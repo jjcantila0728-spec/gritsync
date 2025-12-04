@@ -1,0 +1,391 @@
+{
+  "totalRoutes": 58,
+  "groups": [
+    {
+      "prefix": "auth",
+      "count": 6,
+      "routes": [
+        {
+          "method": "post",
+          "path": "/api/auth/register",
+          "lines": "999-1041"
+        },
+        {
+          "method": "post",
+          "path": "/api/auth/login",
+          "lines": "1043-1074"
+        },
+        {
+          "method": "get",
+          "path": "/api/auth/me",
+          "lines": "1076-1082"
+        },
+        {
+          "method": "post",
+          "path": "/api/auth/change-password",
+          "lines": "1084-1119"
+        },
+        {
+          "method": "post",
+          "path": "/api/auth/forgot-password",
+          "lines": "1134-1175"
+        },
+        {
+          "method": "post",
+          "path": "/api/auth/reset-password",
+          "lines": "1177-1228"
+        }
+      ]
+    },
+    {
+      "prefix": "applications",
+      "count": 13,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/applications",
+          "lines": "1231-1657"
+        },
+        {
+          "method": "get",
+          "path": "/api/applications/check-retaker",
+          "lines": "1661-1670"
+        },
+        {
+          "method": "get",
+          "path": "/api/applications/:id",
+          "lines": "1972-1990"
+        },
+        {
+          "method": "post",
+          "path": "/api/applications",
+          "lines": "1992-2396"
+        },
+        {
+          "method": "patch",
+          "path": "/api/applications/:id",
+          "lines": "2398-2411"
+        },
+        {
+          "method": "post",
+          "path": "/api/applications/:id/payments",
+          "lines": "3742-3790"
+        },
+        {
+          "method": "get",
+          "path": "/api/applications/:id/payments",
+          "lines": "3892-3917"
+        },
+        {
+          "method": "get",
+          "path": "/api/applications/:id/processing-accounts",
+          "lines": "3950-4065"
+        },
+        {
+          "method": "post",
+          "path": "/api/applications/:id/processing-accounts",
+          "lines": "4067-4161"
+        },
+        {
+          "method": "put",
+          "path": "/api/applications/:id/processing-accounts/:accountId",
+          "lines": "4163-4228"
+        },
+        {
+          "method": "delete",
+          "path": "/api/applications/:id/processing-accounts/:accountId",
+          "lines": "4230-4259"
+        },
+        {
+          "method": "get",
+          "path": "/api/applications/:id/timeline-steps",
+          "lines": "4262-4290"
+        },
+        {
+          "method": "put",
+          "path": "/api/applications/:id/timeline-steps/:stepKey",
+          "lines": "4307-4393"
+        }
+      ]
+    },
+    {
+      "prefix": "track",
+      "count": 1,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/track/:id",
+          "lines": "1673-1970"
+        }
+      ]
+    },
+    {
+      "prefix": "files",
+      "count": 1,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/files/:userId/:filename",
+          "lines": "2532-2551"
+        }
+      ]
+    },
+    {
+      "prefix": "quotations",
+      "count": 9,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/quotations",
+          "lines": "2554-2585"
+        },
+        {
+          "method": "post",
+          "path": "/api/quotations/public",
+          "lines": "2588-2659"
+        },
+        {
+          "method": "post",
+          "path": "/api/quotations",
+          "lines": "2661-2680"
+        },
+        {
+          "method": "get",
+          "path": "/api/quotations/public/:id",
+          "lines": "2683-2705"
+        },
+        {
+          "method": "get",
+          "path": "/api/quotations/:id",
+          "lines": "2708-2735"
+        },
+        {
+          "method": "put",
+          "path": "/api/quotations/:id",
+          "lines": "2738-2800"
+        },
+        {
+          "method": "delete",
+          "path": "/api/quotations/:id",
+          "lines": "2803-2822"
+        },
+        {
+          "method": "post",
+          "path": "/api/quotations/:id/create-payment-intent",
+          "lines": "3126-3169"
+        },
+        {
+          "method": "patch",
+          "path": "/api/quotations/:id/status",
+          "lines": "3172-3194"
+        }
+      ]
+    },
+    {
+      "prefix": "services",
+      "count": 5,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/services",
+          "lines": "2826-2922"
+        },
+        {
+          "method": "get",
+          "path": "/api/services/:serviceName/:state",
+          "lines": "2925-2960"
+        },
+        {
+          "method": "post",
+          "path": "/api/services",
+          "lines": "2963-3037"
+        },
+        {
+          "method": "put",
+          "path": "/api/services/:id",
+          "lines": "3040-3103"
+        },
+        {
+          "method": "delete",
+          "path": "/api/services/:id",
+          "lines": "3106-3123"
+        }
+      ]
+    },
+    {
+      "prefix": "clients",
+      "count": 2,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/clients",
+          "lines": "3197-3216"
+        },
+        {
+          "method": "get",
+          "path": "/api/clients/grit/:gritId",
+          "lines": "3219-3237"
+        }
+      ]
+    },
+    {
+      "prefix": "users",
+      "count": 1,
+      "routes": [
+        {
+          "method": "put",
+          "path": "/api/users/:email/role",
+          "lines": "3240-3266"
+        }
+      ]
+    },
+    {
+      "prefix": "dashboard",
+      "count": 1,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/dashboard/stats",
+          "lines": "3269-3297"
+        }
+      ]
+    },
+    {
+      "prefix": "admin",
+      "count": 3,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/admin/stats",
+          "lines": "3300-3332"
+        },
+        {
+          "method": "get",
+          "path": "/api/admin/settings",
+          "lines": "3335-3363"
+        },
+        {
+          "method": "post",
+          "path": "/api/admin/settings",
+          "lines": "3366-3418"
+        }
+      ]
+    },
+    {
+      "prefix": "user",
+      "count": 4,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/user/documents",
+          "lines": "3421-3439"
+        },
+        {
+          "method": "post",
+          "path": "/api/user/documents/:type",
+          "lines": "3441-3515"
+        },
+        {
+          "method": "get",
+          "path": "/api/user/details",
+          "lines": "3518-3530"
+        },
+        {
+          "method": "post",
+          "path": "/api/user/details",
+          "lines": "3532-3693"
+        }
+      ]
+    },
+    {
+      "prefix": "payments",
+      "count": 3,
+      "routes": [
+        {
+          "method": "post",
+          "path": "/api/payments/:id/create-intent",
+          "lines": "3697-3740"
+        },
+        {
+          "method": "post",
+          "path": "/api/payments/:id/complete",
+          "lines": "3792-3890"
+        },
+        {
+          "method": "get",
+          "path": "/api/payments/:id/receipt",
+          "lines": "3919-3947"
+        }
+      ]
+    },
+    {
+      "prefix": "notifications",
+      "count": 4,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/notifications",
+          "lines": "4396-4414"
+        },
+        {
+          "method": "get",
+          "path": "/api/notifications/unread-count",
+          "lines": "4416-4424"
+        },
+        {
+          "method": "put",
+          "path": "/api/notifications/:id/read",
+          "lines": "4426-4442"
+        },
+        {
+          "method": "put",
+          "path": "/api/notifications/read-all",
+          "lines": "4444-4452"
+        }
+      ]
+    },
+    {
+      "prefix": "webhooks",
+      "count": 1,
+      "routes": [
+        {
+          "method": "post",
+          "path": "/api/webhooks/stripe",
+          "lines": "4458-4583"
+        }
+      ]
+    },
+    {
+      "prefix": "root",
+      "count": 1,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/",
+          "lines": "4586-4605"
+        }
+      ]
+    },
+    {
+      "prefix": "test",
+      "count": 3,
+      "routes": [
+        {
+          "method": "get",
+          "path": "/api/test/user-details-route",
+          "lines": "4608-4610"
+        },
+        {
+          "method": "get",
+          "path": "/api/test/documents-route",
+          "lines": "4613-4615"
+        },
+        {
+          "method": "get",
+          "path": "/api/test/stripe-connection",
+          "lines": "4618-4687"
+        }
+      ]
+    }
+  ]
+}

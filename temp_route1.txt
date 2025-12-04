@@ -1,0 +1,427 @@
+﻿app.get('/api/applications', authenticateToken, (req, res) => {
+  try {
+    let query = 'SELECT id, first_name, last_name, status, created_at, email, updated_at FROM applications'
+    let params = []
+
+    if (req.user.role !== 'admin') {
+      query += ' WHERE user_id = ?'
+      params.push(req.user.id)
+    }
+
+    query += ' ORDER BY created_at DESC'
+
+    const applications = db.prepare(query).all(...params)
+    
+    // Define step order and names
+    const stepOrder = [
+      { key: 'app_submission', name: 'Application Submission' },
+      { key: 'credentialing', name: 'Credentialing' },
+      { key: 'bon_application', name: 'BON Application' },
+      { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
+      { key: 'pearson_vue', name: 'Pearson VUE Application' },
+      { key: 'att', name: 'ATT' },
+      { key: 'nclex_exam', name: 'NCLEX Exam' }
+    ]
+    
+    // Define next step instructions
+    const nextStepInstructions = {
+      'credentialing': 'Generate your letter for school',
+      'bon_application': 'Complete mandatory courses and submit Form 1',
+      'nclex_eligibility': 'Wait for NCLEX eligibility approval',
+      'pearson_vue': 'Create Pearson VUE account and request ATT',
+      'att': 'Wait for ATT to be received',
+      'nclex_exam': 'Schedule and take your NCLEX exam'
+    }
+    
+    // For each application, calculate current progress and next step
+    const applicationsWithSteps = applications.map(app => {
+      // Get Gmail account email from processing accounts
+      const gmailAccount = db.prepare(`
+        SELECT email FROM processing_accounts
+        WHERE application_id = ? AND account_type = 'gmail'
+        LIMIT 1
+      `).get(app.id)
+      
+      // Use Gmail email if available, otherwise use application email
+      const displayEmail = gmailAccount ? gmailAccount.email : app.email
+      
+      // Get all timeline steps for this application
+      const allSteps = db.prepare(`
+        SELECT step_key, step_name, status, data, completed_at, updated_at, created_at
+        FROM application_timeline_steps
+        WHERE application_id = ?
+      `).all(app.id)
+      
+      // Get all payments for this application
+      const payments = db.prepare(`
+        SELECT * FROM application_payments
+        WHERE application_id = ?
+      `).all(app.id)
+      
+      // Create a map of step statuses
+      const stepStatusMap = {}
+      allSteps.forEach(step => {
+        stepStatusMap[step.step_key] = step
+      })
+      
+      // Helper function to check if a step is actually completed based on sub-steps
+      const isStepCompleted = (stepKey) => {
+        const stepData = stepStatusMap[stepKey]
+        
+        // Check sub-steps first (regardless of parent step status)
+        switch (stepKey) {
+          case 'app_submission': {
+            const appCreated = stepStatusMap['app_created']
+            const docsSubmitted = stepStatusMap['documents_submitted']
+            const appPaid = stepStatusMap['app_paid'] || payments.some(p => p.status === 'paid' && p.payment_type === 'step1')
+            const allSubStepsDone = (appCreated && appCreated.status === 'completed') &&
+                                   (docsSubmitted && docsSubmitted.status === 'completed') &&
+                                   (appPaid && (appPaid.status === 'completed' || (typeof appPaid === 'object' && appPaid.status === 'paid')))
+            // Return true if all sub-steps are done OR if parent is explicitly marked completed
+            return allSubStepsDone || (stepData && stepData.status === 'completed')
+          }
+          case 'credentialing': {
+            const letterGenerated = stepStatusMap['letter_generated']
+            const letterSubmitted = stepStatusMap['letter_submitted']
+            const officialDocs = stepStatusMap['official_docs_submitted']
+            const allSubStepsDone = (letterGenerated && letterGenerated.status === 'completed') &&
+                                   (letterSubmitted && letterSubmitted.status === 'completed') &&
+                                   (officialDocs && officialDocs.status === 'completed')
+            return allSubStepsDone || (stepData && stepData.status === 'completed')
+          }
+          case 'bon_application': {
+            const mandatoryCourses = stepStatusMap['mandatory_courses']
+            const form1Submitted = stepStatusMap['form1_submitted']
+            const appStep2Paid = stepStatusMap['app_step2_paid'] || payments.some(p => p.status === 'paid' && p.payment_type === 'step2')
+            const allSubStepsDone = (mandatoryCourses && mandatoryCourses.status === 'completed') &&
+                                   (form1Submitted && form1Submitted.status === 'completed') &&
+                                   (appStep2Paid && (appStep2Paid.status === 'completed' || (typeof appStep2Paid === 'object' && appStep2Paid.status === 'paid')))
+            return allSubStepsDone || (stepData && stepData.status === 'completed')
+          }
+          case 'nclex_eligibility': {
+            const eligibilityApproved = stepStatusMap['nclex_eligibility_approved']
+            const subStepDone = (eligibilityApproved && eligibilityApproved.status === 'completed')
+            return subStepDone || (stepData && stepData.status === 'completed')
+          }
+          case 'pearson_vue': {
+            const accountCreated = stepStatusMap['pearson_account_created']
+            const attRequested = stepStatusMap['att_requested']
+            const allSubStepsDone = (accountCreated && accountCreated.status === 'completed') &&
+                                   (attRequested && attRequested.status === 'completed')
+            return allSubStepsDone || (stepData && stepData.status === 'completed')
+          }
+          case 'att': {
+            const attReceived = stepStatusMap['att_received']
+            if (!attReceived || !attReceived.data) {
+              return (stepData && stepData.status === 'completed')
+            }
+            const data = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
+            const hasCodeAndExpiry = !!(data.code || data.att_code) && !!(data.expiry_date || data.att_expiry_date)
+            return hasCodeAndExpiry || (stepData && stepData.status === 'completed')
+          }
+          case 'nclex_exam': {
+            const examBooked = stepStatusMap['exam_date_booked']
+            if (!examBooked || !examBooked.data) {
+              return (stepData && stepData.status === 'completed')
+            }
+            const data = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
+            const hasAllDetails = !!(data.date || examBooked.date) && !!(data.exam_time || data.time) && !!(data.exam_location || data.location)
+            return hasAllDetails || (stepData && stepData.status === 'completed')
+          }
+          case 'quick_results': {
+            const quickResultsData = stepStatusMap['quick_results']
+            if (!quickResultsData || !quickResultsData.data) {
+              return (stepData && stepData.status === 'completed')
+            }
+            const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
+            const hasResult = !!(data.result)
+            return hasResult || (stepData && stepData.status === 'completed')
+          }
+          default:
+            return stepData && stepData.status === 'completed'
+        }
+      }
+      
+      // ===== ALGORITHM: Calculate Latest Update, Current Progress, and Next Step from Timeline =====
+      
+      // 1. Find the latest update timestamp from all timeline steps
+      let latestUpdate = null
+      let latestUpdateTimestamp = null
+      
+      // Check all steps for the most recent updated_at or completed_at
+      allSteps.forEach(step => {
+        const timestamps = []
+        if (step.updated_at) timestamps.push({ time: new Date(step.updated_at).getTime(), value: step.updated_at })
+        if (step.completed_at) timestamps.push({ time: new Date(step.completed_at).getTime(), value: step.completed_at })
+        if (step.created_at) timestamps.push({ time: new Date(step.created_at).getTime(), value: step.created_at })
+        
+        if (timestamps.length > 0) {
+          const maxTimestamp = Math.max(...timestamps.map(t => t.time))
+          if (!latestUpdateTimestamp || maxTimestamp > latestUpdateTimestamp) {
+            latestUpdateTimestamp = maxTimestamp
+            // Use the field that has the max timestamp
+            const maxTimestampObj = timestamps.find(t => t.time === maxTimestamp)
+            latestUpdate = maxTimestampObj ? maxTimestampObj.value : (step.completed_at || step.updated_at || step.created_at)
+          }
+        }
+      })
+      
+      // If no timeline steps, use application updated_at or created_at
+      if (!latestUpdate) {
+        latestUpdate = app.updated_at || app.created_at
+      }
+      
+      // 2. Find the current progress (last completed step in order)
+      let currentProgress = null
+      let currentProgressStep = null
+      let paidAmount = null
+      
+      // Find the last completed step in step order (using new completion logic)
+      // Start from the end and work backwards to find the most recent completed step
+      for (let i = stepOrder.length - 1; i >= 0; i--) {
+        const step = stepOrder[i]
+        if (isStepCompleted(step.key)) {
+          currentProgress = step.name
+          currentProgressStep = step
+          break
+        }
+      }
+      
+      // If no step is completed yet but application exists, default to Application Submission
+      if (!currentProgress && app.created_at) {
+        currentProgress = 'Application Submission'
+        currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
+      }
+      
+      // Get payment amount if application exists
+      const payment = db.prepare(`
+        SELECT amount FROM application_payments
+        WHERE application_id = ? AND status = 'paid'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(app.id)
+      if (payment) {
+        paidAmount = payment.amount
+      }
+      
+      // 3. Find the next step (first pending step after the last completed step)
+      let nextStep = null
+      let nextStepInstruction = null
+      
+      // Find the index of current progress in stepOrder
+      let currentProgressIndex = -1
+      if (currentProgressStep) {
+        for (let i = 0; i < stepOrder.length; i++) {
+          if (stepOrder[i].key === currentProgressStep.key) {
+            currentProgressIndex = i
+            break
+          }
+        }
+      }
+      
+      // Next step is the first pending step after current progress
+      if (currentProgressIndex >= 0 && currentProgressIndex < stepOrder.length - 1) {
+        // Look for the next step that is pending or not yet started
+        for (let i = currentProgressIndex + 1; i < stepOrder.length; i++) {
+          const nextStepInfo = stepOrder[i]
+          const nextStepData = stepStatusMap[nextStepInfo.key]
+          
+          // If step doesn't exist or is not completed (using new completion logic), this is the next step
+          if (!nextStepData || !isStepCompleted(nextStepInfo.key)) {
+            nextStep = nextStepInfo.name
+            nextStepInstruction = nextStepInstructions[nextStepInfo.key] || null
+            break
+          }
+        }
+      } else if (currentProgressIndex === -1) {
+        // No progress yet, next step is the first step
+        if (stepOrder.length > 0) {
+          const firstStep = stepOrder[0]
+          if (!isStepCompleted(firstStep.key)) {
+            nextStep = firstStep.name
+            nextStepInstruction = nextStepInstructions[firstStep.key] || null
+          }
+        }
+      }
+      
+      // Build current progress message
+      let currentProgressMessage = currentProgress || 'Not started'
+      
+      // If application status is completed, show exam result instead
+      if (app.status === 'completed') {
+        const quickResultsStep = allSteps.find(step => step.step_key === 'quick_results')
+        if (quickResultsStep && quickResultsStep.data) {
+          const resultData = typeof quickResultsStep.data === 'string' ? JSON.parse(quickResultsStep.data) : quickResultsStep.data
+          if (resultData.result) {
+            const resultText = resultData.result === 'pass' ? 'Passed' : resultData.result === 'failed' ? 'Failed' : resultData.result
+            currentProgressMessage = `Exam Result: ${resultText}`
+          }
+        }
+      } else if (paidAmount && (currentProgress === 'Application Submission' || !currentProgress)) {
+        currentProgressMessage += `, Application paidAmount: $${parseFloat(paidAmount).toFixed(2)}`
+      }
+      
+      // Build next step message
+      // Don't show next step if application is completed
+      let nextStepMessage = null
+      if (app.status !== 'completed' && nextStep) {
+        nextStepMessage = nextStep
+        if (nextStepInstruction) {
+          nextStepMessage += `, ${nextStepInstruction}`
+        }
+      }
+      
+      // Calculate progress percentage based on all main steps and sub-steps
+      // Define all steps with their sub-steps (matching the timeline structure)
+      const allStepsWithSubSteps = [
+        {
+          mainKey: 'app_submission',
+          mainName: 'Application Submission',
+          subSteps: [
+            { key: 'app_created', checkFn: () => !!app.created_at },
+            { key: 'documents_submitted', checkFn: () => {
+              // Check if application has all required documents
+              const appData = db.prepare('SELECT picture_path, diploma_path, passport_path FROM applications WHERE id = ?').get(app.id)
+              return !!(appData && appData.picture_path && appData.diploma_path && appData.passport_path)
+            }},
+            { key: 'app_paid', checkFn: () => {
+              const payment = db.prepare('SELECT id FROM application_payments WHERE application_id = ? AND status = ?').get(app.id, 'paid')
+              return !!payment
+            }}
+          ]
+        },
+        {
+          mainKey: 'credentialing',
+          mainName: 'Credentialing',
+          subSteps: [
+            { key: 'letter_generated', checkFn: () => {
+              const step = stepStatusMap['letter_generated']
+              return step && step.status === 'completed'
+            }},
+            { key: 'letter_submitted', checkFn: () => {
+              const step = stepStatusMap['letter_submitted']
+              return step && step.status === 'completed'
+            }},
+            { key: 'official_docs_submitted', checkFn: () => {
+              const step = stepStatusMap['official_docs_submitted']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'bon_application',
+          mainName: 'BON Application',
+          subSteps: [
+            { key: 'mandatory_courses', checkFn: () => {
+              const step = stepStatusMap['mandatory_courses']
+              return step && step.status === 'completed'
+            }},
+            { key: 'form1_submitted', checkFn: () => {
+              const step = stepStatusMap['form1_submitted']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'nclex_eligibility',
+          mainName: 'NCLEX Eligibility',
+          subSteps: [
+            { key: 'nclex_eligibility_approved', checkFn: () => {
+              const step = stepStatusMap['nclex_eligibility_approved']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'pearson_vue',
+          mainName: 'Pearson VUE Application',
+          subSteps: [
+            { key: 'pearson_account_created', checkFn: () => {
+              const account = db.prepare('SELECT id FROM processing_accounts WHERE application_id = ? AND account_type = ?').get(app.id, 'pearson_vue')
+              return !!account
+            }},
+            { key: 'att_requested', checkFn: () => {
+              const step = stepStatusMap['att_requested']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'att',
+          mainName: 'ATT',
+          subSteps: [
+            { key: 'att_received', checkFn: () => {
+              const step = stepStatusMap['att_received']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'nclex_exam',
+          mainName: 'NCLEX Exam',
+          subSteps: [
+            { key: 'exam_date_booked', checkFn: () => {
+              const step = stepStatusMap['exam_date_booked']
+              return step && step.status === 'completed'
+            }}
+          ]
+        },
+        {
+          mainKey: 'quick_results',
+          mainName: 'Quick Results',
+          subSteps: []
+        }
+      ]
+      
+      // Count completed items (main steps + sub-steps)
+      let totalItems = 0
+      let completedItems = 0
+      
+      for (const mainStep of allStepsWithSubSteps) {
+        // Check main step
+        totalItems++
+        const mainStepData = stepStatusMap[mainStep.mainKey]
+        if (mainStepData && mainStepData.status === 'completed') {
+          completedItems++
+        }
+        
+        // Check sub-steps
+        for (const subStep of mainStep.subSteps) {
+          totalItems++
+          if (subStep.checkFn()) {
+            completedItems++
+          }
+        }
+      }
+      
+      const progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
+      
+      // Get service information (default to NCLEX Processing for now)
+      const serviceType = 'NCLEX Processing'
+      const serviceState = 'New York'
+      
+      // Get GRIT APP ID if it exists
+      const appData = db.prepare('SELECT grit_app_id FROM applications WHERE id = ?').get(app.id)
+      
+      return {
+        ...app,
+        display_name: 'NCLEX APPLICATION, NEWYORK STATE BOARD OF NURSING',
+        email: displayEmail,
+        current_progress: currentProgressMessage,
+        next_step: nextStepMessage,
+        latest_update: latestUpdate,
+        progress_percentage: progressPercentage,
+        completed_steps: completedItems,
+        total_steps: totalItems,
+        service_type: serviceType,
+        service_state: serviceState,
+        grit_app_id: appData?.grit_app_id || null
+      }
+    })
+    
+    res.json(applicationsWithSteps)
+  } catch (error) {
+    console.error('Error fetching applications:', error)
+    res.status(500).json({ error: 'Failed to fetch applications' })
+  }
+})
