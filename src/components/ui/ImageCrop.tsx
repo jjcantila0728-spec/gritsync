@@ -409,53 +409,6 @@ export function ImageCrop({ image, aspectRatio = 1, onCrop, onCancel }: ImageCro
     })
   }
 
-  const _handleReset = () => {
-    if (containerRef.current && imageRef.current) {
-      const container = containerRef.current
-      const containerWidth = container.clientWidth
-      const containerHeight = container.clientHeight
-      
-      const imgAspect = imageSize.width / imageSize.height
-      let displayWidth = containerWidth * 0.8
-      let displayHeight = displayWidth / imgAspect
-      
-      if (displayHeight > containerHeight * 0.8) {
-        displayHeight = containerHeight * 0.8
-        displayWidth = displayHeight * imgAspect
-      }
-      
-      setPosition({
-        x: (containerWidth - displayWidth) / 2,
-        y: (containerHeight - displayHeight) / 2,
-      })
-      setScale(1)
-      setRotation(0)
-      
-      // Reset crop area
-      const imageLeft = (containerWidth - displayWidth) / 2
-      const imageTop = (containerHeight - displayHeight) / 2
-      
-      const maxCropWidth = displayWidth * 0.8
-      const maxCropHeight = displayHeight * 0.8
-      
-      let initialCropWidth = maxCropWidth
-      let initialCropHeight = maxCropHeight
-      
-      if (aspectRatio) {
-        if (initialCropWidth / initialCropHeight > aspectRatio) {
-          initialCropWidth = initialCropHeight * aspectRatio
-        } else {
-          initialCropHeight = initialCropWidth / aspectRatio
-        }
-      }
-      
-      const cropX = imageLeft + (displayWidth - initialCropWidth) / 2
-      const cropY = imageTop + (displayHeight - initialCropHeight) / 2
-      
-      setCropPosition({ x: cropX, y: cropY })
-      setCropSize({ width: initialCropWidth, height: initialCropHeight })
-    }
-  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -620,7 +573,6 @@ export function ImageCrop({ image, aspectRatio = 1, onCrop, onCancel }: ImageCro
     ? imageSize.width / imageSize.height 
     : (imageUrl ? 1 : 1) // Default to 1:1 if we have URL but no dimensions yet
   const containerWidth = containerRef.current?.clientWidth || 800
-  const containerHeight = containerRef.current?.clientHeight || 500
   const baseDisplayWidth = containerWidth * 0.8 * scale
   const displayWidth = baseDisplayWidth > 0 ? baseDisplayWidth : 600
   const displayHeight = displayWidth / imgAspect
