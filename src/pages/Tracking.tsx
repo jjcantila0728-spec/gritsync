@@ -63,8 +63,8 @@ export function Tracking() {
   // Enhanced filtering and sorting
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [sortField, setSortField] = useState<SortField>('date')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [sortField, _setSortField] = useState<SortField>('date')
+  const [sortDirection, _setSortDirection] = useState<SortDirection>('desc')
   const [refreshing, setRefreshing] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)

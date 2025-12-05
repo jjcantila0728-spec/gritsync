@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -102,11 +102,7 @@ export function AdminQuoteManagement() {
     window.dispatchEvent(new CustomEvent('quotesUpdated'))
   }
 
-  // Count unopened quotes
-  const _unopenedQuotesCount = useMemo(() => {
-    const opened = getOpenedQuotes()
-    return quotations.filter(q => !opened.has(q.id)).length
-  }, [quotations])
+  // Removed unused _unopenedQuotesCount
 
   useEffect(() => {
     if (!isAdmin()) {

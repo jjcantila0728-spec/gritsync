@@ -235,109 +235,7 @@ export function ApplicationDetail() {
     )
   }
 
-  // Component to display authenticated images (legacy support)
-  const AuthenticatedImage = ({ src, alt, className, onError }: { 
-    src: string, 
-    alt: string, 
-    className?: string,
-    onError?: () => void
-  }) => {
-    const [imageSrc, setImageSrc] = useState<string | null>(null)
-    const [error, setError] = useState(false)
-    const imgRef = useRef<HTMLImageElement>(null)
-
-    useEffect(() => {
-      const token = localStorage.getItem('token')
-      if (!token || !src) {
-        setError(true)
-        if (onError) onError()
-        return
-      }
-
-      let currentBlobUrl: string | null = null
-
-      fetch(src, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-        .then(res => {
-          if (!res.ok) throw new Error('Failed to load image')
-          return res.blob()
-        })
-        .then(blob => {
-          const url = URL.createObjectURL(blob)
-          currentBlobUrl = url
-          setImageSrc(url)
-        })
-        .catch(() => {
-          setError(true)
-          if (onError) onError()
-        })
-
-      return () => {
-        if (currentBlobUrl) {
-          URL.revokeObjectURL(currentBlobUrl)
-        }
-      }
-    }, [src, onError])
-
-    if (error) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <ImageIcon className="h-12 w-12 text-gray-400" />
-        </div>
-      )
-    }
-
-    if (!imageSrc) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <div className="animate-pulse text-gray-400 text-sm">Loading...</div>
-        </div>
-      )
-    }
-
-    return (
-      <img
-        ref={imgRef}
-        src={imageSrc}
-        alt={alt}
-        className={className}
-        onError={() => {
-          setError(true)
-          if (onError) onError()
-        }}
-      />
-    )
-  }
-
-  const _handleDownload = async (filePath: string, filename: string) => {
-    try {
-      // Get signed URL for Supabase Storage
-      const signedUrl = await getSignedUrlFromPath(filePath)
-      
-      const response = await fetch(signedUrl)
-
-      if (!response.ok) {
-        throw new Error('Failed to download file')
-      }
-
-      const blob = await response.blob()
-      const downloadUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(downloadUrl)
-      showToast('File downloaded successfully', 'success')
-    } catch (error) {
-      console.error('Error downloading file:', error)
-      showToast('Failed to download file', 'error')
-    }
-  }
+  // Removed unused AuthenticatedImage and _handleDownload functions
 
   const handleViewFile = async (filePath: string, filename: string) => {
     try {
@@ -1616,21 +1514,7 @@ export function ApplicationDetail() {
     }
   }
 
-  const getFileUrlFromPath = (path: string | null | undefined) => {
-    if (!path || path.trim() === '') return ''
-    try {
-      // If path already contains http, return as is (legacy URLs)
-      if (path.startsWith('http://') || path.startsWith('https://')) {
-        return path
-      }
-      // For Supabase Storage, path format is: userId/filename
-      // Use getFileUrl which now handles Supabase Storage paths
-      return getFileUrl(path)
-    } catch (error) {
-      console.error('Error parsing file path:', error, path)
-      return ''
-    }
-  }
+  // Removed unused getFileUrlFromPath function
 
   // Async function to get signed URL for private files
   const getSignedUrlFromPath = async (path: string | null | undefined): Promise<string> => {
@@ -4459,7 +4343,6 @@ function TimelineStep({
   onUpdateSubStep,
   subSteps,
   application,
-  _payments,
   attCode,
   examDate,
   examLocation,

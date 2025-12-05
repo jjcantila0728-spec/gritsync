@@ -43,9 +43,11 @@ async function getEmailConfig() {
   }
   
   const settingsMap: Record<string, string> = {}
-  if (emailSettings && Array.isArray(emailSettings)) {
-    emailSettings.forEach((setting: { key: string; value: string }) => {
-      settingsMap[setting.key] = setting.value
+  if (emailSettings && Array.isArray(emailSettings) && !('error' in emailSettings)) {
+    emailSettings.forEach((setting: any) => {
+      if (setting && typeof setting === 'object' && 'key' in setting && 'value' in setting) {
+        settingsMap[setting.key] = setting.value
+      }
     })
   }
   

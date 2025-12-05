@@ -107,7 +107,7 @@ export function Quote() {
   }
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingQuote, setLoadingQuote] = useState(false)
+  const [_loadingQuote, setLoadingQuote] = useState(false)
   const [showGenerator, setShowGenerator] = useState(false)
   const [currentStep, setCurrentStep] = useState(1) // 1, 2, 3, or 4 (result)
   const [generating, setGenerating] = useState(false)

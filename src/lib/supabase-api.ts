@@ -5,8 +5,7 @@ type Tables<T extends keyof Database['public']['Tables']> = Database['public']['
 type Inserts<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 type Updates<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
 
-// Helper type for query results that TypeScript can't infer
-type QueryResult<T> = T | null
+// Removed unused QueryResult type
 
 // Helper to get current user ID
 async function getCurrentUserId(): Promise<string> {
@@ -242,17 +241,13 @@ export const applicationsAPI = {
           // Check if timeline is completed (all steps in stepOrder are done)
           const isTimelineCompleted = stepOrder.every(step => isStepCompleted(step.key))
           
-          // Check if we're at the last step (NCLEX Exam) and it's completed
-          const lastStepKey = stepOrder[stepOrder.length - 1]?.key
-          const isAtLastStep = currentProgressStep?.key === lastStepKey && isStepCompleted(lastStepKey)
-          
           // Build current progress message
           let currentProgressMessage = currentProgress || 'Not started'
           let nextStepMessage: string | null = null
           
           // Check for exam result if timeline is completed or at last step
-          const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results')
-          const hasExamResult = quickResultsStep && quickResultsStep.data
+          const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results') as any
+          const hasExamResult = quickResultsStep && 'data' in quickResultsStep && quickResultsStep.data
           
           if (hasExamResult) {
             const resultData = typeof quickResultsStep.data === 'string' ? JSON.parse(quickResultsStep.data) : quickResultsStep.data
@@ -604,7 +599,7 @@ export const applicationsAPI = {
     // First, try to update without selecting (more reliable with RLS)
     const { error: updateError } = await supabase
       .from('applications')
-      .update({ status })
+      .update({ status: status as any })
       .eq('id', id)
     
     if (updateError) {
@@ -622,16 +617,25 @@ export const applicationsAPI = {
     if (selectError) {
       // Update likely succeeded, but we can't read it back due to RLS
       // Return a minimal object with the updated status
-      return { id, status } as any
+      return { id, status } as Tables<'applications'>
     }
     
-    return data
+    if (!data) {
+      return { id, status } as Tables<'applications'>
+    }
+    
+    return data as Tables<'applications'>
   },
 
   update: async (id: string, updates: Partial<Tables<'applications'>>) => {
+    // Ensure status is properly typed if present
+    const typedUpdates = updates.status 
+      ? { ...updates, status: updates.status as any }
+      : updates
+    
     const { data, error } = await supabase
       .from('applications')
-      .update(updates)
+      .update(typedUpdates)
       .eq('id', id)
       .select('*')
       .single()
@@ -642,7 +646,7 @@ export const applicationsAPI = {
         // If single() fails, try without it (might return array)
         const { data: dataArray, error: arrayError } = await supabase
           .from('applications')
-          .update(updates)
+          .update(typedUpdates)
           .eq('id', id)
           .select('*')
         
@@ -650,11 +654,16 @@ export const applicationsAPI = {
         if (!dataArray || dataArray.length === 0) {
           throw new Error('Application not found')
         }
-        return dataArray[0]
+        return dataArray[0] as Tables<'applications'>
       }
       throw new Error(error.message)
     }
-    return data
+    
+    if (!data) {
+      throw new Error('Application not found')
+    }
+    
+    return data as Tables<'applications'>
   },
 }
 
@@ -672,7 +681,7 @@ export const quotationsAPI = {
         .order('created_at', { ascending: false })
       
       if (error) throw new Error(error.message)
-      return (data || []) as Tables<'quotations'>[]
+      return ((data || []) as unknown) as Tables<'quotations'>[]
     } else {
       // For non-admin users, fetch their own quotations and public quotations separately, then combine
       const [userQuotes, publicQuotes] = await Promise.all([
@@ -692,7 +701,9 @@ export const quotationsAPI = {
       if (publicQuotes.error) throw new Error(publicQuotes.error.message)
       
       // Combine and deduplicate by ID, then sort by created_at
-      const allQuotes = [...(userQuotes.data || []), ...(publicQuotes.data || [])] as Tables<'quotations'>[]
+      const userData = userQuotes.data && !('error' in userQuotes.data) ? userQuotes.data : []
+      const publicData = publicQuotes.data && !('error' in publicQuotes.data) ? publicQuotes.data : []
+      const allQuotes = [...userData, ...publicData] as Tables<'quotations'>[]
       const uniqueQuotes = Array.from(
         new Map(allQuotes.map(q => [q.id, q])).values()
       )
@@ -758,7 +769,8 @@ export const quotationsAPI = {
         error = fetchError
       } else {
         // Find quote where the GQ format matches
-        const matchingQuote = allQuotes?.find(quote => {
+        const matchingQuote = allQuotes?.find((quote: any) => {
+          if (!quote || typeof quote !== 'object' || !('id' in quote)) return false
           const quoteGQId = quotationsAPI.generateGQId(quote.id)
           return quoteGQId === id
         })
@@ -799,7 +811,8 @@ export const quotationsAPI = {
         error = fetchError
       } else {
         // Find quote where the GQ format matches
-        const matchingQuote = allQuotes?.find(quote => {
+        const matchingQuote = allQuotes?.find((quote: any) => {
+          if (!quote || typeof quote !== 'object' || !('id' in quote)) return false
           const quoteGQId = quotationsAPI.generateGQId(quote.id)
           return quoteGQId === id
         })
@@ -841,7 +854,7 @@ export const quotationsAPI = {
     amount: number,
     description: string,
     email: string,
-    name?: string,
+    _name?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
     service?: string,
     state?: string,
     payment_type?: 'full' | 'staggered',
@@ -1366,7 +1379,7 @@ export const userPreferencesAPI = {
     return codes
   },
 
-  verify2FACode: async (secret: string, code: string): Promise<boolean> => {
+  verify2FACode: async (_secret: string, _code: string): Promise<boolean> => { // eslint-disable-line @typescript-eslint/no-unused-vars
     // In production, use a proper TOTP library like 'otplib'
     // For now, return false as placeholder
     // This should verify the TOTP code against the secret
@@ -1423,7 +1436,7 @@ export const userDocumentsAPI = {
     if (checkError) throw new Error(checkError.message)
     
     let data, error
-    if (existing) {
+    if (existing && !('error' in existing) && 'id' in existing) {
       // Update existing document
       const { data: updated, error: updateError } = await supabase
         .from('user_documents')
@@ -1433,7 +1446,7 @@ export const userDocumentsAPI = {
           file_size: file.size,
           uploaded_at: new Date().toISOString(),
         })
-        .eq('id', existing.id)
+        .eq('id', (existing as { id: string }).id)
         .select()
         .single()
       data = updated
@@ -1482,7 +1495,7 @@ export const userDocumentsAPI = {
     if (checkError) throw new Error(checkError.message)
     
     let data, error
-    if (existing) {
+    if (existing && !('error' in existing) && 'id' in existing) {
       // Update existing document
       const { data: updated, error: updateError } = await supabase
         .from('user_documents')
@@ -1492,7 +1505,7 @@ export const userDocumentsAPI = {
           file_size: file.size,
           uploaded_at: new Date().toISOString(),
         })
-        .eq('id', existing.id)
+        .eq('id', (existing as { id: string }).id)
         .select()
         .single()
       data = updated
@@ -1531,7 +1544,7 @@ export const userDocumentsAPI = {
       .single()
     
     if (fetchError) throw new Error(fetchError.message)
-    if (!admin && doc.user_id !== userId) {
+    if (!admin && doc && !('error' in doc) && 'user_id' in doc && doc.user_id !== userId) {
       throw new Error('Unauthorized')
     }
     
@@ -1807,6 +1820,9 @@ export const processingAccountsAPI = {
     }
     
     // Type assertion for application
+    if (!application || 'error' in application) {
+      throw new Error('Application not found')
+    }
     const typedApplication = application as Tables<'applications'>
     
     // Use the actual UUID id for subsequent queries (not the GRIT APP ID)
@@ -1932,7 +1948,8 @@ export const processingAccountsAPI = {
     }
     
     // Deduplicate accounts by id (in case of any duplicates)
-    const typedExistingAccounts = existingAccounts as Array<{ id: string }>
+    const validAccounts = existingAccounts.filter((acc: any) => acc && !('error' in acc) && 'id' in acc)
+    const typedExistingAccounts = validAccounts as Array<{ id: string }>
     const uniqueAccounts = Array.from(
       new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
     )
@@ -2019,10 +2036,14 @@ export const processingAccountsAPI = {
     if (isSystemAccount) {
       if (!admin) {
         // Check if user owns the application
+        const applicationId = (account as { application_id?: string }).application_id
+        if (!applicationId) {
+          throw new Error('Application ID not found')
+        }
         const { data: application } = await supabase
           .from('applications')
           .select('user_id')
-          .eq('id', (account as { application_id?: string }).application_id)
+          .eq('id', applicationId)
           .single()
         
         const appData = application as { user_id?: string } | null
@@ -2050,10 +2071,14 @@ export const processingAccountsAPI = {
       // - Admins can update any account
       if (!admin) {
         // Check if user owns the application
+        const customApplicationId = accountData.application_id
+        if (!customApplicationId) {
+          throw new Error('Application ID not found')
+        }
         const { data: application } = await supabase
           .from('applications')
           .select('user_id')
-          .eq('id', accountData.application_id || '')
+          .eq('id', customApplicationId)
           .single()
         
         const appData = application as { user_id?: string } | null
@@ -3443,8 +3468,8 @@ export const trackingAPI = {
     }
     
     // Check for exam result
-    const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results')
-    const quickResultsData = quickResultsStep?.data
+    const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results') as any
+    const quickResultsData = quickResultsStep && 'data' in quickResultsStep ? quickResultsStep.data : undefined
     const hasResult = !!(quickResultsData?.result)
     
     let currentProgressMessage = currentProgress || 'Not started'

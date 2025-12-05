@@ -35,9 +35,11 @@ async function getAllSettings(): Promise<Record<string, string>> {
     
     // Convert array to object
     const settings: Record<string, string> = {}
-    if (data && Array.isArray(data)) {
-      data.forEach((setting: { key: string; value: string }) => {
-        settings[setting.key] = setting.value
+    if (data && Array.isArray(data) && !('error' in data)) {
+      data.forEach((setting: any) => {
+        if (setting && typeof setting === 'object' && 'key' in setting && 'value' in setting) {
+          settings[setting.key] = setting.value
+        }
       })
     }
     

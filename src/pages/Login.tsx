@@ -17,7 +17,7 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null)
   const [accountLocked, setAccountLocked] = useState(false)
-  const [lockedUntil, setLockedUntil] = useState<string | null>(null)
+  const [_lockedUntil, setLockedUntil] = useState<string | null>(null)
   const [minutesRemaining, setMinutesRemaining] = useState<number | null>(null)
   const { signIn, isAdmin, user, loading: authLoading } = useAuth()
   const { showToast } = useToast()

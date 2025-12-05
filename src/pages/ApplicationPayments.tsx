@@ -25,10 +25,8 @@ import {
   Receipt, 
   Download, 
   History,
-  DollarSign,
   AlertCircle,
   FileText,
-  Eye,
   ChevronDown,
   ChevronUp,
   Image as ImageIcon
@@ -294,8 +292,8 @@ export function ApplicationPayments() {
       for (const payment of paidPayments) {
         try {
           const receipt = await applicationPaymentsAPI.getReceipt(payment.id)
-          const typedReceipt = receipt as Receipt | null
-          if (typedReceipt) {
+          if (receipt && typeof receipt === 'object' && !('error' in receipt)) {
+            const typedReceipt = receipt as Receipt
             receiptsMap[payment.id] = typedReceipt
           }
         } catch {
@@ -312,35 +310,7 @@ export function ApplicationPayments() {
     }
   }
 
-  const _handleCreatePayment = async (type: 'step1' | 'step2' | 'full') => {
-    if (!id) return
-
-    setLoading(true)
-    try {
-      let amount = 0
-      if (type === 'full') {
-        amount = fullService?.total_full || 0
-      } else if (type === 'step1') {
-        amount = staggeredService?.total_step1 || 0
-      } else {
-        amount = staggeredService?.total_step2 || 0
-      }
-
-      if (!amount) {
-        showToast('Service pricing not available. Please contact support.', 'error')
-        setLoading(false)
-        return
-      }
-
-      await applicationPaymentsAPI.create(id, type, amount)
-      showToast('Payment created successfully', 'success')
-      await loadPayments()
-    } catch (error: any) {
-      showToast(error.message || 'Failed to create payment', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Removed unused _handleCreatePayment function
 
   async function handlePayNow(type: 'step1' | 'step2' | 'full' | 'retake') {
     if (!id) return
@@ -481,9 +451,9 @@ export function ApplicationPayments() {
         proofOfPaymentFile
       )
       
-      if (result && result.receipt) {
-        const typedResult = result as { receipt?: unknown }
-        setReceipts({ ...receipts, [selectedPayment.id]: typedResult.receipt })
+      if (result && typeof result === 'object' && 'receipt' in result) {
+        const typedResult = result as { receipt?: any }
+        setReceipts({ ...receipts, [selectedPayment.id]: typedResult.receipt as any })
       }
       
       if (paymentMethod === 'gcash') {
@@ -518,22 +488,7 @@ export function ApplicationPayments() {
     }
   }
 
-  const _handleViewReceipt = async (paymentId: string) => {
-    try {
-      if (receipts[paymentId]) {
-        setViewingReceipt(receipts[paymentId])
-        setShowReceiptModal(true)
-        return
-      }
-      
-      const receipt = await applicationPaymentsAPI.getReceipt(paymentId)
-      setReceipts({ ...receipts, [paymentId]: receipt })
-      setViewingReceipt(receipt)
-      setShowReceiptModal(true)
-    } catch (error: any) {
-      showToast(error.message || 'Failed to load receipt', 'error')
-    }
-  }
+  // Removed unused _handleViewReceipt function
 
   function handleDownloadReceipt(receipt: Receipt) {
     try {

@@ -308,8 +308,22 @@ export function ApplicationPayment() {
         proofOfPaymentFile
       )
       
-      if (result && result.receipt) {
-        setReceipt(result.receipt)
+      // Try to get receipt if payment is completed
+      if (result && typeof result === 'object' && !('error' in result)) {
+        const payment = result as any
+        if (payment.status === 'paid' && payment.id) {
+          try {
+            const receipt = await applicationPaymentsAPI.getReceipt(payment.id)
+            if (receipt) {
+              setReceipt(receipt)
+            }
+          } catch {
+            // Receipt might not be available yet
+          }
+        }
+        if (payment.payment_type) {
+          setCompletedPayments([...completedPayments, payment.payment_type])
+        }
       }
       
       setPaymentId(null)
@@ -317,12 +331,6 @@ export function ApplicationPayment() {
       setClientSecret(null)
       setPaymentIntentId(null)
       setShowPaymentModal(false)
-      if (result && result.payment) {
-        const typedResult = result as { payment?: { payment_type?: string } }
-        if (typedResult.payment?.payment_type) {
-          setCompletedPayments([...completedPayments, typedResult.payment.payment_type])
-        }
-      }
       
       if (paymentMethod === 'gcash') {
         showToast('GCash payment submitted! Your payment will be verified manually. You will receive a confirmation once verified.', 'success')

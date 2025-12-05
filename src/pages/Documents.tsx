@@ -173,46 +173,7 @@ export function Documents() {
     }
   }
 
-  const _handleFileUpload = async (documentType: string, file: File) => {
-    if (!user) return
-
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024 // 10MB
-    if (file.size > maxSize) {
-      showToast('File size must be less than 10MB', 'error')
-      return
-    }
-
-    // Validate file type
-    const doc = requiredDocuments.find(d => d.type === documentType)
-    if (doc) {
-      const isValidType = doc.acceptedFormats.some(format => {
-        if (format === 'image/*') {
-          return file.type.startsWith('image/')
-        }
-        return file.name.toLowerCase().endsWith(format.toLowerCase())
-      })
-      if (!isValidType) {
-        showToast(`Invalid file type. Accepted formats: ${doc.acceptedFormats.join(', ')}`, 'error')
-        return
-      }
-    }
-
-    setUploading(documentType)
-    try {
-      await userDocumentsAPI.upload(documentType as 'picture' | 'diploma' | 'passport', file)
-      const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
-      showToast(`${docName} uploaded successfully!`, 'success')
-      await fetchDocuments() // Refresh the list
-      // Notify sidebar to update cache
-      window.dispatchEvent(new Event('documentsUpdated'))
-    } catch (error: any) {
-      const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
-      showToast(error.message || `Failed to upload ${docName}`, 'error')
-    } finally {
-      setUploading(null)
-    }
-  }
+  // Removed unused _handleFileUpload function
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
     const file = e.target.files?.[0]

@@ -129,42 +129,7 @@ const convertMMYYYYToDatabase = (mmyyyy: string): string => {
   return `${year}-${month.padStart(2, '0')}`
 }
 
-// Payment pricing configuration
-const _PAYMENT_CONFIG = {
-  firstTake: {
-    step1: {
-      total: 267.99,
-      items: [
-        { name: 'NCLEX NY BON Application Fee', amount: 143 },
-        { name: 'NCLEX NY Mandatory Courses', amount: 54.99 },
-        { name: 'NCLEX NY Bond Fee', amount: 70 },
-      ],
-    },
-    step2: {
-      total: 508,
-      items: [
-        { name: 'NCLEX PV Application Fee', amount: 200 },
-        { name: 'NCLEX PV NCSBN Exam Fee', amount: 150 },
-        { name: 'NCLEX GritSync Service Fee', amount: 150 },
-        { name: 'NCLEX NY Quick Results', amount: 8 },
-      ],
-    },
-    full: {
-      total: 775.99,
-      step1Total: 267.99,
-      step2Total: 508,
-    },
-  },
-  retake: {
-    total: 458,
-    items: [
-      { name: 'NCLEX PV Application Fee', amount: 200 },
-      { name: 'NCLEX PV NCSBN Exam Fee', amount: 150 },
-      { name: 'NCLEX GritSync Service Fee', amount: 100 },
-      { name: 'NCLEX NY Quick Results', amount: 8 },
-    ],
-  },
-}
+// Removed unused _PAYMENT_CONFIG
 
 export function NCLEXApplication() {
   const { user } = useAuth()
@@ -2144,7 +2109,7 @@ export function NCLEXApplication() {
                                 const signedUrl = await getSignedFileUrl(filePath, 3600)
                                 setViewingFile({
                                   url: signedUrl,
-                                  fileName: passDoc.file_name,
+                                  fileName: passDoc.file_name || 'file',
                                   isImage: false
                                 })
                               } catch (error) {
@@ -2177,7 +2142,7 @@ export function NCLEXApplication() {
                       />
                       {passport && (
                         <span className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                          {passport.name}
+                          {passport.name || 'Passport file'}
                           <button
                             type="button"
                             onClick={() => setPassport(null)}
