@@ -17,8 +17,9 @@ export default defineConfig({
     css: true,
   },
   server: {
-    port: 3000,
-    host: true,
+    port: 5000,
+    host: '0.0.0.0',
+    strictPort: true,
   },
   build: {
     // Production build optimizations
