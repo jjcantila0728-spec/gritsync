@@ -82,11 +82,29 @@ export function validateEnvironment() {
     'FRONTEND_URL'
   ]
   
+  const recommended = [
+    'VITE_STRIPE_PUBLISHABLE_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'VITE_API_URL'
+  ]
+  
   const missing = required.filter(key => !process.env[key])
   
   if (missing.length > 0) {
-    logger.error('Missing required environment variables:', missing)
+    logger.error('Missing required environment variables', { missing })
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
+  }
+  
+  // Check for recommended variables
+  const missingRecommended = recommended.filter(key => !process.env[key])
+  if (missingRecommended.length > 0) {
+    logger.warn('Missing recommended environment variables', { missing: missingRecommended })
+  }
+  
+  // Validate JWT_SECRET is not default
+  if (process.env.JWT_SECRET === 'your-secret-key-change-in-production' || 
+      process.env.JWT_SECRET?.length < 32) {
+    logger.warn('JWT_SECRET is using default or weak value. Please change it!')
   }
   
   // Warn if using test keys in production
@@ -97,4 +115,15 @@ export function validateEnvironment() {
   if (process.env.VITE_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_test_')) {
     logger.warn('⚠️  Using Stripe test publishable key in production!')
   }
+  
+  // Validate URLs
+  try {
+    new URL(process.env.FRONTEND_URL)
+    new URL(process.env.VITE_SUPABASE_URL)
+  } catch (error) {
+    logger.error('Invalid URL in environment variables', { error: error.message })
+    throw new Error('Invalid URL format in environment variables')
+  }
+  
+  logger.info('Environment validation passed')
 }

@@ -17,7 +17,13 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e:vitest": "vitest run src/test/e2e-auth.test.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "migrate:sessions": "node scripts/run-session-migration.js",
+    "verify:sessions": "node scripts/verify-session-setup.js",
+    "deploy:check": "node scripts/deploy-production.js",
+    "docker:build": "docker build -t gritsync:latest .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^2.4.0",
@@ -25,6 +31,7 @@
     "@supabase/supabase-js": "^2.84.0",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.0",
+    "compression": "^1.7.4",
     "cors": "^2.8.5",
     "date-fns": "^3.0.0",
     "dotenv": "^17.2.3",

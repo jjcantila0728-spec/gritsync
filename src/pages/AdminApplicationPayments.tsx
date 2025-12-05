@@ -411,16 +411,7 @@ export function AdminApplicationPayments() {
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Application ID</p>
                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100 font-mono">
-                  {(() => {
-                    // Mask the middle 7 characters of GRIT APP ID
-                    const idToMask = application.grit_app_id || id
-                    if (!idToMask) return ''
-                    if (idToMask.includes('-')) return idToMask
-                    if (idToMask.length < 10) return idToMask
-                    const start = idToMask.slice(0, Math.floor((idToMask.length - 7) / 2))
-                    const end = idToMask.slice(start.length + 7)
-                    return `${start}*******${end}`
-                  })()}
+                  {application.grit_app_id || id || ''}
                 </p>
               </div>
             </div>

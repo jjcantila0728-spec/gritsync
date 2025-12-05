@@ -8,7 +8,12 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { logger } from './utils/logger.js'
 import { securityHeaders, requestLogger, validateEnvironment } from './middleware/security.js'
 import { apiRateLimiter, authRateLimiter } from './middleware/rateLimiter.js'
+import { sanitizeInput, validateNoSQLInjection } from './middleware/sanitize.js'
+import { csrfProtection, addCSRFToken } from './middleware/csrf.js'
+import { compressionMiddleware } from './middleware/compression.js'
+import { performanceMonitor, getMetrics } from './middleware/performance.js'
 import authRoutes from './routes/auth.js'
+import sessionsRoutes from './routes/sessions.js'
 import applicationsRoutes from './routes/applications.js'
 import quotationsRoutes from './routes/quotations.js'
 import servicesRoutes from './routes/services.js'
@@ -42,11 +47,31 @@ if (isProduction) {
 // Trust proxy (important for rate limiting and IP detection behind reverse proxy)
 app.set('trust proxy', 1)
 
+// Request timeout (30 seconds for API requests)
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    if (!res.headersSent) {
+      res.status(408).json({
+        success: false,
+        error: 'Request timeout',
+        message: 'The request took too long to process'
+      })
+    }
+  })
+  next()
+})
+
+// Compression middleware (reduces response size)
+app.use(compressionMiddleware)
+
 // Security headers middleware (must be early)
 app.use(securityHeaders)
 
 // Request logging
 app.use(requestLogger)
+
+// Performance monitoring
+app.use(performanceMonitor)
 
 // CORS configuration
 const corsOptions = {
@@ -81,11 +106,24 @@ app.use(cors(corsOptions))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Static files with caching (1 year for immutable assets)
+// Input sanitization (before CSRF and routes)
+app.use(sanitizeInput)
+app.use(validateNoSQLInjection)
+
+// Static files with optimized caching
 app.use(express.static('public', {
-  maxAge: '1y',
+  maxAge: isProduction ? '1y' : '0', // 1 year in production, no cache in dev
   etag: true,
-  lastModified: true
+  lastModified: true,
+  immutable: true, // Mark as immutable for better caching
+  setHeaders: (res, path) => {
+    // Set appropriate cache headers based on file type
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+    } else if (path.match(/\.(jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    }
+  }
 }))
 
 // Initialize Stripe (async, but we don't wait for it)
@@ -95,33 +133,72 @@ initializeStripe().catch(err => {
 
 // Health check endpoints (before rate limiting)
 app.get('/health', (req, res) => {
+  const memUsage = process.memoryUsage()
+  const metrics = getMetrics()
+  
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
+    uptime: `${Math.round(process.uptime())}s`,
+    environment: process.env.NODE_ENV || 'development',
+    memory: {
+      heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+      rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+    },
+    performance: {
+      totalRequests: metrics.requests,
+      averageResponseTime: metrics.averageResponseTime,
+      errors: metrics.errors
+    }
   })
 })
 
 app.get('/ready', async (req, res) => {
   try {
+    const startTime = Date.now()
+    
     // Check critical services
     const checks = {
       database: true, // Supabase connection would be checked here
       stripe: !!getStripe()
     }
     
-    const allHealthy = Object.values(checks).every(v => v === true)
+    // Additional health checks in production
+    if (isProduction) {
+      // Check memory usage
+      const memUsage = process.memoryUsage()
+      checks.memory = {
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+        rss: Math.round(memUsage.rss / 1024 / 1024) // MB
+      }
+      
+      // Warn if memory usage is high (>80% of heap)
+      const heapUsagePercent = (memUsage.heapUsed / memUsage.heapTotal) * 100
+      if (heapUsagePercent > 80) {
+        logger.warn('High memory usage detected', { heapUsagePercent: Math.round(heapUsagePercent) })
+      }
+    }
+    
+    const allHealthy = Object.values(checks).every(v => {
+      if (typeof v === 'object') return true // Skip object checks
+      return v === true
+    })
+    
+    const responseTime = Date.now() - startTime
     
     res.status(allHealthy ? 200 : 503).json({
       status: allHealthy ? 'ready' : 'not ready',
       checks,
+      responseTime: `${responseTime}ms`,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    logger.error('Readiness check failed', error)
     res.status(503).json({
       status: 'not ready',
-      error: error.message,
+      error: isProduction ? 'Service unavailable' : error.message,
       timestamp: new Date().toISOString()
     })
   }
@@ -130,8 +207,13 @@ app.get('/ready', async (req, res) => {
 // Apply rate limiting to API routes
 app.use('/api', apiRateLimiter)
 
+// CSRF protection for state-changing requests (after authentication routes)
+// Note: CSRF is applied per-route where needed, not globally
+// GET requests and webhooks are excluded
+
 // Mount route modules
 app.use('/api/auth', authRateLimiter, authRoutes)
+app.use('/api/sessions', sessionsRoutes)
 app.use('/api/applications', applicationsRoutes)
 app.use('/api/quotations', quotationsRoutes)
 app.use('/api/services', servicesRoutes)
@@ -266,13 +348,81 @@ app.use((req, res) => {
 // Error handler middleware (must be last)
 app.use(errorHandler)
 
-app.listen(PORT, () => {
+// Periodic cleanup of expired sessions (every hour)
+if (isProduction) {
+  setInterval(async () => {
+    try {
+      const { cleanupExpiredSessions } = await import('./utils/sessions.js')
+      const count = await cleanupExpiredSessions()
+      if (count > 0) {
+        logger.info(`Cleaned up ${count} expired sessions`)
+      }
+    } catch (error) {
+      logger.error('Error during session cleanup', error)
+    }
+  }, 60 * 60 * 1000) // Every hour
+}
+
+// Create server instance for graceful shutdown
+const server = app.listen(PORT, () => {
   if (isProduction) {
-    logger.info(`🚀 GritSync API Server running in PRODUCTION mode on port ${PORT}`)
-    logger.info(`Environment: ${process.env.NODE_ENV}`)
-    logger.info(`Frontend URL: ${process.env.FRONTEND_URL || 'Not set'}`)
+    logger.info('🚀 GritSync API Server running in PRODUCTION mode', {
+      port: PORT,
+      environment: process.env.NODE_ENV,
+      frontendUrl: process.env.FRONTEND_URL || 'Not set',
+      features: {
+        sessionManagement: 'Enabled',
+        csrfProtection: 'Enabled',
+        inputSanitization: 'Enabled',
+        compression: 'Enabled',
+        rateLimiting: 'Enabled'
+      }
+    })
   } else {
     logger.info(`Server running on http://localhost:${PORT}`)
   }
 })
+
+// Graceful shutdown handler
+const gracefulShutdown = (signal) => {
+  logger.info(`Received ${signal}, starting graceful shutdown...`)
+  
+  server.close(() => {
+    logger.info('HTTP server closed')
+    
+    // Close database connections, cleanup, etc.
+    // Supabase handles its own cleanup
+    
+    logger.info('Graceful shutdown complete')
+    process.exit(0)
+  })
+  
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout')
+    process.exit(1)
+  }, 10000)
+}
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', error)
+  gracefulShutdown('uncaughtException')
+})
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', { reason, promise })
+  // Don't exit on unhandled rejection in production, just log it
+  if (!isProduction) {
+    gracefulShutdown('unhandledRejection')
+  }
+})
+
+// Export server for testing
+export default app
 

@@ -980,53 +980,27 @@ export const quotationsAPI = {
 // Use server endpoint with caching for better performance
 export const servicesAPI = {
   getAll: async () => {
-    // Try server API first (with caching), fallback to Supabase
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+    // Use Supabase directly (serverless)
+    const { data, error: supabaseError } = await supabase
+      .from('services')
+      .select('*')
+      .order('service_name', { ascending: true })
     
-    try {
-      const { cachedFetch } = await import('./cache')
-      const data = await cachedFetch(`${API_URL}/services`, undefined, {
-        ttl: 300000, // 5 minutes
-        useCache: true
-      })
-      return data || []
-    } catch (error) {
-      // Fallback to Supabase if server API fails
-      const { data, error: supabaseError } = await supabase
-        .from('services')
-        .select('*')
-        .order('service_name', { ascending: true })
-      
-      if (supabaseError) throw new Error(supabaseError.message)
-      return data || []
-    }
+    if (supabaseError) throw new Error(supabaseError.message)
+    return data || []
   },
 
   getByServiceAndState: async (serviceName: string, state: string) => {
-    // Try server API first (with caching), fallback to Supabase
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+    // Use Supabase directly (serverless)
+    const { data, error: supabaseError } = await supabase
+      .from('services')
+      .select('*')
+      .eq('service_name', serviceName)
+      .eq('state', state)
+      .maybeSingle()
     
-    try {
-      const { cachedFetch } = await import('./cache')
-      const encodedServiceName = encodeURIComponent(serviceName)
-      const encodedState = encodeURIComponent(state)
-      const data = await cachedFetch(`${API_URL}/services/${encodedServiceName}/${encodedState}`, undefined, {
-        ttl: 300000, // 5 minutes
-        useCache: true
-      })
-      return data
-    } catch (error) {
-      // Fallback to Supabase if server API fails
-      const { data, error: supabaseError } = await supabase
-        .from('services')
-        .select('*')
-        .eq('service_name', serviceName)
-        .eq('state', state)
-        .maybeSingle()
-      
-      if (supabaseError) throw new Error(supabaseError.message)
-      return data
-    }
+    if (supabaseError) throw new Error(supabaseError.message)
+    return data
   },
 
   getByServiceStateAndPaymentType: async (serviceName: string, state: string, paymentType: 'full' | 'staggered') => {
@@ -1518,31 +1492,45 @@ export function getFileUrl(filePath: string): string {
 // Get signed URL for private files (expires in 1 hour)
 export async function getSignedFileUrl(filePath: string, expiresIn: number = 3600): Promise<string> {
   if (!filePath || filePath.trim() === '') {
+    console.error('getSignedFileUrl: File path is required', filePath)
     throw new Error('File path is required')
   }
   
   // Normalize path (handle Windows backslashes)
   const normalizedPath = filePath.replace(/\\/g, '/')
   
+  console.log('getSignedFileUrl: Attempting to get signed URL for path:', normalizedPath)
+  console.log('getSignedFileUrl: Using bucket: documents')
+  
   const { data, error } = await supabase.storage
     .from('documents')
     .createSignedUrl(normalizedPath, expiresIn)
   
   if (error) {
+    console.error('getSignedFileUrl: Error getting signed URL:', error)
+    console.error('getSignedFileUrl: Error details:', {
+      message: error.message,
+      statusCode: error.statusCode,
+      status: error.status,
+      path: normalizedPath
+    })
+    
     // Provide more helpful error messages
     if (error.message?.includes('not found') || 
         error.message?.includes('Object not found') ||
         error.statusCode === 400 ||
         error.status === 400) {
-      throw new Error('File not found in storage')
+      throw new Error(`File not found in storage: ${normalizedPath}`)
     }
     throw new Error(error.message || 'Failed to get signed URL')
   }
   
   if (!data?.signedUrl) {
+    console.error('getSignedFileUrl: No signed URL returned in data:', data)
     throw new Error('No signed URL returned')
   }
   
+  console.log('getSignedFileUrl: Successfully got signed URL for:', normalizedPath)
   return data.signedUrl
 }
 
@@ -2063,60 +2051,7 @@ export const dashboardAPI = {
     const userId = await getCurrentUserId()
     const admin = await isAdmin()
     
-    // Try server API first (with caching) for better performance
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-    
-    try {
-      const { cachedFetch } = await import('./cache')
-      const { supabase } = await import('./supabase')
-      
-      // Get auth token for authenticated requests
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('No session')
-      }
-      
-      const endpoint = admin ? '/dashboard/admin/stats' : '/dashboard/stats'
-      const stats = await cachedFetch(`${API_URL}${endpoint}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      }, {
-        ttl: 60000, // 1 minute cache
-        useCache: true
-      })
-      
-      // Transform server response to match expected format
-      if (admin) {
-        return {
-          totalApplications: stats.totalApplications || 0,
-          pendingApplications: 0, // Server doesn't return this separately
-          approvedApplications: stats.totalApplications || 0,
-          rejectedApplications: 0,
-          totalQuotations: stats.totalQuotations || 0,
-          pendingQuotations: 0,
-          paidQuotations: 0,
-          totalClients: stats.totalUsers || 0,
-          revenue: stats.revenue || 0,
-          applications: stats.totalApplications || 0,
-          pending: 0,
-          approved: stats.totalApplications || 0,
-          quotations: stats.totalQuotations || 0,
-          users: stats.totalUsers || 0
-        }
-      } else {
-        return {
-          applications: stats.applications || 0,
-          pending: stats.pending || 0,
-          approved: stats.approved || 0,
-          quotations: stats.quotations || 0
-        }
-      }
-    } catch (error) {
-      // Fallback to Supabase queries if server API fails
-      console.warn('Server API failed, falling back to Supabase:', error)
+    // Use Supabase directly (serverless)
       if (admin) {
         // Admin stats - comprehensive system-wide statistics
       const [
@@ -2284,21 +2219,31 @@ export const dashboardAPI = {
       
       // Get approved and completed counts for client
       // We need to check both status and timeline steps to determine completion
-      const [approvedApps, completedApps, allUserApps] = await Promise.all([
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'completed'),
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'completed'),
+      const [completedApps, allUserApps] = await Promise.all([
+        supabase.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).in('status', ['completed', 'approved']),
         supabase.from('applications').select('id, status').eq('user_id', userId),
       ])
       
       // Count applications with status 'completed' or 'approved'
-      let completedCount = (approvedApps.count || 0) + (completedApps.count || 0)
+      // Use a Set to avoid double counting if an app has both statuses (shouldn't happen, but safe)
+      const statusCompletedAppIds = new Set<string>()
+      if (allUserApps.data) {
+        allUserApps.data.forEach((app: any) => {
+          if (app.status === 'completed' || app.status === 'Completed' || 
+              app.status === 'approved' || app.status === 'Approved') {
+            statusCompletedAppIds.add(app.id)
+          }
+        })
+      }
+      let completedCount = statusCompletedAppIds.size
       
       // Also check for applications that are completed based on timeline steps
       // (applications with nclex_exam or quick_results steps completed)
       // This handles cases where status might not be 'completed' but the exam is done
+      // Only count apps that are NOT already counted as completed by status
       if (allUserApps.data && allUserApps.data.length > 0) {
         const appIdsToCheck = allUserApps.data
-          .filter((app: any) => app.status !== 'completed' && app.status !== 'Completed' && app.status !== 'approved' && app.status !== 'Approved')
+          .filter((app: any) => !statusCompletedAppIds.has(app.id))
           .map((app: any) => app.id)
         
         if (appIdsToCheck.length > 0) {
@@ -2312,8 +2257,13 @@ export const dashboardAPI = {
           
           if (completedSteps && completedSteps.length > 0) {
             // Count unique applications with completed exam steps
+            // Only count apps that aren't already counted
             const uniqueCompletedAppIds = new Set(completedSteps.map((s: any) => s.application_id))
-            completedCount += uniqueCompletedAppIds.size
+            uniqueCompletedAppIds.forEach((appId: string) => {
+              if (!statusCompletedAppIds.has(appId)) {
+                completedCount++
+              }
+            })
           }
         }
       }
@@ -2328,7 +2278,6 @@ export const dashboardAPI = {
         approved: totalApprovedCompleted,
         revenue: revenue,
       }
-    }
     }
   },
 }
@@ -2457,6 +2406,106 @@ export const adminAPI = {
       return 56.00
     }
   },
+
+  // Notification Types Management
+  getNotificationTypes: async () => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized')
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('notification_types')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+      
+      if (error) {
+        // If table doesn't exist, return empty array (migration not run)
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+          console.warn('notification_types table does not exist. Run migration: create_notification_types_table.sql')
+          return []
+        }
+        throw new Error(error.message)
+      }
+      return data || []
+    } catch (error: any) {
+      // Handle case where table doesn't exist
+      if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        console.warn('notification_types table does not exist. Run migration: create_notification_types_table.sql')
+        return []
+      }
+      throw error
+    }
+  },
+
+  createNotificationType: async (notification: {
+    key: string
+    name: string
+    description?: string
+    category: 'email' | 'reminder' | 'greeting' | 'system'
+    enabled?: boolean
+    default_enabled?: boolean
+    config?: Record<string, any>
+    icon?: string
+    sort_order?: number
+  }) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized')
+    }
+    
+    const { data, error } = await supabase
+      .from('notification_types')
+      .insert({
+        ...notification,
+        enabled: notification.enabled ?? true,
+        default_enabled: notification.default_enabled ?? true,
+        config: notification.config || {},
+        sort_order: notification.sort_order ?? 0,
+      })
+      .select()
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  updateNotificationType: async (id: string, updates: {
+    name?: string
+    description?: string
+    enabled?: boolean
+    default_enabled?: boolean
+    config?: Record<string, any>
+    icon?: string
+    sort_order?: number
+  }) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized')
+    }
+    
+    const { data, error } = await supabase
+      .from('notification_types')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  deleteNotificationType: async (id: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized')
+    }
+    
+    const { error } = await supabase
+      .from('notification_types')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  },
 }
 
 // Application Payments API
@@ -2522,97 +2571,6 @@ export const applicationPaymentsAPI = {
     return data
   },
 
-  createAdyenPayment: async (paymentId: string, amount: number) => {
-    try {
-      
-      // Get the current session to ensure we have auth token
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in and try again.')
-      }
-      
-      // Call Supabase Edge Function for Adyen GCash payment
-      const { data, error } = await supabase.functions.invoke('create-adyen-payment', {
-        body: { 
-          payment_id: paymentId,
-          amount: amount,
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      })
-      
-      
-      // Handle Supabase client error
-      if (error) {
-        console.error('Supabase function invocation error:', error)
-        
-        // Try to extract error message from response body
-        let errorMessage = 'Failed to create Adyen payment'
-        
-        if (error.context && error.context instanceof Response) {
-          try {
-            const responseText = await error.context.text()
-            console.error('Error response text:', responseText)
-            
-            try {
-              const errorBody = JSON.parse(responseText)
-              if (errorBody?.error) {
-                errorMessage = typeof errorBody.error === 'string' 
-                  ? errorBody.error 
-                  : errorBody.error.message || errorMessage
-              } else if (errorBody?.message) {
-                errorMessage = errorBody.message
-              }
-            } catch (parseError) {
-              if (responseText && responseText.length < 200) {
-                errorMessage = responseText
-              }
-            }
-          } catch (readError) {
-            console.error('Error reading response body:', readError)
-          }
-        }
-        
-        if (errorMessage === 'Failed to create Adyen payment') {
-          if (error.message && error.message !== 'Edge Function returned a non-2xx status code') {
-            errorMessage = error.message
-          } else if (error.error?.message) {
-            errorMessage = error.error.message
-          }
-        }
-        
-        throw new Error(errorMessage)
-      }
-      
-      // Handle edge function error response
-      if (data && typeof data === 'object') {
-        if (data.error) {
-          const errorMsg = typeof data.error === 'string' 
-            ? data.error 
-            : data.error.message || data.error.error || 'Adyen payment creation failed'
-          throw new Error(errorMsg)
-        }
-        
-        return {
-          action: data.action,
-          pspReference: data.pspReference,
-          resultCode: data.resultCode,
-          paymentId: data.payment_id,
-        }
-      }
-      
-      throw new Error('No response from Adyen payment service')
-    } catch (err: any) {
-      if (err instanceof Error) {
-        throw err
-      }
-      
-      const errorMessage = err?.message || err?.error?.message || err?.error || 'Failed to create Adyen payment. Please try again or contact support.'
-      throw new Error(errorMessage)
-    }
-  },
 
   createPaymentIntent: async (paymentId: string) => {
     try {
@@ -2764,7 +2722,7 @@ export const applicationPaymentsAPI = {
       }
     } else if (paymentMethod === 'gcash') {
       // GCash also requires manual verification (keep as pending_approval or paid based on webhook)
-      // For now, if it's from Adyen webhook, it will be 'paid', otherwise 'pending_approval'
+      // For manual GCash payments, status will be 'pending_approval' until admin verifies
       updateData.status = 'pending_approval'
       if (gcashDetails) {
         updateData.transaction_id = `GCASH-${gcashDetails.reference}`
@@ -3118,393 +3076,314 @@ export const applicationPaymentsAPI = {
 // Tracking API
 export const trackingAPI = {
   track: async (id: string) => {
-    // Use server-side API endpoint for accurate tracking results
-    // The server-side API uses Supabase and has the most accurate calculation logic
-    // The server endpoint now supports both GRIT APP IDs and UUIDs
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+    // Use Supabase directly for tracking - no server dependency
+    // This works for both authenticated and public users
+    // RLS policies should allow public access to tracking data
+    const normalizedId = id.trim().toUpperCase()
     
-    try {
-      // Normalize the ID (uppercase for GRIT APP IDs)
-      const normalizedId = id.trim().toUpperCase()
+    console.log('Tracking API: Starting track for ID:', normalizedId)
+    
+    // Check if ID is a GRIT APP ID (AP + 12 alphanumeric) or UUID
+    const isGritAppId = /^AP[0-9A-Z]{12}$/.test(normalizedId)
+    console.log('Tracking API: Is GRIT APP ID?', isGritAppId)
+    
+    let application: any = null
+    let appError: any = null
+    
+    // Query by grit_app_id if it's a GRIT APP ID, otherwise by UUID id
+    // Note: Only select columns that actually exist in the applications table
+    if (isGritAppId) {
+      console.log('Tracking API: Querying by grit_app_id:', normalizedId)
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
+        .eq('grit_app_id', normalizedId)
+        .single()
       
-      // Use cached fetch for tracking (cache for 1 minute since tracking data can change)
-      const { cachedFetch } = await import('./cache')
-      const result = await cachedFetch(`${API_URL}/track/${normalizedId}`, undefined, {
-        ttl: 60000, // 1 minute cache
-        useCache: true
-      })
+      application = data
+      appError = error
       
-      // Ensure picture_url is properly set if picture_path exists
-      if (!result.picture_url && result.picture_path) {
-        try {
-          result.picture_url = getFileUrl(result.picture_path)
-        } catch (error) {
-          // If public URL fails, leave it as null
-          result.picture_url = null
-        }
-      }
-      
-      return result
-    } catch (error: any) {
-      // If server API fails, fall back to Supabase query (for backward compatibility)
-      // Check if ID is a GRIT APP ID (AP + 12 alphanumeric) or UUID
-      const isGritAppId = /^AP[0-9A-Z]{12}$/.test(id.trim().toUpperCase())
-      
-      let application: any = null
-      let appError: any = null
-      
-      // Query by grit_app_id if it's a GRIT APP ID, otherwise by UUID id
-      if (isGritAppId) {
-        // Try to query by grit_app_id first
-        const normalizedId = id.trim().toUpperCase()
-        const { data, error } = await supabase
-          .from('applications')
-          .select('*')
-          .eq('grit_app_id', normalizedId)
-          .single()
-        
-        application = data
-        appError = error
-        
-        // If query fails with 400 (bad request - column might not exist) or other errors, fall back
-        if (appError) {
-          // Check if it's a column error or 400 error (column doesn't exist)
-          const isColumnError = appError.message?.includes('column') || 
-                               appError.message?.includes('does not exist') || 
-                               appError.code === 'PGRST116' ||
-                               appError.code === '42703' ||
-                               (appError.status === 400 && appError.message?.includes('grit_app_id'))
-          
-          if (isColumnError) {
-            // Column might not exist yet, try UUID lookup as fallback
-            // But since we have a GRIT APP ID, we can't look it up by UUID
-            // So we'll just throw a helpful error
-            throw new Error('GRIT APP ID tracking is not available yet. Please run the migration script to add the grit_app_id column.')
-          }
-          // For other errors, throw them
-          throw new Error(appError.message || 'Application not found')
-        }
+      if (error) {
+        console.error('Tracking API: Error querying by grit_app_id:', error)
       } else {
-        // Query by UUID id
-        const { data, error } = await supabase
-          .from('applications')
-          .select('*')
-          .eq('id', id.trim())
-          .single()
-        
-        application = data
-        appError = error
+        console.log('Tracking API: Found application by grit_app_id:', application?.id)
       }
+    } else {
+      // Query by UUID id
+      console.log('Tracking API: Querying by UUID id:', normalizedId)
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
+        .eq('id', normalizedId)
+        .single()
       
-      if (appError) {
-        // Better error message for 400 errors
-        if (appError.status === 400) {
-          throw new Error('Invalid tracking ID format. Please check your tracking ID and try again.')
-        }
-        throw new Error(appError.message || 'Application not found')
+      application = data
+      appError = error
+      
+      if (error) {
+        console.error('Tracking API: Error querying by UUID:', error)
+      } else {
+        console.log('Tracking API: Found application by UUID:', application?.id)
       }
-      if (!application) throw new Error('Application not found')
-      
-      // Use the actual UUID id for related queries
-      const applicationId = application.id
-      
-      const { data: steps, error: stepsError } = await supabase
-        .from('application_timeline_steps')
-        .select('*')
-        .eq('application_id', applicationId)
-        .order('created_at', { ascending: true })
-      
-      if (stepsError) throw new Error(stepsError.message)
-      const allSteps = steps || []
-      
-      // Get payments for this application
-      const { data: payments } = await supabase
-        .from('application_payments')
-        .select('*')
-        .eq('application_id', applicationId)
-      
-      // ===== ALGORITHM: Calculate Latest Update, Current Progress, and Next Step from Timeline =====
-      
-      // Define step order and names (based on timeline structure)
-      const stepOrder = [
-        { key: 'app_submission', name: 'Application Submission' },
-        { key: 'credentialing', name: 'Credentialing' },
-        { key: 'bon_application', name: 'BON Application' },
-        { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
-        { key: 'pearson_vue', name: 'Pearson VUE Application' },
-        { key: 'att', name: 'ATT' },
-        { key: 'nclex_exam', name: 'NCLEX Exam' }
-      ]
-      
-      // Define next step instructions
-      const nextStepInstructions: { [key: string]: string } = {
-        'credentialing': 'Generate your letter for school',
-        'bon_application': 'Complete mandatory courses and submit Form 1',
-        'nclex_eligibility': 'Wait for NCLEX eligibility approval',
-        'pearson_vue': 'Create Pearson VUE account and request ATT',
-        'att': 'Wait for ATT to be received',
-        'nclex_exam': 'Schedule and take your NCLEX exam'
-      }
-      
-      // Create a map of step statuses
-      const stepStatusMap: { [key: string]: any } = {}
-      allSteps.forEach((step: any) => {
-        stepStatusMap[step.step_key] = step
+    }
+    
+    if (appError) {
+      console.error('Tracking API: Application query failed:', {
+        error: appError,
+        message: appError.message,
+        code: appError.code,
+        details: appError.details,
+        hint: appError.hint
       })
       
-      // Helper function to check if a step is actually completed based on sub-steps
-      const isStepCompleted = (stepKey: string): boolean => {
-        const stepData = stepStatusMap[stepKey]
-        
-        // Check sub-steps first (regardless of parent step status)
-        switch (stepKey) {
-          case 'app_submission': {
-            const appCreated = stepStatusMap['app_created']
-            const docsSubmitted = stepStatusMap['documents_submitted']
-            const appPaid = stepStatusMap['app_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step1'))
-            const allSubStepsDone = (appCreated && appCreated.status === 'completed') &&
-                                   (docsSubmitted && docsSubmitted.status === 'completed') &&
-                                   (appPaid && (appPaid.status === 'completed' || (typeof appPaid === 'object' && appPaid.status === 'paid')))
-            // Return true if all sub-steps are done OR if parent is explicitly marked completed
-            return allSubStepsDone || (stepData && stepData.status === 'completed')
-          }
-          case 'credentialing': {
-            const letterGenerated = stepStatusMap['letter_generated']
-            const letterSubmitted = stepStatusMap['letter_submitted']
-            const officialDocs = stepStatusMap['official_docs_submitted']
-            const allSubStepsDone = (letterGenerated && letterGenerated.status === 'completed') &&
-                                   (letterSubmitted && letterSubmitted.status === 'completed') &&
-                                   (officialDocs && officialDocs.status === 'completed')
-            return allSubStepsDone || (stepData && stepData.status === 'completed')
-          }
-          case 'bon_application': {
-            const mandatoryCourses = stepStatusMap['mandatory_courses']
-            const form1Submitted = stepStatusMap['form1_submitted']
-            const appStep2Paid = stepStatusMap['app_step2_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
-            const allSubStepsDone = (mandatoryCourses && mandatoryCourses.status === 'completed') &&
-                                   (form1Submitted && form1Submitted.status === 'completed') &&
-                                   (appStep2Paid && (appStep2Paid.status === 'completed' || (typeof appStep2Paid === 'object' && appStep2Paid.status === 'paid')))
-            return allSubStepsDone || (stepData && stepData.status === 'completed')
-          }
-          case 'nclex_eligibility': {
-            const eligibilityApproved = stepStatusMap['nclex_eligibility_approved']
-            const subStepDone = (eligibilityApproved && eligibilityApproved.status === 'completed')
-            return subStepDone || (stepData && stepData.status === 'completed')
-          }
-          case 'pearson_vue': {
-            const accountCreated = stepStatusMap['pearson_account_created']
-            const attRequested = stepStatusMap['att_requested']
-            const allSubStepsDone = (accountCreated && accountCreated.status === 'completed') &&
-                                   (attRequested && attRequested.status === 'completed')
-            return allSubStepsDone || (stepData && stepData.status === 'completed')
-          }
-          case 'att': {
-            const attReceived = stepStatusMap['att_received']
-            if (!attReceived || !attReceived.data) {
-              return (stepData && stepData.status === 'completed')
-            }
-            const data = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
-            const hasCodeAndExpiry = !!(data.code || data.att_code) && !!(data.expiry_date || data.att_expiry_date)
-            return hasCodeAndExpiry || (stepData && stepData.status === 'completed')
-          }
-          case 'nclex_exam': {
-            const examBooked = stepStatusMap['exam_date_booked']
-            if (!examBooked || !examBooked.data) {
-              return (stepData && stepData.status === 'completed')
-            }
-            const data = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
-            const hasAllDetails = !!(data.date || examBooked.date) && !!(data.exam_time || data.time) && !!(data.exam_location || data.location)
-            return hasAllDetails || (stepData && stepData.status === 'completed')
-          }
-          case 'quick_results': {
-            const quickResultsData = stepStatusMap['quick_results']
-            if (!quickResultsData || !quickResultsData.data) {
-              return (stepData && stepData.status === 'completed')
-            }
-            const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
-            const hasResult = !!(data.result)
-            return hasResult || (stepData && stepData.status === 'completed')
-          }
-          default:
-            return stepData && stepData.status === 'completed'
+      // Provide more helpful error messages
+      if (appError.code === 'PGRST116' || appError.message?.includes('No rows')) {
+        throw new Error('Application not found. Please check your tracking ID and try again.')
+      } else if (appError.code === '42501' || appError.message?.includes('permission denied') || appError.message?.includes('row-level security')) {
+        throw new Error('Access denied. Please ensure the public tracking policies are applied in Supabase.')
+      } else {
+        throw new Error(appError.message || 'Failed to fetch application. Please try again later.')
+      }
+    }
+    
+    if (!application) {
+      console.error('Tracking API: No application returned')
+      throw new Error('Application not found. Please check your tracking ID and try again.')
+    }
+    
+    // Use the actual UUID id for related queries
+    const applicationId = application.id
+    console.log('Tracking API: Application ID:', applicationId)
+    
+    // Get timeline steps
+    console.log('Tracking API: Fetching timeline steps...')
+    const { data: steps, error: stepsError } = await supabase
+      .from('application_timeline_steps')
+      .select('step_key, step_name, status, data, completed_at, updated_at, created_at')
+      .eq('application_id', applicationId)
+      .order('created_at', { ascending: true })
+    
+    if (stepsError) {
+      console.warn('Tracking API: Error fetching timeline steps:', stepsError)
+    }
+    const allSteps = steps || []
+    console.log('Tracking API: Found', allSteps.length, 'timeline steps')
+    
+    // Get payments
+    console.log('Tracking API: Fetching payments...')
+    const { data: payments, error: paymentsError } = await supabase
+      .from('application_payments')
+      .select('*')
+      .eq('application_id', applicationId)
+    
+    if (paymentsError) {
+      console.warn('Tracking API: Error fetching payments:', paymentsError)
+    }
+    const allPayments = payments || []
+    console.log('Tracking API: Found', allPayments.length, 'payments')
+    
+    // Get processing accounts
+    console.log('Tracking API: Fetching processing accounts...')
+    const { data: processingAccounts, error: processingError } = await supabase
+      .from('processing_accounts')
+      .select('account_type, email')
+      .eq('application_id', applicationId)
+    
+    if (processingError) {
+      console.warn('Tracking API: Error fetching processing accounts:', processingError)
+    }
+    const allProcessingAccounts = processingAccounts || []
+    console.log('Tracking API: Found', allProcessingAccounts.length, 'processing accounts')
+    
+    // Get Gmail from processing account
+    const gmailAccounts = allProcessingAccounts.filter(acc => acc.account_type === 'gmail')
+    const displayEmail = (gmailAccounts && gmailAccounts.length > 0) ? gmailAccounts[0].email : application.email
+    
+    // Create step status map
+    const stepStatusMap: { [key: string]: any } = {}
+    allSteps.forEach((step: any) => {
+      if (step.data && typeof step.data === 'string') {
+        try {
+          step.data = JSON.parse(step.data)
+        } catch (e) {
+          // Keep as is if parsing fails
         }
       }
+      stepStatusMap[step.step_key] = step
+    })
+    
+    // Helper to get step status
+    const getStepStatus = (key: string) => {
+      const step = stepStatusMap[key]
+      return step?.status || 'pending'
+    }
+    
+    // Helper to check if step is completed (simplified version matching server logic)
+    const isStepCompleted = (stepKey: string): boolean => {
+      const stepData = stepStatusMap[stepKey]
       
-      // 1. Find the latest update timestamp from all timeline steps
-      let latestUpdate: string | null = null
-      let latestUpdateTimestamp: number | null = null
-      
-      // Check all steps for the most recent updated_at or completed_at
-      allSteps.forEach((step: any) => {
-        const timestamps: Array<{ time: number; value: string }> = []
-        if (step.updated_at) timestamps.push({ time: new Date(step.updated_at).getTime(), value: step.updated_at })
-        if (step.completed_at) timestamps.push({ time: new Date(step.completed_at).getTime(), value: step.completed_at })
-        if (step.created_at) timestamps.push({ time: new Date(step.created_at).getTime(), value: step.created_at })
-        
-        if (timestamps.length > 0) {
-          const maxTimestamp = Math.max(...timestamps.map(t => t.time))
-          if (!latestUpdateTimestamp || maxTimestamp > latestUpdateTimestamp) {
-            latestUpdateTimestamp = maxTimestamp
-            // Use the field that has the max timestamp
-            const maxTimestampObj = timestamps.find(t => t.time === maxTimestamp)
-            latestUpdate = maxTimestampObj ? maxTimestampObj.value : (step.completed_at || step.updated_at || step.created_at)
-          }
+      switch (stepKey) {
+        case 'app_submission': {
+          const appCreated = getStepStatus('app_created') === 'completed' || !!application.created_at
+          const docsSubmitted = getStepStatus('documents_submitted') === 'completed' || !!(application.picture_path)
+          const appPaid = getStepStatus('app_paid') === 'completed' || (allPayments && allPayments.some((p: any) => p.status === 'paid' && (p.payment_type === 'step1' || p.payment_type === 'full')))
+          return (appCreated && docsSubmitted && appPaid) || (stepData && stepData.status === 'completed')
         }
-      })
-      
-      // If no timeline steps, use application updated_at or created_at
-      if (!latestUpdate) {
-        latestUpdate = application.updated_at || application.created_at
+        case 'credentialing': {
+          const letterGenerated = getStepStatus('letter_generated') === 'completed'
+          const letterSubmitted = getStepStatus('letter_submitted') === 'completed'
+          const officialDocs = getStepStatus('official_docs_submitted') === 'completed'
+          return (letterGenerated && letterSubmitted && officialDocs) || (stepData && stepData.status === 'completed')
+        }
+        case 'bon_application': {
+          const mandatoryCourses = getStepStatus('mandatory_courses') === 'completed'
+          const form1Submitted = getStepStatus('form1_submitted') === 'completed'
+          const appStep2Paid = getStepStatus('app_step2_paid') === 'completed' || (allPayments && allPayments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
+          return (mandatoryCourses && form1Submitted && appStep2Paid) || (stepData && stepData.status === 'completed')
+        }
+        case 'nclex_eligibility': {
+          return getStepStatus('nclex_eligibility_approved') === 'completed' || (stepData && stepData.status === 'completed')
+        }
+        case 'pearson_vue': {
+          const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || (allProcessingAccounts && allProcessingAccounts.some((acc: any) => acc.account_type === 'pearson_vue'))
+          const attRequested = getStepStatus('att_requested') === 'completed'
+          return (pearsonAccountCreated && attRequested) || (stepData && stepData.status === 'completed')
+        }
+        case 'att': {
+          const attReceived = stepStatusMap['att_received']
+          if (!attReceived || !attReceived.data) {
+            return (stepData && stepData.status === 'completed')
+          }
+          const attData = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
+          return !!(attData?.code || attData?.att_code) && !!(attData?.expiry_date || attData?.att_expiry_date) || (stepData && stepData.status === 'completed')
+        }
+        case 'nclex_exam': {
+          const examBooked = stepStatusMap['exam_date_booked']
+          if (!examBooked || !examBooked.data) {
+            return (stepData && stepData.status === 'completed')
+          }
+          const examData = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
+          return !!(examData?.date || examData?.exam_date) && !!(examData?.time || examData?.exam_time) && !!(examData?.location || examData?.exam_location) || (stepData && stepData.status === 'completed')
+        }
+        default:
+          return stepData && stepData.status === 'completed'
       }
-      
-      // 2. Find the current progress (last completed step in order)
-      let currentProgress: string | null = null
-      let currentProgressStep: { key: string; name: string } | null = null
-      
-      // Find the last completed step in step order (using new completion logic)
-      // Start from the end and work backwards to find the most recent completed step
-      for (let i = stepOrder.length - 1; i >= 0; i--) {
-        const step = stepOrder[i]
-        if (isStepCompleted(step.key)) {
-          currentProgress = step.name
-          currentProgressStep = step
+    }
+    
+    // Step order
+    const stepOrder = [
+      { key: 'app_submission', name: 'Application Submission' },
+      { key: 'credentialing', name: 'Credentialing' },
+      { key: 'bon_application', name: 'BON Application' },
+      { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
+      { key: 'pearson_vue', name: 'Pearson VUE Application' },
+      { key: 'att', name: 'ATT' },
+      { key: 'nclex_exam', name: 'NCLEX Exam' }
+    ]
+    
+    // Find latest update
+    let latestUpdate = application.updated_at || application.created_at
+    allSteps.forEach((step: any) => {
+      const timestamps = []
+      if (step.updated_at) timestamps.push(new Date(step.updated_at).getTime())
+      if (step.completed_at) timestamps.push(new Date(step.completed_at).getTime())
+      if (step.created_at) timestamps.push(new Date(step.created_at).getTime())
+      if (timestamps.length > 0) {
+        const maxTime = Math.max(...timestamps)
+        const latestTime = latestUpdate ? new Date(latestUpdate).getTime() : 0
+        if (maxTime > latestTime) {
+          latestUpdate = step.completed_at || step.updated_at || step.created_at
+        }
+      }
+    })
+    
+    // Find current progress
+    let currentProgress = null
+    let currentProgressStep = null
+    for (let i = stepOrder.length - 1; i >= 0; i--) {
+      const step = stepOrder[i]
+      if (isStepCompleted(step.key)) {
+        currentProgress = step.name
+        currentProgressStep = step
+        break
+      }
+    }
+    
+    if (!currentProgress && application.created_at) {
+      currentProgress = 'Application Submission'
+      currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
+    }
+    
+    // Find next step
+    let nextStep = null
+    const currentIndex = currentProgressStep ? stepOrder.findIndex(s => s.key === currentProgressStep.key) : -1
+    if (currentIndex >= 0 && currentIndex < stepOrder.length - 1) {
+      for (let i = currentIndex + 1; i < stepOrder.length; i++) {
+        if (!isStepCompleted(stepOrder[i].key)) {
+          nextStep = stepOrder[i].name
           break
         }
       }
-      
-      // If no step is completed yet but application exists, default to Application Submission
-      if (!currentProgress && application.created_at) {
-        currentProgress = 'Application Submission'
-        currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
-      }
-      
-      // 3. Find the next step (first pending step after the last completed step)
-      let nextStep: string | null = null
-      let nextStepInstruction: string | null = null
-      
-      // Find the index of current progress in stepOrder
-      let currentProgressIndex = -1
-      if (currentProgressStep) {
-        for (let i = 0; i < stepOrder.length; i++) {
-          if (stepOrder[i].key === currentProgressStep.key) {
-            currentProgressIndex = i
-            break
-          }
-        }
-      }
-      
-      // Next step is the first pending step after current progress
-      if (currentProgressIndex >= 0 && currentProgressIndex < stepOrder.length - 1) {
-        // Look for the next step that is pending or not yet started
-        for (let i = currentProgressIndex + 1; i < stepOrder.length; i++) {
-          const nextStepInfo = stepOrder[i]
-          const nextStepData = stepStatusMap[nextStepInfo.key]
-          
-          // If step doesn't exist or is not completed (using new completion logic), this is the next step
-          if (!nextStepData || !isStepCompleted(nextStepInfo.key)) {
-            nextStep = nextStepInfo.name
-            nextStepInstruction = nextStepInstructions[nextStepInfo.key] || null
-            break
-          }
-        }
-      } else if (currentProgressIndex === -1) {
-        // No progress yet, next step is the first step
-        if (stepOrder.length > 0) {
-          const firstStep = stepOrder[0]
-          if (!isStepCompleted(firstStep.key)) {
-            nextStep = firstStep.name
-            nextStepInstruction = nextStepInstructions[firstStep.key] || null
-          }
-        }
-      }
-      
-      // Check if timeline is completed (all steps in stepOrder are done)
-      const isTimelineCompleted = stepOrder.every(step => isStepCompleted(step.key))
-      
-      // Check if we're at the last step (NCLEX Exam) and it's completed
-      const lastStepKey = stepOrder[stepOrder.length - 1]?.key
-      const isAtLastStep = currentProgressStep?.key === lastStepKey && isStepCompleted(lastStepKey)
-      
-      // Build current progress message
-      let currentProgressMessage = currentProgress || 'Not started'
-      let nextStepMessage: string | null = null
-      
-      // Check for exam result if timeline is completed or at last step
-      const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results')
-      const hasExamResult = quickResultsStep && quickResultsStep.data
-      
-      if (hasExamResult) {
-        const resultData = typeof quickResultsStep.data === 'string' ? JSON.parse(quickResultsStep.data) : quickResultsStep.data
-        if (resultData.result) {
-          if (resultData.result === 'pass' || resultData.result === 'Passed') {
-            currentProgressMessage = 'Congratulations!, You Passed the NCLEX-RN Exam!'
-            nextStepMessage = 'Wait for 1-2 weeks for your license to reflect in "Nursys"'
-          } else if (resultData.result === 'failed' || resultData.result === 'Failed') {
-            currentProgressMessage = 'You have failed the exam, Don\'t worry, you can take it again anytime.'
-            nextStepMessage = 'Retake again!'
-          } else {
-            const resultText = resultData.result
-            currentProgressMessage = `Exam Result: ${resultText}`
-          }
-        }
-      } else if (isTimelineCompleted || application.status === 'completed') {
-        // Timeline completed but no exam result yet
-        // Keep current progress as is, but don't show next step
-        nextStepMessage = null
-      } else {
-        // Build next step message for non-completed applications
-        if (nextStep) {
-          nextStepMessage = nextStep
-          if (nextStepInstruction) {
-            nextStepMessage += `, ${nextStepInstruction}`
-          }
-        }
-      }
-      
-      // Generate public-accessible picture URL for tracking
-      let pictureUrl = application.picture_url || null
-      if (!pictureUrl && application.picture_path) {
-        // Try to get public URL from Supabase Storage
-        try {
-          pictureUrl = getFileUrl(application.picture_path)
-        } catch (error) {
-          // If public URL fails, try to create a signed URL that works for public access
-          // For now, we'll leave it as null and let the frontend handle it
-          pictureUrl = null
-        }
-      }
-      
-      // Calculate progress percentage for tracking
-      // If timeline is completed (all main steps done), progress should be 100%
-      let calculatedProgressPercentage = application.progress_percentage || 0
-      
-      // Override to 100% if timeline is completed (all main steps in stepOrder are done)
-      if (isTimelineCompleted) {
-        calculatedProgressPercentage = 100
-      } else if (application.status === 'completed') {
-        // If status is completed, also set to 100%
-        calculatedProgressPercentage = 100
-      } else if (hasExamResult) {
-        // If there's an exam result, timeline is effectively complete
-        calculatedProgressPercentage = 100
-      }
-      
-      // Ensure progress doesn't exceed 100%
-      calculatedProgressPercentage = Math.min(100, Math.max(0, calculatedProgressPercentage))
-      
-      return {
-        ...application,
-        current_progress: currentProgressMessage,
-        next_step: nextStepMessage,
-        latest_update: latestUpdate,
-        progress_percentage: calculatedProgressPercentage,
-        completed_steps: application.completed_steps || 0,
-        total_steps: application.total_steps || 0,
-        picture_url: pictureUrl,
-        service_type: application.service_type || 'NCLEX Processing',
-        service_state: application.service_state || 'New York',
+    } else if (currentIndex === -1 && stepOrder.length > 0) {
+      if (!isStepCompleted(stepOrder[0].key)) {
+        nextStep = stepOrder[0].name
       }
     }
+    
+    // Check for exam result
+    const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results')
+    const quickResultsData = quickResultsStep?.data
+    const hasResult = !!(quickResultsData?.result)
+    
+    let currentProgressMessage = currentProgress || 'Not started'
+    let nextStepMessage = nextStep
+    
+    if (hasResult) {
+      const resultValue = quickResultsData.result
+      if (resultValue === 'pass' || resultValue === 'Passed') {
+        currentProgressMessage = 'Congratulations!, You Passed the NCLEX-RN Exam!'
+        nextStepMessage = 'Wait for 1-2 weeks for your license to reflect in "Nursys"'
+      } else if (resultValue === 'failed' || resultValue === 'Failed') {
+        currentProgressMessage = 'You have failed the exam, Don\'t worry, you can take it again anytime.'
+        nextStepMessage = 'Retake again!'
+      } else {
+        currentProgressMessage = `Exam Result: ${resultValue}`
+      }
+    } else if (stepOrder.every(step => isStepCompleted(step.key)) || application.status === 'completed') {
+      nextStepMessage = null
+    }
+    
+    // Get picture URL
+    let picture_url = null
+    if (application.picture_path) {
+      try {
+        picture_url = getFileUrl(application.picture_path)
+      } catch (error) {
+        picture_url = null
+      }
+    }
+    
+    const result = {
+      ...application,
+      email: displayEmail,
+      current_progress: currentProgressMessage,
+      next_step: nextStepMessage,
+      latest_update: latestUpdate,
+      picture_url: picture_url,
+      service_type: 'NCLEX Processing', // Default value (not stored in DB)
+      service_state: 'New York', // Default value (not stored in DB)
+      grit_app_id: application.grit_app_id || null
+    }
+    
+    console.log('Tracking API: Successfully completed tracking for:', normalizedId)
+    console.log('Tracking API: Result summary:', {
+      name: `${result.first_name} ${result.last_name}`,
+      current_progress: result.current_progress,
+      next_step: result.next_step,
+      email: result.email
+    })
+    
+    return result
   },
 }
 

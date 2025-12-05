@@ -23,7 +23,6 @@ const Payment = lazy(() => import('./pages/Payment').then(m => ({ default: m.Pay
 const ApplicationPayment = lazy(() => import('./pages/ApplicationPayment').then(m => ({ default: m.ApplicationPayment })))
 const ApplicationPayments = lazy(() => import('./pages/ApplicationPayments').then(m => ({ default: m.ApplicationPayments })))
 const AdminApplicationPayments = lazy(() => import('./pages/AdminApplicationPayments').then(m => ({ default: m.AdminApplicationPayments })))
-const AdyenReturn = lazy(() => import('./pages/AdyenReturn').then(m => ({ default: m.AdyenReturn })))
 const AdminClients = lazy(() => import('./pages/AdminClients').then(m => ({ default: m.AdminClients })))
 const AdminSettings = lazy(() => import('./pages/admin-settings/AdminSettings').then(m => ({ default: m.AdminSettings })))
 const GeneralSettings = lazy(() => import('./pages/admin-settings/GeneralSettings').then(m => ({ default: m.GeneralSettings })))
@@ -67,6 +66,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (children && typeof children === 'object' && !React.isValidElement(children) && !Array.isArray(children)) {
     console.error('ProtectedRoute: Invalid children prop - received plain object', children)
     return null
+  }
+
+  return <>{children}</>
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, isAdmin } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">
+        <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+      </div>
+    )
+  }
+
+  // If user is logged in, redirect to dashboard
+  if (user) {
+    return <Navigate to={isAdmin() ? '/admin/dashboard' : '/dashboard'} replace />
   }
 
   return <>{children}</>
@@ -130,10 +148,38 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route 
+          path="/" 
+          element={
+            <PublicRoute>
+              <Home />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/login" 
+          element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/register" 
+          element={
+            <PublicRoute>
+              <Register />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/forgot-password" 
+          element={
+            <PublicRoute>
+              <ForgotPassword />
+            </PublicRoute>
+          } 
+        />
         <Route path="/test-supabase" element={<TestSupabase />} />
       
       <Route
@@ -221,14 +267,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Payment />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/payment/adyen/return"
-        element={
-          <ProtectedRoute>
-            <AdyenReturn />
           </ProtectedRoute>
         }
       />

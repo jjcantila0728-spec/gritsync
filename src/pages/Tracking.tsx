@@ -380,18 +380,6 @@ export function Tracking() {
     return null
   }
 
-  // Mask the middle 7 characters of GRIT APP ID
-  const maskGritAppId = (id: string | undefined): string => {
-    if (!id) return ''
-    // If it's a UUID (contains hyphens), don't mask it
-    if (id.includes('-')) return id
-    // If it's shorter than 10 characters, don't mask it
-    if (id.length < 10) return id
-    // Mask middle 7 characters
-    const start = id.slice(0, Math.floor((id.length - 7) / 2))
-    const end = id.slice(start.length + 7)
-    return `${start}*******${end}`
-  }
 
   // Filter and sort applications
   // Reset page when filters change
@@ -929,26 +917,26 @@ export function Tracking() {
                           <div ref={trackingResultRef} className="relative overflow-hidden rounded-lg shadow-xl">
                             <div className="relative">
                             {/* Header - Orange to Maroon Gradient */}
-                            <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-red-900 dark:from-orange-600 dark:via-orange-700 dark:to-red-950 py-2 px-4">
+                            <div className="bg-gradient-to-br from-red-600 to-orange-600 dark:from-red-700 dark:to-orange-700 py-2 px-4">
                               <div className="flex items-center justify-between">
                                 {/* Left - Logo */}
                                 <div className="flex items-center gap-1">
                                   <div className="h-16 w-16 rounded-lg flex items-center justify-center overflow-hidden">
                                     <img 
-                                      src="/gritsync_logo.png" 
+                                      src="/gritsync_logo_gray.png" 
                                       alt="GritSync Logo" 
                                       className="h-full w-full object-contain p-2"
                                     />
                                   </div>
                                   <span className="text-3xl font-bold text-white">
-                                    <span className="text-gray-500">GRIT</span>
+                                    <span className="text-gray-800">GRIT</span>
                                     <span className="text-white">SYNC</span>
                                   </span>
                                 </div>
                                 {/* Right - NCLEX-RN and Tracking ID */}
                                 <div className="text-right">
                                   <h2 className="text-2xl font-bold text-white">NCLEX-RN</h2>
-                                  <p className="font-mono text-sm font-bold text-white/90">{maskGritAppId(trackingResult.grit_app_id || trackingResult.id)}</p>
+                                  <p className="font-mono text-sm font-bold text-gray-400">{trackingResult.grit_app_id || trackingResult.id}</p>
                                 </div>
                               </div>
                             </div>
@@ -1326,7 +1314,7 @@ export function Tracking() {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 text-xs text-gray-600 dark:text-gray-400">
                         <div className="flex items-center gap-1.5">
                           <FileText className="h-3 w-3" />
-                          <span className="font-mono">{maskGritAppId(app.grit_app_id || app.id)}</span>
+                          <span className="font-mono">{app.grit_app_id || app.id}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3 w-3" />

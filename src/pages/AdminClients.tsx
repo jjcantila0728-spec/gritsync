@@ -662,27 +662,18 @@ export function AdminClients() {
                                         throw new Error('No active session. Please log in again.')
                                       }
                                       
-                                      // Call server endpoint to generate login link
-                                      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-                                      // Ensure we don't double up on /api
-                                      let baseUrl = API_URL
-                                      if (baseUrl.endsWith('/api')) {
-                                        baseUrl = baseUrl.slice(0, -4)
-                                      }
-                                      const response = await fetch(`${baseUrl}/api/clients/${client.id}/login-as`, {
+                                      // Call Supabase Edge Function for admin login-as
+                                      const { data, error: functionError } = await supabase.functions.invoke('admin-login-as', {
                                         method: 'POST',
+                                        body: { userId: client.id },
                                         headers: {
-                                          'Content-Type': 'application/json',
                                           'Authorization': `Bearer ${session.access_token}`
                                         }
                                       })
 
-                                      if (!response.ok) {
-                                        const error = await response.json()
-                                        throw new Error(error.error || 'Failed to generate login link')
+                                      if (functionError || !data) {
+                                        throw new Error(functionError?.message || data?.error || 'Failed to generate login link')
                                       }
-
-                                      const data = await response.json()
                                       
                                       if (data.loginUrl) {
                                         // Store admin session to restore later

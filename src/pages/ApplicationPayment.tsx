@@ -13,7 +13,6 @@ import { formatCurrency } from '@/lib/utils'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
-import { AdyenGCashForm } from '@/components/AdyenGCashForm'
 import { ArrowLeft, CheckCircle, CreditCard, Receipt, Download, AlertCircle } from 'lucide-react'
 import jsPDF from 'jspdf'
 
@@ -293,7 +292,7 @@ export function ApplicationPayment() {
 
     setLoading(true)
     try {
-      // For Adyen GCash, paymentIntentId is actually the pspReference
+      // For manual GCash, paymentIntentId is the transaction reference
       const transactionId = paymentMethod === 'gcash' ? paymentIntentId : undefined
       const stripePaymentIntentId = (paymentMethod === 'card' && paymentIntentId) ? paymentIntentId : undefined
       

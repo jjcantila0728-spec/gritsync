@@ -4,6 +4,9 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { getSessionByToken, updateSessionActivity } from '../utils/sessions.js'
+import { getSupabaseAdmin } from '../db/supabase.js'
+import { logger } from '../utils/logger.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -18,8 +21,8 @@ if (!JWT_SECRET) {
   console.warn('⚠️  Using default JWT_SECRET. Set JWT_SECRET environment variable in production!')
 }
 
-// Auth middleware - supports both JWT and Supabase tokens
-export function authenticateToken(req, res, next) {
+// Auth middleware - supports both JWT and Supabase tokens with session validation
+export async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
@@ -27,8 +30,42 @@ export function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Access token required' })
   }
 
-  // Try JWT verification first (for legacy auth)
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  // First, check if token exists in sessions table (server-side session validation)
+  try {
+    const session = await getSessionByToken(token)
+    
+    if (session) {
+      // Server-side session exists and is valid
+      // Update activity (non-blocking)
+      updateSessionActivity(session.id).catch(err => {
+        logger.error('Failed to update session activity', err)
+      })
+      
+      // Get user info from session
+      const supabase = getSupabaseAdmin()
+      const { data: user } = await supabase
+        .from('users')
+        .select('id, email, role')
+        .eq('id', session.user_id)
+        .single()
+      
+      if (user) {
+        req.user = {
+          id: user.id,
+          email: user.email,
+          role: user.role
+        }
+        req.session = session
+        return next()
+      }
+    }
+  } catch (sessionError) {
+    // If session lookup fails, fall through to JWT/Supabase verification
+    logger.debug('Session lookup failed, falling back to token verification', sessionError)
+  }
+
+  // Fallback to JWT verification (for legacy auth or if session not found)
+  jwt.verify(token, JWT_SECRET, async (err, user) => {
     if (!err && user) {
       req.user = user
       return next()

@@ -11,6 +11,7 @@ import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Link } from 'react-router-dom'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { DocumentImagePreview } from '@/components/ui/DocumentImagePreview'
 import { applicationsAPI, applicationPaymentsAPI, getFileUrl, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI } from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import jsPDF from 'jspdf'
@@ -173,64 +174,13 @@ export function ApplicationDetail() {
   const [uploadingCourseFile, setUploadingCourseFile] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'file' | 'account', id: string, name?: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [pictureUrl, setPictureUrl] = useState<string | null>(null)
+  const [pictureError, setPictureError] = useState(false)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const timelineChannelRef = useRef<RealtimeChannel | null>(null)
   const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
 
   // Payment pricing will be loaded from admin quote service config
-
-  // Component for document image preview (uses file path directly with signed URLs)
-  const DocumentImagePreview = ({ filePath, alt, className }: { filePath: string, alt: string, className?: string }) => {
-    const [imageSrc, setImageSrc] = useState<string | null>(null)
-    const [error, setError] = useState(false)
-
-    useEffect(() => {
-      if (!filePath) {
-        setError(true)
-        return
-      }
-
-      // Handle legacy HTTP URLs
-      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-        setImageSrc(filePath)
-        return
-      }
-
-      // For Supabase Storage, get signed URL
-      getSignedFileUrl(filePath, 3600)
-        .then(url => {
-          setImageSrc(url)
-        })
-        .catch(() => {
-          setError(true)
-        })
-    }, [filePath])
-
-    if (error) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <ImageIcon className="h-12 w-12 text-gray-400" />
-        </div>
-      )
-    }
-
-    if (!imageSrc) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <div className="animate-pulse text-gray-400">Loading...</div>
-        </div>
-      )
-    }
-
-    return (
-      <img
-        src={imageSrc}
-        alt={alt}
-        className={className}
-        onError={() => setError(true)}
-      />
-    )
-  }
 
   // Component for PDF preview (shows PDF in iframe)
   const DocumentPDFPreview = ({ filePath, alt, className }: { filePath: string, alt: string, className?: string }) => {
@@ -623,11 +573,23 @@ export function ApplicationDetail() {
         if (applicationUserId) {
           // Fetch documents for the application owner (not the current logged-in user)
           const docs = await userDocumentsAPI.getByUserId(applicationUserId)
+          console.log('ApplicationDetail: Fetched documents for user:', applicationUserId, docs)
           const docsMap: any = {}
           const courseFiles: any[] = []
+          const pictureDocs: any[] = [] // Collect all picture documents first
           
           docs.forEach((doc: any) => {
             if (doc.document_type === 'picture' || doc.document_type === 'diploma' || doc.document_type === 'passport') {
+              // For picture type, collect all picture documents first, then filter
+              if (doc.document_type === 'picture') {
+                pictureDocs.push(doc)
+                return // Don't set yet, we'll process all picture docs together
+              }
+              
+              console.log(`ApplicationDetail: Found ${doc.document_type} document:`, {
+                file_path: doc.file_path,
+                file_name: doc.file_name
+              })
               docsMap[doc.document_type] = {
                 file_path: doc.file_path,
                 file_name: doc.file_name,
@@ -637,6 +599,46 @@ export function ApplicationDetail() {
             }
           })
           
+          // Process picture documents: filter out avatars and find the 2x2 picture
+          if (pictureDocs.length > 0) {
+            // Filter out avatars - only get actual 2x2 picture documents
+            const nonAvatarPictures = pictureDocs.filter(doc => {
+              const fileName = doc.file_name?.toLowerCase() || ''
+              const filePath = doc.file_path?.toLowerCase() || ''
+              // Exclude avatars
+              if (fileName.includes('avatar') || filePath.includes('avatar')) {
+                return false
+              }
+              // Include files that are clearly 2x2 pictures:
+              // - Start with "2x2picture" or "picture_"
+              // - Or contain "picture" in the name (but not "avatar")
+              return fileName.startsWith('2x2picture') || 
+                     fileName.startsWith('picture_') || 
+                     filePath.includes('/picture_') ||
+                     (fileName.includes('picture') && !fileName.includes('avatar'))
+            })
+            
+            if (nonAvatarPictures.length > 0) {
+              // Prefer files that start with '2x2picture' or 'picture_'
+              const preferredPicture = nonAvatarPictures.find(doc => {
+                const fileName = doc.file_name?.toLowerCase() || ''
+                return fileName.startsWith('2x2picture') || fileName.startsWith('picture_')
+              }) || nonAvatarPictures[0] // Fall back to first non-avatar if no preferred found
+              
+              console.log(`ApplicationDetail: Selected 2x2 picture document:`, {
+                file_path: preferredPicture.file_path,
+                file_name: preferredPicture.file_name
+              })
+              docsMap['picture'] = {
+                file_path: preferredPicture.file_path,
+                file_name: preferredPicture.file_name,
+              }
+            } else {
+              console.warn('ApplicationDetail: No valid 2x2 picture document found (only avatars available)')
+            }
+          }
+          
+          console.log('ApplicationDetail: Documents map:', docsMap)
           setLatestDocuments(docsMap)
           setMandatoryCourseFiles(courseFiles)
         } else {
@@ -647,6 +649,24 @@ export function ApplicationDetail() {
           
           docs.forEach((doc: any) => {
             if (doc.document_type === 'picture' || doc.document_type === 'diploma' || doc.document_type === 'passport') {
+              // For picture type, only use documents that are 2x2 pictures (not avatars)
+              if (doc.document_type === 'picture') {
+                const fileName = doc.file_name?.toLowerCase() || ''
+                const filePath = doc.file_path?.toLowerCase() || ''
+                // Skip avatars - only use files that start with '2x2picture' or 'picture_'
+                if (fileName.includes('avatar') || filePath.includes('avatar')) {
+                  return // Skip avatar files
+                }
+                // Only set if it's a valid 2x2 picture (starts with 2x2picture or picture_)
+                if (fileName.startsWith('2x2picture') || fileName.startsWith('picture_') || filePath.includes('/picture_')) {
+                  docsMap[doc.document_type] = {
+                    file_path: doc.file_path,
+                    file_name: doc.file_name,
+                  }
+                }
+                return
+              }
+              
               docsMap[doc.document_type] = {
                 file_path: doc.file_path,
                 file_name: doc.file_name,
@@ -1127,6 +1147,44 @@ export function ApplicationDetail() {
       refreshDocuments()
     }
   }, [tab, application?.user_id])
+
+  // Fetch 2x2 picture URL
+  useEffect(() => {
+    const fetchPictureUrl = async () => {
+      setPictureError(false)
+      setPictureUrl(null)
+      
+      const picturePath = latestDocuments.picture?.file_path || application?.picture_path
+      if (!picturePath) return
+      
+      // Skip if path contains avatar
+      if (picturePath.toLowerCase().includes('avatar')) return
+      
+      try {
+        let normalizedPath = picturePath.replace(/\\/g, '/')
+        
+        // Add userId prefix if needed
+        if (application?.user_id && !normalizedPath.startsWith(application.user_id + '/')) {
+          if (!normalizedPath.includes('/')) {
+            normalizedPath = `${application.user_id}/${normalizedPath}`
+          } else {
+            const filename = normalizedPath.split('/').pop()
+            if (filename) {
+              normalizedPath = `${application.user_id}/${filename}`
+            }
+          }
+        }
+        
+        const url = await getSignedFileUrl(normalizedPath, 3600)
+        setPictureUrl(url)
+      } catch (error) {
+        console.error('Error fetching picture URL:', error)
+        setPictureError(true)
+      }
+    }
+    
+    fetchPictureUrl()
+  }, [latestDocuments.picture?.file_path, application?.picture_path, application?.user_id])
 
   // Refresh processing accounts when processing-accounts tab is opened
   useEffect(() => {
@@ -1680,19 +1738,6 @@ export function ApplicationDetail() {
     }
   }
 
-  // Mask the middle 7 characters of GRIT APP ID
-  const maskGritAppId = (id: string | undefined): string => {
-    if (!id) return ''
-    // If it's a UUID (contains hyphens), don't mask it
-    if (id.includes('-')) return id
-    // If it's shorter than 8 characters, don't mask it
-    if (id.length < 8) return id
-    // Mask only 3-4 characters in the middle, show more of the ID
-    const maskLength = id.length > 12 ? 4 : 3
-    const start = id.slice(0, Math.floor((id.length - maskLength) / 2))
-    const end = id.slice(start.length + maskLength)
-    return `${start}${'*'.repeat(maskLength)}${end}`
-  }
 
   const copyToClipboard = async (text: string, type: string = 'text') => {
     try {
@@ -1777,7 +1822,7 @@ export function ApplicationDetail() {
                 <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    <span className="font-mono">{maskGritAppId(application.grit_app_id || application.id)}</span>
+                    <span className="font-mono">{application.grit_app_id || application.id}</span>
                     <button
                       onClick={() => copyToClipboard(application.grit_app_id || application.id, 'id')}
                       className="ml-1 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
@@ -2725,23 +2770,52 @@ export function ApplicationDetail() {
                           </p>
                           {(() => {
                             // Use latest document from Documents page, fallback to stored path
-                            const picturePath = latestDocuments.picture?.file_path || application.picture_path
+                            let picturePath = latestDocuments.picture?.file_path || application.picture_path
                             const pictureName = latestDocuments.picture?.file_name || (application.picture_path?.split(/[/\\]/).pop() || 'picture.jpg')
+                            
+                            // Skip if path contains avatar
+                            if (picturePath && picturePath.toLowerCase().includes('avatar')) {
+                              picturePath = null
+                            }
+                            
+                            // Normalize path and ensure it has userId prefix for Supabase Storage
+                            if (picturePath) {
+                              picturePath = picturePath.replace(/\\/g, '/')
+                              
+                              // Add userId prefix if needed (for legacy paths)
+                              if (application.user_id && !picturePath.startsWith(application.user_id + '/')) {
+                                if (!picturePath.includes('/')) {
+                                  picturePath = `${application.user_id}/${picturePath}`
+                                } else {
+                                  const filename = picturePath.split('/').pop()
+                                  if (filename) {
+                                    picturePath = `${application.user_id}/${filename}`
+                                  }
+                                }
+                              }
+                            }
                             
                             return picturePath ? (
                               <>
                                 <div className="relative group">
                                   <div 
-                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center cursor-pointer"
+                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 cursor-pointer"
                                     onClick={() => {
                                       handleViewFile(picturePath, pictureName)
                                     }}
                                   >
-                                    <DocumentImagePreview
-                                      filePath={picturePath}
-                                      alt="2x2 Picture"
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                    />
+                                    {pictureError || !pictureUrl ? (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <ImageIcon className="h-16 w-16 text-gray-400" />
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={pictureUrl}
+                                        alt="2x2 Picture"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                        onError={() => setPictureError(true)}
+                                      />
+                                    )}
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
@@ -2764,14 +2838,33 @@ export function ApplicationDetail() {
                           </p>
                           {(() => {
                             // Use latest document from Documents page, fallback to stored path
-                            const diplomaPath = latestDocuments.diploma?.file_path || application.diploma_path
+                            let diplomaPath = latestDocuments.diploma?.file_path || application.diploma_path
                             const diplomaName = latestDocuments.diploma?.file_name || (application.diploma_path?.split(/[/\\]/).pop() || 'diploma.pdf')
+                            
+                            // Normalize path and ensure it has userId prefix for Supabase Storage
+                            if (diplomaPath) {
+                              diplomaPath = diplomaPath.replace(/\\/g, '/')
+                              const isFromUserDocuments = !!latestDocuments.diploma?.file_path
+                              
+                              if (!isFromUserDocuments && application.user_id) {
+                                if (!diplomaPath.startsWith(application.user_id + '/')) {
+                                  if (!diplomaPath.includes('/')) {
+                                    diplomaPath = `${application.user_id}/${diplomaPath}`
+                                  } else {
+                                    const filename = diplomaPath.split('/').pop()
+                                    if (filename) {
+                                      diplomaPath = `${application.user_id}/${filename}`
+                                    }
+                                  }
+                                }
+                              }
+                            }
                             
                             return diplomaPath ? (
                               <>
                                 <div className="relative group">
                                   <div 
-                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center cursor-pointer"
+                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 cursor-pointer"
                                     onClick={() => {
                                       handleViewFile(diplomaPath, diplomaName)
                                     }}
@@ -2812,14 +2905,33 @@ export function ApplicationDetail() {
                           </p>
                           {(() => {
                             // Use latest document from Documents page, fallback to stored path
-                            const passportPath = latestDocuments.passport?.file_path || application.passport_path
+                            let passportPath = latestDocuments.passport?.file_path || application.passport_path
                             const passportName = latestDocuments.passport?.file_name || (application.passport_path?.split(/[/\\]/).pop() || 'passport.pdf')
+                            
+                            // Normalize path and ensure it has userId prefix for Supabase Storage
+                            if (passportPath) {
+                              passportPath = passportPath.replace(/\\/g, '/')
+                              const isFromUserDocuments = !!latestDocuments.passport?.file_path
+                              
+                              if (!isFromUserDocuments && application.user_id) {
+                                if (!passportPath.startsWith(application.user_id + '/')) {
+                                  if (!passportPath.includes('/')) {
+                                    passportPath = `${application.user_id}/${passportPath}`
+                                  } else {
+                                    const filename = passportPath.split('/').pop()
+                                    if (filename) {
+                                      passportPath = `${application.user_id}/${filename}`
+                                    }
+                                  }
+                                }
+                              }
+                            }
                             
                             return passportPath ? (
                               <>
                                 <div className="relative group">
                                   <div 
-                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center cursor-pointer"
+                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 cursor-pointer"
                                     onClick={() => {
                                       handleViewFile(passportPath, passportName)
                                     }}
@@ -2948,7 +3060,7 @@ export function ApplicationDetail() {
                               return (
                                 <div className="space-y-2">
                                   <div
-                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center cursor-pointer group relative"
+                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 cursor-pointer group relative"
                                     onClick={async () => {
                                       try {
                                         const signedUrl = await getSignedFileUrl(courseFile.file_path, 3600)
@@ -3098,7 +3210,7 @@ export function ApplicationDetail() {
                               return (
                                 <div className="space-y-2">
                                   <div
-                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center cursor-pointer group relative"
+                                    className="aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50 cursor-pointer group relative"
                                     onClick={async () => {
                                       try {
                                         const signedUrl = await getSignedFileUrl(courseFile.file_path, 3600)

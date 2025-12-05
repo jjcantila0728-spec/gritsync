@@ -15,6 +15,7 @@ import {
   getRemainingAttempts,
   getAccountLockStatus
 } from '../utils/loginAttempts.js'
+import { createSession, getUserSessions, revokeSession } from '../utils/sessions.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
@@ -175,6 +176,15 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRY })
 
+    // Create server-side session
+    let session = null
+    try {
+      session = await createSession(user.id, token, req, { generateRefreshToken: true })
+    } catch (sessionError) {
+      logger.warn('Failed to create session, continuing with token only', sessionError)
+      // Continue without session if creation fails (backward compatibility)
+    }
+
     res.json({
       user: { 
         id: user.id, 
@@ -183,7 +193,9 @@ router.post('/login', async (req, res) => {
         full_name: fullName, 
         grit_id: user.grit_id 
       },
-      token
+      token,
+      refreshToken: session?.refresh_token || null,
+      sessionId: session?.id || null
     })
   } catch (error) {
     logger.error('Login error', error)
@@ -268,7 +280,26 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to change password' })
     }
 
-    res.json({ message: 'Password changed successfully' })
+    // Revoke all other sessions for security (password change should invalidate old sessions)
+    try {
+      const { revokeAllUserSessions } = await import('../utils/sessions.js')
+      const currentSessionId = req.session?.id
+      
+      // Revoke all sessions except current
+      const sessions = await getUserSessions(req.user.id)
+      await Promise.all(
+        sessions
+          .filter(s => s.id !== currentSessionId)
+          .map(s => revokeSession(s.id, 'password_change'))
+      )
+      
+      logger.info('Sessions revoked after password change', { userId: req.user.id })
+    } catch (sessionError) {
+      logger.warn('Failed to revoke sessions after password change', sessionError)
+      // Don't fail the password change if session revocation fails
+    }
+
+    res.json({ message: 'Password changed successfully. All other sessions have been revoked for security.' })
   } catch (error) {
     logger.error('Error changing password', error)
     res.status(500).json({ success: false, error: 'Failed to change password' })
@@ -403,13 +434,23 @@ router.post('/reset-password', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to reset password' })
     }
 
+    // Revoke all sessions for security (password reset should invalidate all sessions)
+    try {
+      const { revokeAllUserSessions } = await import('../utils/sessions.js')
+      await revokeAllUserSessions(user.id, 'password_reset')
+      logger.info('All sessions revoked after password reset', { userId: user.id })
+    } catch (sessionError) {
+      logger.warn('Failed to revoke sessions after password reset', sessionError)
+      // Don't fail the password reset if session revocation fails
+    }
+
     // Mark token as used
     await supabase
       .from('password_reset_tokens')
       .update({ used: true })
       .eq('id', resetToken.id)
 
-    res.json({ message: 'Password reset successfully' })
+    res.json({ message: 'Password reset successfully. All sessions have been revoked for security.' })
   } catch (error) {
     logger.error('Error resetting password', error)
     res.status(500).json({ success: false, error: 'Failed to reset password' })

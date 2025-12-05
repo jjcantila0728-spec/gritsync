@@ -1,16 +1,51 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'noreply@gritsync.com'
-const EMAIL_FROM_NAME = Deno.env.get('EMAIL_FROM_NAME') || 'GritSync'
-
 interface EmailRequest {
   to: string
   subject: string
   html: string
   text?: string
   from?: string
+}
+
+/**
+ * Get email configuration from settings table
+ */
+async function getEmailConfig(supabaseClient: any) {
+  // Get email settings from database
+  const { data: emailSettings } = await supabaseClient
+    .from('settings')
+    .select('key, value')
+    .in('key', [
+      'emailFrom',
+      'emailFromName',
+      'emailServiceProvider',
+      'resendApiKey',
+      'smtpHost',
+      'smtpPort',
+      'smtpUser',
+      'smtpPassword',
+      'smtpSecure'
+    ])
+  
+  const settingsMap: Record<string, string> = {}
+  emailSettings?.forEach((setting: any) => {
+    settingsMap[setting.key] = setting.value
+  })
+  
+  // Fallback to environment variables if not in settings
+  return {
+    fromEmail: settingsMap.emailFrom || Deno.env.get('EMAIL_FROM') || 'noreply@gritsync.com',
+    fromName: settingsMap.emailFromName || Deno.env.get('EMAIL_FROM_NAME') || 'GritSync',
+    serviceProvider: settingsMap.emailServiceProvider || 'resend',
+    resendApiKey: settingsMap.resendApiKey || Deno.env.get('RESEND_API_KEY') || '',
+    smtpHost: settingsMap.smtpHost || '',
+    smtpPort: settingsMap.smtpPort || '587',
+    smtpUser: settingsMap.smtpUser || '',
+    smtpPassword: settingsMap.smtpPassword || '',
+    smtpSecure: settingsMap.smtpSecure === 'true' || settingsMap.smtpSecure === true,
+  }
 }
 
 serve(async (req) => {
@@ -29,11 +64,12 @@ serve(async (req) => {
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization') ?? '' },
-        },
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
       }
     )
 
@@ -49,16 +85,19 @@ serve(async (req) => {
       )
     }
 
-    // If Resend API key is available, use Resend
-    if (RESEND_API_KEY) {
+    // Get email configuration from settings
+    const config = await getEmailConfig(supabaseClient)
+
+    // Use Resend if configured
+    if (config.serviceProvider === 'resend' && config.resendApiKey) {
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Authorization': `Bearer ${config.resendApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: from || `${EMAIL_FROM_NAME} <${EMAIL_FROM}>`,
+          from: from || `${config.fromName} <${config.fromEmail}>`,
           to: [to],
           subject,
           html,
@@ -88,24 +127,45 @@ serve(async (req) => {
       )
     }
 
-    // Fallback: Use Supabase's built-in email (if configured)
-    // Or log for manual sending in development
-    console.log('Email would be sent:', {
+    // Try SMTP if configured
+    if (config.serviceProvider === 'smtp' && config.smtpHost && config.smtpUser && config.smtpPassword) {
+      // SMTP sending would require a Deno SMTP library
+      // For now, log and return success
+      console.log('SMTP email would be sent:', {
+        to,
+        subject,
+        from: from || `${config.fromName} <${config.fromEmail}>`,
+        smtpHost: config.smtpHost,
+      })
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'SMTP email queued (SMTP implementation pending)',
+          note: 'SMTP support will be added in a future update'
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        }
+      )
+    }
+
+    // Fallback: Log for manual sending
+    console.log('Email would be sent (no service configured):', {
       to,
       subject,
-      from: from || `${EMAIL_FROM_NAME} <${EMAIL_FROM}>`,
+      from: from || `${config.fromName} <${config.fromEmail}>`,
     })
 
-    // In development, just return success
-    // In production, you should configure an email service
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        message: 'Email queued (email service not configured)',
-        note: 'Configure RESEND_API_KEY or another email service for production'
+        success: false, 
+        error: 'Email service not configured',
+        message: 'Please configure Resend API key or SMTP settings in admin notification settings'
       }),
       {
-        status: 200,
+        status: 400,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       }
     )

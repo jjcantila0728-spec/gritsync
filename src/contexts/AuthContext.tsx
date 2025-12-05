@@ -105,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedEmail = email.toLowerCase().trim()
 
     // Simple registration - let Supabase Auth handle duplicate checking
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_name: lastName,
           role: role, // Store role in metadata for RLS checks
         },
+        emailRedirectTo: `${window.location.origin}/verify-email`,
       },
     })
 
@@ -127,6 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(error.message)
     }
+
+    // Email verification is automatically sent by Supabase Auth
+    // If you want to send a custom verification email, you can do it here:
+    // if (data.user && !data.user.email_confirmed_at) {
+    //   // Custom email verification can be sent here if needed
+    // }
 
     // Don't wait for profile creation - the trigger will handle it
     // The auth state change listener will load the profile automatically

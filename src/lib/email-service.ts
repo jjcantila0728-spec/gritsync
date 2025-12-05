@@ -55,7 +55,7 @@ async function getEmailConfig() {
 /**
  * Generate HTML email template
  */
-function generateEmailTemplate(data: EmailTemplateData): string {
+function generateEmailTemplate(data: EmailTemplateData & { customHtml?: string }): string {
   const {
     userName = 'User',
     title = 'Notification',
@@ -63,7 +63,11 @@ function generateEmailTemplate(data: EmailTemplateData): string {
     actionUrl,
     actionText = 'View Details',
     footerText = 'Thank you for using GritSync',
+    customHtml,
   } = data
+
+  // If custom HTML is provided, use it instead of message
+  const messageContent = customHtml || message.split('\n').map(p => `<p>${p}</p>`).join('')
 
   return `
 <!DOCTYPE html>
@@ -147,7 +151,7 @@ function generateEmailTemplate(data: EmailTemplateData): string {
         Hello ${userName},
       </div>
       <div class="email-content">
-        ${message.split('\n').map(p => `<p>${p}</p>`).join('')}
+        ${messageContent}
       </div>
       ${actionUrl ? `
         <div style="text-align: center;">
@@ -243,7 +247,7 @@ export async function sendNotificationEmail(
   
   // Determine action URL based on type
   let actionUrl = data.actionUrl
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.VITE_API_URL?.replace('/api', '') || 'https://gritsync.com'
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
   if (!actionUrl && data.applicationId) {
     actionUrl = `${baseUrl}/applications/${data.applicationId}`
   } else if (!actionUrl) {
@@ -267,6 +271,133 @@ export async function sendNotificationEmail(
 }
 
 /**
+ * Send email verification
+ */
+export async function sendEmailVerification(
+  email: string,
+  userName: string,
+  verificationUrl: string
+): Promise<boolean> {
+  const template = await emailTemplates.emailVerification({
+    userName,
+    email,
+    verificationUrl,
+  })
+
+  return sendEmail({
+    to: email,
+    subject: 'Verify Your Email Address - GritSync',
+    html: template,
+  })
+}
+
+/**
+ * Send forgot password email
+ */
+export async function sendForgotPasswordEmail(
+  email: string,
+  userName: string,
+  resetUrl: string
+): Promise<boolean> {
+  const template = await emailTemplates.forgotPassword({
+    userName,
+    resetUrl,
+  })
+
+  return sendEmail({
+    to: email,
+    subject: 'Reset Your Password - GritSync',
+    html: template,
+  })
+}
+
+/**
+ * Send payment receipt email
+ */
+export async function sendPaymentReceipt(
+  email: string,
+  data: {
+    userName: string
+    receiptNumber: string
+    amount: number
+    paymentType: string
+    items: Array<{ name: string; amount: number }>
+    paymentDate: string
+    applicationId?: string
+  }
+): Promise<boolean> {
+  const template = await emailTemplates.paymentReceipt(data)
+
+  return sendEmail({
+    to: email,
+    subject: `Payment Receipt ${data.receiptNumber} - GritSync`,
+    html: template,
+  })
+}
+
+/**
+ * Send birthday greeting
+ */
+export async function sendBirthdayGreeting(
+  email: string,
+  userName: string,
+  greeting: string
+): Promise<boolean> {
+  const template = await emailTemplates.birthdayGreeting({
+    userName,
+    greeting,
+  })
+
+  return sendEmail({
+    to: email,
+    subject: 'Happy Birthday! - GritSync',
+    html: template,
+  })
+}
+
+/**
+ * Send reminder email
+ */
+export async function sendReminderEmail(
+  email: string,
+  data: {
+    userName: string
+    reminderType: string
+    message: string
+    actionUrl?: string
+  }
+): Promise<boolean> {
+  const template = await emailTemplates.reminder(data)
+
+  return sendEmail({
+    to: email,
+    subject: `Reminder: ${data.reminderType} - GritSync`,
+    html: template,
+  })
+}
+
+/**
+ * Send test email
+ */
+export async function sendTestEmail(email: string): Promise<boolean> {
+  const config = await getEmailConfig()
+  const template = generateEmailTemplate({
+    userName: 'Test User',
+    title: 'Test Email',
+    message: 'This is a test email from GritSync. If you received this, your email configuration is working correctly!',
+    actionUrl: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard',
+    actionText: 'Visit Dashboard',
+    footerText: 'This is a test email. Your email service is configured correctly.',
+  })
+
+  return sendEmail({
+    to: email,
+    subject: 'Test Email - GritSync Email Configuration',
+    html: template,
+  })
+}
+
+/**
  * Email templates for different notification types
  */
 export const emailTemplates = {
@@ -276,7 +407,7 @@ export const emailTemplates = {
     stepName: string
     message: string
   }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.VITE_API_URL?.replace('/api', '') || 'https://gritsync.com'
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
     const actionUrl = `${baseUrl}/applications/${data.applicationId}`
     return generateEmailTemplate({
       userName: data.userName,
@@ -294,7 +425,7 @@ export const emailTemplates = {
     newStatus: string
     message?: string
   }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.VITE_API_URL?.replace('/api', '') || 'https://gritsync.com'
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
     const actionUrl = `${baseUrl}/applications/${data.applicationId}`
     return generateEmailTemplate({
       userName: data.userName,
@@ -312,7 +443,7 @@ export const emailTemplates = {
     paymentType: string
     message?: string
   }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.VITE_API_URL?.replace('/api', '') || 'https://gritsync.com'
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
     const actionUrl = `${baseUrl}/applications/${data.applicationId}`
     return generateEmailTemplate({
       userName: data.userName,
@@ -335,6 +466,133 @@ export const emailTemplates = {
       message: data.message,
       actionUrl: data.actionUrl || (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard'),
       actionText: 'View Dashboard',
+    })
+  },
+
+  emailVerification: async (data: {
+    userName: string
+    email: string
+    verificationUrl: string
+  }) => {
+    return generateEmailTemplate({
+      userName: data.userName,
+      title: 'Verify Your Email Address',
+      message: `Thank you for registering with GritSync!\n\nPlease verify your email address by clicking the button below. This helps us ensure the security of your account.\n\nIf you did not create an account, please ignore this email.`,
+      actionUrl: data.verificationUrl,
+      actionText: 'Verify Email Address',
+      footerText: 'This verification link will expire in 24 hours.',
+    })
+  },
+
+  forgotPassword: async (data: {
+    userName: string
+    resetUrl: string
+  }) => {
+    return generateEmailTemplate({
+      userName: data.userName,
+      title: 'Reset Your Password',
+      message: `We received a request to reset your password. Click the button below to create a new password.\n\nIf you did not request a password reset, please ignore this email. Your password will remain unchanged.`,
+      actionUrl: data.resetUrl,
+      actionText: 'Reset Password',
+      footerText: 'This password reset link will expire in 1 hour.',
+    })
+  },
+
+  paymentReceipt: async (data: {
+    userName: string
+    receiptNumber: string
+    amount: number
+    paymentType: string
+    items: Array<{ name: string; amount: number }>
+    paymentDate: string
+    applicationId?: string
+  }) => {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+    const actionUrl = data.applicationId 
+      ? `${baseUrl}/applications/${data.applicationId}/payment`
+      : `${baseUrl}/dashboard`
+    
+    const itemsHtml = data.items.map(item => 
+      `<tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${item.amount.toFixed(2)}</td>
+      </tr>`
+    ).join('')
+
+    const receiptHtml = `
+      <p>Thank you for your payment!</p>
+      <p>Your payment has been processed successfully. Please find your receipt details below.</p>
+      <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #dc2626;">Payment Receipt</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; font-weight: bold;">Receipt Number:</td>
+            <td style="padding: 8px;">${data.receiptNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold;">Payment Type:</td>
+            <td style="padding: 8px;">${data.paymentType}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold;">Date:</td>
+            <td style="padding: 8px;">${new Date(data.paymentDate).toLocaleDateString()}</td>
+          </tr>
+        </table>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+          <thead>
+            <tr style="background: #dc2626; color: white;">
+              <th style="padding: 10px; text-align: left;">Item</th>
+              <th style="padding: 10px; text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+            <tr>
+              <td style="padding: 8px; font-weight: bold; border-top: 2px solid #dc2626;">Total</td>
+              <td style="padding: 8px; font-weight: bold; text-align: right; border-top: 2px solid #dc2626;">$${data.amount.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `
+
+    return generateEmailTemplate({
+      userName: data.userName,
+      title: 'Payment Receipt',
+      customHtml: receiptHtml,
+      actionUrl,
+      actionText: 'View Payment Details',
+      footerText: 'Keep this receipt for your records.',
+    })
+  },
+
+  birthdayGreeting: async (data: {
+    userName: string
+    greeting: string
+  }) => {
+    return generateEmailTemplate({
+      userName: data.userName,
+      title: 'Happy Birthday!',
+      message: `${data.greeting}\n\nWe hope you have a wonderful day filled with joy and success!\n\nThank you for being part of the GritSync family.`,
+      actionUrl: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard',
+      actionText: 'Visit Dashboard',
+      footerText: 'Wishing you all the best on your special day!',
+    })
+  },
+
+  reminder: async (data: {
+    userName: string
+    reminderType: string
+    message: string
+    actionUrl?: string
+  }) => {
+    return generateEmailTemplate({
+      userName: data.userName,
+      title: `Reminder: ${data.reminderType}`,
+      message: data.message,
+      actionUrl: data.actionUrl || (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard'),
+      actionText: 'Take Action',
+      footerText: 'This is an automated reminder from GritSync.',
     })
   },
 }

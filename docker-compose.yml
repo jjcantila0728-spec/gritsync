@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  gritsync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gritsync-api
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Add your environment variables here or use .env file
+      # - JWT_SECRET=${JWT_SECRET}
+      # - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      # - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      # - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      # - FRONTEND_URL=${FRONTEND_URL}
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - gritsync-network
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  gritsync-network:
+    driver: bridge
