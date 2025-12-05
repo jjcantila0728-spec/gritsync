@@ -156,3 +156,4 @@ If the policy doesn't work, you can temporarily make the entire bucket public:
 - Other documents (PDFs, diplomas, etc.) still require authentication
 - The policy uses case-insensitive matching for file extensions
 - Public URLs don't expire (unlike signed URLs which expire after 1 hour)
+

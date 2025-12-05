@@ -601,7 +601,7 @@ export function Header() {
                           src={avatarUrl} 
                           alt="Profile" 
                           className="w-full h-full object-cover"
-                          onError={(e) => {
+                          onError={(_e) => {
                             // If image fails to load, clear cache and reset to initials
                             const cachedAvatarKey = `avatar_${user?.id}`
                             const cachedAvatarPathKey = `avatar_path_${user?.id}`
@@ -641,7 +641,7 @@ export function Header() {
                                 src={avatarUrl} 
                                 alt="Profile" 
                                 className="w-full h-full object-cover"
-                                onError={(e) => {
+                                onError={(_e) => {
                                   // If image fails to load, clear cache and reset to initials
                                   const cachedAvatarKey = `avatar_${user?.id}`
                                   const cachedAvatarPathKey = `avatar_path_${user?.id}`

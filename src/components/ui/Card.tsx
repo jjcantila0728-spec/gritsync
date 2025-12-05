@@ -1,8 +1,8 @@
 import { HTMLAttributes, ReactNode, forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
-interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  title?: string | ReactNode
+interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+  title?: ReactNode
 }
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(

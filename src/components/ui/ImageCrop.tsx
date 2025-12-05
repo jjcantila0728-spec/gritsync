@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from './Button'
-import { Crop, RotateCw, ZoomIn, ZoomOut, Move, Maximize2, Grid, Info, RefreshCw, MousePointer2 } from 'lucide-react'
+import { Crop, RotateCw, ZoomIn, ZoomOut, Grid } from 'lucide-react'
 
 interface ImageCropProps {
   image: File
@@ -25,7 +25,6 @@ export function ImageCrop({ image, aspectRatio = 1, onCrop, onCancel }: ImageCro
   const [rotation, setRotation] = useState(0)
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 })
   const [showGrid, setShowGrid] = useState(false)
-  const [showInfo, setShowInfo] = useState(true)
   const [cropMode, setCropMode] = useState(false)
   const [imageUrl, setImageUrl] = useState<string>('')
 
@@ -410,7 +409,7 @@ export function ImageCrop({ image, aspectRatio = 1, onCrop, onCancel }: ImageCro
     })
   }
 
-  const handleReset = () => {
+  const _handleReset = () => {
     if (containerRef.current && imageRef.current) {
       const container = containerRef.current
       const containerWidth = container.clientWidth

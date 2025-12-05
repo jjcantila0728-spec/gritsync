@@ -5,9 +5,9 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
-import { userDocumentsAPI, getFileUrl, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
-import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, X, Trash2 } from 'lucide-react'
+import { CardSkeleton } from '@/components/ui/Loading'
+import { userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
+import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
 
@@ -24,7 +24,7 @@ interface DocumentStatus {
 }
 
 export function Documents() {
-  const { user, isClient } = useAuth()
+  const { user } = useAuth()
   const { showToast } = useToast()
   const [uploading, setUploading] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -104,20 +104,19 @@ export function Documents() {
   async function fetchUserDetails() {
     try {
       const details = await userDetailsAPI.get()
-      if (details) {
-        setUserFirstName(details.first_name || '')
-        setUserLastName(details.last_name || '')
+      const typedDetails = details as { first_name?: string; last_name?: string } | null
+      if (typedDetails) {
+        setUserFirstName(typedDetails.first_name || '')
+        setUserLastName(typedDetails.last_name || '')
       } else {
-        // Fallback to parsing full_name
-        const nameParts = user?.full_name?.split(' ') || []
-        setUserFirstName(nameParts[0] || user?.email?.split('@')[0] || '')
-        setUserLastName(nameParts.slice(1).join(' ') || '')
+        // Fallback to parsing email
+        setUserFirstName(user?.email?.split('@')[0] || '')
+        setUserLastName('')
       }
     } catch (error) {
-      // Fallback to parsing full_name if fetch fails
-      const nameParts = user?.full_name?.split(' ') || []
-      setUserFirstName(nameParts[0] || user?.email?.split('@')[0] || '')
-      setUserLastName(nameParts.slice(1).join(' ') || '')
+      // Fallback to parsing email if fetch fails
+      setUserFirstName(user?.email?.split('@')[0] || '')
+      setUserLastName('')
     }
   }
 
@@ -174,7 +173,7 @@ export function Documents() {
     }
   }
 
-  const handleFileUpload = async (documentType: string, file: File) => {
+  const _handleFileUpload = async (documentType: string, file: File) => {
     if (!user) return
 
     // Validate file size (max 10MB)
@@ -201,7 +200,7 @@ export function Documents() {
 
     setUploading(documentType)
     try {
-      await userDocumentsAPI.upload(documentType, file)
+      await userDocumentsAPI.upload(documentType as 'picture' | 'diploma' | 'passport', file)
       const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
       showToast(`${docName} uploaded successfully!`, 'success')
       await fetchDocuments() // Refresh the list
@@ -276,7 +275,7 @@ export function Documents() {
       // Create a new File object with the new name
       const renamedFile = new File([file], newFileName, { type: file.type })
       
-      await userDocumentsAPI.upload(documentType, renamedFile)
+      await userDocumentsAPI.upload(documentType as 'picture' | 'diploma' | 'passport', renamedFile)
       const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
       showToast(`${docName} uploaded successfully!`, 'success')
       

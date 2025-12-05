@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -8,8 +8,10 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, adminAPI } from '@/lib/api'
+import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/supabase-api'
 import { 
@@ -54,7 +56,6 @@ export function AdminApplicationPayments() {
   const navigate = useNavigate()
   const { user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
-  const [loading, setLoading] = useState(false)
   const [loadingPayments, setLoadingPayments] = useState(true)
   const [loadingApplication, setLoadingApplication] = useState(true)
   const [application, setApplication] = useState<any>(null)
@@ -177,8 +178,9 @@ export function AdminApplicationPayments() {
       const data = await applicationPaymentsAPI.getByApplication(id)
       // For payments without usd_to_php_rate but with PHP-convertible payment methods,
       // fetch the current rate (as fallback for old payments)
+      const typedData = (data || []) as unknown as Payment[]
       const paymentsWithRates = await Promise.all(
-        (data || []).map(async (payment: Payment) => {
+        typedData.map(async (payment: Payment) => {
           if ((payment.payment_method === 'gcash' || payment.payment_method === 'mobile_banking') && !payment.usd_to_php_rate) {
             try {
               const rate = await adminAPI.getUsdToPhpRate()

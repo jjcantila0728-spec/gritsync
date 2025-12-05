@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/supabase-api'
@@ -284,16 +284,20 @@ export function ApplicationPayments() {
     setLoadingPayments(true)
     try {
       const data = await applicationPaymentsAPI.getByApplication(id)
-      setPayments(data || [])
+      const typedPayments = (data || []) as unknown as Payment[]
+      setPayments(typedPayments)
       
       // Load receipts for paid payments
-      const paidPayments = (data || []).filter((p: Payment) => p.status === 'paid')
+      const paidPayments = typedPayments.filter((p: Payment) => p.status === 'paid')
       const receiptsMap: { [paymentId: string]: Receipt } = {}
       
       for (const payment of paidPayments) {
         try {
           const receipt = await applicationPaymentsAPI.getReceipt(payment.id)
-          receiptsMap[payment.id] = receipt
+          const typedReceipt = receipt as Receipt | null
+          if (typedReceipt) {
+            receiptsMap[payment.id] = typedReceipt
+          }
         } catch {
           // Receipt might not exist yet
         }
@@ -308,7 +312,7 @@ export function ApplicationPayments() {
     }
   }
 
-  async function handleCreatePayment(type: 'step1' | 'step2' | 'full') {
+  const _handleCreatePayment = async (type: 'step1' | 'step2' | 'full') => {
     if (!id) return
 
     setLoading(true)
@@ -472,13 +476,14 @@ export function ApplicationPayments() {
         selectedPayment.id, 
         undefined, 
         paymentMethod === 'gcash' || paymentMethod === 'mobile_banking' ? undefined : paymentIntentId,
-        paymentMethod || 'stripe',
+        (paymentMethod === 'card' ? 'stripe' : paymentMethod) || 'stripe',
         gcashDetails,
         proofOfPaymentFile
       )
       
-      if (result.receipt) {
-        setReceipts({ ...receipts, [selectedPayment.id]: result.receipt })
+      if (result && result.receipt) {
+        const typedResult = result as { receipt?: unknown }
+        setReceipts({ ...receipts, [selectedPayment.id]: typedResult.receipt })
       }
       
       if (paymentMethod === 'gcash') {
@@ -513,7 +518,7 @@ export function ApplicationPayments() {
     }
   }
 
-  async function handleViewReceipt(paymentId: string) {
+  const _handleViewReceipt = async (paymentId: string) => {
     try {
       if (receipts[paymentId]) {
         setViewingReceipt(receipts[paymentId])
@@ -540,10 +545,10 @@ export function ApplicationPayments() {
       let yPos = margin
 
       // Colors
-      const primaryColor = [220, 38, 38] // Red #dc2626
-      const lightGray = [243, 244, 246] // Gray-100
-      const textGray = [107, 114, 128] // Gray-500
-      const textDark = [17, 24, 39] // Gray-900
+      const primaryColor: [number, number, number] = [220, 38, 38] // Red #dc2626
+      const lightGray: [number, number, number] = [243, 244, 246] // Gray-100
+      const textGray: [number, number, number] = [107, 114, 128] // Gray-500
+      const textDark: [number, number, number] = [17, 24, 39] // Gray-900
 
       // Header with gradient effect (simulated with rectangle)
       doc.setFillColor(...primaryColor)

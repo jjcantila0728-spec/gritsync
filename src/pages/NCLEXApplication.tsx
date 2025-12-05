@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -8,11 +8,25 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
-import { applicationsAPI, userDetailsAPI, userDocumentsAPI, getFileUrl, getSignedFileUrl, applicationPaymentsAPI, servicesAPI } from '@/lib/api'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
-import { Upload, X, Info, CheckCircle, Eye, FileCheck, ArrowLeft, Download, Image, File as FileIcon, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
+import { applicationsAPI, userDetailsAPI, userDocumentsAPI, getSignedFileUrl, applicationPaymentsAPI, servicesAPI } from '@/lib/api'
+import { CardSkeleton } from '@/components/ui/Loading'
+import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
+
+// Helper function to format MM/YYYY input
+const formatMMYYYY = (value: string): string => {
+  const digits = value.replace(/\D/g, '')
+  const limited = digits.slice(0, 6)
+  
+  if (limited.length <= 2) {
+    return limited
+  } else if (limited.length <= 6) {
+    return `${limited.slice(0, 2)}/${limited.slice(2)}`
+  }
+  
+  return `${limited.slice(0, 2)}/${limited.slice(2, 6)}`
+}
 
 // Helper function to format MM/DD/YYYY input
 const formatMMDDYYYY = (value: string): string => {
@@ -116,7 +130,7 @@ const convertMMYYYYToDatabase = (mmyyyy: string): string => {
 }
 
 // Payment pricing configuration
-const PAYMENT_CONFIG = {
+const _PAYMENT_CONFIG = {
   firstTake: {
     step1: {
       total: 267.99,
@@ -560,47 +574,88 @@ export function NCLEXApplication() {
   async function loadSavedDetails() {
     try {
       const details = await userDetailsAPI.get()
-      if (details) {
+      const typedDetails = details as {
+        first_name?: string
+        middle_name?: string
+        last_name?: string
+        mobile_number?: string
+        email?: string
+        gender?: string
+        marital_status?: string
+        single_full_name?: string
+        date_of_birth?: string
+        birth_place?: string
+        house_number?: string
+        street_name?: string
+        city?: string
+        province?: string
+        country?: string
+        zipcode?: string
+        elementary_school?: string
+        elementary_city?: string
+        elementary_province?: string
+        elementary_country?: string
+        elementary_years_attended?: string | number
+        elementary_start_date?: string
+        elementary_end_date?: string
+        high_school?: string
+        high_school_city?: string
+        high_school_province?: string
+        high_school_country?: string
+        high_school_years_attended?: string | number
+        high_school_start_date?: string
+        high_school_end_date?: string
+        nursing_school?: string
+        nursing_school_city?: string
+        nursing_school_province?: string
+        nursing_school_country?: string
+        nursing_school_years_attended?: string | number
+        nursing_school_start_date?: string
+        nursing_school_end_date?: string
+        nursing_school_major?: string
+        nursing_school_diploma_date?: string
+      } | null
+      if (typedDetails) {
         // Auto-populate all fields from saved details
-        setFirstName(details.first_name || '')
-        setMiddleName(details.middle_name || '')
-        setLastName(details.last_name || '')
-        setMobileNumber(details.mobile_number || '')
-        setEmail(details.email || user?.email || '')
-        setGender(details.gender || '')
-        setMaritalStatus(details.marital_status || '')
-        setSingleFullName(details.single_full_name || '')
-        setDateOfBirth(convertFromDatabaseFormat(details.date_of_birth))
-        setBirthPlace(details.birth_place || '')
-        setHouseNumber(details.house_number || '')
-        setStreetName(details.street_name || '')
-        setCity(details.city || '')
-        setProvince(details.province || '')
-        setCountry(details.country || '')
-        setZipcode(details.zipcode || '')
-        setElementarySchool(details.elementary_school || '')
-        setElementaryCity(details.elementary_city || '')
-        setElementaryProvince(details.elementary_province || '')
-        setElementaryCountry(details.elementary_country || '')
-        setElementaryYearsAttended(details.elementary_years_attended != null ? String(details.elementary_years_attended) : '')
-        setElementaryStartDate(convertToMMYYYY(details.elementary_start_date))
-        setElementaryEndDate(convertToMMYYYY(details.elementary_end_date))
-        setHighSchool(details.high_school || '')
-        setHighSchoolCity(details.high_school_city || '')
-        setHighSchoolProvince(details.high_school_province || '')
-        setHighSchoolCountry(details.high_school_country || '')
-        setHighSchoolYearsAttended(details.high_school_years_attended != null ? String(details.high_school_years_attended) : '')
-        setHighSchoolStartDate(convertToMMYYYY(details.high_school_start_date))
-        setHighSchoolEndDate(convertToMMYYYY(details.high_school_end_date))
-        setNursingSchool(details.nursing_school || '')
-        setNursingSchoolCity(details.nursing_school_city || '')
-        setNursingSchoolProvince(details.nursing_school_province || '')
-        setNursingSchoolCountry(details.nursing_school_country || '')
-        setNursingSchoolYearsAttended(details.nursing_school_years_attended != null ? String(details.nursing_school_years_attended) : '')
-        setNursingSchoolStartDate(convertToMMYYYY(details.nursing_school_start_date))
-        setNursingSchoolEndDate(convertToMMYYYY(details.nursing_school_end_date))
-        setNursingSchoolMajor(details.nursing_school_major || '')
-        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(details.nursing_school_diploma_date))
+        setFirstName(typedDetails.first_name || '')
+        setMiddleName(typedDetails.middle_name || '')
+        setLastName(typedDetails.last_name || '')
+        setMobileNumber(typedDetails.mobile_number || '')
+        setEmail(typedDetails.email || user?.email || '')
+        setGender(typedDetails.gender || '')
+        setMaritalStatus(typedDetails.marital_status || '')
+        setSingleFullName(typedDetails.single_full_name || '')
+        setDateOfBirth(convertFromDatabaseFormat(typedDetails.date_of_birth))
+        setBirthPlace(typedDetails.birth_place || '')
+        setHouseNumber(typedDetails.house_number || '')
+        setStreetName(typedDetails.street_name || '')
+        setCity(typedDetails.city || '')
+        setProvince(typedDetails.province || '')
+        setCountry(typedDetails.country || '')
+        setZipcode(typedDetails.zipcode || '')
+        setElementarySchool(typedDetails.elementary_school || '')
+        setElementaryCity(typedDetails.elementary_city || '')
+        setElementaryProvince(typedDetails.elementary_province || '')
+        setElementaryCountry(typedDetails.elementary_country || '')
+        setElementaryYearsAttended(typedDetails.elementary_years_attended != null ? String(typedDetails.elementary_years_attended) : '')
+        setElementaryStartDate(convertToMMYYYY(typedDetails.elementary_start_date))
+        setElementaryEndDate(convertToMMYYYY(typedDetails.elementary_end_date))
+        setHighSchool(typedDetails.high_school || '')
+        setHighSchoolCity(typedDetails.high_school_city || '')
+        setHighSchoolProvince(typedDetails.high_school_province || '')
+        setHighSchoolCountry(typedDetails.high_school_country || '')
+        setHighSchoolYearsAttended(typedDetails.high_school_years_attended != null ? String(typedDetails.high_school_years_attended) : '')
+        setHighSchoolStartDate(convertToMMYYYY(typedDetails.high_school_start_date))
+        setHighSchoolEndDate(convertToMMYYYY(typedDetails.high_school_end_date))
+        setNursingSchool(typedDetails.nursing_school || '')
+        setNursingSchoolCity(typedDetails.nursing_school_city || '')
+        setNursingSchoolProvince(typedDetails.nursing_school_province || '')
+        setNursingSchoolCountry(typedDetails.nursing_school_country || '')
+        setNursingSchoolYearsAttended(typedDetails.nursing_school_years_attended != null ? String(typedDetails.nursing_school_years_attended) : '')
+        setNursingSchoolStartDate(convertToMMYYYY(typedDetails.nursing_school_start_date))
+        setNursingSchoolEndDate(convertToMMYYYY(typedDetails.nursing_school_end_date))
+        setNursingSchoolMajor(typedDetails.nursing_school_major || '')
+        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(typedDetails.nursing_school_diploma_date))
         setAutoFilled(true)
       }
     } catch (error) {
@@ -801,27 +856,39 @@ export function NCLEXApplication() {
       // Handle picture
       if (useUploadedDocs.picture && uploadedDocuments.picture) {
         // Use existing uploaded document path
-        picturePath = uploadedDocuments.picture.file_path
+        const picDoc = uploadedDocuments.picture as { file_path?: string }
+        picturePath = picDoc.file_path || ''
       } else if (picture) {
         // Upload new picture to Supabase Storage
         const uploadedDoc = await userDocumentsAPI.upload('picture', picture)
-        picturePath = uploadedDoc.file_path
+        const typedDoc = uploadedDoc as { file_path?: string } | null
+        if (typedDoc?.file_path) {
+          picturePath = typedDoc.file_path
+        }
       }
 
       // Handle diploma
       if (useUploadedDocs.diploma && uploadedDocuments.diploma) {
-        diplomaPath = uploadedDocuments.diploma.file_path
+        const dipDoc = uploadedDocuments.diploma as { file_path?: string }
+        diplomaPath = dipDoc.file_path || ''
       } else if (diploma) {
         const uploadedDoc = await userDocumentsAPI.upload('diploma', diploma)
-        diplomaPath = uploadedDoc.file_path
+        const typedDoc = uploadedDoc as { file_path?: string } | null
+        if (typedDoc?.file_path) {
+          diplomaPath = typedDoc.file_path
+        }
       }
 
       // Handle passport
       if (useUploadedDocs.passport && uploadedDocuments.passport) {
-        passportPath = uploadedDocuments.passport.file_path
+        const passDoc = uploadedDocuments.passport as { file_path?: string }
+        passportPath = passDoc.file_path || ''
       } else if (passport) {
         const uploadedDoc = await userDocumentsAPI.upload('passport', passport)
-        passportPath = uploadedDoc.file_path
+        const typedDoc = uploadedDoc as { file_path?: string } | null
+        if (typedDoc?.file_path) {
+          passportPath = typedDoc.file_path
+        }
       }
 
       // Convert MM/DD/YYYY to YYYY-MM-DD for database
@@ -890,7 +957,8 @@ export function NCLEXApplication() {
         paymentTypeParam = 'full' // Retake uses 'full' payment type in the backend
       }
       
-      navigate(`/applications/${result.grit_app_id || result.id}/payment?type=${paymentTypeParam}`)
+      const typedResult = result as { grit_app_id?: string; id?: string }
+      navigate(`/applications/${typedResult.grit_app_id || typedResult.id}/payment?type=${paymentTypeParam}`)
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to submit application'
       setError(errorMessage)
@@ -1879,12 +1947,14 @@ export function NCLEXApplication() {
                       {/* Square Image Preview */}
                       <div className="mb-3 relative group cursor-pointer aspect-square" onClick={async () => {
                         try {
-                          const filePath = uploadedDocuments.picture.file_path
+                          const picDoc = uploadedDocuments.picture as { file_path?: string; file_name?: string }
+                          if (!picDoc.file_path) return
+                          const filePath = picDoc.file_path
                           const signedUrl = await getSignedFileUrl(filePath, 3600)
-                          const isImage = uploadedDocuments.picture.file_name?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || true
+                          const isImage = picDoc.file_name?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || true
                           setViewingFile({
                             url: signedUrl,
-                            fileName: uploadedDocuments.picture.file_name,
+                            fileName: picDoc.file_name || '',
                             isImage: !!isImage
                           })
                         } catch (error) {
@@ -1892,8 +1962,8 @@ export function NCLEXApplication() {
                         }
                       }}>
                         <DocumentImagePreview
-                          filePath={typeof uploadedDocuments.picture.file_path === 'string' ? uploadedDocuments.picture.file_path : ''}
-                          alt={uploadedDocuments.picture.file_name || 'Picture'}
+                          filePath={(uploadedDocuments.picture as { file_path?: string })?.file_path || ''}
+                          alt={(uploadedDocuments.picture as { file_name?: string })?.file_name || 'Picture'}
                           className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-gray-700 transition-opacity group-hover:opacity-90"
                         />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
@@ -1903,7 +1973,7 @@ export function NCLEXApplication() {
                       <div className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                          {uploadedDocuments.picture.file_name}
+                          {(uploadedDocuments.picture as { file_name?: string })?.file_name}
                         </span>
                       </div>
                     </div>
@@ -1948,11 +2018,13 @@ export function NCLEXApplication() {
                         return isImage ? (
                           <div className="mb-3 relative group cursor-pointer aspect-square" onClick={async () => {
                             try {
+                              if (!uploadedDocuments.diploma) return
                               const filePath = uploadedDocuments.diploma.file_path
+                              if (!filePath) return
                               const signedUrl = await getSignedFileUrl(filePath, 3600)
                               setViewingFile({
                                 url: signedUrl,
-                                fileName: uploadedDocuments.diploma.file_name,
+                                fileName: uploadedDocuments.diploma.file_name || '',
                                 isImage: true
                               })
                             } catch (error) {
@@ -1973,11 +2045,13 @@ export function NCLEXApplication() {
                             className="mb-3 aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors group"
                             onClick={async () => {
                               try {
-                                const filePath = uploadedDocuments.diploma.file_path
+                                const dipDoc = uploadedDocuments.diploma as { file_path?: string; file_name?: string }
+                                if (!dipDoc.file_path) return
+                                const filePath = dipDoc.file_path
                                 const signedUrl = await getSignedFileUrl(filePath, 3600)
                                 setViewingFile({
                                   url: signedUrl,
-                                  fileName: uploadedDocuments.diploma.file_name,
+                                  fileName: dipDoc.file_name || '',
                                   isImage: false
                                 })
                               } catch (error) {
@@ -1992,7 +2066,7 @@ export function NCLEXApplication() {
                       <div className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                          {uploadedDocuments.diploma.file_name}
+                          {(uploadedDocuments.diploma as { file_name?: string })?.file_name}
                         </span>
                       </div>
                     </div>
@@ -2037,11 +2111,13 @@ export function NCLEXApplication() {
                         return isImage ? (
                           <div className="mb-3 relative group cursor-pointer aspect-square" onClick={async () => {
                             try {
+                              if (!uploadedDocuments.passport) return
                               const filePath = uploadedDocuments.passport.file_path
+                              if (!filePath) return
                               const signedUrl = await getSignedFileUrl(filePath, 3600)
                               setViewingFile({
                                 url: signedUrl,
-                                fileName: uploadedDocuments.passport.file_name,
+                                fileName: uploadedDocuments.passport.file_name || '',
                                 isImage: true
                               })
                             } catch (error) {
@@ -2049,8 +2125,8 @@ export function NCLEXApplication() {
                             }
                           }}>
                             <DocumentImagePreview
-                              filePath={typeof uploadedDocuments.passport.file_path === 'string' ? uploadedDocuments.passport.file_path : ''}
-                              alt={uploadedDocuments.passport.file_name || 'Passport'}
+                              filePath={(uploadedDocuments.passport as { file_path?: string })?.file_path || ''}
+                              alt={(uploadedDocuments.passport as { file_name?: string })?.file_name || 'Passport'}
                               className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-gray-700 transition-opacity group-hover:opacity-90"
                             />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
@@ -2062,11 +2138,13 @@ export function NCLEXApplication() {
                             className="mb-3 aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors group"
                             onClick={async () => {
                               try {
-                                const filePath = uploadedDocuments.passport.file_path
+                                const passDoc = uploadedDocuments.passport as { file_path?: string; file_name?: string }
+                                if (!passDoc.file_path) return
+                                const filePath = passDoc.file_path
                                 const signedUrl = await getSignedFileUrl(filePath, 3600)
                                 setViewingFile({
                                   url: signedUrl,
-                                  fileName: uploadedDocuments.passport.file_name,
+                                  fileName: passDoc.file_name,
                                   isImage: false
                                 })
                               } catch (error) {
@@ -2081,7 +2159,7 @@ export function NCLEXApplication() {
                       <div className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                          {uploadedDocuments.passport.file_name}
+                          {(uploadedDocuments.passport as { file_name?: string })?.file_name}
                         </span>
                       </div>
                     </div>

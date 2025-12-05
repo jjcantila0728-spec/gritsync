@@ -1,5 +1,7 @@
-# Multi-stage Dockerfile for Production
-# Optimized for size and performance
+# Multi-stage Dockerfile for Production (Serverless/Static Build)
+# This Dockerfile is for serving the static Vite build
+# Note: The project is primarily deployed on Vercel (serverless)
+# This Dockerfile is optional and only needed if you want to self-host
 
 # Stage 1: Build
 FROM node:20-alpine AS builder
@@ -15,46 +17,33 @@ RUN npm ci
 # Copy source files
 COPY . .
 
-# Build the application
-RUN npm run build:prod
+# Build the application (static files)
+RUN npm run build
 
-# Stage 2: Production
-FROM node:20-alpine
+# Stage 2: Production - Serve static files with nginx
+FROM nginx:alpine
 
-WORKDIR /app
+# Copy built static files from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
-
-# Copy package files
-COPY package*.json ./
-
-# Install only production dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/public ./public
-
-# Change ownership to non-root user
-RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
+# Copy nginx configuration (optional - nginx default config works for SPA)
+# For SPA routing, all routes should serve index.html
+RUN echo 'server { \
+    listen 80; \
+    server_name _; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 # Expose port
-EXPOSE 3001
-
-# Set production environment
-ENV NODE_ENV=production
-ENV PORT=3001
+EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
 
-# Start the application
-CMD ["node", "server/index.js"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

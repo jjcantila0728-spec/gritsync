@@ -20,7 +20,7 @@ export function GeneralSettings() {
       siteName: data.siteName || 'GritSync',
       siteEmail: data.siteEmail || 'admin@gritsync.com',
       supportEmail: data.supportEmail || 'support@gritsync.com',
-      maintenanceMode: data.maintenanceMode === 'true' || data.maintenanceMode === true,
+      maintenanceMode: String(data.maintenanceMode) === 'true',
     })
   )
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})

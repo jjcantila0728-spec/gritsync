@@ -5,12 +5,10 @@ import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI } from '@/lib/api'
 import {
   LayoutDashboard,
-  FileText,
   DollarSign,
   ClipboardList,
   Users,
   Settings,
-  User,
   FolderOpen,
   AlertCircle,
 } from 'lucide-react'

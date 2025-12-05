@@ -2,9 +2,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { Button } from '@/components/ui/Button'
-import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, Eye, BarChart3, Zap, FileCheck, User, Sparkles } from 'lucide-react'
+import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
 import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocumentsAPI, applicationPaymentsAPI, timelineStepsAPI } from '@/lib/api'
@@ -111,52 +111,91 @@ export function Dashboard() {
       // Fetch first name and profile completion from user details
       userDetailsAPI.get()
         .then((details) => {
-          if (details?.first_name) {
-            setFirstName(details.first_name)
+          const typedDetails = details as {
+            first_name?: string
+            last_name?: string
+            gender?: string
+            date_of_birth?: string
+            birth_place?: string
+            place_of_birth?: string
+            email?: string
+            mobile_number?: string
+            house_number?: string
+            street_name?: string
+            city?: string
+            province?: string
+            country?: string
+            zipcode?: string
+            elementary_school?: string
+            elementary_city?: string
+            elementary_province?: string
+            elementary_country?: string
+            elementary_years_attended?: string
+            elementary_start_date?: string
+            elementary_end_date?: string
+            high_school?: string
+            high_school_city?: string
+            high_school_province?: string
+            high_school_country?: string
+            high_school_years_attended?: string
+            high_school_start_date?: string
+            high_school_end_date?: string
+            nursing_school?: string
+            nursing_school_city?: string
+            nursing_school_province?: string
+            nursing_school_country?: string
+            nursing_school_years_attended?: string
+            nursing_school_start_date?: string
+            nursing_school_end_date?: string
+            nursing_school_major?: string
+            nursing_school_diploma_date?: string
+          } | null
+          if (typedDetails?.first_name) {
+            setFirstName(typedDetails.first_name)
           } else {
             const nameParts = user.first_name ? [user.first_name] : []
             setFirstName(nameParts[0] || user.email.split('@')[0])
           }
           
           // Calculate profile completion
-          if (details) {
+          if (typedDetails) {
             const completion = calculateCompletion({
-              firstName: details.first_name,
-              lastName: details.last_name,
-              gender: details.gender,
-              dateOfBirth: details.date_of_birth,
-              birthPlace: details.birth_place || details.place_of_birth,
-              email: details.email || user?.email,
-              mobileNumber: details.mobile_number,
-              houseNumber: details.house_number,
-              streetName: details.street_name,
-              city: details.city,
-              province: details.province,
-              country: details.country,
-              zipcode: details.zipcode,
-              elementarySchool: details.elementary_school,
-              elementaryCity: details.elementary_city,
-              elementaryProvince: details.elementary_province,
-              elementaryCountry: details.elementary_country,
-              elementaryYearsAttended: details.elementary_years_attended,
-              elementaryStartDate: details.elementary_start_date,
-              elementaryEndDate: details.elementary_end_date,
-              highSchool: details.high_school,
-              highSchoolCity: details.high_school_city,
-              highSchoolProvince: details.high_school_province,
-              highSchoolCountry: details.high_school_country,
-              highSchoolYearsAttended: details.high_school_years_attended,
-              highSchoolStartDate: details.high_school_start_date,
-              highSchoolEndDate: details.high_school_end_date,
-              nursingSchool: details.nursing_school,
-              nursingSchoolCity: details.nursing_school_city,
-              nursingSchoolProvince: details.nursing_school_province,
-              nursingSchoolCountry: details.nursing_school_country,
-              nursingSchoolYearsAttended: details.nursing_school_years_attended,
-              nursingSchoolStartDate: details.nursing_school_start_date,
-              nursingSchoolEndDate: details.nursing_school_end_date,
-              nursingSchoolMajor: details.nursing_school_major,
-              nursingSchoolDiplomaDate: details.nursing_school_diploma_date
+              firstName: typedDetails.first_name,
+              lastName: typedDetails.last_name,
+              gender: typedDetails.gender,
+              dateOfBirth: typedDetails.date_of_birth,
+              birthPlace: typedDetails.birth_place || typedDetails.place_of_birth,
+              email: typedDetails.email || user?.email,
+              mobileNumber: typedDetails.mobile_number,
+              houseNumber: typedDetails.house_number,
+              streetName: typedDetails.street_name,
+              city: typedDetails.city,
+              province: typedDetails.province,
+              country: typedDetails.country,
+              zipcode: typedDetails.zipcode,
+              elementarySchool: typedDetails.elementary_school,
+              elementaryCity: typedDetails.elementary_city,
+              elementaryProvince: typedDetails.elementary_province,
+              elementaryCountry: typedDetails.elementary_country,
+              elementaryYearsAttended: typedDetails.elementary_years_attended,
+              elementaryStartDate: typedDetails.elementary_start_date,
+              elementaryEndDate: typedDetails.elementary_end_date,
+              highSchool: typedDetails.high_school,
+              highSchoolCity: typedDetails.high_school_city,
+              highSchoolProvince: typedDetails.high_school_province,
+              highSchoolCountry: typedDetails.high_school_country,
+              highSchoolYearsAttended: typedDetails.high_school_years_attended,
+              highSchoolStartDate: typedDetails.high_school_start_date,
+              highSchoolEndDate: typedDetails.high_school_end_date,
+              nursingSchool: typedDetails.nursing_school,
+              nursingSchoolCity: typedDetails.nursing_school_city,
+              nursingSchoolProvince: typedDetails.nursing_school_province,
+              nursingSchoolCountry: typedDetails.nursing_school_country,
+              nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
+              nursingSchoolStartDate: typedDetails.nursing_school_start_date,
+              nursingSchoolEndDate: typedDetails.nursing_school_end_date,
+              nursingSchoolMajor: typedDetails.nursing_school_major,
+              nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
             })
             setProfileCompletion(completion)
           }
@@ -377,7 +416,7 @@ export function Dashboard() {
       }
       
       const results = await Promise.all(promises)
-      const [statsData, applications, quotations, pendingPaymentsData] = results
+      const [statsData, applications, , pendingPaymentsData] = results
       
       setStats(statsData)
       
@@ -591,7 +630,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                    {greeting}, {firstName || user?.first_name || 'Admin'} 👋
+                    {greeting}, {firstName || (user?.first_name as string | undefined) || 'Admin'} 👋
                   </h1>
                   <p className="text-gray-600 dark:text-gray-400">
                     System overview and management dashboard
@@ -628,7 +667,7 @@ export function Dashboard() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
-                    <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.totalApplications || stats.applications || 0}</p>
+                    <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
                     <div className="flex items-center gap-1 mt-2 text-xs text-primary-600 dark:text-primary-400">
                       <FileText className="h-3 w-3" />
                       <span>All time</span>
@@ -679,7 +718,7 @@ export function Dashboard() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Quotations</p>
-                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.totalQuotations || stats.quotations || 0}</p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.quotations || 0}</p>
                     <div className="flex items-center gap-1 mt-2 text-xs text-blue-600 dark:text-blue-400">
                       <DollarSign className="h-3 w-3" />
                       <span>Total quotes</span>

@@ -27,8 +27,7 @@ interface StripePaymentFormProps {
 export function StripePaymentForm({
   amount,
   onSuccess,
-  onError,
-  paymentIntentId
+  onError
 }: StripePaymentFormProps) {
   const stripe = useStripe()
   const elements = useElements()

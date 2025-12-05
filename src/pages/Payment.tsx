@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Elements } from '@stripe/react-stripe-js'
-import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
@@ -31,10 +30,11 @@ export function Payment() {
   async function fetchQuotation() {
     try {
       const quote = await quotationsAPI.getById(id!)
-      if (quote) {
-        setQuotation({ id: quote.id, amount: quote.amount })
+      const typedQuote = quote as { id?: string; amount?: number } | null
+      if (typedQuote && typedQuote.id && typedQuote.amount) {
+        setQuotation({ id: typedQuote.id, amount: typedQuote.amount })
         // Create payment intent for quotation
-        await createPaymentIntent(quote.id, quote.amount)
+        await createPaymentIntent(typedQuote.id, typedQuote.amount)
       }
     } catch (error: any) {
       console.error('Error fetching quotation:', error)
@@ -55,7 +55,7 @@ export function Payment() {
     }
   }
 
-  async function handlePaymentSuccess(paymentIntentId: string) {
+  async function handlePaymentSuccess(_paymentIntentId: string) {
     if (!quotation) return
 
     try {

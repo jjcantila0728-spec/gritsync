@@ -85,3 +85,4 @@ WHERE tablename IN ('applications', 'application_timeline_steps', 'application_p
   AND schemaname = 'public'
   AND policyname LIKE '%tracking%'
 ORDER BY tablename, policyname;
+

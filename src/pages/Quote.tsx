@@ -6,11 +6,11 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { quotationsAPI, servicesAPI } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, MapPin, Calendar, Trash2, Edit, Eye, X, Info, ChevronRight, Copy, Check, Globe, ArrowLeft } from 'lucide-react'
+import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 
@@ -135,10 +135,12 @@ export function Quote() {
           
           // Use staggered service if available (it has step information)
           const serviceToUse = staggeredService || fullService || services[0]
+          const typedService = serviceToUse as { line_items?: any } | null
           
-          if (serviceToUse && serviceToUse.line_items) {
-            const step1Items = serviceToUse.line_items.filter((item: any) => !item.step || item.step === 1)
-            const step2Items = serviceToUse.line_items.filter((item: any) => item.step === 2)
+          if (typedService && typedService.line_items) {
+            const lineItems = typedService.line_items as Array<{ step?: number }>
+            const step1Items = lineItems.filter((item: any) => !item.step || item.step === 1)
+            const step2Items = lineItems.filter((item: any) => item.step === 2)
             
             // Calculate subtotals (before tax) from line items
             // Line item amounts are the base prices (subtotals)
@@ -252,21 +254,36 @@ export function Quote() {
       const quote = user 
         ? await quotationsAPI.getById(id)
         : await quotationsAPI.getByIdPublic(id)
-      if (quote) {
+      const typedQuote = quote as {
+        id?: string
+        payment_type?: string
+        description?: string
+        line_items?: any
+        service?: string
+        state?: string
+        client_first_name?: string
+        client_last_name?: string
+        client_email?: string
+        user_id?: string
+        client_mobile?: string
+        amount?: number
+        created_at?: string
+      } | null
+      if (typedQuote) {
         // Check if quote has expired
-        const expired = checkExpiration(quote)
+        const expired = checkExpiration(typedQuote as any)
         setIsExpired(expired)
         
         if (expired) {
           showToast('This quotation has expired. It is shown for reference only.', 'warning')
         }
         
-        setViewingQuote(quote)
+        setViewingQuote(typedQuote as any)
         setCurrentStep(4) // Show result view
         
         // Determine payment type from quote data or description
-        const paymentType = quote.payment_type || (() => {
-          const description = quote.description || ''
+        const paymentType = typedQuote.payment_type || (() => {
+          const description = typedQuote.description || ''
           const isFullPayment = description.includes('NCLEX PV Application Fee') && description.includes('NCLEX NY BON Application Fee')
           return isFullPayment ? 'full' : 'staggered'
         })()
@@ -274,7 +291,7 @@ export function Quote() {
         // Load line items from quote if available, otherwise reconstruct from description
         let items: QuoteLineItem[] = []
         // Check if line_items is an object with items array (new format with metadata)
-        let lineItemsData: any = quote.line_items
+        let lineItemsData: any = typedQuote.line_items
         let takerTypeFromMetadata: 'first-time' | 'retaker' | null = null
         
         if (lineItemsData && typeof lineItemsData === 'object' && !Array.isArray(lineItemsData) && lineItemsData.items) {
@@ -300,8 +317,8 @@ export function Quote() {
           // Reconstruct line items from description (fallback)
           // Check if takerType is available from metadata
           let takerTypeFromQuote: 'first-time' | 'retaker' | null = null
-          if (quote.line_items && typeof quote.line_items === 'object' && !Array.isArray(quote.line_items)) {
-            const metadata = (quote.line_items as any).metadata
+          if (typedQuote.line_items && typeof typedQuote.line_items === 'object' && !Array.isArray(typedQuote.line_items)) {
+            const metadata = (typedQuote.line_items as any).metadata
             if (metadata && metadata.taker_type) {
               takerTypeFromQuote = metadata.taker_type
             }
@@ -363,20 +380,20 @@ export function Quote() {
         
         // Load client details from quote (these should be saved when quote is created)
         setFormData({
-          service: quote.service || 'NCLEX Processing',
-          state: quote.state || 'New York',
+          service: typedQuote.service || 'NCLEX Processing',
+          state: typedQuote.state || 'New York',
           takerType: takerTypeFromMetadata,
-          firstName: quote.client_first_name || '',
-          lastName: quote.client_last_name || '',
-          email: quote.client_email || quote.user_id || '',
-          mobileNumber: quote.client_mobile || '',
+          firstName: typedQuote.client_first_name || '',
+          lastName: typedQuote.client_last_name || '',
+          email: typedQuote.client_email || typedQuote.user_id || '',
+          mobileNumber: typedQuote.client_mobile || '',
           paymentType: paymentType as 'full' | 'staggered',
           lineItems: items,
           subtotal,
           tax,
-          total: quote.amount || total // Use quote amount if available, otherwise calculated total
+          total: typedQuote.amount || total // Use quote amount if available, otherwise calculated total
         })
-        setGeneratedQuote(quote)
+        setGeneratedQuote(typedQuote as any)
         
         // Show preloader for 3 seconds before displaying quote
         setTimeout(() => {
@@ -493,7 +510,11 @@ export function Quote() {
         // For admins, this will show all quotations
         // For regular users, this will show their own + public quotations
         const data = await quotationsAPI.getAll()
-        setQuotations(data || [])
+        const typedData = (data || []).map((q: any) => ({
+          ...q,
+          service: q.service ?? undefined
+        }))
+        setQuotations(typedData)
       } else {
         // For non-logged-in users, try to fetch public quotations only
         try {
@@ -504,7 +525,7 @@ export function Quote() {
             .order('created_at', { ascending: false })
           
           if (!error && data) {
-            setQuotations(data || [])
+            setQuotations((data || []) as any[])
           }
         } catch (err) {
           // If fetching fails, just set empty array
@@ -902,15 +923,17 @@ export function Quote() {
         formData.takerType || undefined
       )
       // Check expiration for new quote (should be false for new quotes)
-      const expired = checkExpiration(quote)
+      const typedNewQuote = quote as { id?: string; created_at?: string } | null
+      if (!typedNewQuote) return
+      const expired = checkExpiration(typedNewQuote as any)
       setIsExpired(expired)
       
-      setGeneratedQuote(quote)
-      setViewingQuote(quote)
+      setGeneratedQuote(typedNewQuote as any)
+      setViewingQuote(typedNewQuote as any)
       setCurrentStep(4) // Show result
       setShowPreloader(true)
       // Navigate to the quote view with the formatted GQ quote ID
-      const formattedId = formatQuoteId(quote.id)
+      const formattedId = formatQuoteId(typedNewQuote.id || '')
       navigate(`/quote/${formattedId}`, { replace: false })
       // Show preloader for 3 seconds before displaying quote and showing toast
       setTimeout(() => {
@@ -2087,7 +2110,7 @@ export function Quote() {
                           </div>
                           <button
                             onClick={async () => {
-                              const quoteId = (generatedQuote || viewingQuote)?.id
+                              const quoteId = ((generatedQuote || viewingQuote) as { id?: string } | null)?.id
                               if (!quoteId) return
                               const formattedId = formatQuoteId(quoteId)
                               const quoteLink = `${window.location.origin}/quote/${formattedId}`

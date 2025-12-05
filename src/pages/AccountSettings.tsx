@@ -13,8 +13,8 @@ import { getFullNameWithMiddle } from '@/lib/utils'
 import { 
   Lock, Eye, EyeOff, Save, Shield, User, Mail, Calendar, 
   Key, LogOut, AlertTriangle, CheckCircle2, XCircle, 
-  Info, Bell, Globe, Smartphone, Clock, QrCode, Copy, 
-  Check, X, ToggleLeft, ToggleRight, Download
+  Info, Bell, Clock, QrCode, Copy, 
+  Check, X, Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -108,16 +108,27 @@ export function AccountSettings() {
   async function fetchPreferences() {
     try {
       const preferences = await userPreferencesAPI.get()
-      setEmailPreferences({
-        email_notifications_enabled: preferences.email_notifications_enabled ?? true,
-        email_timeline_updates: preferences.email_timeline_updates ?? true,
-        email_status_changes: preferences.email_status_changes ?? true,
-        email_payment_updates: preferences.email_payment_updates ?? true,
-        email_general_notifications: preferences.email_general_notifications ?? true,
-      })
-      setTwoFactorEnabled(preferences.two_factor_enabled ?? false)
-      if (preferences.two_factor_backup_codes) {
-        setTwoFactorBackupCodes(preferences.two_factor_backup_codes)
+      const typedPreferences = preferences as {
+        email_notifications_enabled?: boolean
+        email_timeline_updates?: boolean
+        email_status_changes?: boolean
+        email_payment_updates?: boolean
+        email_general_notifications?: boolean
+        two_factor_enabled?: boolean
+        two_factor_backup_codes?: string[]
+      } | null
+      if (typedPreferences) {
+        setEmailPreferences({
+          email_notifications_enabled: typedPreferences.email_notifications_enabled ?? true,
+          email_timeline_updates: typedPreferences.email_timeline_updates ?? true,
+          email_status_changes: typedPreferences.email_status_changes ?? true,
+          email_payment_updates: typedPreferences.email_payment_updates ?? true,
+          email_general_notifications: typedPreferences.email_general_notifications ?? true,
+        })
+        setTwoFactorEnabled(typedPreferences.two_factor_enabled ?? false)
+        if (typedPreferences.two_factor_backup_codes) {
+          setTwoFactorBackupCodes(typedPreferences.two_factor_backup_codes)
+        }
       }
     } catch (error) {
       console.error('Error fetching preferences:', error)
@@ -321,7 +332,7 @@ export function AccountSettings() {
     ? getFullNameWithMiddle(userDetails.first_name, userDetails.middle_name, userDetails.last_name, '')
     : user?.first_name && user?.last_name
     ? getFullNameWithMiddle(user.first_name, undefined, user.last_name, '')
-    : user?.full_name || 'User'
+    : 'User'
 
   const nameForAvatar = userDetails
     ? getFullNameWithMiddle(userDetails.first_name, userDetails.middle_name, userDetails.last_name, user?.email || '')
@@ -627,7 +638,7 @@ export function AccountSettings() {
                     <div className="flex gap-3 pt-2">
                       <Button
                         onClick={handleChangePassword}
-                        disabled={saving || !passwordsMatch || (passwordStrength && passwordStrength.strength === 'weak')}
+                        disabled={saving || passwordsMatch === false || (passwordStrength?.strength === 'weak') || false}
                         className="flex-1"
                       >
                         {saving ? (

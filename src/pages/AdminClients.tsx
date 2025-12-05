@@ -35,8 +35,7 @@ function generateGmailAddress(firstName: string, middleName: string | null, last
   
   return email
 }
-import { Users, Search, Mail, Calendar, RefreshCw, Download, ChevronLeft, ChevronRight, FileText, Eye, Download as DownloadIcon, User, MapPin, Award, School } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { Modal } from '@/components/ui/Modal'
@@ -54,9 +53,8 @@ interface Client {
 }
 
 export function AdminClients() {
-  const { isAdmin, signIn } = useAuth()
+  const { isAdmin } = useAuth()
   const { showToast } = useToast()
-  const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -150,20 +148,23 @@ export function AdminClients() {
             if (applications && applications.length > 0) {
               const app = applications[0]
               // Try to get existing Gmail account from processing_accounts
+              const typedApp = app as { id?: string }
               const { data: gmailAccounts } = await supabase
                 .from('processing_accounts')
                 .select('email')
-                .eq('application_id', app.id)
+                .eq('application_id', typedApp.id || '')
                 .eq('account_type', 'gmail')
                 .limit(1)
               
-              if (gmailAccounts && gmailAccounts.length > 0) {
-                return { ...client, gmail_account: gmailAccounts[0].email }
+              const typedGmailAccounts = gmailAccounts as Array<{ email?: string }> | null
+              if (typedGmailAccounts && typedGmailAccounts.length > 0) {
+                return { ...client, gmail_account: typedGmailAccounts[0].email }
               } else {
                 // Generate Gmail address if not found
-                const firstName = app.first_name || client.first_name || ''
-                const middleName = app.middle_name || null
-                const lastName = app.last_name || client.last_name || ''
+                const typedApp = app as { first_name?: string; middle_name?: string; last_name?: string } | null
+                const firstName = typedApp?.first_name || client.first_name || ''
+                const middleName = typedApp?.middle_name || null
+                const lastName = typedApp?.last_name || client.last_name || ''
                 if (firstName && lastName) {
                   const gmailAddress = generateGmailAddress(firstName, middleName, lastName)
                   return { ...client, gmail_account: gmailAddress }
@@ -241,7 +242,47 @@ export function AdminClients() {
           .limit(1)
         
         if (applications && applications.length > 0) {
-          const latestApp = applications[0]
+          const latestApp = applications[0] as {
+            first_name?: string | null
+            middle_name?: string | null
+            last_name?: string | null
+            gender?: string | null
+            marital_status?: string | null
+            single_full_name?: string | null
+            date_of_birth?: string | null
+            birth_place?: string | null
+            email?: string | null
+            mobile_number?: string | null
+            house_number?: string | null
+            street_name?: string | null
+            city?: string | null
+            province?: string | null
+            country?: string | null
+            zipcode?: string | null
+            elementary_school?: string | null
+            elementary_city?: string | null
+            elementary_province?: string | null
+            elementary_country?: string | null
+            elementary_years_attended?: string | null
+            elementary_start_date?: string | null
+            elementary_end_date?: string | null
+            high_school?: string | null
+            high_school_city?: string | null
+            high_school_province?: string | null
+            high_school_country?: string | null
+            high_school_years_attended?: string | null
+            high_school_start_date?: string | null
+            high_school_end_date?: string | null
+            nursing_school?: string | null
+            nursing_school_city?: string | null
+            nursing_school_province?: string | null
+            nursing_school_country?: string | null
+            nursing_school_years_attended?: string | null
+            nursing_school_start_date?: string | null
+            nursing_school_end_date?: string | null
+            nursing_school_major?: string | null
+            nursing_school_diploma_date?: string | null
+          }
           // Map application fields to user_details format
           detailsResult = {
             first_name: latestApp.first_name,
@@ -324,7 +365,7 @@ export function AdminClients() {
     setClientDocuments([])
   }
 
-  const handleViewDocument = async (filePath: string, fileName: string) => {
+  const handleViewDocument = async (filePath: string, _fileName: string) => {
     try {
       const url = await getSignedFileUrl(filePath)
       window.open(url, '_blank')

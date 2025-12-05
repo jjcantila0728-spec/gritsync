@@ -26,7 +26,11 @@ export function NewQuotation() {
     setError('')
 
     try {
-      await quotationsAPI.create(parseFloat(amount), description)
+      await quotationsAPI.create({
+        amount: parseFloat(amount),
+        description,
+        status: 'pending'
+      })
       showToast('Quotation created successfully!', 'success')
       navigate('/quotations')
     } catch (err: any) {

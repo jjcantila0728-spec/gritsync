@@ -6,30 +6,23 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { quotationsAPI, servicesAPI } from '@/lib/api'
-import { formatDate, formatCurrency, exportToCSV, paginate } from '@/lib/utils'
+import { formatDate, formatCurrency } from '@/lib/utils'
 import { 
   DollarSign, 
-  Trash2, 
-  Edit, 
-  Eye, 
   Search, 
-  Filter,
-  X,
-  Check,
   Plus,
-  Minus,
   Save,
   Copy,
-  ExternalLink,
-  Download,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Edit,
+  Trash2,
+  Eye,
+  X
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { subscribeToAllQuotations, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
@@ -110,7 +103,7 @@ export function AdminQuoteManagement() {
   }
 
   // Count unopened quotes
-  const unopenedQuotesCount = useMemo(() => {
+  const _unopenedQuotesCount = useMemo(() => {
     const opened = getOpenedQuotes()
     return quotations.filter(q => !opened.has(q.id)).length
   }, [quotations])
@@ -205,7 +198,7 @@ export function AdminQuoteManagement() {
   async function fetchQuotations() {
     try {
       const data = await quotationsAPI.getAll()
-      setQuotations(data || [])
+      setQuotations((data || []) as any[])
     } catch (error) {
       console.error('Error fetching quotations:', error)
       showToast('Failed to load quotations', 'error')
@@ -257,7 +250,8 @@ export function AdminQuoteManagement() {
     try {
       const data = await servicesAPI.getAll()
       // Calculate taxes for services if not already calculated
-      const servicesWithTax = (data || []).map(calculateTaxForService)
+      const typedServices = (data || []) as any[]
+      const servicesWithTax = typedServices.map(calculateTaxForService)
       setServices(servicesWithTax)
       if (!data || data.length === 0) {
       }
@@ -331,7 +325,7 @@ export function AdminQuoteManagement() {
         service: editingQuote.service,
         state: editingQuote.state,
         payment_type: editingQuote.payment_type,
-        line_items: editingQuote.line_items,
+        line_items: editingQuote.line_items as unknown as any,
         client_first_name: editingQuote.client_first_name,
         client_last_name: editingQuote.client_last_name,
         client_email: editingQuote.client_email,
@@ -1407,7 +1401,7 @@ function EditQuoteForm({
   useEffect(() => {
     if (quote.service && quote.state) {
       servicesAPI.getByServiceAndState(quote.service, quote.state)
-        .then(data => setCurrentService(data || []))
+        .then(data => setCurrentService((data || []) as unknown as Service[]))
         .catch(() => setCurrentService([]))
     }
   }, [quote.service, quote.state])

@@ -75,7 +75,8 @@ export function NotificationSettings() {
     try {
       setLoadingNotifications(true)
       const types = await adminAPI.getNotificationTypes()
-      setNotificationTypes(Array.isArray(types) ? types : [])
+      const typedTypes = (Array.isArray(types) ? types : []) as any[]
+      setNotificationTypes(typedTypes)
     } catch (error: any) {
       console.error('Error loading notification types:', error)
       // If table doesn't exist yet, show empty list (migration not run)

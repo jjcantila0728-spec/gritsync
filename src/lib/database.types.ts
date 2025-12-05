@@ -96,7 +96,7 @@ export interface Database {
           passport_path: string
           signature: string | null
           payment_type: string | null
-          status: 'pending' | 'completed' | 'rejected'
+          status: 'pending' | 'completed' | 'rejected' | 'initiated' | 'in-progress' | 'approved'
           created_at: string
           updated_at: string
         }

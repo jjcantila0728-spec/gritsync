@@ -31,9 +31,7 @@ lerna-debug.log*
 *.db-wal
 gritsync.db*
 
-# Uploads
-server/uploads/*
-!server/uploads/.gitkeep
+# Uploads (removed - using Supabase Storage)
 
 # IDE
 .vscode/

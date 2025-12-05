@@ -24,7 +24,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
         status: 'success',
         message: 'Supabase client initialized successfully',
         details: {
-          url: supabase.supabaseUrl,
+          url: 'Supabase client initialized',
         },
       })
     }
@@ -184,7 +184,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
           name: 'RLS Policies',
           status: 'success',
           message: 'RLS policies working correctly (can access own data)',
-          details: { userRole: data?.role },
+          details: { userRole: (data as { role?: string } | null)?.role },
         })
       }
     } else {

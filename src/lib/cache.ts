@@ -67,12 +67,10 @@ class APICache {
    */
   cleanup(): void {
     const now = Date.now()
-    let cleaned = 0
 
     for (const [key, entry] of this.cache.entries()) {
       if (now >= entry.expiresAt) {
         this.cache.delete(key)
-        cleaned++
       }
     }
 
@@ -84,8 +82,6 @@ class APICache {
       const toRemove = entries.slice(0, this.cache.size - this.maxSize + 10)
       toRemove.forEach(([key]) => this.cache.delete(key))
     }
-
-    return cleaned
   }
 
   /**
@@ -107,7 +103,7 @@ class APICache {
   /**
    * Get cache statistics
    */
-  getStats() {
+  getStats(): { totalEntries: number; validEntries: number; expiredEntries: number } {
     const entries = Array.from(this.cache.entries())
     const now = Date.now()
     

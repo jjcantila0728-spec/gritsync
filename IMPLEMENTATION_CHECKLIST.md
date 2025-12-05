@@ -162,3 +162,4 @@ AND policyname = 'Public can view timeline steps for tracking';
 4. **Test tracking** (Incognito + Authenticated)
 5. **Verify pictures display**
 6. **Done!** ✅
+

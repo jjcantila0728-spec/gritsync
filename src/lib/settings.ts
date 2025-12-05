@@ -35,9 +35,11 @@ async function getAllSettings(): Promise<Record<string, string>> {
     
     // Convert array to object
     const settings: Record<string, string> = {}
-    data?.forEach(setting => {
-      settings[setting.key] = setting.value
-    })
+    if (data && Array.isArray(data)) {
+      data.forEach((setting: { key: string; value: string }) => {
+        settings[setting.key] = setting.value
+      })
+    }
     
     // Update cache
     settingsCache = settings
@@ -63,7 +65,7 @@ export async function getSetting(key: string, defaultValue: string = ''): Promis
  */
 export async function getBooleanSetting(key: string, defaultValue: boolean = false): Promise<boolean> {
   const value = await getSetting(key, defaultValue.toString())
-  return value === 'true' || value === true
+  return value === 'true'
 }
 
 /**

@@ -7,11 +7,10 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationsAPI, trackingAPI, getSignedFileUrl, getFileUrl } from '@/lib/api'
 import { formatDate, paginate } from '@/lib/utils'
-import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Filter, X, ArrowUpDown, ArrowUp, ArrowDown, Image as ImageIcon, Shield, MapPin, GraduationCap, ExternalLink, Download, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Logo } from '@/components/Logo'
+import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -43,7 +42,7 @@ type SortDirection = 'asc' | 'desc'
 
 export function Tracking() {
   const { user, isAdmin } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const params = useParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -136,7 +135,7 @@ export function Tracking() {
             setPictureUrl(url)
             setImageError(false)
           })
-          .catch(error => {
+          .catch(() => {
             // All methods failed
             setImageError(true)
           })
@@ -452,36 +451,36 @@ export function Tracking() {
   }, [filteredAndSortedApplications, currentPage, pageSize])
 
   // Calculate statistics based on status from database
-  const stats = useMemo(() => {
-    const total = applications.length
-    const initiated = applications.filter((app) => getDisplayStatus(app) === 'initiated').length
-    const inProgress = applications.filter((app) => getDisplayStatus(app) === 'in-progress').length
-    const completed = applications.filter((app) => getDisplayStatus(app) === 'completed').length
-    const rejected = applications.filter((app) => getDisplayStatus(app) === 'rejected').length
-    // Legacy support - include old status values
-    const pending = applications.filter((app) => app.status === 'pending').length
-    const approved = applications.filter((app) => app.status === 'completed' || app.status === 'approved').length
-    
-    return { 
-      total, 
-      pending: initiated + pending, 
-      approved: completed + approved, 
-      rejected,
-      initiated,
-      inProgress,
-      completed
-    }
-  }, [applications])
+  // const _stats = useMemo(() => {
+  //   const total = applications.length
+  //   const initiated = applications.filter((app) => getDisplayStatus(app) === 'initiated').length
+  //   const inProgress = applications.filter((app) => getDisplayStatus(app) === 'in-progress').length
+  //   const completed = applications.filter((app) => getDisplayStatus(app) === 'completed').length
+  //   const rejected = applications.filter((app) => getDisplayStatus(app) === 'rejected').length
+  //   // Legacy support - include old status values
+  //   const pending = applications.filter((app) => app.status === 'pending').length
+  //   const approved = applications.filter((app) => app.status === 'completed' || app.status === 'approved').length
+  //   
+  //   return { 
+  //     total, 
+  //     pending: initiated + pending, 
+  //     approved: completed + approved, 
+  //     rejected,
+  //     initiated,
+  //     inProgress,
+  //     completed
+  //   }
+  // }, [applications])
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDirection('desc')
-    }
-    setCurrentPage(1) // Reset to first page on sort
-  }
+  // const _handleSort = (field: SortField) => {
+  //   if (sortField === field) {
+  //     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+  //   } else {
+  //     setSortField(field)
+  //     setSortDirection('desc')
+  //   }
+  //   setCurrentPage(1) // Reset to first page on sort
+  // }
 
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -586,7 +585,7 @@ export function Tracking() {
         if (img.complete && img.naturalWidth > 0) {
           return Promise.resolve()
         }
-        return new Promise((resolve) => {
+        return new Promise<void>((resolve) => {
           const timeout = setTimeout(() => resolve(), 8000) // Increased timeout
           img.onload = () => {
             clearTimeout(timeout)
@@ -629,8 +628,7 @@ export function Tracking() {
         scrollY: 0,
         imageTimeout: 20000, // Increased timeout for slow images
         removeContainer: false,
-        pixelRatio: window.devicePixelRatio || 1, // Use device pixel ratio for better quality
-        ignoreElements: (element) => {
+        ignoreElements: () => {
           // Don't ignore any elements - capture everything
           return false
         },
@@ -649,10 +647,10 @@ export function Tracking() {
               const computed = clonedDoc.defaultView?.getComputedStyle(el) || window.getComputedStyle(el)
               
               // Ensure text rendering is optimized
-              htmlEl.style.webkitFontSmoothing = 'antialiased'
-              htmlEl.style.mozOsxFontSmoothing = 'grayscale'
+              ;(htmlEl.style as any).webkitFontSmoothing = 'antialiased'
+              ;(htmlEl.style as any).mozOsxFontSmoothing = 'grayscale'
               htmlEl.style.textRendering = 'optimizeLegibility'
-              htmlEl.style.fontSmooth = 'always'
+              ;(htmlEl.style as any).fontSmooth = 'always'
               
               // Force text to render with proper color and styles
               if (computed.color) {

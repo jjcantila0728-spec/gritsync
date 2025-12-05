@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { stripePromise } from '@/lib/stripe'
@@ -142,9 +142,12 @@ export function ApplicationPayment() {
       // Check if there's a receipt for any payment
       for (const payment of paid) {
         try {
-          const receiptData = await applicationPaymentsAPI.getReceipt(payment.id)
-          setReceipt(receiptData)
-          break
+          const typedPayment = payment as { id?: string }
+          if (typedPayment.id) {
+            const receiptData = await applicationPaymentsAPI.getReceipt(typedPayment.id)
+            setReceipt(receiptData)
+            break
+          }
         } catch (error) {
           // No receipt yet
         }
@@ -235,7 +238,7 @@ export function ApplicationPayment() {
       setShowPaymentModal(true)
       // For GCash, we'll use a special client secret value
       setClientSecret('gcash')
-      setPaymentIntentId(undefined)
+      setPaymentIntentId(null)
       return
     }
 
@@ -300,12 +303,12 @@ export function ApplicationPayment() {
         paymentId, 
         transactionId, 
         stripePaymentIntentId,
-        paymentMethod || 'stripe',
+        (paymentMethod === 'card' ? 'stripe' : paymentMethod) || 'stripe',
         gcashDetails,
         proofOfPaymentFile
       )
       
-      if (result.receipt) {
+      if (result && result.receipt) {
         setReceipt(result.receipt)
       }
       
@@ -314,7 +317,12 @@ export function ApplicationPayment() {
       setClientSecret(null)
       setPaymentIntentId(null)
       setShowPaymentModal(false)
-      setCompletedPayments([...completedPayments, result.payment.payment_type])
+      if (result && result.payment) {
+        const typedResult = result as { payment?: { payment_type?: string } }
+        if (typedResult.payment?.payment_type) {
+          setCompletedPayments([...completedPayments, typedResult.payment.payment_type])
+        }
+      }
       
       if (paymentMethod === 'gcash') {
         showToast('GCash payment submitted! Your payment will be verified manually. You will receive a confirmation once verified.', 'success')
@@ -347,10 +355,10 @@ export function ApplicationPayment() {
       let yPos = margin
 
       // Colors
-      const primaryColor = [220, 38, 38] // Red #dc2626
-      const lightGray = [243, 244, 246] // Gray-100
-      const textGray = [107, 114, 128] // Gray-500
-      const textDark = [17, 24, 39] // Gray-900
+      const primaryColor: [number, number, number] = [220, 38, 38] // Red #dc2626
+      const lightGray: [number, number, number] = [243, 244, 246] // Gray-100
+      const textGray: [number, number, number] = [107, 114, 128] // Gray-500
+      const textDark: [number, number, number] = [17, 24, 39] // Gray-900
 
       // Header with gradient effect (simulated with rectangle)
       doc.setFillColor(...primaryColor)

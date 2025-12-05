@@ -111,3 +111,4 @@ cfae7073-0116-47b8-863b-363851958479/picture_1764724210473.JPG
 - Public URLs are faster (no signing needed)
 
 After making the bucket public, the `DocumentImagePreview` component will automatically use public URLs for pictures and they should display correctly.
+

@@ -285,7 +285,7 @@ export function SessionTimeout({ children }: SessionTimeoutProps) {
               Log Out Now
             </Button>
             <Button
-              variant="primary"
+              variant="default"
               onClick={handleStayLoggedIn}
             >
               Stay Logged In

@@ -1,27 +1,27 @@
 version: '3.8'
 
+# Docker Compose for Static Site (Serverless Build)
+# Note: The project is primarily deployed on Vercel (serverless)
+# This docker-compose.yml is optional and only needed if you want to self-host
+
 services:
   gritsync:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gritsync-api
+    container_name: gritsync-app
     ports:
-      - "3001:3001"
+      - "80:80"
     environment:
       - NODE_ENV=production
-      - PORT=3001
       # Add your environment variables here or use .env file
-      # - JWT_SECRET=${JWT_SECRET}
-      # - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      # - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      # - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      # - FRONTEND_URL=${FRONTEND_URL}
+      # Note: Environment variables are baked into the build at build time
+      # For Vite, use VITE_ prefix: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, etc.
     env_file:
       - .env.production
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -32,11 +32,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
+          cpus: '1'
           memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 networks:
   gritsync-network:

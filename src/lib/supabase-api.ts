@@ -1,9 +1,12 @@
-import { supabase, handleSupabaseError } from './supabase'
+import { supabase } from './supabase'
 import type { Database } from './database.types'
 
 type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
 type Inserts<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 type Updates<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
+
+// Helper type for query results that TypeScript can't infer
+type QueryResult<T> = T | null
 
 // Helper to get current user ID
 async function getCurrentUserId(): Promise<string> {
@@ -426,8 +429,11 @@ export const applicationsAPI = {
               .eq('account_type', 'gmail')
               .limit(1)
             
-            if (!gmailError && gmailAccounts && gmailAccounts.length > 0 && gmailAccounts[0]?.email) {
-              displayEmail = gmailAccounts[0].email
+            if (!gmailError && gmailAccounts && gmailAccounts.length > 0) {
+              const gmailAccount = gmailAccounts[0] as { email?: string } | null
+              if (gmailAccount?.email) {
+                displayEmail = gmailAccount.email
+              }
             } else {
               // If no Gmail account exists, generate the email address
               const firstName = app.first_name || ''
@@ -469,8 +475,11 @@ export const applicationsAPI = {
               .eq('account_type', 'gmail')
               .limit(1)
             
-            if (gmailAccounts && gmailAccounts.length > 0 && gmailAccounts[0]?.email) {
-              displayEmail = gmailAccounts[0].email
+            if (gmailAccounts && gmailAccounts.length > 0) {
+              const gmailAccount = gmailAccounts[0] as { email?: string } | null
+              if (gmailAccount?.email) {
+                displayEmail = gmailAccount.email
+              }
             } else {
               const firstName = app.first_name || ''
               const middleName = app.middle_name || null
@@ -525,7 +534,7 @@ export const applicationsAPI = {
     const { data, error } = await query.single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 
   create: async (applicationData: any, files?: { picture?: File; diploma?: File; passport?: File }) => {
@@ -584,11 +593,11 @@ export const applicationsAPI = {
         diploma_path: diplomaPath,
         passport_path: passportPath,
       })
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'processing_accounts'>
   },
 
   updateStatus: async (id: string, status: 'initiated' | 'in-progress' | 'rejected' | 'completed' | 'pending' | 'approved') => {
@@ -663,7 +672,7 @@ export const quotationsAPI = {
         .order('created_at', { ascending: false })
       
       if (error) throw new Error(error.message)
-      return data || []
+      return (data || []) as Tables<'quotations'>[]
     } else {
       // For non-admin users, fetch their own quotations and public quotations separately, then combine
       const [userQuotes, publicQuotes] = await Promise.all([
@@ -683,7 +692,7 @@ export const quotationsAPI = {
       if (publicQuotes.error) throw new Error(publicQuotes.error.message)
       
       // Combine and deduplicate by ID, then sort by created_at
-      const allQuotes = [...(userQuotes.data || []), ...(publicQuotes.data || [])]
+      const allQuotes = [...(userQuotes.data || []), ...(publicQuotes.data || [])] as Tables<'quotations'>[]
       const uniqueQuotes = Array.from(
         new Map(allQuotes.map(q => [q.id, q])).values()
       )
@@ -772,7 +781,7 @@ export const quotationsAPI = {
     }
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'quotations'> | null
   },
 
   getByIdPublic: async (id: string) => {
@@ -813,7 +822,7 @@ export const quotationsAPI = {
     }
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'quotations'> | null
   },
 
   create: async (data: Inserts<'quotations'>) => {
@@ -972,7 +981,7 @@ export const quotationsAPI = {
     })
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 }
 
@@ -1013,7 +1022,7 @@ export const servicesAPI = {
       .maybeSingle()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 
   getAllByServiceAndState: async (serviceName: string, state: string) => {
@@ -1085,11 +1094,11 @@ export const servicesAPI = {
       .from('services')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'processing_accounts'>
   },
 
   delete: async (id: string) => {
@@ -1174,14 +1183,14 @@ export const notificationsAPI = {
           // Get user's full name if available
           const { data: userProfile } = await supabase
             .from('users')
-            .select('full_name, first_name, last_name')
+            .select('first_name, last_name')
             .eq('id', userId)
             .single()
           
-          const userName = userProfile?.full_name || 
-                          (userProfile?.first_name && userProfile?.last_name 
-                            ? `${userProfile.first_name} ${userProfile.last_name}` 
-                            : userProfile?.first_name || 'User')
+          const profile = userProfile as { first_name?: string; last_name?: string } | null
+          const userName = (profile?.first_name && profile?.last_name 
+                            ? `${profile.first_name} ${profile.last_name}` 
+                            : profile?.first_name || 'User')
           
           // Import email service dynamically
           const { sendNotificationEmail } = await import('./email-service')
@@ -1211,11 +1220,11 @@ export const notificationsAPI = {
       .from('notifications')
       .update({ read: true })
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'processing_accounts'>
   },
 
   markAllAsRead: async () => {
@@ -1241,7 +1250,7 @@ export const userDetailsAPI = {
       .maybeSingle()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_details'> | null
   },
 
   // Get user details for a specific user (for admins viewing client details)
@@ -1264,7 +1273,7 @@ export const userDetailsAPI = {
       throw new Error(error.message)
     }
     
-    return data
+    return data as Tables<'user_details'> | null
   },
 
   save: async (details: any) => {
@@ -1289,6 +1298,79 @@ export const userDetailsAPI = {
       throw new Error(error.message)
     }
     return data
+  },
+}
+
+// User Preferences API
+export const userPreferencesAPI = {
+  get: async () => {
+    const userId = await getCurrentUserId()
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+    
+    if (error) throw new Error(error.message)
+    
+    // Return defaults if no preferences exist
+    if (!data) {
+      return {
+        email_notifications_enabled: true,
+        email_timeline_updates: true,
+        email_status_changes: true,
+        email_payment_updates: true,
+        email_general_notifications: true,
+        two_factor_enabled: false,
+        two_factor_secret: null,
+        two_factor_backup_codes: null,
+        two_factor_verified_at: null,
+      }
+    }
+    
+    return data
+  },
+
+  save: async (preferences: Partial<Tables<'user_preferences'>>) => {
+    const userId = await getCurrentUserId()
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .upsert({ ...preferences, user_id: userId }, { onConflict: 'user_id' })
+      .select()
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data as Tables<'user_documents'>
+  },
+
+  generate2FASecret: async () => {
+    // Generate a random secret (in production, use a proper TOTP library)
+    const secret = Array.from(crypto.getRandomValues(new Uint8Array(20)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+    
+    return secret
+  },
+
+  generateBackupCodes: () => {
+    // Generate 10 backup codes
+    const codes: string[] = []
+    for (let i = 0; i < 10; i++) {
+      const code = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase()
+        .slice(0, 8)
+      codes.push(code)
+    }
+    return codes
+  },
+
+  verify2FACode: async (secret: string, code: string): Promise<boolean> => {
+    // In production, use a proper TOTP library like 'otplib'
+    // For now, return false as placeholder
+    // This should verify the TOTP code against the secret
+    return false
   },
 }
 
@@ -1374,7 +1456,7 @@ export const userDocumentsAPI = {
     }
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 
   // Upload document for a specific user (for admins)
@@ -1433,7 +1515,7 @@ export const userDocumentsAPI = {
     }
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 
   // Delete a document
@@ -1510,16 +1592,12 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
     console.error('getSignedFileUrl: Error getting signed URL:', error)
     console.error('getSignedFileUrl: Error details:', {
       message: error.message,
-      statusCode: error.statusCode,
-      status: error.status,
       path: normalizedPath
     })
     
     // Provide more helpful error messages
     if (error.message?.includes('not found') || 
-        error.message?.includes('Object not found') ||
-        error.statusCode === 400 ||
-        error.status === 400) {
+        error.message?.includes('Object not found')) {
       throw new Error(`File not found in storage: ${normalizedPath}`)
     }
     throw new Error(error.message || 'Failed to get signed URL')
@@ -1586,9 +1664,10 @@ export const timelineStepsAPI = {
     
     // Merge existing data with new data
     let mergedData = data || {}
-    if (existingStep?.data && typeof existingStep.data === 'object') {
+    const existingStepData = existingStep as { data?: any } | null
+    if (existingStepData?.data && typeof existingStepData.data === 'object') {
       mergedData = {
-        ...existingStep.data,
+        ...existingStepData.data,
         ...data,
       }
     }
@@ -1614,7 +1693,8 @@ export const timelineStepsAPI = {
     }
     
     // Get step name - use existing if available, otherwise use map
-    const stepName = existingStep?.step_name || stepNameMap[stepKey] || stepKey
+    const existingStepInfo = existingStep as { step_name?: string } | null
+    const stepName = existingStepInfo?.step_name || stepNameMap[stepKey] || stepKey
     
     // Prepare upsert data
     const upsertData: any = {
@@ -1633,7 +1713,7 @@ export const timelineStepsAPI = {
       upsertData.data = null
     }
     
-    const { data: step, error } = await supabase
+    const { data: updatedStep, error } = await supabase
       .from('application_timeline_steps')
       .upsert(upsertData, {
         onConflict: 'application_id,step_key',
@@ -1642,7 +1722,7 @@ export const timelineStepsAPI = {
       .single()
     
     if (error) throw new Error(error.message)
-    return step
+    return updatedStep
   },
 
   create: async (applicationId: string, stepKey: string, stepName: string, parentStep?: string) => {
@@ -1655,11 +1735,11 @@ export const timelineStepsAPI = {
         parent_step: parentStep,
         status: 'pending',
       })
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'application_timeline_steps'> | null
   },
 }
 
@@ -1726,11 +1806,14 @@ export const processingAccountsAPI = {
       throw new Error('Application not found')
     }
     
+    // Type assertion for application
+    const typedApplication = application as Tables<'applications'>
+    
     // Use the actual UUID id for subsequent queries (not the GRIT APP ID)
-    const actualApplicationId = application.id
+    const actualApplicationId = typedApplication.id
     
     // Check if user owns the application or is admin
-    if (!admin && application.user_id !== userId) {
+    if (!admin && typedApplication.user_id !== userId) {
       throw new Error('Unauthorized')
     }
     
@@ -1747,37 +1830,39 @@ export const processingAccountsAPI = {
     const existingAccounts = accounts || []
     
     // Check if Gmail and Pearson Vue accounts exist
-    const existingGmail = existingAccounts.find(acc => acc.account_type === 'gmail')
-    const existingPearson = existingAccounts.find(acc => acc.account_type === 'pearson_vue')
+    const typedAccounts = existingAccounts as Array<{ account_type?: string }>
+    const existingGmail = typedAccounts.find(acc => acc.account_type === 'gmail')
+    const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
     
     // Get user's grit_id for password
-    const { data: user, error: userError } = await supabase
+    const { data: user } = await supabase
       .from('users')
       .select('grit_id')
-      .eq('id', application.user_id)
+      .eq('id', typedApplication.user_id)
       .single()
     
     // Generate password: "@GRiT" + numeric part of grit_id
     // Example: GRIT414821 -> @GRiT414821
     let password = ''
-    if (user?.grit_id) {
-      const gritId = user.grit_id
+    const userData = user as { grit_id?: string } | null
+    if (userData?.grit_id) {
+      const gritId = userData.grit_id
       // Extract numeric part (everything after "GRIT")
       const numericPart = gritId.replace(/^GRIT/i, '')
       password = `@GRiT${numericPart}`
     }
     
     // Generate Gmail address from application name
-    const firstName = application.first_name || ''
-    const middleName = application.middle_name || null
-    const lastName = application.last_name || ''
+    const firstName = typedApplication.first_name || ''
+    const middleName = typedApplication.middle_name || null
+    const lastName = typedApplication.last_name || ''
     const gmailAddress = generateGmailAddress(firstName, middleName, lastName)
     
     // Create Gmail account if it doesn't exist
     if (!existingGmail) {
       try {
         if (password && firstName && lastName) {
-          const { data: newGmailAccount, error: gmailError } = await supabase
+          const { error: gmailError } = await supabase
             .from('processing_accounts')
             .insert({
               application_id: actualApplicationId,
@@ -1785,7 +1870,7 @@ export const processingAccountsAPI = {
               email: gmailAddress,
               password: password,
               status: 'inactive', // Inactive by default, must be activated by admin
-              created_by: application.user_id,
+              created_by: typedApplication.user_id,
             })
             .select()
             .single()
@@ -1807,7 +1892,7 @@ export const processingAccountsAPI = {
     if (!existingPearson) {
       try {
         if (password && firstName && lastName) {
-          const { data: newPearsonAccount, error: pearsonError } = await supabase
+          const { error: pearsonError } = await supabase
             .from('processing_accounts')
             .insert({
               application_id: actualApplicationId,
@@ -1815,7 +1900,7 @@ export const processingAccountsAPI = {
               email: gmailAddress,
               password: password,
               status: 'inactive', // Inactive by default, must be activated by admin
-              created_by: application.user_id,
+              created_by: typedApplication.user_id,
             })
             .select()
             .single()
@@ -1847,15 +1932,17 @@ export const processingAccountsAPI = {
     }
     
     // Deduplicate accounts by id (in case of any duplicates)
+    const typedExistingAccounts = existingAccounts as Array<{ id: string }>
     const uniqueAccounts = Array.from(
-      new Map(existingAccounts.map(acc => [acc.id, acc])).values()
+      new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
     )
     
     // Sort accounts: Gmail and Pearson Vue first, then custom accounts
-    uniqueAccounts.sort((a, b) => {
+    const typedUniqueAccounts = uniqueAccounts as Array<{ account_type?: string; created_at?: string }>
+    typedUniqueAccounts.sort((a, b) => {
       const order: { [key: string]: number } = { 'gmail': 1, 'pearson_vue': 2, 'custom': 3 }
-      const aOrder = order[a.account_type] || 99
-      const bOrder = order[b.account_type] || 99
+      const aOrder = order[a.account_type || ''] || 99
+      const bOrder = order[b.account_type || ''] || 99
       if (aOrder !== bOrder) {
         return aOrder - bOrder
       }
@@ -1888,11 +1975,11 @@ export const processingAccountsAPI = {
         created_by: userId,
         status: 'active',
       })
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'processing_accounts'>
   },
 
   update: async (id: string, updates: Partial<{
@@ -1920,8 +2007,9 @@ export const processingAccountsAPI = {
     if (!account) throw new Error('Account not found')
     
     // Check if this is a Gmail or Pearson Vue account
-    const isSystemAccount = account.account_type === 'gmail' || account.account_type === 'pearson_vue'
-    const isGmailAccount = account.account_type === 'gmail'
+    const accountData = account as { account_type?: string; application_id?: string }
+    const isSystemAccount = accountData.account_type === 'gmail' || accountData.account_type === 'pearson_vue'
+    const isGmailAccount = accountData.account_type === 'gmail'
     
     // For Gmail accounts:
     // - Clients can update status and password for their own applications
@@ -1934,10 +2022,11 @@ export const processingAccountsAPI = {
         const { data: application } = await supabase
           .from('applications')
           .select('user_id')
-          .eq('id', account.application_id)
+          .eq('id', (account as { application_id?: string }).application_id)
           .single()
         
-        if (!application || application.user_id !== userId) {
+        const appData = application as { user_id?: string } | null
+        if (!appData || appData.user_id !== userId) {
           throw new Error('Unauthorized - You can only update accounts for your own applications')
         }
         
@@ -1964,10 +2053,11 @@ export const processingAccountsAPI = {
         const { data: application } = await supabase
           .from('applications')
           .select('user_id')
-          .eq('id', account.application_id)
+          .eq('id', accountData.application_id || '')
           .single()
         
-        if (!application || application.user_id !== userId) {
+        const appData = application as { user_id?: string } | null
+        if (!appData || appData.user_id !== userId) {
           throw new Error('Unauthorized - You can only update accounts for your own applications')
         }
         
@@ -1980,11 +2070,11 @@ export const processingAccountsAPI = {
       .from('processing_accounts')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'processing_accounts'>
   },
 
   delete: async (id: string) => {
@@ -2219,7 +2309,7 @@ export const dashboardAPI = {
       
       // Get approved and completed counts for client
       // We need to check both status and timeline steps to determine completion
-      const [completedApps, allUserApps] = await Promise.all([
+      const [, allUserApps] = await Promise.all([
         supabase.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).in('status', ['completed', 'approved']),
         supabase.from('applications').select('id, status').eq('user_id', userId),
       ])
@@ -2227,8 +2317,9 @@ export const dashboardAPI = {
       // Count applications with status 'completed' or 'approved'
       // Use a Set to avoid double counting if an app has both statuses (shouldn't happen, but safe)
       const statusCompletedAppIds = new Set<string>()
-      if (allUserApps.data) {
-        allUserApps.data.forEach((app: any) => {
+      const typedAllUserApps = allUserApps.data as Array<{ id?: string; status?: string }> | null
+      if (typedAllUserApps) {
+        typedAllUserApps.forEach((app: any) => {
           if (app.status === 'completed' || app.status === 'Completed' || 
               app.status === 'approved' || app.status === 'Approved') {
             statusCompletedAppIds.add(app.id)
@@ -2305,7 +2396,7 @@ export const adminAPI = {
     
     // Convert array to object
     const settings: Record<string, string> = {}
-    data?.forEach(setting => {
+    ;(data as unknown as Array<{ key: string; value: string }> | null)?.forEach(setting => {
       settings[setting.key] = setting.value
     })
     
@@ -2369,7 +2460,7 @@ export const adminAPI = {
       
       // Convert array to object
       const settings: Record<string, string> = {}
-      data?.forEach(setting => {
+      ;(data as unknown as Array<{ key: string; value: string }> | null)?.forEach(setting => {
         settings[setting.key] = setting.value
       })
 
@@ -2463,11 +2554,11 @@ export const adminAPI = {
         config: notification.config || {},
         sort_order: notification.sort_order ?? 0,
       })
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return (data as unknown) as Tables<'notifications'> | null
   },
 
   updateNotificationType: async (id: string, updates: {
@@ -2487,11 +2578,11 @@ export const adminAPI = {
       .from('notification_types')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return (data as unknown) as Tables<'notification_types'>
   },
 
   deleteNotificationType: async (id: string) => {
@@ -2545,14 +2636,16 @@ export const applicationPaymentsAPI = {
       }
       
       // Check if user owns the application
-      if (application.user_id !== userId) {
+      const appData = application as { user_id?: string }
+      if (appData.user_id !== userId) {
         const admin = await isAdmin()
         if (!admin) {
           throw new Error('Unauthorized')
         }
       }
       
-      actualApplicationId = application.id
+      const typedApp = application as { id?: string }
+      actualApplicationId = typedApp.id || ''
     }
     
     const { data, error } = await supabase
@@ -2564,11 +2657,11 @@ export const applicationPaymentsAPI = {
         amount,
         status: 'pending',
       })
-      .select()
+      .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return (data as unknown) as Tables<'application_payments'>
   },
 
 
@@ -2777,7 +2870,8 @@ export const applicationPaymentsAPI = {
     }
     
     // Auto-update timeline steps when payment is completed (status = 'paid')
-    if (data && data.status === 'paid') {
+    const typedData = data as unknown as { status?: string } | null
+    if (typedData && typedData.status === 'paid') {
       try {
         // Get the payment with application_id
         const { data: paymentWithApp } = await supabase
@@ -2787,8 +2881,9 @@ export const applicationPaymentsAPI = {
           .single()
         
         if (paymentWithApp) {
-          const applicationId = paymentWithApp.application_id
-          const paymentType = paymentWithApp.payment_type
+          const paymentData = paymentWithApp as { application_id?: string; payment_type?: string; amount?: number | string }
+          const applicationId = paymentData.application_id
+          const paymentType = paymentData.payment_type
           
           // Get all paid payments for this application to calculate total
           const { data: allPayments } = await supabase
@@ -2798,37 +2893,40 @@ export const applicationPaymentsAPI = {
             .eq('status', 'paid')
           
           // Calculate total amount paid
-          const totalAmountPaid = allPayments?.reduce((sum, p) => sum + (parseFloat(p.amount.toString()) || 0), 0) || 0
+          const typedPayments = allPayments as Array<{ amount?: number | string }> | null
+          const totalAmountPaid = typedPayments?.reduce((sum, p) => sum + (parseFloat(String(p.amount || 0)) || 0), 0) || 0
           
           // Update timeline step based on payment type
-          if (paymentType === 'step1') {
-            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-              amount: paymentWithApp.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentMethod,
-              completed_at: new Date().toISOString()
-            })
-          } else if (paymentType === 'step2') {
-            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-              amount: paymentWithApp.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentMethod,
-              completed_at: new Date().toISOString()
-            })
-          } else if (paymentType === 'full') {
-            // For full payment, update both step1 and step2 as completed
-            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-              amount: paymentWithApp.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentMethod,
-              completed_at: new Date().toISOString()
-            })
-            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-              amount: paymentWithApp.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentMethod,
-              completed_at: new Date().toISOString()
-            })
+          if (applicationId) {
+            if (paymentType === 'step1') {
+              await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
+                amount: paymentData.amount,
+                total_amount_paid: totalAmountPaid,
+                payment_method: paymentMethod,
+                completed_at: new Date().toISOString()
+              })
+            } else if (paymentType === 'step2') {
+              await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
+                amount: paymentData.amount,
+                total_amount_paid: totalAmountPaid,
+                payment_method: paymentMethod,
+                completed_at: new Date().toISOString()
+              })
+            } else if (paymentType === 'full') {
+              // For full payment, update both step1 and step2 as completed
+              await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
+                amount: paymentData.amount,
+                total_amount_paid: totalAmountPaid,
+                payment_method: paymentMethod,
+                completed_at: new Date().toISOString()
+              })
+              await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
+                amount: paymentData.amount,
+                total_amount_paid: totalAmountPaid,
+                payment_method: paymentMethod,
+                completed_at: new Date().toISOString()
+              })
+            }
           }
         }
       } catch {
@@ -2861,11 +2959,12 @@ export const applicationPaymentsAPI = {
       }
       
       // Check if user owns the application or is admin
-      if (!admin && application.user_id !== userId) {
+      const appCheckData = application as { user_id?: string; id?: string }
+      if (!admin && appCheckData.user_id !== userId) {
         throw new Error('Unauthorized')
       }
       
-      actualApplicationId = application.id
+      actualApplicationId = appCheckData.id || ''
     } else {
       // If it's a UUID, verify the user has access to this application
       const { data: application, error: appError } = await supabase
@@ -2879,7 +2978,8 @@ export const applicationPaymentsAPI = {
       }
       
       // Check if user owns the application or is admin
-      if (!admin && application.user_id !== userId) {
+      const appCheckData = application as { user_id?: string }
+      if (!admin && appCheckData.user_id !== userId) {
         throw new Error('Unauthorized')
       }
     }
@@ -2902,7 +3002,7 @@ export const applicationPaymentsAPI = {
       .single()
     
     if (error) throw new Error(error.message)
-    return data
+    return data as Tables<'user_documents'>
   },
 
   // Admin methods for approving/rejecting payments
@@ -2954,8 +3054,10 @@ export const applicationPaymentsAPI = {
     if (error) throw new Error(error.message)
     
     // Create notification if payment status changed to paid
-    if (data && paymentBefore && paymentBefore.status !== 'paid' && data.user_id) {
-      const paymentTypeNames = {
+    const paymentData = data as { user_id?: string; payment_type?: string; amount?: number | string; application_id?: string; payment_method?: string } | null
+    const beforeData = paymentBefore as { status?: string } | null
+    if (paymentData && beforeData && beforeData.status !== 'paid' && paymentData.user_id) {
+      const paymentTypeNames: Record<string, string> = {
         'step1': 'Step 1',
         'step2': 'Step 2',
         'full': 'Full Payment'
@@ -2963,17 +3065,17 @@ export const applicationPaymentsAPI = {
       
       await notificationsAPI.create(
         'Payment Approved',
-        `Your ${paymentTypeNames[data.payment_type] || 'payment'} of $${parseFloat(data.amount.toString()).toFixed(2)} has been approved and processed successfully.`,
+        `Your ${paymentTypeNames[paymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(paymentData.amount || 0)).toFixed(2)} has been approved and processed successfully.`,
         'payment',
-        data.application_id
+        paymentData.application_id
       )
     }
     
     // Auto-update timeline steps when payment is approved
-    if (data) {
+    if (paymentData) {
       try {
-        const applicationId = data.application_id
-        const paymentType = data.payment_type
+        const applicationId = paymentData.application_id
+        const paymentType = paymentData.payment_type
         
         // Get all paid payments for this application to calculate total
         const { data: allPayments } = await supabase
@@ -2983,37 +3085,40 @@ export const applicationPaymentsAPI = {
           .eq('status', 'paid')
         
         // Calculate total amount paid
-        const totalAmountPaid = allPayments?.reduce((sum, p) => sum + (parseFloat(p.amount.toString()) || 0), 0) || 0
+        const typedAllPayments = allPayments as Array<{ amount?: number | string }> | null
+        const totalAmountPaid = typedAllPayments?.reduce((sum, p) => sum + (parseFloat(String(p.amount || 0)) || 0), 0) || 0
         
         // Update timeline step based on payment type
-        if (paymentType === 'step1') {
-          await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-            amount: data.amount,
-            total_amount_paid: totalAmountPaid,
-            payment_method: data.payment_method || 'mobile_banking',
-            completed_at: new Date().toISOString()
-          })
-        } else if (paymentType === 'step2') {
-          await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-            amount: data.amount,
-            total_amount_paid: totalAmountPaid,
-            payment_method: data.payment_method || 'mobile_banking',
-            completed_at: new Date().toISOString()
-          })
-        } else if (paymentType === 'full') {
-          // For full payment, update both step1 and step2 as completed
-          await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-            amount: data.amount,
-            total_amount_paid: totalAmountPaid,
-            payment_method: data.payment_method || 'stripe',
-            completed_at: new Date().toISOString()
-          })
-          await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-            amount: data.amount,
-            total_amount_paid: totalAmountPaid,
-            payment_method: data.payment_method || 'stripe',
-            completed_at: new Date().toISOString()
-          })
+        if (applicationId) {
+          if (paymentType === 'step1') {
+            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
+              amount: paymentData.amount,
+              total_amount_paid: totalAmountPaid,
+              payment_method: paymentData.payment_method || 'mobile_banking',
+              completed_at: new Date().toISOString()
+            })
+          } else if (paymentType === 'step2') {
+            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
+              amount: paymentData.amount,
+              total_amount_paid: totalAmountPaid,
+              payment_method: paymentData.payment_method || 'mobile_banking',
+              completed_at: new Date().toISOString()
+            })
+          } else if (paymentType === 'full') {
+            // For full payment, update both step1 and step2 as completed
+            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
+              amount: paymentData.amount,
+              total_amount_paid: totalAmountPaid,
+              payment_method: paymentData.payment_method || 'stripe',
+              completed_at: new Date().toISOString()
+            })
+            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
+              amount: paymentData.amount,
+              total_amount_paid: totalAmountPaid,
+              payment_method: paymentData.payment_method || 'stripe',
+              completed_at: new Date().toISOString()
+            })
+          }
         }
       } catch (timelineError: any) {
         // Log error but don't fail the payment approval
@@ -3050,22 +3155,24 @@ export const applicationPaymentsAPI = {
     if (error) throw new Error(error.message)
     
     // Create notification if payment was rejected
-    if (data && paymentBefore && paymentBefore.status !== 'failed' && data.user_id) {
-      const paymentTypeNames = {
+    const rejectPaymentData = data as { user_id?: string; payment_type?: string; amount?: number | string; application_id?: string } | null
+    const rejectBeforeData = paymentBefore as { status?: string } | null
+    if (rejectPaymentData && rejectBeforeData && rejectBeforeData.status !== 'failed' && rejectPaymentData.user_id) {
+      const paymentTypeNames: Record<string, string> = {
         'step1': 'Step 1',
         'step2': 'Step 2',
         'full': 'Full Payment'
       }
       
       const rejectionMessage = reason 
-        ? `Your ${paymentTypeNames[data.payment_type] || 'payment'} of $${parseFloat(data.amount.toString()).toFixed(2)} has been rejected. Reason: ${reason}`
-        : `Your ${paymentTypeNames[data.payment_type] || 'payment'} of $${parseFloat(data.amount.toString()).toFixed(2)} has been rejected. Please contact support for more information.`
+        ? `Your ${paymentTypeNames[rejectPaymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(rejectPaymentData.amount || 0)).toFixed(2)} has been rejected. Reason: ${reason}`
+        : `Your ${paymentTypeNames[rejectPaymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(rejectPaymentData.amount || 0)).toFixed(2)} has been rejected. Please contact support for more information.`
       
       await notificationsAPI.create(
         'Payment Rejected',
         rejectionMessage,
         'payment',
-        data.application_id
+        rejectPaymentData.application_id
       )
     }
     
@@ -3196,7 +3303,8 @@ export const trackingAPI = {
     console.log('Tracking API: Found', allProcessingAccounts.length, 'processing accounts')
     
     // Get Gmail from processing account
-    const gmailAccounts = allProcessingAccounts.filter(acc => acc.account_type === 'gmail')
+    const typedProcessingAccounts = allProcessingAccounts as Array<{ account_type?: string; email?: string }>
+    const gmailAccounts = typedProcessingAccounts.filter(acc => acc.account_type === 'gmail')
     const displayEmail = (gmailAccounts && gmailAccounts.length > 0) ? gmailAccounts[0].email : application.email
     
     // Create step status map
@@ -3238,7 +3346,8 @@ export const trackingAPI = {
         case 'bon_application': {
           const mandatoryCourses = getStepStatus('mandatory_courses') === 'completed'
           const form1Submitted = getStepStatus('form1_submitted') === 'completed'
-          const appStep2Paid = getStepStatus('app_step2_paid') === 'completed' || (allPayments && allPayments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
+          const typedAllPayments = allPayments as Array<{ status?: string; payment_type?: string }> | null
+        const appStep2Paid = getStepStatus('app_step2_paid') === 'completed' || (typedAllPayments && typedAllPayments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
           return (mandatoryCourses && form1Submitted && appStep2Paid) || (stepData && stepData.status === 'completed')
         }
         case 'nclex_eligibility': {
@@ -3281,8 +3390,11 @@ export const trackingAPI = {
       { key: 'nclex_exam', name: 'NCLEX Exam' }
     ]
     
+    // Type assertion for application
+    const typedApp = application as { updated_at?: string; created_at?: string; grit_app_id?: string | null }
+    
     // Find latest update
-    let latestUpdate = application.updated_at || application.created_at
+    let latestUpdate = typedApp.updated_at || typedApp.created_at
     allSteps.forEach((step: any) => {
       const timestamps = []
       if (step.updated_at) timestamps.push(new Date(step.updated_at).getTime())
@@ -3372,7 +3484,7 @@ export const trackingAPI = {
       picture_url: picture_url,
       service_type: 'NCLEX Processing', // Default value (not stored in DB)
       service_state: 'New York', // Default value (not stored in DB)
-      grit_app_id: application.grit_app_id || null
+      grit_app_id: typedApp.grit_app_id || null
     }
     
     console.log('Tracking API: Successfully completed tracking for:', normalizedId)

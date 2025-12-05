@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
-import { Loading } from '@/components/ui/Loading'
 import { Shield, Settings, Bell, Lock, DollarSign, Calculator, Server } from 'lucide-react'
-import { adminAPI } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface Tab {
@@ -54,7 +52,6 @@ export function AdminSettings() {
     )
   }
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path)) || tabs[0]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -95,7 +92,7 @@ export function AdminSettings() {
                   }
                 }}
               >
-                {tabs.map((tab, index) => {
+                {tabs.map((tab, _index) => {
                   const Icon = tab.icon
                   const isActive = location.pathname.startsWith(tab.path)
                   return (

@@ -132,7 +132,7 @@ export function ApplicationDetail() {
   const [updating, setUpdating] = useState(false)
   const [copiedId, setCopiedId] = useState(false)
   const [copiedEmail, setCopiedEmail] = useState(false)
-  const [imageErrors, setImageErrors] = useState<{ [key: string]: boolean }>({})
+  const [_imageErrors, _setImageErrors] = useState<{ [key: string]: boolean }>({})
   const [payments, setPayments] = useState<any[]>([])
   const [loadingPayments, setLoadingPayments] = useState(false)
   const [processingPayments, setProcessingPayments] = useState(false)
@@ -312,7 +312,7 @@ export function ApplicationDetail() {
     )
   }
 
-  const handleDownload = async (filePath: string, filename: string) => {
+  const _handleDownload = async (filePath: string, filename: string) => {
     try {
       // Get signed URL for Supabase Storage
       const signedUrl = await getSignedUrlFromPath(filePath)
@@ -2770,7 +2770,7 @@ export function ApplicationDetail() {
                           </p>
                           {(() => {
                             // Use latest document from Documents page, fallback to stored path
-                            let picturePath = latestDocuments.picture?.file_path || application.picture_path
+                            let picturePath: string | null = latestDocuments.picture?.file_path || application.picture_path || null
                             const pictureName = latestDocuments.picture?.file_name || (application.picture_path?.split(/[/\\]/).pop() || 'picture.jpg')
                             
                             // Skip if path contains avatar
@@ -4441,6 +4441,7 @@ interface TimelineStepProps {
   }>
   application?: any
   payments?: any[]
+  _payments?: any[]
   attCode?: string
   examDate?: string
   examLocation?: string
@@ -4458,7 +4459,7 @@ function TimelineStep({
   onUpdateSubStep,
   subSteps,
   application,
-  payments,
+  _payments,
   attCode,
   examDate,
   examLocation,
@@ -4639,7 +4640,7 @@ function TimelineStep({
 
           {isExpanded && (
             <div className="mt-6 space-y-3">
-              {subSteps.map((subStep, index) => (
+              {subSteps.map((subStep, _index) => (
                 <div 
                   key={subStep.key} 
                   className={`group relative flex items-start gap-4 p-4 rounded-lg border transition-all duration-200 ${

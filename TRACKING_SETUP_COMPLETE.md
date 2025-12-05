@@ -147,3 +147,4 @@ AND policyname = 'Public can view payments for tracking';
 ## Summary
 
 The tracking feature is now fully migrated to Supabase with no server dependency. Both authenticated and public users will get identical results, and the system is simpler to maintain.
+

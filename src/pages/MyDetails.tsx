@@ -517,45 +517,84 @@ export function MyDetails() {
       if (!remindersEnabled) return
       
       const details = await userDetailsAPI.get()
-      if (!details) return
+      const typedDetails = details as {
+        first_name?: string
+        last_name?: string
+        gender?: string
+        date_of_birth?: string
+        birth_place?: string
+        place_of_birth?: string
+        email?: string
+        mobile_number?: string
+        house_number?: string
+        street_name?: string
+        city?: string
+        province?: string
+        country?: string
+        zipcode?: string
+        elementary_school?: string
+        elementary_city?: string
+        elementary_province?: string
+        elementary_country?: string
+        elementary_years_attended?: string
+        elementary_start_date?: string
+        elementary_end_date?: string
+        high_school?: string
+        high_school_city?: string
+        high_school_province?: string
+        high_school_country?: string
+        high_school_years_attended?: string
+        high_school_start_date?: string
+        high_school_end_date?: string
+        nursing_school?: string
+        nursing_school_city?: string
+        nursing_school_province?: string
+        nursing_school_country?: string
+        nursing_school_years_attended?: string
+        nursing_school_start_date?: string
+        nursing_school_end_date?: string
+        nursing_school_major?: string
+        nursing_school_diploma_date?: string
+      } | null
+      if (!typedDetails) return
       
       const completion = calculateCompletion({
-        firstName: details.first_name,
-        lastName: details.last_name,
-        gender: details.gender,
-        dateOfBirth: details.date_of_birth,
-        birthPlace: details.birth_place || details.place_of_birth,
-        email: details.email || user?.email,
-        mobileNumber: details.mobile_number,
-        houseNumber: details.house_number,
-        streetName: details.street_name,
-        city: details.city,
-        province: details.province,
-        country: details.country,
-        zipcode: details.zipcode,
-        elementarySchool: details.elementary_school,
-        elementaryCity: details.elementary_city,
-        elementaryProvince: details.elementary_province,
-        elementaryCountry: details.elementary_country,
-        elementaryYearsAttended: details.elementary_years_attended,
-        elementaryStartDate: details.elementary_start_date,
-        elementaryEndDate: details.elementary_end_date,
-        highSchool: details.high_school,
-        highSchoolCity: details.high_school_city,
-        highSchoolProvince: details.high_school_province,
-        highSchoolCountry: details.high_school_country,
-        highSchoolYearsAttended: details.high_school_years_attended,
-        highSchoolStartDate: details.high_school_start_date,
-        highSchoolEndDate: details.high_school_end_date,
-        nursingSchool: details.nursing_school,
-        nursingSchoolCity: details.nursing_school_city,
-        nursingSchoolProvince: details.nursing_school_province,
-        nursingSchoolCountry: details.nursing_school_country,
-        nursingSchoolYearsAttended: details.nursing_school_years_attended,
-        nursingSchoolStartDate: details.nursing_school_start_date,
-        nursingSchoolEndDate: details.nursing_school_end_date,
-        nursingSchoolMajor: details.nursing_school_major,
-        nursingSchoolDiplomaDate: details.nursing_school_diploma_date
+        firstName: typedDetails.first_name,
+        lastName: typedDetails.last_name,
+        gender: typedDetails.gender,
+        dateOfBirth: typedDetails.date_of_birth,
+        birthPlace: typedDetails.birth_place || typedDetails.place_of_birth,
+        email: typedDetails.email || user?.email,
+        mobileNumber: typedDetails.mobile_number,
+        houseNumber: typedDetails.house_number,
+        streetName: typedDetails.street_name,
+        city: typedDetails.city,
+        province: typedDetails.province,
+        country: typedDetails.country,
+        zipcode: typedDetails.zipcode,
+        elementarySchool: typedDetails.elementary_school,
+        elementaryCity: typedDetails.elementary_city,
+        elementaryProvince: typedDetails.elementary_province,
+        elementaryCountry: typedDetails.elementary_country,
+        elementaryYearsAttended: typedDetails.elementary_years_attended,
+        elementaryStartDate: typedDetails.elementary_start_date,
+        elementaryEndDate: typedDetails.elementary_end_date,
+        highSchool: typedDetails.high_school,
+        highSchoolCity: typedDetails.high_school_city,
+        highSchoolProvince: typedDetails.high_school_province,
+        highSchoolCountry: typedDetails.high_school_country,
+        highSchoolYearsAttended: typedDetails.high_school_years_attended,
+        highSchoolStartDate: typedDetails.high_school_start_date,
+        highSchoolEndDate: typedDetails.high_school_end_date,
+        nursingSchool: typedDetails.nursing_school,
+        nursingSchoolCity: typedDetails.nursing_school_city,
+        nursingSchoolProvince: typedDetails.nursing_school_province,
+        nursingSchoolCountry: typedDetails.nursing_school_country,
+        nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
+        nursingSchoolStartDate: typedDetails.nursing_school_start_date,
+        nursingSchoolEndDate: typedDetails.nursing_school_end_date,
+        nursingSchoolMajor: typedDetails.nursing_school_major,
+        nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
       })
       
       // Check if we should send a reminder (only if < 100% and haven't sent one recently)
@@ -606,11 +645,12 @@ export function MyDetails() {
         const { data: userData } = await supabase
           .from('users')
           .select('avatar_path')
-          .eq('id', user?.id)
+          .eq('id', user?.id || '')
           .single()
         
-        if (userData?.avatar_path) {
-          const url = await getSignedFileUrl(userData.avatar_path)
+        const typedUserData = userData as { avatar_path?: string } | null
+        if (typedUserData?.avatar_path) {
+          const url = await getSignedFileUrl(typedUserData.avatar_path)
           setAvatarUrl(url)
         } else {
           setAvatarUrl(null)
@@ -621,93 +661,138 @@ export function MyDetails() {
       }
 
       const details = await userDetailsAPI.get()
-      if (details) {
+      const typedDetails = details as {
+        first_name?: string
+        middle_name?: string
+        last_name?: string
+        gender?: string
+        marital_status?: string
+        single_full_name?: string
+        single_name?: string
+        date_of_birth?: string
+        birth_place?: string
+        place_of_birth?: string
+        email?: string
+        mobile_number?: string
+        house_number?: string
+        street_name?: string
+        city?: string
+        province?: string
+        country?: string
+        zipcode?: string
+        elementary_school?: string
+        elementary_city?: string
+        elementary_province?: string
+        elementary_country?: string
+        elementary_years_attended?: string
+        elementary_start_date?: string
+        elementary_end_date?: string
+        high_school?: string
+        high_school_city?: string
+        high_school_province?: string
+        high_school_country?: string
+        high_school_years_attended?: string
+        high_school_start_date?: string
+        high_school_end_date?: string
+        nursing_school?: string
+        nursing_school_city?: string
+        nursing_school_province?: string
+        nursing_school_country?: string
+        nursing_school_years_attended?: string
+        nursing_school_start_date?: string
+        nursing_school_end_date?: string
+        nursing_school_major?: string
+        nursing_school_diploma_date?: string
+        signature?: string
+        payment_type?: string
+      } | null
+      if (typedDetails) {
         // Populate all fields from saved details
-        setFirstName(details.first_name || '')
-        setMiddleName(details.middle_name || '')
-        setLastName(details.last_name || '')
-        setGender(details.gender || '')
-        setMaritalStatus(details.marital_status || '')
-        setSingleFullName(details.single_full_name || details.single_name || '')
-        setDateOfBirth(convertFromDatabaseFormat(details.date_of_birth))
-        setBirthPlace(details.birth_place || details.place_of_birth || '')
-        setEmail(details.email || user?.email || '')
-        setMobileNumber(details.mobile_number || '')
-        setHouseNumber(details.house_number || '')
-        setStreetName(details.street_name || '')
-        setCity(details.city || '')
-        setProvince(details.province || '')
-        setCountry(details.country || '')
-        setZipcode(details.zipcode || '')
+        setFirstName(typedDetails.first_name || '')
+        setMiddleName(typedDetails.middle_name || '')
+        setLastName(typedDetails.last_name || '')
+        setGender(typedDetails.gender || '')
+        setMaritalStatus(typedDetails.marital_status || '')
+        setSingleFullName(typedDetails.single_full_name || typedDetails.single_name || '')
+        setDateOfBirth(convertFromDatabaseFormat(typedDetails.date_of_birth))
+        setBirthPlace(typedDetails.birth_place || typedDetails.place_of_birth || '')
+        setEmail(typedDetails.email || user?.email || '')
+        setMobileNumber(typedDetails.mobile_number || '')
+        setHouseNumber(typedDetails.house_number || '')
+        setStreetName(typedDetails.street_name || '')
+        setCity(typedDetails.city || '')
+        setProvince(typedDetails.province || '')
+        setCountry(typedDetails.country || '')
+        setZipcode(typedDetails.zipcode || '')
         // Elementary School
-        setElementarySchool(details.elementary_school || '')
-        setElementaryCity(details.elementary_city || '')
-        setElementaryProvince(details.elementary_province || '')
-        setElementaryCountry(details.elementary_country || '')
-        setElementaryYearsAttended(details.elementary_years_attended || '')
-        setElementaryStartDate(convertToMMYYYY(details.elementary_start_date))
-        setElementaryEndDate(convertToMMYYYY(details.elementary_end_date))
+        setElementarySchool(typedDetails.elementary_school || '')
+        setElementaryCity(typedDetails.elementary_city || '')
+        setElementaryProvince(typedDetails.elementary_province || '')
+        setElementaryCountry(typedDetails.elementary_country || '')
+        setElementaryYearsAttended(typedDetails.elementary_years_attended || '')
+        setElementaryStartDate(convertToMMYYYY(typedDetails.elementary_start_date))
+        setElementaryEndDate(convertToMMYYYY(typedDetails.elementary_end_date))
         
         // High School
-        setHighSchool(details.high_school || '')
-        setHighSchoolCity(details.high_school_city || '')
-        setHighSchoolProvince(details.high_school_province || '')
-        setHighSchoolCountry(details.high_school_country || '')
-        setHighSchoolYearsAttended(details.high_school_years_attended || '')
-        setHighSchoolStartDate(convertToMMYYYY(details.high_school_start_date))
-        setHighSchoolEndDate(convertToMMYYYY(details.high_school_end_date))
+        setHighSchool(typedDetails.high_school || '')
+        setHighSchoolCity(typedDetails.high_school_city || '')
+        setHighSchoolProvince(typedDetails.high_school_province || '')
+        setHighSchoolCountry(typedDetails.high_school_country || '')
+        setHighSchoolYearsAttended(typedDetails.high_school_years_attended || '')
+        setHighSchoolStartDate(convertToMMYYYY(typedDetails.high_school_start_date))
+        setHighSchoolEndDate(convertToMMYYYY(typedDetails.high_school_end_date))
         
         // Nursing School
-        setNursingSchool(details.nursing_school || '')
-        setNursingSchoolCity(details.nursing_school_city || '')
-        setNursingSchoolProvince(details.nursing_school_province || '')
-        setNursingSchoolCountry(details.nursing_school_country || '')
-        setNursingSchoolYearsAttended(details.nursing_school_years_attended || '')
-        setNursingSchoolStartDate(convertToMMYYYY(details.nursing_school_start_date))
-        setNursingSchoolEndDate(convertToMMYYYY(details.nursing_school_end_date))
-        setNursingSchoolMajor(details.nursing_school_major || '')
-        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(details.nursing_school_diploma_date))
-        setSignature(details.signature || '')
-        setPaymentType(details.payment_type || '')
+        setNursingSchool(typedDetails.nursing_school || '')
+        setNursingSchoolCity(typedDetails.nursing_school_city || '')
+        setNursingSchoolProvince(typedDetails.nursing_school_province || '')
+        setNursingSchoolCountry(typedDetails.nursing_school_country || '')
+        setNursingSchoolYearsAttended(typedDetails.nursing_school_years_attended || '')
+        setNursingSchoolStartDate(convertToMMYYYY(typedDetails.nursing_school_start_date))
+        setNursingSchoolEndDate(convertToMMYYYY(typedDetails.nursing_school_end_date))
+        setNursingSchoolMajor(typedDetails.nursing_school_major || '')
+        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(typedDetails.nursing_school_diploma_date))
+        setSignature(typedDetails.signature || '')
+        setPaymentType(typedDetails.payment_type || '')
         
         // Calculate completion percentage
         const completion = calculateCompletion({
-          firstName: details.first_name,
-          lastName: details.last_name,
-          gender: details.gender,
-          dateOfBirth: details.date_of_birth,
-          birthPlace: details.birth_place || details.place_of_birth,
-          email: details.email || user?.email,
-          mobileNumber: details.mobile_number,
-          houseNumber: details.house_number,
-          streetName: details.street_name,
-          city: details.city,
-          province: details.province,
-          country: details.country,
-          zipcode: details.zipcode,
-          elementarySchool: details.elementary_school,
-          elementaryCity: details.elementary_city,
-          elementaryProvince: details.elementary_province,
-          elementaryCountry: details.elementary_country,
-          elementaryYearsAttended: details.elementary_years_attended,
-          elementaryStartDate: details.elementary_start_date,
-          elementaryEndDate: details.elementary_end_date,
-          highSchool: details.high_school,
-          highSchoolCity: details.high_school_city,
-          highSchoolProvince: details.high_school_province,
-          highSchoolCountry: details.high_school_country,
-          highSchoolYearsAttended: details.high_school_years_attended,
-          highSchoolStartDate: details.high_school_start_date,
-          highSchoolEndDate: details.high_school_end_date,
-          nursingSchool: details.nursing_school,
-          nursingSchoolCity: details.nursing_school_city,
-          nursingSchoolProvince: details.nursing_school_province,
-          nursingSchoolCountry: details.nursing_school_country,
-          nursingSchoolYearsAttended: details.nursing_school_years_attended,
-          nursingSchoolStartDate: details.nursing_school_start_date,
-          nursingSchoolEndDate: details.nursing_school_end_date,
-          nursingSchoolMajor: details.nursing_school_major,
-          nursingSchoolDiplomaDate: details.nursing_school_diploma_date
+          firstName: typedDetails.first_name,
+          lastName: typedDetails.last_name,
+          gender: typedDetails.gender,
+          dateOfBirth: typedDetails.date_of_birth,
+          birthPlace: typedDetails.birth_place || typedDetails.place_of_birth,
+          email: typedDetails.email || user?.email,
+          mobileNumber: typedDetails.mobile_number,
+          houseNumber: typedDetails.house_number,
+          streetName: typedDetails.street_name,
+          city: typedDetails.city,
+          province: typedDetails.province,
+          country: typedDetails.country,
+          zipcode: typedDetails.zipcode,
+          elementarySchool: typedDetails.elementary_school,
+          elementaryCity: typedDetails.elementary_city,
+          elementaryProvince: typedDetails.elementary_province,
+          elementaryCountry: typedDetails.elementary_country,
+          elementaryYearsAttended: typedDetails.elementary_years_attended,
+          elementaryStartDate: typedDetails.elementary_start_date,
+          elementaryEndDate: typedDetails.elementary_end_date,
+          highSchool: typedDetails.high_school,
+          highSchoolCity: typedDetails.high_school_city,
+          highSchoolProvince: typedDetails.high_school_province,
+          highSchoolCountry: typedDetails.high_school_country,
+          highSchoolYearsAttended: typedDetails.high_school_years_attended,
+          highSchoolStartDate: typedDetails.high_school_start_date,
+          highSchoolEndDate: typedDetails.high_school_end_date,
+          nursingSchool: typedDetails.nursing_school,
+          nursingSchoolCity: typedDetails.nursing_school_city,
+          nursingSchoolProvince: typedDetails.nursing_school_province,
+          nursingSchoolCountry: typedDetails.nursing_school_country,
+          nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
+          nursingSchoolStartDate: typedDetails.nursing_school_start_date,
+          nursingSchoolEndDate: typedDetails.nursing_school_end_date,
+          nursingSchoolMajor: typedDetails.nursing_school_major,
+          nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
         })
         setCompletionPercentage(completion)
       } else {
@@ -779,11 +864,12 @@ export function MyDetails() {
         .eq('id', user.id)
         .single()
       
-      if (currentUser?.avatar_path) {
+      const typedCurrentUser = currentUser as { avatar_path?: string } | null
+      if (typedCurrentUser?.avatar_path) {
         try {
           await supabase.storage
             .from('documents')
-            .remove([currentUser.avatar_path])
+            .remove([typedCurrentUser.avatar_path])
         } catch {
           // Could not delete old avatar
         }
@@ -1247,7 +1333,7 @@ export function MyDetails() {
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                    {getFullNameWithMiddle(firstName, middleName, lastName, '') || user.full_name || 'User'}
+                    {getFullNameWithMiddle(firstName, middleName, lastName, '') || 'User'}
                   </h2>
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
                     <Mail className="h-4 w-4 text-gray-400" />

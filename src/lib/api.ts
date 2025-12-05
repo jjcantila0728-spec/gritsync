@@ -4,12 +4,12 @@ export * from './supabase-api'
 
 // Legacy auth API (now handled by AuthContext with Supabase)
 export const authAPI = {
-  register: async (firstName: string, lastName: string, email: string, password: string, role: string = 'client') => {
+  register: async () => {
     // This is now handled by AuthContext.signUp
     throw new Error('Use AuthContext.signUp instead')
   },
 
-  login: async (email: string, password: string) => {
+  login: async () => {
     // This is now handled by AuthContext.signIn
     throw new Error('Use AuthContext.signIn instead')
   },
@@ -19,17 +19,17 @@ export const authAPI = {
     throw new Error('Use AuthContext.user instead')
   },
 
-  changePassword: async (currentPassword: string, newPassword: string) => {
+  changePassword: async () => {
     // This is now handled by AuthContext.changePassword
     throw new Error('Use AuthContext.changePassword instead')
   },
 
-  requestPasswordReset: async (email: string) => {
+  requestPasswordReset: async () => {
     // This is now handled by AuthContext.requestPasswordReset
     throw new Error('Use AuthContext.requestPasswordReset instead')
   },
 
-  resetPassword: async (token: string, newPassword: string) => {
+  resetPassword: async () => {
     // This is now handled by AuthContext.resetPassword
     throw new Error('Use AuthContext.resetPassword instead')
   },

@@ -33,15 +33,21 @@ async function getEmailConfig() {
   const supportEmail = await generalSettings.getSupportEmail()
   
   // Get email settings from database
-  const { data: emailSettings } = await supabase
+  const { data: emailSettings, error } = await supabase
     .from('settings')
     .select('key, value')
     .in('key', ['emailFrom', 'emailFromName', 'emailServiceProvider', 'resendApiKey'])
   
+  if (error) {
+    console.error('Error fetching email settings:', error)
+  }
+  
   const settingsMap: Record<string, string> = {}
-  emailSettings?.forEach(setting => {
-    settingsMap[setting.key] = setting.value
-  })
+  if (emailSettings && Array.isArray(emailSettings)) {
+    emailSettings.forEach((setting: { key: string; value: string }) => {
+      settingsMap[setting.key] = setting.value
+    })
+  }
   
   return {
     fromName: settingsMap.emailFromName || siteName || 'GritSync',
@@ -207,7 +213,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     const config = await getEmailConfig()
     
     // Call Supabase Edge Function to send email
-    const { data, error } = await supabase.functions.invoke('send-email', {
+    const { error } = await supabase.functions.invoke('send-email', {
       body: {
         to: options.to,
         subject: options.subject,
@@ -380,7 +386,6 @@ export async function sendReminderEmail(
  * Send test email
  */
 export async function sendTestEmail(email: string): Promise<boolean> {
-  const config = await getEmailConfig()
   const template = generateEmailTemplate({
     userName: 'Test User',
     title: 'Test Email',
