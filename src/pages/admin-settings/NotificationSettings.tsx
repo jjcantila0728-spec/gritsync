@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
-import { Bell, Save, Mail, Settings as SettingsIcon, Send, Plus, Edit2, Trash2, Power, PowerOff, X } from 'lucide-react'
+import { Bell, Save, Mail, Settings as SettingsIcon, Send, Plus, Edit2, Trash2, Power, PowerOff } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { Loading } from '@/components/ui/Loading'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
 import { Tabs } from '@/components/ui/Tabs'
 import { useSettings } from './useSettings'
 import { sendTestEmail } from '@/lib/email-service'
 import { useAuth } from '@/contexts/AuthContext'
 import { adminAPI } from '@/lib/api'
-import { supabase } from '@/lib/supabase'
 
 interface NotificationType {
   id: string
@@ -32,7 +30,7 @@ export function NotificationSettings() {
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
-  const [activeTab, setActiveTab] = useState('email-config')
+  const [activeTab] = useState('email-config')
   const [notificationTypes, setNotificationTypes] = useState<NotificationType[]>([])
   const [loadingNotifications, setLoadingNotifications] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -64,7 +62,7 @@ export function NotificationSettings() {
       smtpUser: data.smtpUser || '',
       smtpPassword: data.smtpPassword || '',
       smtpSecure: data.smtpSecure || 'true',
-      emailNotificationsEnabled: data.emailNotificationsEnabled === 'true' || data.emailNotificationsEnabled === true || data.emailNotificationsEnabled === undefined,
+      emailNotificationsEnabled: data.emailNotificationsEnabled === 'true' || (typeof data.emailNotificationsEnabled === 'boolean' && data.emailNotificationsEnabled) || data.emailNotificationsEnabled === undefined,
     })
   )
 
@@ -77,7 +75,7 @@ export function NotificationSettings() {
     try {
       setLoadingNotifications(true)
       const types = await adminAPI.getNotificationTypes()
-      setNotificationTypes(types || [])
+      setNotificationTypes(Array.isArray(types) ? types : [])
     } catch (error: any) {
       console.error('Error loading notification types:', error)
       // If table doesn't exist yet, show empty list (migration not run)
@@ -267,7 +265,7 @@ export function NotificationSettings() {
           loading={loadingNotifications}
           onToggle={handleToggleNotification}
           onDelete={handleDeleteNotification}
-          onEdit={(nt) => {
+          onEdit={(nt: NotificationType) => {
             setEditingNotification(nt)
             setShowEditModal(true)
           }}
@@ -286,7 +284,7 @@ export function NotificationSettings() {
           loading={loadingNotifications}
           onToggle={handleToggleNotification}
           onDelete={handleDeleteNotification}
-          onEdit={(nt) => {
+          onEdit={(nt: NotificationType) => {
             setEditingNotification(nt)
             setShowEditModal(true)
           }}
@@ -303,12 +301,11 @@ export function NotificationSettings() {
       content: (
         <GreetingsTab
           notifications={notificationsByCategory.greeting}
-          settings={settings}
           loading={loadingNotifications}
           onUpdateNotification={handleUpdateNotification}
           onToggle={handleToggleNotification}
           onDelete={handleDeleteNotification}
-          onEdit={(nt) => {
+          onEdit={(nt: NotificationType) => {
             setEditingNotification(nt)
             setShowEditModal(true)
           }}
@@ -364,7 +361,7 @@ export function NotificationSettings() {
             setShowEditModal(false)
             setEditingNotification(null)
           }}
-          onUpdate={(updates) => handleUpdateNotification(editingNotification.id, updates)}
+          onUpdate={(updates: { name?: string; description?: string; enabled?: boolean; icon?: string; config?: Record<string, any> }) => handleUpdateNotification(editingNotification.id, updates)}
         />
       )}
     </div>
@@ -751,7 +748,7 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
 }
 
 // Greetings Tab
-function GreetingsTab({ notifications, settings, loading, onUpdateNotification, onToggle, onDelete, onEdit, onCreate, deletingId }: any) {
+function GreetingsTab({ notifications, loading, onUpdateNotification, onToggle, onDelete, onEdit, onCreate, deletingId }: any) {
   // Sort greetings by sort_order, then by name
   const sortedGreetings = [...notifications].sort((a: NotificationType, b: NotificationType) => {
     if (a.sort_order !== b.sort_order) {

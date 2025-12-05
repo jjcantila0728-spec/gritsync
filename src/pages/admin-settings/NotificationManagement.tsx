@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Loading } from '@/components/ui/Loading'
 import { useToast } from '@/components/ui/Toast'
-import { Bell, Search, Filter, Mail, CheckCircle, XCircle, Eye, Send, Calendar, User } from 'lucide-react'
+import { Bell, Search, Filter, CheckCircle, Send, Calendar, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
 import { sendNotificationEmail } from '@/lib/email-service'
@@ -29,7 +29,7 @@ interface Notification {
 }
 
 export function NotificationManagement() {
-  const { user, isAdmin } = useAuth()
+  const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
