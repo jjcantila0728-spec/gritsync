@@ -37,3 +37,10 @@ externalPort = 80
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_URL = "https://warfdcbvnapietbkpild.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhcmZkY2J2bmFwaWV0YmtwaWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwODMzNzEsImV4cCI6MjA3OTY1OTM3MX0.aoDKJXq7NIppYn2szlanf4PsekGsQMqRv-gYA_cX7KI"
+VITE_STRIPE_PUBLISHABLE_KEY = "pk_live_51Qt9RuGl6Bh5tV23a4nBagZ9UY7pxgEsw68CaX6QPywl7C613UyZtlYRJwuEtfwodKpVVu1fjHgRPoVLIOYw5UsL00VuJansND"
