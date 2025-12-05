@@ -142,6 +142,7 @@ The project also includes Vercel configuration (`vercel.json`):
 ### Configuration Updates
 - Updated `vite.config.ts` to use port 5000 (required for Replit webview)
 - Configured Vite server to bind to `0.0.0.0` for external access
+- Added `allowedHosts: true` to allow Replit's proxy domains
 - Set up deployment configuration for static site builds
 
 ### Dependencies
