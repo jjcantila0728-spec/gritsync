@@ -16,7 +16,7 @@ export function SystemSettings() {
     pendingQuotations: 0,
     paidQuotations: 0,
   })
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
 
   useEffect(() => {
     fetchStats()
@@ -34,7 +34,7 @@ export function SystemSettings() {
         rejectedApplications: 0,
         pendingQuotations: 0,
         paidQuotations: 0,
-      }))
+      })) as any
       
       setStats({
         totalUsers: statsData.totalClients || statsData.totalUsers || 0,
@@ -125,7 +125,7 @@ export function SystemSettings() {
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
               <span className="text-xs text-gray-600 dark:text-gray-400">Environment</span>
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
-                {import.meta.env.MODE === 'production' ? 'Production' : 'Development'}
+                {(import.meta as any).env?.MODE === 'production' ? 'Production' : 'Development'}
               </p>
             </div>
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">

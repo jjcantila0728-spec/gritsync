@@ -5,7 +5,6 @@ import { DollarSign, Save, Key, Eye, EyeOff, Building2, Plus, Trash2 } from 'luc
 import { useToast } from '@/components/ui/Toast'
 import { Loading } from '@/components/ui/Loading'
 import { useSettings } from './useSettings'
-import { Select } from '@/components/ui/Select'
 
 interface MobileBankingConfig {
   id: string
@@ -30,11 +29,11 @@ export function PaymentSettings() {
       mobileBankingConfigs: '[]',
     },
     (data) => ({
-      stripeEnabled: data.stripeEnabled === 'true' || data.stripeEnabled === true,
+      stripeEnabled: data.stripeEnabled === 'true' || (typeof data.stripeEnabled === 'boolean' && data.stripeEnabled),
       stripePublishableKey: data.stripePublishableKey || '',
       stripeSecretKey: data.stripeSecretKey || '',
       stripeWebhookSecret: data.stripeWebhookSecret || '',
-      mobileBankingEnabled: data.mobileBankingEnabled === 'true' || data.mobileBankingEnabled === true || data.mobileBankingEnabled === undefined,
+      mobileBankingEnabled: data.mobileBankingEnabled === 'true' || (typeof data.mobileBankingEnabled === 'boolean' && data.mobileBankingEnabled) || data.mobileBankingEnabled === undefined,
       mobileBankingConfigs: data.mobileBankingConfigs || '[]',
     })
   )

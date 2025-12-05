@@ -214,8 +214,6 @@ describe('E2E Authentication Tests', () => {
       expect(testUser.email).toBeDefined()
       expect(testUser.password).toBeDefined()
       
-      // Verify user was created in auth
-      const { data: session } = await supabase.auth.getSession()
       // Note: After signUp, we might not have a session immediately
       // depending on email confirmation settings
       

@@ -20,7 +20,7 @@ export function SecuritySettings() {
       sessionTimeout: data.sessionTimeout || '30',
       maxLoginAttempts: data.maxLoginAttempts || '5',
       passwordMinLength: data.passwordMinLength || '8',
-      requireStrongPassword: data.requireStrongPassword === 'true' || data.requireStrongPassword === true,
+      requireStrongPassword: data.requireStrongPassword === 'true' || (typeof data.requireStrongPassword === 'boolean' && data.requireStrongPassword),
     })
   )
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})

@@ -304,7 +304,6 @@ export function NotificationSettings() {
         <GreetingsTab
           notifications={notificationsByCategory.greeting}
           settings={settings}
-          setSettings={setSettings}
           loading={loadingNotifications}
           onUpdateNotification={handleUpdateNotification}
           onToggle={handleToggleNotification}
@@ -752,7 +751,7 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
 }
 
 // Greetings Tab
-function GreetingsTab({ notifications, settings, setSettings, loading, onUpdateNotification, onToggle, onDelete, onEdit, onCreate, deletingId }: any) {
+function GreetingsTab({ notifications, settings, loading, onUpdateNotification, onToggle, onDelete, onEdit, onCreate, deletingId }: any) {
   // Sort greetings by sort_order, then by name
   const sortedGreetings = [...notifications].sort((a: NotificationType, b: NotificationType) => {
     if (a.sort_order !== b.sort_order) {
