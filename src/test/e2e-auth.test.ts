@@ -14,15 +14,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
-import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 
 // Load environment variables
 config()
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
 
 // Get Supabase credentials
 const supabaseUrl = process.env.VITE_SUPABASE_URL
@@ -154,13 +148,14 @@ async function cleanupTestUsers() {
       // So we'll just sign them out and let them be inactive
       
       // Delete from public.users table (if RLS allows)
-      await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId)
-        .catch(() => {
-          // Ignore errors - user might not exist or RLS might block
-        })
+      try {
+        await supabase
+          .from('users')
+          .delete()
+          .eq('id', userId)
+      } catch {
+        // Ignore errors - user might not exist or RLS might block
+      }
     } catch (error) {
       // Ignore cleanup errors
       console.warn(`Could not cleanup user ${userId}:`, error)
@@ -276,7 +271,7 @@ describe('E2E Authentication Tests', () => {
       const testUser = await createTestUser()
 
       // Try to register again with the same email
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: testUser.email,
         password: 'AnotherPassword123!',
       })

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Register } from '@/pages/Register'
 import { Login } from '@/pages/Login'
-import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { AuthProvider } from '@/contexts/AuthContext'
 
 // Mock Supabase - functions must be defined inside the factory
 vi.mock('@/lib/supabase', () => {
@@ -37,7 +37,6 @@ import * as supabaseModule from '@/lib/supabase'
 // Get references to mocked functions
 const mockSignUp = (supabaseModule.supabase.auth.signUp as any)
 const mockSignIn = (supabaseModule.supabase.auth.signInWithPassword as any)
-const mockSignOut = (supabaseModule.supabase.auth.signOut as any)
 const mockGetSession = (supabaseModule.supabase.auth.getSession as any)
 const mockOnAuthStateChange = (supabaseModule.supabase.auth.onAuthStateChange as any)
 const mockFrom = (supabaseModule.supabase.from as any)
@@ -329,9 +328,28 @@ describe('Supabase Registration Tests', () => {
       const user = userEvent.setup()
       const userEmail = 'TestUser@Example.COM'
 
-      mockMaybeSingle.mockResolvedValueOnce({
+      const mockMaybeSingleFn = vi.fn().mockResolvedValueOnce({
         data: null,
         error: { code: 'PGRST116' },
+      })
+
+      const mockUpsertFn = vi.fn().mockResolvedValueOnce({
+        data: null,
+        error: null,
+      })
+
+      mockFrom.mockImplementationOnce((table: string) => {
+        if (table === 'users') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: mockMaybeSingleFn,
+            single: vi.fn(),
+            update: vi.fn().mockReturnThis(),
+            upsert: mockUpsertFn,
+          }
+        }
+        return {}
       })
 
       mockSignUp.mockResolvedValueOnce({
@@ -339,11 +357,6 @@ describe('Supabase Registration Tests', () => {
           user: { id: 'user-123', email: userEmail.toLowerCase() },
           session: { user: { id: 'user-123' } },
         },
-        error: null,
-      })
-
-      mockUpsert.mockResolvedValueOnce({
-        data: null,
         error: null,
       })
 

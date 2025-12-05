@@ -36,7 +36,6 @@ vi.mock('@/lib/supabase', () => {
 import * as supabaseModule from '@/lib/supabase'
 const mockSignUp = (supabaseModule.supabase.auth.signUp as any)
 const mockSignIn = (supabaseModule.supabase.auth.signInWithPassword as any)
-const mockSignOut = (supabaseModule.supabase.auth.signOut as any)
 const mockGetSession = (supabaseModule.supabase.auth.getSession as any)
 const mockOnAuthStateChange = (supabaseModule.supabase.auth.onAuthStateChange as any)
 const mockFrom = (supabaseModule.supabase.from as any)

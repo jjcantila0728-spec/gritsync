@@ -32,15 +32,15 @@ describe('Utility Functions', () => {
       expect(validatePassword('abcdef')).toEqual({ valid: true })
     })
 
-    it('should return invalid for passwords shorter than 6 characters', () => {
-      const result = validatePassword('12345')
+    it('should return invalid for passwords shorter than 6 characters', async () => {
+      const result = await validatePassword('12345')
       expect(result.valid).toBe(false)
       expect(result.message).toBe('Password must be at least 6 characters')
     })
 
-    it('should return invalid for passwords longer than 128 characters', () => {
+    it('should return invalid for passwords longer than 128 characters', async () => {
       const longPassword = 'a'.repeat(129)
-      const result = validatePassword(longPassword)
+      const result = await validatePassword(longPassword)
       expect(result.valid).toBe(false)
       expect(result.message).toBe('Password must be less than 128 characters')
     })
