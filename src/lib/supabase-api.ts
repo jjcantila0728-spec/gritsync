@@ -624,7 +624,7 @@ export const applicationsAPI = {
       return { id, status } as Tables<'applications'>
     }
     
-    return data as Tables<'applications'>
+    return data as unknown as Tables<'applications'>
   },
 
   update: async (id: string, updates: Partial<Tables<'applications'>>) => {
@@ -654,7 +654,7 @@ export const applicationsAPI = {
         if (!dataArray || dataArray.length === 0) {
           throw new Error('Application not found')
         }
-        return dataArray[0] as Tables<'applications'>
+        return dataArray[0] as unknown as Tables<'applications'>
       }
       throw new Error(error.message)
     }
@@ -663,7 +663,7 @@ export const applicationsAPI = {
       throw new Error('Application not found')
     }
     
-    return data as Tables<'applications'>
+    return data as unknown as Tables<'applications'>
   },
 }
 
@@ -703,7 +703,7 @@ export const quotationsAPI = {
       // Combine and deduplicate by ID, then sort by created_at
       const userData = userQuotes.data && !('error' in userQuotes.data) ? userQuotes.data : []
       const publicData = publicQuotes.data && !('error' in publicQuotes.data) ? publicQuotes.data : []
-      const allQuotes = [...userData, ...publicData] as Tables<'quotations'>[]
+      const allQuotes = [...userData, ...publicData] as unknown as Tables<'quotations'>[]
       const uniqueQuotes = Array.from(
         new Map(allQuotes.map(q => [q.id, q])).values()
       )
@@ -1544,7 +1544,7 @@ export const userDocumentsAPI = {
       .single()
     
     if (fetchError) throw new Error(fetchError.message)
-    if (!admin && doc && !('error' in doc) && 'user_id' in doc && doc.user_id !== userId) {
+    if (!admin && doc && !('error' in doc) && 'user_id' in doc && (doc as any).user_id !== userId) {
       throw new Error('Unauthorized')
     }
     
@@ -1949,7 +1949,7 @@ export const processingAccountsAPI = {
     
     // Deduplicate accounts by id (in case of any duplicates)
     const validAccounts = existingAccounts.filter((acc: any) => acc && !('error' in acc) && 'id' in acc)
-    const typedExistingAccounts = validAccounts as Array<{ id: string }>
+    const typedExistingAccounts = validAccounts as unknown as Array<{ id: string }>
     const uniqueAccounts = Array.from(
       new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
     )
