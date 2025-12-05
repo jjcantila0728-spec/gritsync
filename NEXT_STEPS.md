@@ -1,259 +1,238 @@
-# Next Steps - Serverless Migration
+# Next Steps - Pre-Deployment Completion
 
-## ✅ What's Been Done
+## ✅ Completed Items
 
-1. ✅ Frontend updated to use Supabase directly
-2. ✅ Admin login-as Edge Function created
-3. ✅ All Express API dependencies removed from frontend
-4. ✅ Deployment scripts created
+### Documentation Created
+- ✅ **PRE_DEPLOYMENT_VERIFICATION.md** - Comprehensive 15-section checklist
+- ✅ **DEPLOYMENT_SUMMARY.md** - Status summary of automated checks
+- ✅ **QUICK_DEPLOYMENT_GUIDE.md** - Quick reference guide
+- ✅ **MANUAL_VERIFICATION_GUIDE.md** - Step-by-step manual verification instructions
+- ✅ **DEPLOYMENT_ACTION_PLAN.md** - Complete deployment action plan
+- ✅ **Terms of Service** page created at `/terms-of-service`
+- ✅ **Privacy Policy** page created at `/privacy-policy`
 
-## 🚀 Immediate Next Steps
+### Code Quality
+- ✅ TypeScript compilation passes
+- ✅ Production build completes successfully
+- ✅ Console.log removal configured (automatic in production)
+- ✅ Error boundaries implemented
+- ✅ Security headers configured in vercel.json
 
-### Step 1: Deploy Edge Functions
+### Configuration
+- ✅ Vercel configuration verified
+- ✅ Environment variables documented
+- ✅ Build optimization configured
+- ✅ SPA routing configured
 
-**Option A: Use the deployment script (Windows PowerShell)**
-```powershell
-cd e:\GRITSYNC
-.\scripts\deploy-serverless.ps1
-```
-
-**Option B: Manual deployment**
-```bash
-# Login to Supabase
-supabase login
-
-# Link your project
-supabase link --project-ref YOUR_PROJECT_REF
-
-# Deploy the new Edge Function
-supabase functions deploy admin-login-as
-
-# Deploy other Edge Functions (if not already deployed)
-supabase functions deploy create-payment-intent
-supabase functions deploy stripe-webhook
-supabase functions deploy send-email
-```
-
-### Step 2: Set Edge Function Secrets
-
-```bash
-# Required secrets
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-supabase secrets set FRONTEND_URL=https://yourdomain.com
-
-# Stripe secrets (if using Stripe)
-supabase secrets set STRIPE_SECRET_KEY=your-stripe-secret-key
-supabase secrets set STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
-
-```
-
-**Where to find these values:**
-- `SUPABASE_SERVICE_ROLE_KEY`: Supabase Dashboard → Settings → API → `service_role` key
-- `FRONTEND_URL`: Your production frontend URL (e.g., `https://gritsync.com`)
-- Stripe keys: Stripe Dashboard → Developers → API keys
-
-### Step 3: Update Environment Variables
-
-**Update `.env` file:**
-
-Remove:
-```env
-VITE_API_URL=http://localhost:3001/api
-```
-
-Keep:
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_STRIPE_PUBLISHABLE_KEY=your-stripe-publishable-key
-```
-
-### Step 4: Update Stripe Webhook URL
-
-In Stripe Dashboard:
-1. Go to **Developers** → **Webhooks**
-2. Edit your existing webhook or create a new one
-3. Set endpoint URL to: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/stripe-webhook`
-4. Select events: `payment_intent.succeeded`, `payment_intent.payment_failed`
-5. Copy the webhook secret and set it as Edge Function secret
-
-### Step 5: Verify Deployment
-
-Run the verification script:
-```bash
-node scripts/verify-serverless.js
-```
-
-Or manually check:
-- [ ] Edge Functions are deployed: `supabase functions list`
-- [ ] Secrets are set: `supabase secrets list`
-- [ ] Frontend builds without errors: `npm run build`
-- [ ] No references to `VITE_API_URL` in production code
-
-### Step 6: Test Everything
-
-Test all functionality:
-
-- [ ] **Authentication**
-  - [ ] User registration
-  - [ ] User login
-  - [ ] Password reset
-  - [ ] Session management
-
-- [ ] **Dashboard**
-  - [ ] Dashboard stats load correctly
-  - [ ] Admin dashboard shows correct stats
-  - [ ] Client dashboard shows correct stats
-
-- [ ] **Admin Features**
-  - [ ] Admin can login-as users (uses Edge Function)
-  - [ ] Admin can view all clients
-  - [ ] Admin can manage applications
-
-- [ ] **File Operations**
-  - [ ] File uploads work
-  - [ ] File downloads work
-  - [ ] Documents are stored in Supabase Storage
-
-- [ ] **Payments**
-  - [ ] Stripe payments work
-  - [ ] Payment webhooks are received
-  - [ ] Payment status updates correctly
-
-- [ ] **Notifications**
-  - [ ] Notifications load
-  - [ ] Real-time notifications work
-  - [ ] Email notifications work (if configured)
-
-- [ ] **CRUD Operations**
-  - [ ] Create applications
-  - [ ] Update applications
-  - [ ] View applications
-  - [ ] Create quotations
-  - [ ] Update quotations
-
-### Step 7: Deploy Frontend
-
-Build and deploy your frontend:
-
-```bash
-# Build for production
-npm run build
-
-# Deploy to your hosting provider (Vercel, Netlify, etc.)
-# The built files are in the `dist/` directory
-```
-
-**Important:** Make sure your hosting provider has the correct environment variables set.
-
-### Step 8: Monitor and Verify
-
-After deployment:
-
-1. **Check Edge Function logs:**
-   ```bash
-   supabase functions logs admin-login-as
-   supabase functions logs stripe-webhook
-   ```
-
-2. **Monitor Supabase Dashboard:**
-   - Check API usage
-   - Check Edge Function invocations
-   - Check error logs
-
-3. **Test in production:**
-   - Test all critical user flows
-   - Verify payments work
-   - Check email notifications
-
-## 🧹 Optional: Clean Up Express Server
-
-Once you're confident everything works, you can optionally remove:
-
-```bash
-# Remove Express server directory (optional)
-# rm -rf server/
-
-# Remove Docker files (optional)
-# rm Dockerfile
-# rm docker-compose.yml
-
-# Remove Express dependencies (optional)
-# npm uninstall express cors compression multer bcryptjs jsonwebtoken
-```
-
-**Note:** Keep these files as backup until you're 100% confident everything works.
-
-## 🆘 Troubleshooting
-
-### Edge Function Not Working
-
-```bash
-# Check logs
-supabase functions logs admin-login-as
-
-# Verify secrets
-supabase secrets list
-
-# Test locally (if needed)
-supabase functions serve admin-login-as
-```
-
-### Frontend Errors
-
-1. Check browser console for errors
-2. Verify Supabase RLS policies are correct
-3. Verify environment variables are set correctly
-4. Check network tab for failed requests
-
-### Stripe Webhook Not Working
-
-1. Verify webhook URL in Stripe Dashboard
-2. Check Edge Function logs: `supabase functions logs stripe-webhook`
-3. Verify `STRIPE_WEBHOOK_SECRET` is set correctly
-4. Test with Stripe CLI: `stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook`
-
-## 📋 Checklist
-
-- [ ] Edge Functions deployed
-- [ ] Secrets set
-- [ ] `.env` updated (VITE_API_URL removed)
-- [ ] Stripe webhook URL updated
-- [ ] Frontend builds successfully
-- [ ] All tests pass
-- [ ] Frontend deployed to production
-- [ ] Production testing complete
-- [ ] Monitoring set up
-
-## 🎉 Success!
-
-Once all steps are complete, your application is **100% serverless** and ready for production!
+### Tools Created
+- ✅ Verification script (`npm run verify`)
+- ✅ RLS verification SQL script (`supabase/migrations/verify_rls_policies.sql`)
 
 ---
 
-## Quick Reference
+## ⚠️ Manual Steps Required
 
-**Deploy Edge Function:**
+### 1. Supabase Setup (Critical)
+
+**Database Migrations:**
+- [ ] Run all 10 migrations from `supabase/migrations/` in Supabase SQL Editor
+- [ ] Verify each migration completes successfully
+- [ ] Run `verify_rls_policies.sql` to check RLS configuration
+
+**RLS Policies:**
+- [ ] Verify all tables have RLS enabled
+- [ ] Verify policies exist for users, admins, and public access
+- [ ] Test policies with test user account
+
+**Storage Buckets:**
+- [ ] Verify `documents` bucket exists (PRIVATE)
+- [ ] Verify `pictures` bucket exists (PUBLIC, if used)
+- [ ] Check storage policies are configured
+
+**Edge Functions:**
+- [ ] Deploy all 5 Edge Functions
+- [ ] Set required secrets
+- [ ] Test each function
+
+**Authentication:**
+- [ ] Configure email settings
+- [ ] Customize email templates
+- [ ] Set session timeout
+- [ ] Enable rate limiting
+
+### 2. Manual Testing
+
+**Critical User Flows:**
+- [ ] User registration and login
+- [ ] Password reset flow
+- [ ] Application submission
+- [ ] Payment processing
+- [ ] Document uploads
+- [ ] Admin dashboard functionality
+
+**Browser Testing:**
+- [ ] Chrome, Firefox, Safari, Edge
+- [ ] Mobile browsers (iOS Safari, Chrome Mobile)
+- [ ] Responsive design on various screen sizes
+
+### 3. Vercel Deployment
+
+**Environment Variables:**
+- [ ] Set `VITE_SUPABASE_URL` in Vercel dashboard
+- [ ] Set `VITE_SUPABASE_ANON_KEY` in Vercel dashboard
+- [ ] Set `VITE_STRIPE_PUBLISHABLE_KEY` (use `pk_live_` for production)
+- [ ] Verify variables are set for Production environment
+
+**Deployment:**
+- [ ] Connect GitHub repository to Vercel
+- [ ] Verify build settings
+- [ ] Deploy to production
+- [ ] Test deployed application
+
+### 4. Post-Deployment
+
+**Monitoring:**
+- [ ] Set up error tracking (Sentry, LogRocket, etc.)
+- [ ] Configure uptime monitoring
+- [ ] Set up performance monitoring
+- [ ] Create alerts for critical errors
+
+**Verification:**
+- [ ] Test all features in production
+- [ ] Verify environment variables work
+- [ ] Check for console errors
+- [ ] Test API connections
+
+---
+
+## 📋 Recommended Order of Operations
+
+1. **Run Automated Checks**
+   ```bash
+   npm run verify
+   npm run test:run
+   npm run type-check
+   npm run lint
+   npm run build
+   ```
+
+2. **Supabase Setup**
+   - Run migrations
+   - Verify RLS policies
+   - Configure storage
+   - Deploy Edge Functions
+   - Configure authentication
+
+3. **Manual Testing**
+   - Test all critical user flows
+   - Test on different browsers
+   - Test responsive design
+
+4. **Vercel Deployment**
+   - Set environment variables
+   - Deploy to production
+   - Test deployed application
+
+5. **Post-Deployment**
+   - Set up monitoring
+   - Verify all features work
+   - Document any issues
+
+---
+
+## 🔍 Verification Tools
+
+### Automated Verification
 ```bash
-supabase functions deploy admin-login-as
+npm run verify
+```
+Checks:
+- Package.json configuration
+- Vercel configuration
+- Environment files
+- Documentation
+- Legal pages
+- Migrations
+- Security configurations
+
+### RLS Policy Verification
+Run in Supabase SQL Editor:
+```sql
+-- Copy and run: supabase/migrations/verify_rls_policies.sql
+```
+This will show:
+- RLS status for all tables
+- Policy counts per table
+- Storage bucket configuration
+- Functions and triggers
+
+---
+
+## 📚 Documentation Reference
+
+- **Full Checklist**: [PRE_DEPLOYMENT_VERIFICATION.md](./PRE_DEPLOYMENT_VERIFICATION.md)
+- **Action Plan**: [DEPLOYMENT_ACTION_PLAN.md](./DEPLOYMENT_ACTION_PLAN.md)
+- **Manual Verification**: [MANUAL_VERIFICATION_GUIDE.md](./MANUAL_VERIFICATION_GUIDE.md)
+- **Quick Guide**: [QUICK_DEPLOYMENT_GUIDE.md](./QUICK_DEPLOYMENT_GUIDE.md)
+- **Status Summary**: [DEPLOYMENT_SUMMARY.md](./DEPLOYMENT_SUMMARY.md)
+
+---
+
+## ⚡ Quick Commands
+
+```bash
+# Verification
+npm run verify          # Run automated verification
+npm run test:run        # Run test suite
+npm run type-check      # TypeScript type checking
+npm run lint            # Lint code
+npm run build           # Build for production
+
+# Supabase
+supabase functions deploy <function-name>
+supabase secrets set <KEY>=<value>
+
+# Git
+git add .
+git commit -m "Ready for production"
+git push origin main
 ```
 
-**Set Secret:**
-```bash
-supabase secrets set KEY=value
-```
+---
 
-**Check Logs:**
-```bash
-supabase functions logs FUNCTION_NAME
-```
+## 🎯 Success Criteria
 
-**List Functions:**
-```bash
-supabase functions list
-```
+Before going live, ensure:
+- ✅ All automated checks pass
+- ✅ All Supabase migrations applied
+- ✅ RLS policies verified
+- ✅ Storage buckets configured
+- ✅ Edge Functions deployed
+- ✅ Manual testing completed
+- ✅ Environment variables set in Vercel
+- ✅ Application deployed successfully
+- ✅ All features work in production
+- ✅ Monitoring configured
+- ✅ Legal pages accessible
 
-**List Secrets:**
-```bash
-supabase secrets list
-```
+---
+
+## 🆘 Need Help?
+
+1. Review the troubleshooting sections in:
+   - [DEPLOYMENT_ACTION_PLAN.md](./DEPLOYMENT_ACTION_PLAN.md)
+   - [QUICK_DEPLOYMENT_GUIDE.md](./QUICK_DEPLOYMENT_GUIDE.md)
+
+2. Check error logs:
+   - Vercel deployment logs
+   - Supabase logs
+   - Browser console
+
+3. Run verification scripts:
+   - `npm run verify`
+   - `verify_rls_policies.sql` in Supabase
+
+---
+
+**Status**: Ready to proceed with manual verification and deployment
+**Last Updated**: Pre-deployment verification complete

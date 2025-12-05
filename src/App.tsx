@@ -37,6 +37,8 @@ const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m
 const AccountSettings = lazy(() => import('./pages/AccountSettings').then(m => ({ default: m.AccountSettings })))
 const Documents = lazy(() => import('./pages/Documents').then(m => ({ default: m.Documents })))
 const TestSupabase = lazy(() => import('./pages/TestSupabase').then(m => ({ default: m.TestSupabase })))
+const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })))
 
 // Loading fallback component
 function PageLoader() {
@@ -180,6 +182,8 @@ function AppRoutes() {
             </PublicRoute>
           } 
         />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/test-supabase" element={<TestSupabase />} />
       
       <Route

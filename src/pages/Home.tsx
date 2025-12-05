@@ -349,8 +349,8 @@ export function Home() {
               <ul className="space-y-2 text-sm">
                 <li><a href="#" className="hover:text-primary-400 transition-colors">About Us</a></li>
                 <li><a href="#" className="hover:text-primary-400 transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-primary-400 transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-primary-400 transition-colors">Terms of Service</a></li>
+                <li><Link to="/privacy" className="hover:text-primary-400 transition-colors">Privacy Policy</Link></li>
+                <li><Link to="/terms" className="hover:text-primary-400 transition-colors">Terms of Service</Link></li>
               </ul>
             </div>
             
