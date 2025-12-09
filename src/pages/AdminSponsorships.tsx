@@ -98,7 +98,7 @@ export function AdminSponsorships() {
     try {
       setLoading(true)
       const data = await sponsorshipsAPI.getAll()
-      setSponsorships(data as Sponsorship[])
+      setSponsorships(data as unknown as Sponsorship[])
       setCurrentPage(1)
     } catch (error: any) {
       console.error('Error fetching sponsorships:', error)

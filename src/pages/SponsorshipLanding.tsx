@@ -8,7 +8,6 @@ import {
   Award, 
   DollarSign, 
   CheckCircle, 
-  FileText, 
   Users, 
   Heart,
   ArrowRight,

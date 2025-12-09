@@ -1948,6 +1948,7 @@ export function ApplicationDetail() {
                           }}
                           application={application}
                           showGenerateLetter={true}
+                          phoneNumber={phoneNumber}
                           subSteps={[
                             {
                               key: 'letter_generated',
@@ -4346,6 +4347,7 @@ interface TimelineStepProps {
   examTime?: string
   result?: 'pass' | 'failed'
   showGenerateLetter?: boolean
+  phoneNumber?: string
 }
 
 function TimelineStep({ 
@@ -4362,7 +4364,8 @@ function TimelineStep({
   examLocation,
   examTime,
   result,
-  showGenerateLetter = false
+  showGenerateLetter = false,
+  phoneNumber = '+1 (509) 270-3437'
 }: TimelineStepProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [attCodeValue, setAttCodeValue] = useState<string>('')

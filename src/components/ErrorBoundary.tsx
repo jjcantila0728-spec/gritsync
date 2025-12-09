@@ -1,8 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Card } from './ui/Card'
 import { Button } from './ui/Button'
-import { AlertTriangle, RefreshCw, Home, Bug, Copy, Check } from 'lucide-react'
-import { normalizeError, logError, classifyError, type AppError, ErrorType } from '@/lib/error-handler'
+import { AlertTriangle, RefreshCw, Home, Copy, Check } from 'lucide-react'
+import { normalizeError, logError, classifyError, ErrorType } from '@/lib/error-handler'
 
 interface Props {
   children: ReactNode

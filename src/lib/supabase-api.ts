@@ -1,55 +1,14 @@
 import { supabase } from './supabase'
 import type { Database } from './database.types'
 import { 
-  handleSupabaseError, 
   normalizeError, 
   retryWithBackoff,
-  isRetryableError,
-  type AppError 
+  AppError 
 } from './error-handler'
 
 type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
 type Inserts<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 type Updates<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
-
-// Removed unused QueryResult type
-
-/**
- * Enhanced Supabase query wrapper with error handling and retry logic
- */
-async function executeQuery<T>(
-  queryFn: () => Promise<{ data: T | null; error: any }>,
-  context?: Record<string, any>,
-  retry: boolean = true
-): Promise<T> {
-  const execute = async () => {
-    const { data, error } = await queryFn()
-    
-    if (error) {
-      const normalizedError = normalizeError(error, context)
-      throw normalizedError
-    }
-    
-    if (data === null) {
-      throw normalizeError(new Error('No data returned'), context)
-    }
-    
-    return data
-  }
-
-  if (retry) {
-    try {
-      return await execute()
-    } catch (error: any) {
-      if (isRetryableError(error)) {
-        return await retryWithBackoff(execute, 3, 1000, error)
-      }
-      throw error
-    }
-  }
-
-  return await execute()
-}
 
 // Helper to get current user ID
 async function getCurrentUserId(): Promise<string> {
@@ -1356,10 +1315,11 @@ export const notificationsAPI = {
           ])
           
           // Prefer email from users table, fallback to auth
-          const userEmail = userProfileResult.data?.email || userDataResult.data?.user?.email
+          const userProfile = userProfileResult.data as { first_name?: string; last_name?: string; email?: string } | null
+          const userEmail = userProfile?.email || userDataResult.data?.user?.email
           
           if (userEmail) {
-            const profile = userProfileResult.data as { first_name?: string; last_name?: string } | null
+            const profile = userProfile
             const userName = (profile?.first_name && profile?.last_name 
                               ? `${profile.first_name} ${profile.last_name}` 
                               : profile?.first_name || 'User')
@@ -3706,17 +3666,16 @@ export const sponsorshipsAPI = {
     const userId = await getCurrentUserId()
     const admin = await isAdmin()
     
-    const query = supabase
+    let query = supabase
       .from('nclex_sponsorships')
       .select('*')
       .eq('id', id)
-      .single()
     
     if (!admin) {
-      query.eq('user_id', userId)
+      query = query.eq('user_id', userId)
     }
     
-    const { data, error } = await query
+    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
     return data
   },
@@ -3749,13 +3708,14 @@ export const sponsorshipsAPI = {
     const admin = await isAdmin()
     if (!admin) {
       // Non-admins can only update pending sponsorships
-      const { data: existing } = await supabase
+      const { data: existingData } = await supabase
         .from('nclex_sponsorships')
         .select('status, user_id')
         .eq('id', id)
         .single()
       
-      if (!existing) throw new Error('Sponsorship not found')
+      if (!existingData) throw new Error('Sponsorship not found')
+      const existing = existingData as any
       
       const userId = await getCurrentUserId()
       if (existing.user_id !== userId) {
@@ -3824,13 +3784,14 @@ export const donationsAPI = {
     if (!admin) {
       // Non-admins can only see their own donations
       const userId = await getCurrentUserId()
-      const { data: user } = await supabase
+      const { data: userData } = await supabase
         .from('users')
         .select('email')
         .eq('id', userId)
         .single()
       
-      if (!user) throw new Error('User not found')
+      if (!userData) throw new Error('User not found')
+      const user = userData as any
       
       const { data, error } = await supabase
         .from('donations')
@@ -3855,11 +3816,10 @@ export const donationsAPI = {
   getById: async (id: string) => {
     const admin = await isAdmin()
     
-    const query = supabase
+    let query = supabase
       .from('donations')
       .select('*')
       .eq('id', id)
-      .single()
     
     if (!admin) {
       const userId = await getCurrentUserId()
@@ -3870,11 +3830,11 @@ export const donationsAPI = {
         .single()
       
       if (user) {
-        query.eq('donor_email', user.email)
+        query = query.eq('donor_email', (user as any).email)
       }
     }
     
-    const { data, error } = await query
+    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
     return data
   },
@@ -3931,7 +3891,7 @@ export const donationsAPI = {
     
     if (error) throw new Error(error.message)
     
-    const donations = data || []
+    const donations = (data || []) as any[]
     const total = donations
       .filter(d => d.status === 'completed')
       .reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0)
@@ -4074,7 +4034,7 @@ export const careerApplicationsAPI = {
     const userId = await getCurrentUserId()
     const admin = await isAdmin()
     
-    const query = supabase
+    let query = supabase
       .from('career_applications')
       .select(`
         *,
@@ -4089,15 +4049,14 @@ export const careerApplicationsAPI = {
         )
       `)
       .eq('id', id)
-      .single()
     
     if (!admin) {
-      query.eq('user_id', userId)
+      query = query.eq('user_id', userId)
     }
     
-    const { data, error } = await query
+    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
-    return data
+    return data as any
   },
 
   create: async (applicationData: any) => {
@@ -4138,13 +4097,14 @@ export const careerApplicationsAPI = {
     const admin = await isAdmin()
     if (!admin) {
       // Non-admins can only update pending applications
-      const { data: existing } = await supabase
+      const { data: existingData } = await supabase
         .from('career_applications')
         .select('status, user_id')
         .eq('id', id)
         .single()
       
-      if (!existing) throw new Error('Career application not found')
+      if (!existingData) throw new Error('Career application not found')
+      const existing = existingData as any
       
       const userId = await getCurrentUserId()
       if (existing.user_id !== userId) {
@@ -4221,21 +4181,23 @@ export const careerApplicationsAPI = {
     if (!admin) throw new Error('Admin access required')
     
     // Get application and agency details
-    const { data: application } = await supabase
+    const { data: applicationData } = await supabase
       .from('career_applications')
       .select('*')
       .eq('id', id)
       .single()
     
-    if (!application) throw new Error('Application not found')
+    if (!applicationData) throw new Error('Application not found')
+    const application = applicationData as any
     
-    const { data: agency } = await supabase
+    const { data: agencyData } = await supabase
       .from('partner_agencies')
       .select('*')
       .eq('id', partnerAgencyId)
       .single()
     
-    if (!agency) throw new Error('Partner agency not found')
+    if (!agencyData) throw new Error('Partner agency not found')
+    const agency = agencyData as any
     
     // Update application status
     const userId = await getCurrentUserId()

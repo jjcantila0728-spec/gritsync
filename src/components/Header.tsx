@@ -301,7 +301,6 @@ export function Header() {
       
       // Fetch avatar from users table (same source as MyDetails page)
       // Always check database to detect avatar changes, but use cache to prevent flicker
-      const cachedAvatarKey = `avatar_${user.id}`
       const cachedAvatarPathKey = `avatar_path_${user.id}`
       
       // Only fetch if we're not already fetching

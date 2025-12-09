@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Elements } from '@stripe/react-stripe-js'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -19,7 +18,6 @@ import { Heart, DollarSign, Users, CheckCircle } from 'lucide-react'
 
 export function Donate() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -34,7 +32,7 @@ export function Donate() {
   const [donorPhone, setDonorPhone] = useState('')
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [message, setMessage] = useState('')
-  const [sponsorshipId, setSponsorshipId] = useState<string | null>(null)
+  const [sponsorshipId] = useState<string | null>(null)
 
   // Predefined amounts
   const presetAmounts = [25, 50, 100, 250, 500, 1000]
@@ -53,7 +51,8 @@ export function Donate() {
             .single()
           
           if (data) {
-            const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
+            const userData = data as { first_name?: string; last_name?: string }
+            const fullName = [userData.first_name, userData.last_name].filter(Boolean).join(' ')
             if (fullName) setDonorName(fullName)
           }
         } catch (error) {
@@ -108,7 +107,7 @@ export function Donate() {
         sponsorship_id: sponsorshipId || null,
       }
 
-      const donation = await donationsAPI.create(donationData)
+      const donation = await donationsAPI.create(donationData) as unknown as { id: string }
       setDonationId(donation.id)
 
       // Create payment intent
@@ -124,7 +123,7 @@ export function Donate() {
     }
   }
 
-  const handlePaymentSuccess = async (paymentIntentId: string) => {
+  const handlePaymentSuccess = async (_paymentIntentId: string) => {
     if (!donationId) return
 
     try {

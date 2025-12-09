@@ -175,7 +175,7 @@ export function AdminCareers() {
         careerApplicationsAPI.getAll(),
         partnerAgenciesAPI.getAll()
       ])
-      setApplications(apps as CareerApplication[])
+      setApplications(apps as unknown as CareerApplication[])
       setPartnerAgencies(agencies)
       setCurrentPage(1)
     } catch (error: any) {
@@ -192,7 +192,7 @@ export function AdminCareers() {
     try {
       setLoadingCareers(true)
       const data = await careersAPI.getAll(true) // Include inactive
-      setCareers(data as Career[])
+      setCareers(data as unknown as Career[])
     } catch (error: any) {
       console.error('Error fetching careers:', error)
       showToast(error?.message || 'Failed to load careers', 'error')

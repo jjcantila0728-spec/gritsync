@@ -83,7 +83,7 @@ export function AdminDonations() {
     try {
       setLoading(true)
       const data = await donationsAPI.getAll()
-      setDonations(data as Donation[])
+      setDonations(data as unknown as Donation[])
       setCurrentPage(1)
     } catch (error: any) {
       console.error('Error fetching donations:', error)

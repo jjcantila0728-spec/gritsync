@@ -79,7 +79,7 @@ export function AdminPartnerAgencies() {
     try {
       setLoading(true)
       const data = await partnerAgenciesAPI.getAll()
-      setAgencies(data as PartnerAgency[])
+      setAgencies(data as unknown as PartnerAgency[])
     } catch (error: any) {
       console.error('Error fetching partner agencies:', error)
       showToast(error?.message || 'Failed to load partner agencies', 'error')
