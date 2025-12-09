@@ -11,6 +11,10 @@ import {
   Settings,
   FolderOpen,
   AlertCircle,
+  Award,
+  Heart,
+  Briefcase,
+  Building2,
 } from 'lucide-react'
 
 interface NavItem {
@@ -31,6 +35,10 @@ const adminNavItems: NavItem[] = [
   { label: 'All Applications', path: '/admin/applications', icon: ClipboardList },
   { label: 'Clients', path: '/admin/clients', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
+  { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
+  { label: 'Donations', path: '/admin/donations', icon: Heart },
+  { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },
+  { label: 'Partner Agencies', path: '/admin/partner-agencies', icon: Building2 },
   { label: 'Settings', path: '/admin/settings', icon: Settings },
 ]
 

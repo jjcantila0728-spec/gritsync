@@ -21,6 +21,13 @@ export default {
           900: '#7f1d1d',
         },
       },
+      animation: {
+        'blob': 'blob 7s ease-in-out infinite',
+        'fade-in-up': 'fade-in-up 0.8s ease-out forwards',
+        'bounce-x': 'bounce-x 1.5s ease-in-out infinite',
+        'spin-slow': 'spin-slow 3s linear infinite',
+        'gradient': 'gradient 3s ease infinite',
+      },
     },
   },
   plugins: [],

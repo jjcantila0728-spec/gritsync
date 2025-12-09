@@ -1,0 +1,35 @@
+# robots.txt for GritSync
+# Allow all search engines to crawl the site
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /application/new
+Disallow: /applications/
+Disallow: /my-details
+Disallow: /account-settings
+Disallow: /documents
+Disallow: /test-supabase
+
+# Allow public pages
+Allow: /
+Allow: /about-us
+Allow: /donate
+Allow: /career
+Allow: /terms
+Allow: /privacy
+Allow: /quote
+Allow: /quotations
+Allow: /tracking
+Allow: /sponsorship/apply
+Allow: /login
+Allow: /register
+Allow: /forgot-password
+
+# Sitemap location
+Sitemap: https://gritsync.com/sitemap.xml
+
+# Crawl delay (optional, helps prevent server overload)
+Crawl-delay: 1
+

@@ -212,27 +212,70 @@ function generatePlainTextEmail(data: EmailTemplateData): string {
  */
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
-    const config = await getEmailConfig()
-    
-    // Call Supabase Edge Function to send email
-    const { error } = await supabase.functions.invoke('send-email', {
-      body: {
+    // Validate required fields before calling the function
+    if (!options.to || !options.subject || !options.html) {
+      console.error('Missing required email fields:', {
+        hasTo: !!options.to,
+        hasSubject: !!options.subject,
+        hasHtml: !!options.html,
         to: options.to,
         subject: options.subject,
-        html: options.html,
-        text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
-        from: options.from || `${config.fromName} <${config.fromEmail}>`,
-      },
+        htmlLength: options.html?.length || 0
+      })
+      return false
+    }
+
+    const config = await getEmailConfig()
+    
+    // Prepare the email payload
+    const emailPayload = {
+      to: options.to.trim(),
+      subject: options.subject.trim(),
+      html: options.html,
+      text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
+      from: options.from || `${config.fromName} <${config.fromEmail}>`,
+    }
+
+    console.log('Sending email with payload:', {
+      to: emailPayload.to,
+      subject: emailPayload.subject,
+      htmlLength: emailPayload.html.length,
+      hasText: !!emailPayload.text,
+      from: emailPayload.from
+    })
+    
+    // Call Supabase Edge Function to send email
+    const { data, error } = await supabase.functions.invoke('send-email', {
+      body: emailPayload,
     })
 
     if (error) {
       console.error('Error sending email:', error)
+      
+      // Check if it's a CORS error
+      if (error.message?.includes('CORS') || error.message?.includes('Failed to send a request')) {
+        console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
+        console.error('To fix this, run: supabase functions deploy send-email')
+      }
+      
       return false
     }
 
+    // Check if the response indicates success
+    if (data && typeof data === 'object' && 'success' in data) {
+      return data.success === true
+    }
+
     return true
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error sending email:', error)
+    
+    // Check if it's a CORS error
+    if (error?.message?.includes('CORS') || error?.message?.includes('Failed to send')) {
+      console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
+      console.error('To fix this, run: supabase functions deploy send-email')
+    }
+    
     return false
   }
 }

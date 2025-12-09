@@ -179,6 +179,13 @@ export const generalSettings = {
   },
   
   /**
+   * Get phone number
+   */
+  getPhoneNumber: async (): Promise<string> => {
+    return getSetting('phoneNumber', '+1 (509) 270-3437')
+  },
+  
+  /**
    * Check if maintenance mode is enabled
    */
   isMaintenanceMode: async (): Promise<boolean> => {

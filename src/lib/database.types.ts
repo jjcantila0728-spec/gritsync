@@ -18,6 +18,7 @@ export interface Database {
           last_name: string | null
           grit_id: string
           avatar_path: string | null
+          default_avatar_design: string | null
           created_at: string
           updated_at: string
         }
@@ -29,6 +30,7 @@ export interface Database {
           last_name?: string | null
           grit_id?: string
           avatar_path?: string | null
+          default_avatar_design?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +42,7 @@ export interface Database {
           last_name?: string | null
           grit_id?: string
           avatar_path?: string | null
+          default_avatar_design?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -343,13 +346,400 @@ export interface Database {
           updated_at?: string
         }
       }
+      nclex_sponsorships: {
+        Row: {
+          id: string
+          user_id: string | null
+          first_name: string
+          last_name: string
+          email: string
+          mobile_number: string
+          date_of_birth: string | null
+          country: string | null
+          nursing_school: string | null
+          graduation_date: string | null
+          current_employment_status: string | null
+          years_of_experience: string | null
+          financial_need_description: string
+          motivation_statement: string
+          how_will_this_help: string | null
+          resume_path: string | null
+          transcript_path: string | null
+          recommendation_letter_path: string | null
+          status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'awarded'
+          admin_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          first_name: string
+          last_name: string
+          email: string
+          mobile_number: string
+          date_of_birth?: string | null
+          country?: string | null
+          nursing_school?: string | null
+          graduation_date?: string | null
+          current_employment_status?: string | null
+          years_of_experience?: string | null
+          financial_need_description: string
+          motivation_statement: string
+          how_will_this_help?: string | null
+          resume_path?: string | null
+          transcript_path?: string | null
+          recommendation_letter_path?: string | null
+          status?: 'pending' | 'under_review' | 'approved' | 'rejected' | 'awarded'
+          admin_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          first_name?: string
+          last_name?: string
+          email?: string
+          mobile_number?: string
+          date_of_birth?: string | null
+          country?: string | null
+          nursing_school?: string | null
+          graduation_date?: string | null
+          current_employment_status?: string | null
+          years_of_experience?: string | null
+          financial_need_description?: string
+          motivation_statement?: string
+          how_will_this_help?: string | null
+          resume_path?: string | null
+          transcript_path?: string | null
+          recommendation_letter_path?: string | null
+          status?: 'pending' | 'under_review' | 'approved' | 'rejected' | 'awarded'
+          admin_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      donations: {
+        Row: {
+          id: string
+          donor_name: string | null
+          donor_email: string | null
+          donor_phone: string | null
+          is_anonymous: boolean
+          amount: number
+          currency: string
+          payment_method: string | null
+          stripe_payment_intent_id: string | null
+          transaction_id: string | null
+          sponsorship_id: string | null
+          status: 'pending' | 'completed' | 'failed' | 'refunded'
+          message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          donor_name?: string | null
+          donor_email?: string | null
+          donor_phone?: string | null
+          is_anonymous?: boolean
+          amount: number
+          currency?: string
+          payment_method?: string | null
+          stripe_payment_intent_id?: string | null
+          transaction_id?: string | null
+          sponsorship_id?: string | null
+          status?: 'pending' | 'completed' | 'failed' | 'refunded'
+          message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          donor_name?: string | null
+          donor_email?: string | null
+          donor_phone?: string | null
+          is_anonymous?: boolean
+          amount?: number
+          currency?: string
+          payment_method?: string | null
+          stripe_payment_intent_id?: string | null
+          transaction_id?: string | null
+          sponsorship_id?: string | null
+          status?: 'pending' | 'completed' | 'failed' | 'refunded'
+          message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      partner_agencies: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          phone: string | null
+          website: string | null
+          address: string | null
+          city: string | null
+          state: string | null
+          country: string
+          zipcode: string | null
+          contact_person_name: string | null
+          contact_person_email: string | null
+          contact_person_phone: string | null
+          is_active: boolean
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          email: string
+          phone?: string | null
+          website?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          country?: string
+          zipcode?: string | null
+          contact_person_name?: string | null
+          contact_person_email?: string | null
+          contact_person_phone?: string | null
+          is_active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string
+          phone?: string | null
+          website?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          country?: string
+          zipcode?: string | null
+          contact_person_name?: string | null
+          contact_person_email?: string | null
+          contact_person_phone?: string | null
+          is_active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      career_applications: {
+        Row: {
+          id: string
+          user_id: string | null
+          career_id: string | null
+          first_name: string
+          last_name: string
+          email: string
+          mobile_number: string
+          date_of_birth: string | null
+          country: string | null
+          nursing_school: string | null
+          graduation_date: string | null
+          years_of_experience: string | null
+          current_employment_status: string | null
+          license_number: string | null
+          license_state: string | null
+          resume_path: string | null
+          cover_letter_path: string | null
+          additional_documents_path: string | null
+          partner_agency_id: string | null
+          forwarded_to_agency_at: string | null
+          forwarded_email_sent: boolean
+          status: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected'
+          admin_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          career_id?: string | null
+          first_name: string
+          last_name: string
+          email: string
+          mobile_number: string
+          date_of_birth?: string | null
+          country?: string | null
+          nursing_school?: string | null
+          graduation_date?: string | null
+          years_of_experience?: string | null
+          current_employment_status?: string | null
+          license_number?: string | null
+          license_state?: string | null
+          resume_path?: string | null
+          cover_letter_path?: string | null
+          additional_documents_path?: string | null
+          partner_agency_id?: string | null
+          forwarded_to_agency_at?: string | null
+          forwarded_email_sent?: boolean
+          status?: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected'
+          admin_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          career_id?: string | null
+          first_name?: string
+          last_name?: string
+          email?: string
+          mobile_number?: string
+          date_of_birth?: string | null
+          country?: string | null
+          nursing_school?: string | null
+          graduation_date?: string | null
+          years_of_experience?: string | null
+          current_employment_status?: string | null
+          license_number?: string | null
+          license_state?: string | null
+          resume_path?: string | null
+          cover_letter_path?: string | null
+          additional_documents_path?: string | null
+          partner_agency_id?: string | null
+          forwarded_to_agency_at?: string | null
+          forwarded_email_sent?: boolean
+          status?: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected'
+          admin_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      careers: {
+        Row: {
+          id: string
+          title: string
+          description: string
+          requirements: string | null
+          responsibilities: string | null
+          location: string | null
+          employment_type: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship' | null
+          salary_range: string | null
+          department: string | null
+          is_active: boolean
+          is_featured: boolean
+          application_deadline: string | null
+          application_instructions: string | null
+          partner_agency_id: string | null
+          views_count: number
+          applications_count: number
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description: string
+          requirements?: string | null
+          responsibilities?: string | null
+          location?: string | null
+          employment_type?: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship' | null
+          salary_range?: string | null
+          department?: string | null
+          is_active?: boolean
+          is_featured?: boolean
+          application_deadline?: string | null
+          application_instructions?: string | null
+          partner_agency_id?: string | null
+          views_count?: number
+          applications_count?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string
+          requirements?: string | null
+          responsibilities?: string | null
+          location?: string | null
+          employment_type?: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship' | null
+          salary_range?: string | null
+          department?: string | null
+          is_active?: boolean
+          is_featured?: boolean
+          application_deadline?: string | null
+          application_instructions?: string | null
+          partner_agency_id?: string | null
+          views_count?: number
+          applications_count?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+      }
       [key: string]: any
     }
     Views: {
       [key: string]: never
     }
     Functions: {
-      [key: string]: never
+      increment_career_views: {
+        Args: {
+          career_uuid: string
+        }
+        Returns: void
+      }
+      increment_career_applications: {
+        Args: {
+          career_uuid: string
+        }
+        Returns: void
+      }
+      get_career_statistics: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          total_careers: number
+          active_careers: number
+          featured_careers: number
+          total_applications: number
+          pending_applications: number
+        }
+      }
+      get_donation_statistics: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          total_donations: number
+          total_amount: number
+          completed_donations: number
+          completed_amount: number
+          pending_donations: number
+        }
+      }
+      get_sponsorship_statistics: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          total_sponsorships: number
+          pending_sponsorships: number
+          approved_sponsorships: number
+          awarded_sponsorships: number
+        }
+      }
+      [key: string]: any
     }
     Enums: {
       [key: string]: never

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
 import { getSignedFileUrl, getFileUrl } from '../../lib/supabase-api'
+import { getCachedSignedUrl } from '../../lib/image-cache'
 
 interface DocumentImagePreviewProps {
   filePath: string
@@ -44,8 +45,12 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
     // Signed URLs work if policy allows anon access (which it does for pictures)
     // Public URLs only work if bucket is public, but we'll try both
     if (isPictureFile) {
-      console.log('DocumentImagePreview: Detected picture file, trying signed URL first:', filePath)
-      getSignedFileUrl(filePath, 3600)
+      console.log('DocumentImagePreview: Detected picture file, trying cached/signed URL first:', filePath)
+      getCachedSignedUrl(
+        filePath,
+        (path) => getSignedFileUrl(path, 3600),
+        3600000 // Cache for 1 hour (matching signed URL expiration)
+      )
         .then(url => {
           if (typeof url === 'string' && url.trim() !== '') {
             console.log('DocumentImagePreview: Successfully got signed URL for picture:', filePath, 'URL:', url.substring(0, 100) + '...')
@@ -88,8 +93,12 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
           }
         })
     } else {
-      // For non-picture files, use signed URL (requires authentication)
-      getSignedFileUrl(filePath, 3600)
+      // For non-picture files, use cached signed URL (requires authentication)
+      getCachedSignedUrl(
+        filePath,
+        (path) => getSignedFileUrl(path, 3600),
+        3600000 // Cache for 1 hour (matching signed URL expiration)
+      )
         .then(url => {
           if (typeof url === 'string' && url.trim() !== '') {
             console.log('DocumentImagePreview: Successfully got signed URL for', filePath)
@@ -113,9 +122,13 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
   // Handle image load error - if signed URL failed and we tried public URL, try signed URL
   const handleImageError = () => {
     if (triedPublicUrl && imageSrc && !imageSrc.includes('token=')) {
-      // Public URL failed, try signed URL as fallback
+      // Public URL failed, try cached signed URL as fallback
       console.log('DocumentImagePreview: Public URL failed, trying signed URL as fallback')
-      getSignedFileUrl(filePath, 3600)
+      getCachedSignedUrl(
+        filePath,
+        (path) => getSignedFileUrl(path, 3600),
+        3600000
+      )
         .then(url => {
           if (typeof url === 'string' && url.trim() !== '') {
             console.log('DocumentImagePreview: Successfully got signed URL fallback for', filePath)
@@ -175,6 +188,9 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
       className={className || 'w-full h-full object-cover transition-opacity group-hover:opacity-90'}
       style={{ display: 'block', minHeight: '192px' }}
       onError={handleImageError}
+      loading="lazy"
+      decoding="async"
+      crossOrigin="anonymous"
     />
   )
 }

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
+import { getCachedSignedUrl } from '@/lib/image-cache'
 import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
@@ -296,8 +297,12 @@ export function Documents() {
         return
       }
 
-      // For Supabase Storage paths, get signed URL
-      getSignedFileUrl(src, 3600)
+      // For Supabase Storage paths, get cached signed URL
+      getCachedSignedUrl(
+        src,
+        (path) => getSignedFileUrl(path, 3600),
+        3600000 // Cache for 1 hour
+      )
         .then(url => {
           if (typeof url === 'string') {
             setImageSrc(url)

@@ -49,19 +49,23 @@ async function getEmailConfig(supabaseClient: any) {
 }
 
 serve(async (req) => {
-  try {
-    // Handle CORS
-    if (req.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        },
-      })
-    }
+  // CORS headers for all responses
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Max-Age': '86400',
+  }
 
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    })
+  }
+
+  try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -73,14 +77,103 @@ serve(async (req) => {
       }
     )
 
-    const { to, subject, html, text, from } = await req.json() as EmailRequest
-
-    if (!to || !subject || !html) {
+    let requestData: EmailRequest
+    try {
+      const rawBody = await req.json()
+      console.log('Raw request body type:', typeof rawBody)
+      console.log('Raw request body keys:', rawBody ? Object.keys(rawBody) : 'null')
+      console.log('Raw request body:', JSON.stringify(rawBody).substring(0, 500))
+      
+      // Handle different body formats
+      if (rawBody && typeof rawBody === 'object') {
+        // Check if it's wrapped in a 'body' or 'data' property (some Supabase versions do this)
+        if ('body' in rawBody && typeof rawBody.body === 'object') {
+          requestData = rawBody.body as EmailRequest
+          console.log('Extracted from body property')
+        } else if ('data' in rawBody && typeof rawBody.data === 'object') {
+          requestData = rawBody.data as EmailRequest
+          console.log('Extracted from data property')
+        } else {
+          // Direct format
+          requestData = rawBody as EmailRequest
+          console.log('Using direct format')
+        }
+      } else {
+        throw new Error('Request body is not an object')
+      }
+      
+      console.log('Parsed request data:', {
+        hasTo: !!requestData.to,
+        hasSubject: !!requestData.subject,
+        hasHtml: !!requestData.html,
+        to: requestData.to,
+        subject: requestData.subject,
+        htmlLength: requestData.html?.length || 0
+      })
+    } catch (parseError) {
+      console.error('Error parsing request body:', parseError)
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: to, subject, html' }),
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          details: parseError instanceof Error ? parseError.message : 'Unknown error'
+        }),
         {
           status: 400,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
+        }
+      )
+    }
+
+    const { to, subject, html, text, from } = requestData
+
+    // Check for missing or empty required fields
+    if (!to || to.trim() === '') {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing required field: to',
+          received: { to: to || null, subject: subject || null, html: html ? 'present' : null }
+        }),
+        {
+          status: 400,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
+        }
+      )
+    }
+
+    if (!subject || subject.trim() === '') {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing required field: subject',
+          received: { to: to || null, subject: subject || null, html: html ? 'present' : null }
+        }),
+        {
+          status: 400,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
+        }
+      )
+    }
+
+    if (!html || html.trim() === '') {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing required field: html',
+          received: { to: to || null, subject: subject || null, html: html ? 'present' : null }
+        }),
+        {
+          status: 400,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
         }
       )
     }
@@ -112,7 +205,10 @@ serve(async (req) => {
           JSON.stringify({ error: 'Failed to send email via Resend', details: error }),
           {
             status: 500,
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            headers: { 
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            },
           }
         )
       }
@@ -122,7 +218,10 @@ serve(async (req) => {
         JSON.stringify({ success: true, messageId: result.id }),
         {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
         }
       )
     }
@@ -146,7 +245,10 @@ serve(async (req) => {
         }),
         {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
         }
       )
     }
@@ -166,16 +268,22 @@ serve(async (req) => {
       }),
       {
         status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        },
       }
     )
   } catch (error) {
     console.error('Error in send-email function:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Internal server error' }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        },
       }
     )
   }

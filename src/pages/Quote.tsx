@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +11,7 @@ import { CardSkeleton } from '@/components/ui/Loading'
 import { quotationsAPI, servicesAPI } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
@@ -245,6 +247,19 @@ export function Quote() {
     }
   }, [user, quoteId])
 
+  // Mark quote as opened in localStorage
+  const markQuoteAsOpened = (quoteId: string) => {
+    try {
+      const stored = localStorage.getItem('openedQuotes')
+      const opened = stored ? new Set(JSON.parse(stored)) : new Set()
+      opened.add(quoteId)
+      localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+      window.dispatchEvent(new CustomEvent('quotesUpdated'))
+    } catch {
+      // Ignore errors
+    }
+  }
+
   async function fetchQuoteById(id: string) {
     setLoadingQuote(true)
     setLoading(true)
@@ -280,6 +295,11 @@ export function Quote() {
         
         setViewingQuote(typedQuote as any)
         setCurrentStep(4) // Show result view
+        
+        // Mark quote as opened when viewing
+        if (typedQuote.id) {
+          markQuoteAsOpened(typedQuote.id)
+        }
         
         // Determine payment type from quote data or description
         const paymentType = typedQuote.payment_type || (() => {
@@ -970,25 +990,61 @@ export function Quote() {
     )
   }
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const breadcrumbs = [
+    { name: 'Home', url: baseUrl },
+    { name: quoteId ? `Quote #${formatQuoteId(quoteId)}` : 'Quotations', url: currentUrl },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SEO
+        title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | NCLEX Processing Agency` : 'Get a Quote - NCLEX Processing Services | GritSync'}
+        description={quoteId ? `View your NCLEX processing quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX application processing services.` : 'Get instant, transparent quotes for NCLEX application processing. No hidden fees, clear pricing upfront. Calculate your NCLEX processing costs with GritSync.'}
+        keywords="NCLEX quote, NCLEX pricing, NCLEX cost, NCLEX processing fee, quotation, NCLEX service cost, nursing application pricing"
+        canonicalUrl={currentUrl}
+        ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - NCLEX Processing Services | GritSync'}
+        ogDescription={quoteId ? `View your NCLEX processing quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for NCLEX application processing. No hidden fees.'}
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        structuredData={[
+          generateBreadcrumbSchema(breadcrumbs),
+          generateServiceSchema('NCLEX Processing Quotation', 'Get instant quotes for NCLEX application processing services with transparent pricing'),
+        ]}
+      />
       <Header />
       <div className="flex">
         {user && <Sidebar />}
-        <main className="flex-1 p-4 md:p-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-              Quotation Generator
-            </h1>
-            {user && !isAdmin() && (
-              <Link to="/quotations/new">
-                <Button className="w-full sm:w-auto">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Quotation
-                </Button>
-              </Link>
-            )}
-          </div>
+        <main className="flex-1">
+          {/* Banner Section */}
+          <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
+            <div className="container mx-auto px-4 py-12 md:py-16">
+              <div className="max-w-4xl mx-auto text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Get Instant Quotes</span>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                  NCLEX Processing Quotation
+                </h1>
+                <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+                  Get transparent, instant quotes for your NCLEX application processing. No hidden fees, clear pricing upfront.
+                </p>
+                {user && !isAdmin() && (
+                  <Link to="/quotations/new">
+                    <Button size="lg" className="text-lg px-8 py-6">
+                      <Plus className="h-5 w-5 mr-2" />
+                      Create New Quotation
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Content Section */}
+          <div className="p-4 md:p-8">
 
           {/* Show quote result if quote exists (for both logged-in and non-logged-in users) */}
           {(generatedQuote || viewingQuote) ? (
@@ -1033,7 +1089,7 @@ export function Quote() {
               }}>
                 {/* Expiration Banner */}
                 {isExpired && expirationDate && (
-                  <div className="w-full max-w-[8.5in] mx-auto mb-4">
+                  <div className="w-full max-w-[8.5in] mx-auto mb-4 px-2 sm:px-4">
                     <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700">
                       <div className="p-4 flex items-start gap-3">
                         <div className="flex-shrink-0 mt-0.5">
@@ -1054,7 +1110,7 @@ export function Quote() {
                 )}
                 
                 {/* Icon Buttons - Top Outside Paper */}
-                <div className="w-full max-w-[8.5in] mx-auto mb-4 flex justify-between items-center gap-2">
+                <div className="w-full max-w-[8.5in] mx-auto mb-4 flex justify-between items-center gap-2 px-2 sm:px-4">
                   <button
                     onClick={() => {
                       setGeneratedQuote(null)
@@ -1105,7 +1161,7 @@ export function Quote() {
                 </div>
                 
                 {/* Letter-Sized Paper Container */}
-                <div className="w-full max-w-[8.5in] mx-auto" style={{
+                <div className="w-full max-w-[8.5in] mx-auto px-2 sm:px-4" style={{
                   width: '100%',
                   maxWidth: '8.5in'
                 }}>
@@ -1118,8 +1174,9 @@ export function Quote() {
                     backgroundSize: '100% 25px',
                     backgroundPosition: '0 0',
                     width: '100%',
-                    height: '11in',
-                    maxHeight: '11in',
+                    height: 'auto',
+                    minHeight: '11in',
+                    maxHeight: 'none',
                     maxWidth: '8.5in',
                     margin: '0 auto',
                     border: '4px solid #374151',
@@ -2201,8 +2258,10 @@ export function Quote() {
               </div>
             )
           ) : null}
+          </div>
         </main>
       </div>
+      <Footer />
     </div>
   )
 }

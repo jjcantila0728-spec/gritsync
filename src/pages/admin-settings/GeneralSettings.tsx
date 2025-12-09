@@ -14,12 +14,14 @@ export function GeneralSettings() {
       siteName: 'GritSync',
       siteEmail: 'admin@gritsync.com',
       supportEmail: 'support@gritsync.com',
+      phoneNumber: '+1 (509) 270-3437',
       maintenanceMode: false,
     },
     (data) => ({
       siteName: data.siteName || 'GritSync',
       siteEmail: data.siteEmail || 'admin@gritsync.com',
       supportEmail: data.supportEmail || 'support@gritsync.com',
+      phoneNumber: data.phoneNumber || '+1 (509) 270-3437',
       maintenanceMode: String(data.maintenanceMode) === 'true',
     })
   )
@@ -38,6 +40,10 @@ export function GeneralSettings() {
     
     if (!settings.supportEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.supportEmail)) {
       errors.supportEmail = 'Valid support email is required'
+    }
+    
+    if (!settings.phoneNumber || settings.phoneNumber.trim().length === 0) {
+      errors.phoneNumber = 'Phone number is required'
     }
     
     setValidationErrors(errors)
@@ -131,6 +137,27 @@ export function GeneralSettings() {
           {validationErrors.supportEmail && (
             <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.supportEmail}</p>
           )}
+        </div>
+
+        <div>
+          <Input
+            label="Phone Number"
+            type="tel"
+            value={settings.phoneNumber}
+            onChange={(e) => {
+              setSettings({ ...settings, phoneNumber: e.target.value })
+              if (validationErrors.phoneNumber) {
+                setValidationErrors({ ...validationErrors, phoneNumber: '' })
+              }
+            }}
+            placeholder="+1 (509) 270-3437"
+          />
+          {validationErrors.phoneNumber && (
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.phoneNumber}</p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            This phone number will be displayed across all pages (Footer, Contact, Terms, Privacy, etc.)
+          </p>
         </div>
 
         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">

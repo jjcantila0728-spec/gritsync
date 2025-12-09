@@ -11,7 +11,7 @@ export function SystemSettings() {
     revenue: 0,
     totalQuotations: 0,
     pendingApplications: 0,
-    approvedApplications: 0,
+    completedApplications: 0,
     rejectedApplications: 0,
     pendingQuotations: 0,
     paidQuotations: 0,
@@ -30,7 +30,7 @@ export function SystemSettings() {
         revenue: 0, 
         totalQuotations: 0,
         pendingApplications: 0,
-        approvedApplications: 0,
+        completedApplications: 0,
         rejectedApplications: 0,
         pendingQuotations: 0,
         paidQuotations: 0,
@@ -42,7 +42,7 @@ export function SystemSettings() {
         revenue: statsData.revenue || 0,
         totalQuotations: statsData.totalQuotations || 0,
         pendingApplications: statsData.pendingApplications || statsData.pending || 0,
-        approvedApplications: statsData.approvedApplications || statsData.approved || 0,
+        completedApplications: statsData.completedApplications || statsData.completed || 0,
         rejectedApplications: statsData.rejectedApplications || 0,
         pendingQuotations: statsData.pendingQuotations || 0,
         paidQuotations: statsData.paidQuotations || 0,
@@ -173,9 +173,9 @@ export function SystemSettings() {
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="h-3.5 w-3.5 text-green-500 dark:text-green-400" />
-                <span className="text-xs text-gray-600 dark:text-gray-400">Approved</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">Completed</span>
               </div>
-              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{stats.approvedApplications}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{stats.completedApplications}</p>
             </div>
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
               <div className="flex items-center gap-2 mb-1">

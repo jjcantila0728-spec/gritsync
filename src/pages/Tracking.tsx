@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSearchParams, useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationsAPI, trackingAPI, getSignedFileUrl, getFileUrl } from '@/lib/api'
 import { formatDate, paginate } from '@/lib/utils'
+import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
@@ -786,36 +788,94 @@ export function Tracking() {
     )
   }
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const { id } = useParams()
+  const breadcrumbs = [
+    { name: 'Home', url: baseUrl },
+    { name: id ? `Application #${id}` : 'Application Tracking', url: currentUrl },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SEO
+        title={id ? `Track Application #${id} - GritSync | NCLEX Processing Agency` : 'Application Tracking - Track Your NCLEX Application Status | GritSync'}
+        description={id ? `Track the status of your NCLEX application #${id}. Get real-time updates on your application progress, document status, and processing timeline.` : 'Track your NCLEX application status in real-time. Monitor progress, view document status, and get instant notifications on updates. Public tracking available for all applications.'}
+        keywords="NCLEX tracking, application status, NCLEX application tracking, track NCLEX, application progress, NCLEX status check"
+        canonicalUrl={currentUrl}
+        ogTitle={id ? `Track Application #${id} - GritSync` : 'Application Tracking - Track Your NCLEX Application Status | GritSync'}
+        ogDescription={id ? `Track the status of your NCLEX application #${id}` : 'Track your NCLEX application status in real-time. Monitor progress and get instant notifications.'}
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        structuredData={[
+          generateBreadcrumbSchema(breadcrumbs),
+          generateServiceSchema('NCLEX Application Tracking', 'Real-time tracking of NCLEX application status and progress'),
+        ]}
+      />
       <Header />
       <div className="flex">
         {user && <Sidebar />}
-        <main className="flex-1 p-4 md:p-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-              {!user ? 'Application Tracking' : isAdmin() ? 'All Applications' : 'My Applications'}
-            </h1>
-            <div className="flex items-center gap-3">
-              {user && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={refreshing || loading}
-                  className="w-full sm:w-auto"
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-              )}
-              {user && !isAdmin() && (
-                <Link to="/application/new">
-                  <Button className="w-full sm:w-auto">New Application</Button>
-                </Link>
-              )}
-            </div>
-          </div>
+        <main className="flex-1">
+          {/* Banner Section */}
+          {user ? (
+            <section className="border-b bg-white dark:bg-gray-900">
+              <div className="p-4 md:p-6 lg:p-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Applications</p>
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
+                      {isAdmin() ? 'All Applications' : 'My Applications'}
+                    </h1>
+                    <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
+                      Monitor and manage your NCLEX applications. Get instant notifications on status changes and updates.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={handleRefresh}
+                      disabled={refreshing || loading}
+                      className="px-5"
+                    >
+                      <RefreshCw className={`h-5 w-5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                    {!isAdmin() && (
+                      <Link to="/application/new">
+                        <Button className="px-5">
+                          <FileText className="h-5 w-5 mr-2" />
+                          New Application
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
+              <div className="container mx-auto px-4 py-12 md:py-16">
+                <div className="max-w-4xl mx-auto text-center">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+                    <FileText className="h-4 w-4" />
+                    <span>Real-Time Tracking</span>
+                  </div>
+                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                    Application Tracking
+                  </h1>
+                  <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+                    Track your NCLEX application status in real-time. Enter your application ID to view progress and updates.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    {/* Buttons only for authenticated users; none for public */}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Content Section */}
+          <div className="p-4 md:p-8">
 
 
           {/* Show tracking form and result for public users OR when tracking result exists */}
@@ -1467,8 +1527,10 @@ export function Tracking() {
               )}
             </>
           )}
+          </div>
         </main>
       </div>
+      <Footer />
     </div>
   )
 }

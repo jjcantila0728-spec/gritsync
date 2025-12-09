@@ -160,6 +160,87 @@ export function paginate<T>(items: T[], page: number, pageSize: number) {
 }
 
 // Debounce utility for optimizing real-time updates
+// PDF text wrapping helper for jsPDF
+// Wraps text to fit within a specified width and returns an array of lines
+export function wrapTextForPDF(
+  doc: any,
+  text: string,
+  maxWidth: number,
+  options?: { fontSize?: number; font?: string; fontStyle?: string }
+): string[] {
+  if (!text) return []
+  
+  // Set font if provided
+  if (options?.fontSize) {
+    doc.setFontSize(options.fontSize)
+  }
+  if (options?.font) {
+    doc.setFont(options.font, options.fontStyle || 'normal')
+  }
+  
+  const words = text.split(' ')
+  const lines: string[] = []
+  let currentLine = ''
+  
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word
+    const testWidth = doc.getTextWidth(testLine)
+    
+    if (testWidth > maxWidth && currentLine) {
+      lines.push(currentLine)
+      currentLine = word
+    } else {
+      currentLine = testLine
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+  
+  return lines
+}
+
+// PDF helper to add text with automatic wrapping and page breaks
+export function addWrappedTextToPDF(
+  doc: any,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  pageHeight: number,
+  margin: number,
+  options?: { fontSize?: number; font?: string; fontStyle?: string; color?: [number, number, number] }
+): number {
+  // Set font and color if provided
+  if (options?.fontSize) {
+    doc.setFontSize(options.fontSize)
+  }
+  if (options?.font) {
+    doc.setFont(options.font, options.fontStyle || 'normal')
+  }
+  if (options?.color) {
+    doc.setTextColor(...options.color)
+  }
+  
+  const lines = wrapTextForPDF(doc, text, maxWidth, options)
+  let currentY = y
+  
+  for (const line of lines) {
+    // Check if we need a new page
+    if (currentY > pageHeight - margin - lineHeight) {
+      doc.addPage()
+      currentY = margin
+    }
+    
+    doc.text(line, x, currentY)
+    currentY += lineHeight
+  }
+  
+  return currentY
+}
+
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number

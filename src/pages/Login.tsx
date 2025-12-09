@@ -3,9 +3,11 @@ import { useNavigate, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { isValidEmail } from '@/lib/utils'
 
@@ -63,7 +65,9 @@ export function Login() {
       // The useEffect will handle the redirect when user state updates via onAuthStateChange
       // No need to navigate here - the useEffect will catch the user state change
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to sign in'
+      // Use enhanced error handling
+      const { getUserFriendlyMessage } = await import('@/lib/error-handler')
+      const errorMessage = getUserFriendlyMessage(err) || err.message || 'Failed to sign in'
       
       // Check if error response contains lockout information
       if (err.response?.data || err.data) {
@@ -118,8 +122,27 @@ export function Login() {
     return <Navigate to={isAdmin() ? '/admin/dashboard' : '/dashboard'} replace />
   }
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const breadcrumbs = [
+    { name: 'Home', url: baseUrl },
+    { name: 'Login', url: currentUrl },
+  ]
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title="Login - GritSync | NCLEX Processing Agency"
+        description="Sign in to your GritSync account to access your NCLEX applications, track status, manage documents, and process payments. Secure login for nurses and clients."
+        keywords="login, sign in, NCLEX account, nursing application login, GritSync login"
+        canonicalUrl={currentUrl}
+        ogTitle="Login - GritSync | NCLEX Processing Agency"
+        ogDescription="Sign in to your GritSync account to access your NCLEX applications and track status."
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        noindex={true}
+        structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
+      />
       <Header />
       <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
         <Card className="w-full max-w-md border-0 shadow-xl">
@@ -248,6 +271,7 @@ export function Login() {
           </div>
         </Card>
       </main>
+      <Footer />
     </div>
   )
 }

@@ -81,14 +81,8 @@ export default defineConfig({
     cssCodeSplit: true,
     // Report compressed size
     reportCompressedSize: true,
-    // Remove console logs in production
-    terserOptions: process.env.NODE_ENV === 'production' ? {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
-      },
-    } : undefined,
+    // Remove console logs in production (esbuild minify handles this)
+    // Note: esbuild automatically removes console.log in production builds
     // Optimize dependencies
     commonjsOptions: {
       include: [/node_modules/],

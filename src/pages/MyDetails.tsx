@@ -10,8 +10,8 @@ import { useToast } from '@/components/ui/Toast'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, notificationsAPI } from '@/lib/api'
-import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
-import { User, Mail, Calendar, Shield, Edit2, Save, X, FileText, MapPin, ArrowLeft, CheckCircle2, Building2, Award, Sparkles, School, Info, Camera, Upload, AlertCircle } from 'lucide-react'
+import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark, getAvatarDesigns } from '@/lib/avatar'
+import { User, Mail, Calendar, Shield, Edit2, Save, X, FileText, MapPin, ArrowLeft, CheckCircle2, Building2, Award, Sparkles, School, Info, Camera, Upload, AlertCircle, Trash2, Palette } from 'lucide-react'
 import { getSignedFileUrl } from '@/lib/supabase-api'
 import { supabase } from '@/lib/supabase'
 import { cn, getFullNameWithMiddle } from '@/lib/utils'
@@ -506,6 +506,10 @@ export function MyDetails() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<{ file: File, previewUrl: string } | null>(null)
+  const [defaultAvatarDesign, setDefaultAvatarDesign] = useState<string>('default')
+  const [deletingAvatar, setDeletingAvatar] = useState(false)
+  const [showDesignModal, setShowDesignModal] = useState(false)
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
 
   // Check and send profile completion reminders
   const checkAndSendReminders = async () => {
@@ -640,24 +644,38 @@ export function MyDetails() {
 
   async function fetchDetails() {
     try {
-      // Fetch avatar from users table (separate from 2x2 picture)
+      // Fetch avatar and default design from users table (separate from 2x2 picture)
       try {
         const { data: userData } = await supabase
           .from('users')
-          .select('avatar_path')
+          .select('avatar_path, default_avatar_design')
           .eq('id', user?.id || '')
           .single()
         
-        const typedUserData = userData as { avatar_path?: string } | null
+        const typedUserData = userData as { avatar_path?: string; default_avatar_design?: string | null } | null
         if (typedUserData?.avatar_path) {
           const url = await getSignedFileUrl(typedUserData.avatar_path)
           setAvatarUrl(url)
         } else {
           setAvatarUrl(null)
         }
+        
+        // Set default avatar design and cache it
+        const design = typedUserData?.default_avatar_design || 'default'
+        setDefaultAvatarDesign(design)
+        
+        // Cache the design in localStorage
+        if (user?.id) {
+          try {
+            localStorage.setItem(`default_avatar_design_${user.id}`, design)
+          } catch {
+            // Ignore localStorage errors
+          }
+        }
       } catch {
         // Could not load avatar
         setAvatarUrl(null)
+        setDefaultAvatarDesign('default')
       }
 
       const details = await userDetailsAPI.get()
@@ -917,6 +935,89 @@ export function MyDetails() {
       URL.revokeObjectURL(avatarPreview.previewUrl)
     }
     setAvatarPreview(null)
+  }
+
+  const handleDeleteAvatar = () => {
+    if (!user || !avatarUrl) return
+    setShowDeleteConfirmModal(true)
+  }
+
+  const confirmDeleteAvatar = async () => {
+    if (!user || !avatarUrl) return
+
+    setDeletingAvatar(true)
+    setShowDeleteConfirmModal(false)
+    try {
+      // Get current avatar path
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('avatar_path')
+        .eq('id', user.id)
+        .single()
+      
+      const typedCurrentUser = currentUser as { avatar_path?: string } | null
+      
+      // Delete file from storage if exists
+      if (typedCurrentUser?.avatar_path) {
+        try {
+          await supabase.storage
+            .from('documents')
+            .remove([typedCurrentUser.avatar_path])
+        } catch {
+          // Could not delete file, continue anyway
+        }
+      }
+      
+      // Update users table to remove avatar_path
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_path: null })
+        .eq('id', user.id)
+      
+      if (updateError) throw updateError
+      
+      showToast('Avatar deleted successfully!', 'success')
+      setAvatarUrl(null)
+      
+      // Refresh avatar
+      await fetchDetails()
+      // Refresh user context
+      refreshUser()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete avatar', 'error')
+    } finally {
+      setDeletingAvatar(false)
+    }
+  }
+
+  const handleDesignChange = async (design: string) => {
+    if (!user) return
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ default_avatar_design: design })
+        .eq('id', user.id)
+      
+      if (error) throw error
+      
+      setDefaultAvatarDesign(design)
+      
+      // Cache the design in localStorage so Header can use it immediately
+      try {
+        localStorage.setItem(`default_avatar_design_${user.id}`, design)
+      } catch {
+        // Ignore localStorage errors
+      }
+      
+      setShowDesignModal(false)
+      showToast('Default avatar design updated!', 'success')
+      
+      // Refresh user context
+      refreshUser()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to update avatar design', 'error')
+    }
   }
 
   const handleSave = async () => {
@@ -1299,10 +1400,10 @@ export function MyDetails() {
                   return (
                     <div className={cn(
                       "w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold flex-shrink-0 shadow-lg overflow-hidden",
-                      !avatarUrl && getAvatarColor(fullNameForAvatar),
-                      !avatarUrl && getAvatarColorDark(fullNameForAvatar),
-                      !avatarUrl && getAvatarTextColor(fullNameForAvatar),
-                      !avatarUrl && getAvatarTextColorDark(fullNameForAvatar)
+                      !avatarUrl && getAvatarColor(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarColorDark(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarTextColor(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarTextColorDark(fullNameForAvatar, defaultAvatarDesign)
                     )}>
                       {avatarUrl ? (
                         <img 
@@ -1316,25 +1417,64 @@ export function MyDetails() {
                     </div>
                   )
                 })()}
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarUpload}
-                      disabled={uploadingAvatar}
-                    />
-                    {uploadingAvatar ? (
-                      <Loading className="text-white" />
-                    ) : (
-                      <Camera className="h-6 w-6 text-white" />
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 rounded-full transition-opacity">
+                    <label className="cursor-pointer p-2 hover:bg-black/20 rounded-full transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAvatarUpload}
+                        disabled={uploadingAvatar || deletingAvatar}
+                      />
+                      {uploadingAvatar ? (
+                        <Loading className="text-white h-5 w-5" />
+                      ) : (
+                        <Camera className="h-5 w-5 text-white" />
+                      )}
+                    </label>
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteAvatar}
+                        disabled={deletingAvatar}
+                        className="cursor-pointer p-2 hover:bg-red-500/50 rounded-full transition-colors"
+                        title="Delete avatar"
+                      >
+                        {deletingAvatar ? (
+                          <Loading className="text-white h-5 w-5" />
+                        ) : (
+                          <Trash2 className="h-5 w-5 text-white" />
+                        )}
+                      </button>
                     )}
-                  </label>
+                    {!avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDesignModal(true)}
+                        className="cursor-pointer p-2 hover:bg-primary-500/50 rounded-full transition-colors"
+                        title="Choose avatar design"
+                      >
+                        <Palette className="h-5 w-5 text-white" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                    {getFullNameWithMiddle(firstName, middleName, lastName, '') || 'User'}
-                  </h2>
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      {getFullNameWithMiddle(firstName, middleName, lastName, '') || 'User'}
+                    </h2>
+                    {!avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDesignModal(true)}
+                        className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title="Change avatar design"
+                      >
+                        <Palette className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
                     <Mail className="h-4 w-4 text-gray-400" />
                     <p className="text-gray-600 dark:text-gray-400">
@@ -2639,6 +2779,153 @@ export function MyDetails() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Avatar Design Selection Modal */}
+      <Modal
+        isOpen={showDesignModal}
+        onClose={() => setShowDesignModal(false)}
+        title="Choose Default Avatar Design"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Select a design style for your default avatar. This will be used when you don't have an uploaded avatar.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            {getAvatarDesigns().map((design) => {
+              const fullNameForAvatar = [firstName, lastName].filter(Boolean).join(' ') || user?.email || ''
+              const isSelected = defaultAvatarDesign === design.value
+              
+              return (
+                <button
+                  key={design.value}
+                  type="button"
+                  onClick={() => handleDesignChange(design.value)}
+                  className={cn(
+                    "p-4 rounded-lg border-2 transition-all",
+                    isSelected
+                      ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20"
+                      : "border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700"
+                  )}
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <div className={cn(
+                      "w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold shadow-md",
+                      getAvatarColor(fullNameForAvatar, design.value),
+                      getAvatarColorDark(fullNameForAvatar, design.value),
+                      getAvatarTextColor(fullNameForAvatar, design.value),
+                      getAvatarTextColorDark(fullNameForAvatar, design.value)
+                    )}>
+                      {getInitials(fullNameForAvatar)}
+                    </div>
+                    <div className="text-center">
+                      <div className={cn(
+                        "font-semibold text-sm mb-1",
+                        isSelected ? "text-primary-700 dark:text-primary-300" : "text-gray-900 dark:text-gray-100"
+                      )}>
+                        {design.label}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {design.description}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={() => setShowDesignModal(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Avatar Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteConfirmModal}
+        onClose={() => setShowDeleteConfirmModal(false)}
+        title="Delete Avatar"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                Are you sure you want to delete your avatar?
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                This action cannot be undone. Your uploaded avatar will be permanently deleted, and the default avatar will be used instead.
+              </p>
+            </div>
+          </div>
+
+          {avatarUrl && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
+                <img 
+                  src={avatarUrl} 
+                  alt="Current avatar" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Current Avatar
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  This will be replaced with your default avatar design
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirmModal(false)}
+              disabled={deletingAvatar}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={confirmDeleteAvatar}
+              disabled={deletingAvatar}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deletingAvatar ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Avatar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

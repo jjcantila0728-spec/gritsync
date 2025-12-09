@@ -1,10 +1,53 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Shield, ArrowLeft } from 'lucide-react'
 import { Button } from '../components/ui/Button'
+import { Footer } from '@/components/Footer'
+import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
+import { generalSettings } from '@/lib/settings'
 
 export function PrivacyPolicy() {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const breadcrumbs = [
+    { name: 'Home', url: baseUrl },
+    { name: 'Privacy Policy', url: currentUrl },
+  ]
+  const [phoneNumber, setPhoneNumber] = useState('+1 (509) 270-3437')
+
+  useEffect(() => {
+    const loadPhoneNumber = async () => {
+      try {
+        const phone = await generalSettings.getPhoneNumber()
+        setPhoneNumber(phone)
+      } catch (error) {
+        console.error('Error loading phone number:', error)
+      }
+    }
+    loadPhoneNumber()
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SEO
+        title="Privacy Policy - GritSync | NCLEX Processing Agency"
+        description="Read GritSync's Privacy Policy. Learn how we collect, use, disclose, and safeguard your information when using our NCLEX application processing services."
+        keywords="privacy policy, data protection, privacy, NCLEX agency privacy, data security, GDPR"
+        canonicalUrl={currentUrl}
+        ogTitle="Privacy Policy - GritSync"
+        ogDescription="Read GritSync's Privacy Policy. Learn how we collect, use, disclose, and safeguard your information."
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        structuredData={[
+          generateBreadcrumbSchema(breadcrumbs),
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            name: 'Privacy Policy',
+            description: 'Privacy Policy for GritSync NCLEX application processing services',
+          },
+        ]}
+      />
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto px-4 py-4">
@@ -262,7 +305,7 @@ export function PrivacyPolicy() {
                   <strong>Email:</strong> office@gritsync.com
                 </p>
                 <p className="text-gray-700 dark:text-gray-300 mb-2">
-                  <strong>Phone:</strong> +1 509 270 3437
+                  <strong>Phone:</strong> {phoneNumber}
                 </p>
                 <p className="text-gray-700 dark:text-gray-300">
                   <strong>Service:</strong> NCLEX Application Processing
@@ -308,6 +351,7 @@ export function PrivacyPolicy() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

@@ -81,6 +81,7 @@ export function AdminQuoteManagement() {
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [serviceDeleteConfirm, setServiceDeleteConfirm] = useState<string | null>(null)
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null)
+  const [selectedQuotes, setSelectedQuotes] = useState<Set<string>>(new Set())
   const channelRef = useRef<RealtimeChannel | null>(null)
 
   // Get opened quotes from localStorage
@@ -102,7 +103,13 @@ export function AdminQuoteManagement() {
     window.dispatchEvent(new CustomEvent('quotesUpdated'))
   }
 
-  // Removed unused _unopenedQuotesCount
+  // Calculate opened and unopened counts
+  const getQuoteCounts = () => {
+    const opened = getOpenedQuotes()
+    const unopened = quotations.filter(q => !opened.has(q.id)).length
+    const openedCount = quotations.filter(q => opened.has(q.id)).length
+    return { unopened, opened: openedCount, total: quotations.length }
+  }
 
   useEffect(() => {
     if (!isAdmin()) {
@@ -182,7 +189,21 @@ export function AdminQuoteManagement() {
       } else if (eventType === 'DELETE' && oldRecord) {
         // Quotation deleted - remove from list
         setQuotations((prev) => prev.filter((q) => q.id !== oldRecord.id))
+        
+        // Remove from selected quotes if it was selected
+        setSelectedQuotes(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(oldRecord.id)
+          return newSet
+        })
+        
+        // Remove from opened quotes in localStorage
+        const opened = getOpenedQuotes()
+        opened.delete(oldRecord.id)
+        localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+        
         showToast('Quotation deleted', 'info')
+        window.dispatchEvent(new CustomEvent('quotesUpdated'))
       }
     } catch (error) {
       console.error('Error handling real-time quotation update:', error)
@@ -285,30 +306,164 @@ export function AdminQuoteManagement() {
     // Store the quote to restore if deletion fails
     const quoteToDelete = quotations.find(q => q.id === id)
     
-    // Optimistically remove from state immediately
-    setQuotations(prev => prev.filter(q => q.id !== id))
     setDeleteConfirm(null)
     
-    try {
-      await quotationsAPI.delete(id)
-      showToast('Quotation deleted successfully', 'success')
-      // Refresh to ensure consistency (real-time updates might have already handled it)
-      fetchQuotations()
-    } catch (error: any) {
-      // Restore the quote if deletion failed
-      if (quoteToDelete) {
-        setQuotations(prev => {
-          // Check if it's not already in the list (might have been re-added by real-time)
-          if (!prev.find(q => q.id === id)) {
-            return [...prev, quoteToDelete].sort((a, b) => 
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            )
-          }
-          return prev
-        })
-      }
-      showToast(error.message || 'Failed to delete quotation', 'error')
+    // Verify admin status before attempting deletion
+    if (!isAdmin()) {
+      showToast('You do not have permission to delete quotations', 'error')
+      return
     }
+    
+    try {
+      // Actually delete from database first (don't do optimistic update)
+      const deletedData = await quotationsAPI.delete(id)
+      
+      if (!deletedData || deletedData.length === 0) {
+        throw new Error('Deletion failed: No data returned from server')
+      }
+      
+      // Only remove from state after successful deletion
+      setQuotations(prev => prev.filter(q => q.id !== id))
+      
+      // Remove from selected quotes if it was selected
+      setSelectedQuotes(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(id)
+        return newSet
+      })
+      
+      // Remove from opened quotes in localStorage
+      const opened = getOpenedQuotes()
+      opened.delete(id)
+      localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+      
+      showToast('Quotation deleted successfully', 'success')
+      window.dispatchEvent(new CustomEvent('quotesUpdated'))
+      
+      // Verify deletion by fetching again after a short delay
+      setTimeout(async () => {
+        try {
+          const { data: verify } = await quotationsAPI.getById(id)
+          if (verify) {
+            console.error('WARNING: Quotation still exists after deletion!', id)
+            showToast('Warning: Quotation may not have been fully deleted. Please refresh the page.', 'warning')
+            // Re-add to list if it still exists
+            setQuotations(prev => {
+              if (!prev.find(q => q.id === id) && quoteToDelete) {
+                return [...prev, quoteToDelete].sort((a, b) => 
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                )
+              }
+              return prev
+            })
+          }
+        } catch (verifyError: any) {
+          // Good - quotation doesn't exist (404 is expected)
+          if (verifyError.message && !verifyError.message.includes('not found')) {
+            console.error('Error verifying deletion:', verifyError)
+          }
+        }
+      }, 1000)
+      
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      showToast(error.message || 'Failed to delete quotation. Please check your permissions.', 'error')
+      // Don't restore optimistically - the quote is still in the list
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedQuotes.size === 0) return
+    
+    // Verify admin status before attempting deletion
+    if (!isAdmin()) {
+      showToast('You do not have permission to delete quotations', 'error')
+      return
+    }
+    
+    const idsToDelete = Array.from(selectedQuotes)
+    const quotesToDelete = quotations.filter(q => idsToDelete.includes(q.id))
+    
+    // Don't optimistically remove - wait for actual deletion
+    const originalQuotations = [...quotations]
+    
+    try {
+      // Delete all selected quotations
+      const deleteResults = await Promise.allSettled(
+        idsToDelete.map(id => quotationsAPI.delete(id))
+      )
+      
+      // Check which deletions succeeded
+      const successfulDeletions: string[] = []
+      const failedDeletions: string[] = []
+      
+      deleteResults.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
+          successfulDeletions.push(idsToDelete[index])
+        } else {
+          failedDeletions.push(idsToDelete[index])
+        }
+      })
+      
+      // Remove only successfully deleted quotes from state
+      if (successfulDeletions.length > 0) {
+        setQuotations(prev => prev.filter(q => !successfulDeletions.includes(q.id)))
+        
+        // Remove from opened quotes in localStorage
+        const opened = getOpenedQuotes()
+        successfulDeletions.forEach(id => opened.delete(id))
+        localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+      }
+      
+      // Clear selection
+      setSelectedQuotes(new Set())
+      
+      if (failedDeletions.length > 0) {
+        showToast(
+          `Deleted ${successfulDeletions.length} quotation(s), but ${failedDeletions.length} failed. Please check your permissions.`,
+          'warning'
+        )
+      } else {
+        showToast(`Successfully deleted ${successfulDeletions.length} quotation(s)`, 'success')
+      }
+      
+      window.dispatchEvent(new CustomEvent('quotesUpdated'))
+      
+    } catch (error: any) {
+      console.error('Bulk delete error:', error)
+      showToast(error.message || 'Failed to delete quotations. Please check your permissions.', 'error')
+      // Don't restore - quotes are still in the list
+    }
+  }
+
+  const handleClearAll = () => {
+    const opened = getOpenedQuotes()
+    quotations.forEach(q => opened.add(q.id))
+    localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+    window.dispatchEvent(new CustomEvent('quotesUpdated'))
+    showToast('All quotations marked as opened', 'success')
+    // Force re-render
+    setQuotations(prev => [...prev])
+  }
+
+  const handleSelectAll = () => {
+    if (selectedQuotes.size === filteredQuotations.length) {
+      setSelectedQuotes(new Set())
+    } else {
+      setSelectedQuotes(new Set(filteredQuotations.map(q => q.id)))
+    }
+  }
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedQuotes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
   }
 
   const handleUpdate = async () => {
@@ -751,19 +906,58 @@ export function AdminQuoteManagement() {
             </Card>
           )}
 
-          {/* Filters */}
+          {/* Filters and Actions */}
           <Card className="mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search by ID, description, email, or client name..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search by ID, description, email, or client name..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 dark:text-gray-400">Total:</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{getQuoteCounts().total}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 dark:text-gray-400">Opened:</span>
+                    <span className="font-semibold text-green-600 dark:text-green-400">{getQuoteCounts().opened}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 dark:text-gray-400">Unopened:</span>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{getQuoteCounts().unopened}</span>
+                  </div>
+                </div>
+                <div className="flex-1" />
+                <div className="flex items-center gap-2">
+                  {selectedQuotes.size > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeleteSelected}
+                      className="text-red-600 hover:text-red-700 dark:text-red-400"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedQuotes.size})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearAll}
+                  >
+                    Clear All (Mark as Opened)
+                  </Button>
                 </div>
               </div>
             </div>
@@ -781,12 +975,26 @@ export function AdminQuoteManagement() {
                 </div>
               </Card>
             ) : (
-              filteredQuotations.map((quote, index) => {
-                const isExpanded = expandedQuoteId === quote.id
-                const isOpened = getOpenedQuotes().has(quote.id)
-                
-                return (
-                  <Card key={quote.id}>
+              <>
+                {filteredQuotations.length > 0 && (
+                  <div className="flex items-center gap-2 mb-2 px-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedQuotes.size === filteredQuotations.length && filteredQuotations.length > 0}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      Select All ({filteredQuotations.length} quotations)
+                    </span>
+                  </div>
+                )}
+                {filteredQuotations.map((quote, index) => {
+                  const isExpanded = expandedQuoteId === quote.id
+                  const isOpened = getOpenedQuotes().has(quote.id)
+                  
+                  return (
+                    <Card key={quote.id}>
                     {editingQuote?.id === quote.id ? (
                       <EditQuoteForm
                         quote={editingQuote}
@@ -799,7 +1007,12 @@ export function AdminQuoteManagement() {
                         {/* Single line summary - always visible */}
                         <div 
                           className="flex items-center justify-between gap-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 -m-2 rounded transition-colors"
-                          onClick={() => {
+                          onClick={(e) => {
+                            // Don't expand/collapse if clicking on checkbox or delete button
+                            if ((e.target as HTMLElement).closest('input[type="checkbox"]') || 
+                                (e.target as HTMLElement).closest('button')) {
+                              return
+                            }
                             if (isExpanded) {
                               setExpandedQuoteId(null)
                             } else {
@@ -809,6 +1022,18 @@ export function AdminQuoteManagement() {
                           }}
                         >
                           <div className="flex-1 flex items-center gap-3 min-w-0">
+                            <div className="flex-shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={selectedQuotes.has(quote.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation()
+                                  handleToggleSelect(quote.id)
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
+                              />
+                            </div>
                             <div className="flex-shrink-0 w-8 text-center text-gray-500 dark:text-gray-500 text-sm font-medium">
                               {index + 1}
                             </div>
@@ -943,6 +1168,7 @@ export function AdminQuoteManagement() {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  markQuoteAsOpened(quote.id)
                                   window.open(`/quotations/${quote.id}`, '_blank', 'noopener,noreferrer')
                                 }}
                               >
@@ -1000,8 +1226,9 @@ export function AdminQuoteManagement() {
                       </>
                     )}
                   </Card>
-                )
-              })
+                  )
+                })}
+              </>
             )}
           </div>
 

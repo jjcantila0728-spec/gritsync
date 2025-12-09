@@ -47,7 +47,8 @@ export function NotificationManagement() {
     try {
       setLoading(true)
       
-      // Fetch notifications with user information
+      // Optimize: Use pagination and limit initial fetch
+      // Fetch notifications with user information using optimized query
       const { data, error } = await supabase
         .from('notifications')
         .select(`
@@ -60,7 +61,7 @@ export function NotificationManagement() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(100) // Keep limit for admin view, but query is now optimized with indexes
 
       if (error) throw error
 

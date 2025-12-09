@@ -550,18 +550,18 @@ export function AdminApplicationPayments() {
                 </h2>
               </div>
 
-              <Card className="p-6">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+              <Card className="p-3 sm:p-6">
+                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                  <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Type</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Amount</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Method</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Admin Note</th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Proof of Payment</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Type</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Amount</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Method</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Admin Note</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Proof of Payment</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -574,18 +574,18 @@ export function AdminApplicationPayments() {
                         
                         return (
                           <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
-                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                               {formatDate(payment.created_at, true)}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
+                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-900 dark:text-gray-100">
                               {payment.payment_type === 'step1' ? 'Step 1' : 
                                payment.payment_type === 'step2' ? (application?.payment_type === 'retake' ? 'Retake' : 'Step 2') : 
                                'Full'}
                             </td>
-                            <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                               {formatCurrency(payment.amount)}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-2 sm:px-4">
                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                                 payment.status === 'paid' 
                                   ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
@@ -601,10 +601,10 @@ export function AdminApplicationPayments() {
                                 {payment.status.charAt(0).toUpperCase() + payment.status.slice(1).replace('_', ' ')}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 capitalize">
+                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400 capitalize">
                               {payment.payment_method || 'N/A'}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 max-w-xs">
+                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400 max-w-xs">
                               {adminNote ? (
                                 <span className="text-gray-900 dark:text-gray-100" title={adminNote}>
                                   {adminNote.length > 50 ? `${adminNote.substring(0, 50)}...` : adminNote}
@@ -613,7 +613,7 @@ export function AdminApplicationPayments() {
                                 <span className="text-gray-400 dark:text-gray-500 italic">—</span>
                               )}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-2 sm:px-4">
                               {payment.proof_of_payment_file_path ? (
                                 <Button
                                   variant="ghost"

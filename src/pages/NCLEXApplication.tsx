@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { applicationsAPI, userDetailsAPI, userDocumentsAPI, getSignedFileUrl, applicationPaymentsAPI, servicesAPI } from '@/lib/api'
+import { getCachedSignedUrl } from '@/lib/image-cache'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -686,7 +687,11 @@ export function NCLEXApplication() {
         return
       }
 
-      getSignedFileUrl(filePath, 3600)
+      getCachedSignedUrl(
+        filePath,
+        (path) => getSignedFileUrl(path, 3600),
+        3600000 // Cache for 1 hour
+      )
         .then(url => {
           if (typeof url === 'string') {
             setImageSrc(url)

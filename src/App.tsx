@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loading } from './components/ui/Loading'
 import { MaintenanceMode } from './components/MaintenanceMode'
 import { SessionTimeout } from './components/SessionTimeout'
+import { ScrollToTop } from './components/ScrollToTop'
 
 // Lazy load pages for better performance and code splitting
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })))
@@ -39,6 +40,16 @@ const Documents = lazy(() => import('./pages/Documents').then(m => ({ default: m
 const TestSupabase = lazy(() => import('./pages/TestSupabase').then(m => ({ default: m.TestSupabase })))
 const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })))
+const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })))
+const NCLEXSponsorship = lazy(() => import('./pages/NCLEXSponsorship').then(m => ({ default: m.NCLEXSponsorship })))
+const SponsorshipLanding = lazy(() => import('./pages/SponsorshipLanding').then(m => ({ default: m.SponsorshipLanding })))
+const Donate = lazy(() => import('./pages/Donate').then(m => ({ default: m.Donate })))
+const AdminSponsorships = lazy(() => import('./pages/AdminSponsorships').then(m => ({ default: m.AdminSponsorships })))
+const AdminDonations = lazy(() => import('./pages/AdminDonations').then(m => ({ default: m.AdminDonations })))
+const Career = lazy(() => import('./pages/Career').then(m => ({ default: m.Career })))
+const CareerListing = lazy(() => import('./pages/CareerListing').then(m => ({ default: m.CareerListing })))
+const AdminCareers = lazy(() => import('./pages/AdminCareers').then(m => ({ default: m.AdminCareers })))
+const AdminPartnerAgencies = lazy(() => import('./pages/AdminPartnerAgencies').then(m => ({ default: m.AdminPartnerAgencies })))
 
 // Loading fallback component
 function PageLoader() {
@@ -184,6 +195,10 @@ function AppRoutes() {
         />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/donate" element={<Donate />} />
+        <Route path="/career/apply" element={<Career />} />
+        <Route path="/career" element={<CareerListing />} />
         <Route path="/test-supabase" element={<TestSupabase />} />
       
       <Route
@@ -201,6 +216,14 @@ function AppRoutes() {
             <NCLEXApplication />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/sponsorship/apply"
+        element={<NCLEXSponsorship />}
+      />
+      <Route
+        path="/sponsorship"
+        element={<SponsorshipLanding />}
       />
       <Route
         path="/tracking"
@@ -374,6 +397,38 @@ function AppRoutes() {
           </AdminRoute>
         }
       />
+      <Route
+        path="/admin/sponsorships"
+        element={
+          <AdminRoute>
+            <AdminSponsorships />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/donations"
+        element={
+          <AdminRoute>
+            <AdminDonations />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/careers"
+        element={
+          <AdminRoute>
+            <AdminCareers />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/partner-agencies"
+        element={
+          <AdminRoute>
+            <AdminPartnerAgencies />
+          </AdminRoute>
+        }
+      />
       </Routes>
     </Suspense>
   )
@@ -392,6 +447,7 @@ function App() {
                   v7_relativeSplatPath: true,
                 }}
               >
+                <ScrollToTop />
                 <AppRoutes />
               </BrowserRouter>
             </ToastProvider>

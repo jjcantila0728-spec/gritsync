@@ -31,35 +31,34 @@ serve(async (req) => {
   }
 
   try {
-    // Check for authorization header
+    // Check for authorization header (optional for donations)
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      throw new Error('Missing authorization header')
-    }
-
+    
     // Create Supabase client
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
+      authHeader ? {
         global: {
           headers: { Authorization: authHeader },
         },
-      }
+      } : {}
     )
 
-    // Get the authenticated user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser()
+    // Get the authenticated user (optional for donations)
+    let user = null
+    if (authHeader) {
+      const {
+        data: { user: authUser },
+        error: userError,
+      } = await supabaseClient.auth.getUser()
 
-    if (userError || !user) {
-      console.error('Auth error:', userError)
-      throw new Error('Unauthorized: Invalid or expired token')
+      if (!userError && authUser) {
+        user = authUser
+      }
     }
 
-    // Get payment details - can be either application_payment or quotation
+    // Get payment details - can be either application_payment, quotation, or donation
     let body: any = {}
     try {
       body = await req.json()
@@ -68,16 +67,38 @@ serve(async (req) => {
       console.error('Error parsing request body:', e)
       throw new Error('Invalid request body')
     }
-    const { payment_id, quotation_id, amount } = body
+    const { payment_id, quotation_id, donation_id, amount } = body
     
-    console.log('Extracted params:', { payment_id, quotation_id, amount })
+    console.log('Extracted params:', { payment_id, quotation_id, donation_id, amount })
 
     let paymentAmount: number
-    let metadata: Record<string, string> = {
-      user_id: user.id,
+    let metadata: Record<string, string> = {}
+    if (user) {
+      metadata.user_id = user.id
     }
 
-    if (quotation_id) {
+    if (donation_id) {
+      // Handle donation payment (can be anonymous, so user might be null)
+      const { data: donation, error: donationError } = await supabaseClient
+        .from('donations')
+        .select('*')
+        .eq('id', donation_id)
+        .single()
+
+      if (donationError || !donation) {
+        throw new Error('Donation not found')
+      }
+
+      paymentAmount = amount ? Math.round(amount) : Math.round(donation.amount * 100)
+      metadata.donation_id = donation_id
+      if (donation.sponsorship_id) {
+        metadata.sponsorship_id = donation.sponsorship_id
+      }
+    } else if (quotation_id) {
+      // Require authentication for quotations
+      if (!user) {
+        throw new Error('Authentication required for quotation payments')
+      }
       // Handle quotation payment
       const { data: quotation, error: quotationError } = await supabaseClient
         .from('quotations')
@@ -92,6 +113,10 @@ serve(async (req) => {
       paymentAmount = amount ? Math.round(amount) : Math.round(quotation.amount * 100)
       metadata.quotation_id = quotation_id
     } else if (payment_id) {
+      // Require authentication for application payments
+      if (!user) {
+        throw new Error('Authentication required for application payments')
+      }
       // Handle application payment
       console.log('Looking for payment:', payment_id, 'for user:', user.id)
       const { data: payment, error: paymentError } = await supabaseClient
@@ -121,7 +146,7 @@ serve(async (req) => {
       metadata.payment_id = payment_id
       metadata.application_id = payment.application_id
     } else {
-      throw new Error('Either payment_id or quotation_id is required')
+      throw new Error('Either payment_id, quotation_id, or donation_id is required')
     }
 
     // Validate Stripe secret key is set
@@ -137,7 +162,12 @@ serve(async (req) => {
     })
 
     // Update record with intent ID
-    if (quotation_id) {
+    if (donation_id) {
+      await supabaseClient
+        .from('donations')
+        .update({ stripe_payment_intent_id: paymentIntent.id })
+        .eq('id', donation_id)
+    } else if (quotation_id) {
       await supabaseClient
         .from('quotations')
         .update({ stripe_payment_intent_id: paymentIntent.id })

@@ -1,5 +1,12 @@
 import { supabase } from './supabase'
 import type { Database } from './database.types'
+import { 
+  handleSupabaseError, 
+  normalizeError, 
+  retryWithBackoff,
+  isRetryableError,
+  type AppError 
+} from './error-handler'
 
 type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
 type Inserts<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
@@ -7,11 +14,60 @@ type Updates<T extends keyof Database['public']['Tables']> = Database['public'][
 
 // Removed unused QueryResult type
 
+/**
+ * Enhanced Supabase query wrapper with error handling and retry logic
+ */
+async function executeQuery<T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  context?: Record<string, any>,
+  retry: boolean = true
+): Promise<T> {
+  const execute = async () => {
+    const { data, error } = await queryFn()
+    
+    if (error) {
+      const normalizedError = normalizeError(error, context)
+      throw normalizedError
+    }
+    
+    if (data === null) {
+      throw normalizeError(new Error('No data returned'), context)
+    }
+    
+    return data
+  }
+
+  if (retry) {
+    try {
+      return await execute()
+    } catch (error: any) {
+      if (isRetryableError(error)) {
+        return await retryWithBackoff(execute, 3, 1000, error)
+      }
+      throw error
+    }
+  }
+
+  return await execute()
+}
+
 // Helper to get current user ID
 async function getCurrentUserId(): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-  return user.id
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) {
+      throw normalizeError(error, { operation: 'getCurrentUserId' })
+    }
+    if (!user) {
+      throw normalizeError(new Error('Not authenticated'), { operation: 'getCurrentUserId' })
+    }
+    return user.id
+  } catch (error: any) {
+    if (error instanceof AppError) {
+      throw error
+    }
+    throw normalizeError(error, { operation: 'getCurrentUserId' })
+  }
 }
 
 // Helper to check if user is admin
@@ -46,7 +102,9 @@ export const applicationsAPI = {
     }
     
     const { data, error } = await query
-    if (error) throw new Error(error.message)
+    if (error) {
+      throw normalizeError(error, { operation: 'applicationsAPI.getAll' })
+    }
     const applications = data || []
     
     // Enhance each application with timeline-based current_progress and next_step
@@ -976,12 +1034,68 @@ export const quotationsAPI = {
   },
 
   delete: async (id: string) => {
-    const { error } = await supabase
+    console.log('[quotationsAPI.delete] Attempting to delete quotation:', id)
+    
+    // First, verify the quotation exists and we can access it
+    const { data: existing, error: fetchError } = await supabase
+      .from('quotations')
+      .select('id, user_id')
+      .eq('id', id)
+      .single()
+    
+    if (fetchError) {
+      console.error('[quotationsAPI.delete] Error fetching quotation:', fetchError)
+      if (fetchError.code !== 'PGRST116') { // PGRST116 = not found
+        throw new Error(`Failed to verify quotation: ${fetchError.message} (Code: ${fetchError.code})`)
+      }
+      throw new Error('Quotation not found')
+    }
+    
+    if (!existing) {
+      throw new Error('Quotation not found or you do not have permission to delete it')
+    }
+    
+    console.log('[quotationsAPI.delete] Quotation found:', existing)
+    
+    // Check if user is admin
+    const adminCheck = await isAdmin()
+    console.log('[quotationsAPI.delete] Is admin:', adminCheck)
+    
+    // Perform the deletion
+    const { data, error } = await supabase
       .from('quotations')
       .delete()
       .eq('id', id)
+      .select() // Return deleted data to verify
     
-    if (error) throw new Error(error.message)
+    if (error) {
+      console.error('[quotationsAPI.delete] Delete error:', error)
+      throw new Error(`Failed to delete quotation: ${error.message} (Code: ${error.code}, Details: ${error.details || 'N/A'})`)
+    }
+    
+    console.log('[quotationsAPI.delete] Delete response:', data)
+    
+    // Verify deletion was successful
+    if (!data || data.length === 0) {
+      console.warn('[quotationsAPI.delete] No data returned from delete, verifying...')
+      // Double-check by trying to fetch it again
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('quotations')
+        .select('id')
+        .eq('id', id)
+        .single()
+      
+      if (!verifyError && verifyData) {
+        console.error('[quotationsAPI.delete] Quotation still exists after deletion!')
+        throw new Error('Deletion appeared to succeed but quotation still exists. This may be a permissions issue. Please check RLS policies.')
+      } else {
+        console.log('[quotationsAPI.delete] Verification passed - quotation is deleted')
+      }
+    } else {
+      console.log('[quotationsAPI.delete] Deletion successful, deleted:', data.length, 'row(s)')
+    }
+    
+    return data
   },
 
   createPaymentIntent: async (quotationId: string, amount: number) => {
@@ -1124,9 +1238,14 @@ export const servicesAPI = {
   },
 }
 
+// In-memory cache for notification counts (per user)
+// This reduces database queries for frequently accessed counts
+const notificationCountCache = new Map<string, { count: number; timestamp: number }>()
+const CACHE_TTL = 30000 // 30 seconds cache TTL
+
 // Notifications API
 export const notificationsAPI = {
-  getAll: async (unreadOnly?: boolean) => {
+  getAll: async (unreadOnly?: boolean, limit?: number) => {
     const userId = await getCurrentUserId()
     
     const query = supabase
@@ -1139,13 +1258,28 @@ export const notificationsAPI = {
       query.eq('read', false)
     }
     
+    // Limit results for better performance (default: 50 for dashboard, unlimited if not specified)
+    if (limit !== undefined) {
+      query.limit(limit)
+    }
+    
     const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
 
-  getUnreadCount: async () => {
+  getUnreadCount: async (forceRefresh = false) => {
     const userId = await getCurrentUserId()
+    
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached = notificationCountCache.get(userId)
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.count
+      }
+    }
+    
+    // Use optimized count query with head: true for better performance
     const { count, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -1153,7 +1287,24 @@ export const notificationsAPI = {
       .eq('read', false)
     
     if (error) throw new Error(error.message)
-    return count || 0
+    const countValue = count || 0
+    
+    // Update cache
+    notificationCountCache.set(userId, {
+      count: countValue,
+      timestamp: Date.now()
+    })
+    
+    return countValue
+  },
+
+  // Invalidate cache for a user (call when notifications change)
+  invalidateCountCache: (userId?: string) => {
+    if (userId) {
+      notificationCountCache.delete(userId)
+    } else {
+      notificationCountCache.clear()
+    }
   },
 
   create: async (
@@ -1185,50 +1336,57 @@ export const notificationsAPI = {
     
     if (error) throw new Error(error.message)
     
+    // Invalidate cache since a new notification was created
+    notificationsAPI.invalidateCountCache(userId)
+    
     // If email notifications are enabled for this type, send email
     if (shouldSendEmail && data) {
-      try {
-        // Get user information for email
-        const { data: userData } = await supabase.auth.getUser()
-        const userEmail = userData?.user?.email
-        
-        if (userEmail) {
-          // Get user's full name if available
-          const { data: userProfile } = await supabase
-            .from('users')
-            .select('first_name, last_name')
-            .eq('id', userId)
-            .single()
+      // Send email asynchronously in the background (don't wait for it to complete)
+      // This prevents blocking the notification creation
+      Promise.resolve().then(async () => {
+        try {
+          // Optimize: Get user email and profile in parallel
+          const [userDataResult, userProfileResult] = await Promise.all([
+            supabase.auth.getUser(),
+            supabase
+              .from('users')
+              .select('first_name, last_name, email')
+              .eq('id', userId)
+              .single()
+          ])
           
-          const profile = userProfile as { first_name?: string; last_name?: string } | null
-          const userName = (profile?.first_name && profile?.last_name 
-                            ? `${profile.first_name} ${profile.last_name}` 
-                            : profile?.first_name || 'User')
+          // Prefer email from users table, fallback to auth
+          const userEmail = userProfileResult.data?.email || userDataResult.data?.user?.email
           
-          // Import email service dynamically
-          const { sendNotificationEmail } = await import('./email-service')
-          
-          // Send email asynchronously (don't wait for it to complete)
-          sendNotificationEmail(userEmail, type, {
-            userName,
-            title,
-            message,
-            applicationId,
-          }).catch((emailError) => {
-            console.error('Failed to send notification email:', emailError)
-            // Don't throw - email failure shouldn't break notification creation
-          })
+          if (userEmail) {
+            const profile = userProfileResult.data as { first_name?: string; last_name?: string } | null
+            const userName = (profile?.first_name && profile?.last_name 
+                              ? `${profile.first_name} ${profile.last_name}` 
+                              : profile?.first_name || 'User')
+            
+            // Import email service dynamically
+            const { sendNotificationEmail } = await import('./email-service')
+            
+            // Send email with error handling
+            await sendNotificationEmail(userEmail, type, {
+              userName,
+              title,
+              message,
+              applicationId,
+            })
+          }
+        } catch (emailError) {
+          console.error('Error sending notification email:', emailError)
+          // Don't throw - email failure shouldn't break notification creation
         }
-      } catch (emailError) {
-        console.error('Error sending notification email:', emailError)
-        // Don't throw - email failure shouldn't break notification creation
-      }
+      })
     }
     
     return data
   },
 
   markAsRead: async (id: string) => {
+    const userId = await getCurrentUserId()
     const { data, error } = await supabase
       .from('notifications')
       .update({ read: true })
@@ -1237,6 +1395,10 @@ export const notificationsAPI = {
       .single()
     
     if (error) throw new Error(error.message)
+    
+    // Invalidate cache since count changed
+    notificationsAPI.invalidateCountCache(userId)
+    
     return data as Tables<'processing_accounts'>
   },
 
@@ -1249,6 +1411,10 @@ export const notificationsAPI = {
       .eq('read', false)
     
     if (error) throw new Error(error.message)
+    
+    // Invalidate cache and set count to 0
+    notificationsAPI.invalidateCountCache(userId)
+    notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
   },
 }
 
@@ -2172,7 +2338,6 @@ export const dashboardAPI = {
       const [
         applications,
         pendingApps,
-        approvedApps,
         completedApps,
         rejectedApps,
         quotations,
@@ -2183,7 +2348,6 @@ export const dashboardAPI = {
       ] = await Promise.all([
         supabase.from('applications').select('*', { count: 'exact', head: true }),
         supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
         supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
         supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
         supabase.from('quotations').select('*', { count: 'exact', head: true }),
@@ -2197,12 +2361,8 @@ export const dashboardAPI = {
       if (completedApps.error) {
         console.error('Error fetching completed apps:', completedApps.error)
       }
-      if (approvedApps.error) {
-        console.error('Error fetching approved apps:', approvedApps.error)
-      }
       
       // Fallback: If count queries fail, fetch all and count manually
-      let approvedCount = approvedApps.count ?? 0
       let completedCount = completedApps.count ?? 0
       
       // If counts are 0 but we suspect there might be data, do a manual count as fallback
@@ -2221,21 +2381,6 @@ export const dashboardAPI = {
         }
       }
       
-      if (approvedCount === 0) {
-        const { data: allApps, error: allAppsError } = await supabase
-          .from('applications')
-          .select('id, status')
-        
-        if (!allAppsError && allApps) {
-          const manualApprovedCount = allApps.filter((app: any) => 
-            app.status === 'completed' || app.status === 'Completed' || app.status === 'approved' || app.status === 'Approved'
-          ).length
-          if (manualApprovedCount > 0) {
-            approvedCount = manualApprovedCount
-          }
-        }
-      }
-      
       // Also check for applications that are completed based on timeline steps
       // (applications with nclex_exam or quick_results steps completed)
       // This handles cases where status might not be 'completed' but the exam is done
@@ -2247,11 +2392,11 @@ export const dashboardAPI = {
       let timelineCompletedAppIds = new Set<string>()
       
       if (!allAppsError && allApps && allApps.length > 0) {
-        // Find applications that are not already marked as completed or approved
+        // Find applications that are not already marked as completed
         const appIdsToCheck = allApps
           .filter((app: any) => {
             const status = app.status?.toLowerCase()
-            return status !== 'completed' && status !== 'approved' && status !== 'rejected'
+            return status !== 'completed' && status !== 'rejected'
           })
           .map((app: any) => app.id)
         
@@ -2300,13 +2445,12 @@ export const dashboardAPI = {
         revenue = payments.data.reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0)
       }
       
-      // Combine approved and completed applications
-      const totalApprovedCompleted = approvedCount + completedCount
+      const totalCompleted = completedCount
       
       return {
         totalApplications: applications.count || 0,
         pendingApplications: pendingCount,
-        approvedApplications: totalApprovedCompleted,
+        completedApplications: totalCompleted,
         rejectedApplications: rejectedApps.count || 0,
         totalQuotations: quotations.count || 0,
         pendingQuotations: pendingQuotes.count || 0,
@@ -2315,7 +2459,7 @@ export const dashboardAPI = {
         revenue: revenue,
         applications: applications.count || 0,
         pending: pendingCount,
-        approved: totalApprovedCompleted,
+        completed: totalCompleted,
         quotations: quotations.count || 0,
       }
     } else {
@@ -2332,21 +2476,20 @@ export const dashboardAPI = {
         revenue = payments.data.reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0)
       }
       
-      // Get approved and completed counts for client
+      // Get completed counts for client
       // We need to check both status and timeline steps to determine completion
       const [, allUserApps] = await Promise.all([
-        supabase.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).in('status', ['completed', 'approved']),
+        supabase.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).eq('status', 'completed'),
         supabase.from('applications').select('id, status').eq('user_id', userId),
       ])
       
-      // Count applications with status 'completed' or 'approved'
-      // Use a Set to avoid double counting if an app has both statuses (shouldn't happen, but safe)
+      // Count applications with status 'completed'
+      // Use a Set to avoid double counting
       const statusCompletedAppIds = new Set<string>()
       const typedAllUserApps = allUserApps.data as Array<{ id?: string; status?: string }> | null
       if (typedAllUserApps) {
         typedAllUserApps.forEach((app: any) => {
-          if (app.status === 'completed' || app.status === 'Completed' || 
-              app.status === 'approved' || app.status === 'Approved') {
+          if (app.status === 'completed' || app.status === 'Completed') {
             statusCompletedAppIds.add(app.id)
           }
         })
@@ -2384,14 +2527,15 @@ export const dashboardAPI = {
         }
       }
       
-      const totalApprovedCompleted = completedCount
+      const totalCompleted = completedCount
       
       return {
         totalApplications: applications.count || 0,
         totalQuotations: quotations.count || 0,
         applications: applications.count || 0,
         quotations: quotations.count || 0,
-        approved: totalApprovedCompleted,
+        completed: totalCompleted,
+        completedApplications: totalCompleted,
         revenue: revenue,
       }
     }
@@ -2691,101 +2835,110 @@ export const applicationPaymentsAPI = {
 
 
   createPaymentIntent: async (paymentId: string) => {
+    const context = { operation: 'applicationPaymentsAPI.createPaymentIntent', paymentId }
+    
     try {
       // Get the current session to ensure we have auth token
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in and try again.')
+        throw normalizeError(
+          sessionError || new Error('Not authenticated. Please log in and try again.'),
+          { ...context, step: 'getSession' }
+        )
       }
       
-      // Call Supabase Edge Function for Stripe payment intent creation
-      // The Supabase client should automatically include the Authorization header
-      const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-        body: { payment_id: paymentId },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      })
-      
-      // Handle Supabase client error (network, auth, etc.)
-      if (error) {
-        // Try to extract error message from response body
-        let errorMessage = 'Failed to connect to payment service'
+      // Call Supabase Edge Function for Stripe payment intent creation with retry logic
+      const executeInvoke = async () => {
+        const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+          body: { payment_id: paymentId },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
         
-        // If context is a Response object, try to read the body
-        if (error.context && error.context instanceof Response) {
-          try {
-            // Try to read the response body
-            const responseText = await error.context.text()
-            
+        if (error) {
+          // Try to extract error message from response body
+          let errorMessage = 'Failed to connect to payment service'
+          
+          // If context is a Response object, try to read the body
+          if (error.context && error.context instanceof Response) {
             try {
-              const errorBody = JSON.parse(responseText)
-              if (errorBody?.error) {
-                errorMessage = typeof errorBody.error === 'string' 
-                  ? errorBody.error 
-                  : errorBody.error.message || errorMessage
-              } else if (errorBody?.message) {
-                errorMessage = errorBody.message
+              const responseText = await error.context.text()
+              
+              try {
+                const errorBody = JSON.parse(responseText)
+                if (errorBody?.error) {
+                  errorMessage = typeof errorBody.error === 'string' 
+                    ? errorBody.error 
+                    : errorBody.error.message || errorMessage
+                } else if (errorBody?.message) {
+                  errorMessage = errorBody.message
+                }
+              } catch (parseError) {
+                // If it's not JSON, use the text as error message if it's meaningful
+                if (responseText && responseText.length < 200) {
+                  errorMessage = responseText
+                }
               }
-            } catch (parseError) {
-              // If it's not JSON, use the text as error message if it's meaningful
-              if (responseText && responseText.length < 200) {
-                errorMessage = responseText
-              }
+            } catch (readError) {
+              // Fall through to use default error message
             }
-          } catch (readError) {
-            console.error('Error reading response body:', readError)
+          }
+          
+          // Try to get error message from other sources
+          if (errorMessage === 'Failed to connect to payment service') {
+            if (error.message && error.message !== 'Edge Function returned a non-2xx status code') {
+              errorMessage = error.message
+            } else if (error.error?.message) {
+              errorMessage = error.error.message
+            }
+          }
+          
+          throw normalizeError(new Error(errorMessage), { ...context, step: 'invokeFunction', originalError: error })
+        }
+        
+        // Handle edge function error response (function executed but returned error)
+        if (data && typeof data === 'object') {
+          if (data.error) {
+            const errorMsg = typeof data.error === 'string' 
+              ? data.error 
+              : data.error.message || data.error.error || 'Payment intent creation failed'
+            throw normalizeError(new Error(errorMsg), { ...context, step: 'processResponse' })
+          }
+          
+          // Edge function returns snake_case, convert to camelCase for consistency
+          const clientSecret = data.client_secret || data.clientSecret
+          const paymentIntentId = data.payment_intent_id || data.paymentIntentId
+          
+          if (!clientSecret) {
+            throw normalizeError(
+              new Error('Payment intent created but no client secret returned. Please contact support.'),
+              { ...context, step: 'validateResponse' }
+            )
+          }
+          
+          return {
+            clientSecret,
+            paymentIntentId,
           }
         }
         
-        // Try to get error message from other sources
-        if (errorMessage === 'Failed to connect to payment service') {
-          if (error.message && error.message !== 'Edge Function returned a non-2xx status code') {
-            errorMessage = error.message
-          } else if (error.error?.message) {
-            errorMessage = error.error.message
-          }
-        }
-        
-        throw new Error(errorMessage)
+        // No data returned
+        throw normalizeError(
+          new Error('No response from payment service. Please try again or contact support.'),
+          { ...context, step: 'validateResponse' }
+        )
       }
       
-      // Handle edge function error response (function executed but returned error)
-      if (data && typeof data === 'object') {
-        if (data.error) {
-          const errorMsg = typeof data.error === 'string' 
-            ? data.error 
-            : data.error.message || data.error.error || 'Payment intent creation failed'
-          throw new Error(errorMsg)
-        }
-        
-        // Edge function returns snake_case, convert to camelCase for consistency
-        const clientSecret = data.client_secret || data.clientSecret
-        const paymentIntentId = data.payment_intent_id || data.paymentIntentId
-        
-        if (!clientSecret) {
-          throw new Error('Payment intent created but no client secret returned. Please contact support.')
-        }
-        
-        return {
-          clientSecret,
-          paymentIntentId,
-        }
-      }
-      
-      // No data returned
-      throw new Error('No response from payment service. Please try again or contact support.')
+      // Execute with retry logic for network errors
+      return await retryWithBackoff(executeInvoke, 3, 2000)
     } catch (err: any) {
-      
-      // If it's already an Error object, re-throw it
-      if (err instanceof Error) {
+      // Re-throw AppError as-is, normalize others
+      if (err instanceof AppError) {
         throw err
       }
-      
-      // Handle different error formats
-      const errorMessage = err?.message || err?.error?.message || err?.error || 'Failed to create payment intent. Please try again or contact support.'
-      throw new Error(errorMessage)
+      throw normalizeError(err, context)
     }
   },
 
@@ -2847,9 +3000,12 @@ export const applicationPaymentsAPI = {
       }
     } else {
       // Stripe card payments are automatically paid
+      // Set status to 'paid' immediately for better UX
+      // Webhook will also update but will check for duplicates
       updateData.status = 'paid'
       if (stripePaymentIntentId) {
         updateData.stripe_payment_intent_id = stripePaymentIntentId
+        updateData.transaction_id = stripePaymentIntentId
       }
     }
 
@@ -2895,6 +3051,8 @@ export const applicationPaymentsAPI = {
     }
     
     // Auto-update timeline steps when payment is completed (status = 'paid')
+    // Note: For Stripe payments, webhook also updates timeline (idempotent upsert)
+    // This ensures timeline is updated even if webhook is delayed
     const typedData = data as unknown as { status?: string } | null
     if (typedData && typedData.status === 'paid') {
       try {
@@ -3521,6 +3679,764 @@ export const trackingAPI = {
     })
     
     return result
+  },
+}
+
+// NCLEX Sponsorships API
+export const sponsorshipsAPI = {
+  getAll: async () => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('nclex_sponsorships')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getById: async (id: string) => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('nclex_sponsorships')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  create: async (sponsorshipData: any) => {
+    // Allow anonymous users to create sponsorships
+    // Try to get user ID if authenticated, otherwise null
+    let userId: string | null = null
+    try {
+      userId = await getCurrentUserId()
+    } catch {
+      // User is not authenticated, allow anonymous sponsorship
+      userId = null
+    }
+    
+    const { data, error } = await supabase
+      .from('nclex_sponsorships')
+      .insert({
+        ...sponsorshipData,
+        user_id: userId,
+      })
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<Tables<'nclex_sponsorships'>>) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      // Non-admins can only update pending sponsorships
+      const { data: existing } = await supabase
+        .from('nclex_sponsorships')
+        .select('status, user_id')
+        .eq('id', id)
+        .single()
+      
+      if (!existing) throw new Error('Sponsorship not found')
+      
+      const userId = await getCurrentUserId()
+      if (existing.user_id !== userId) {
+        throw new Error('Unauthorized')
+      }
+      
+      if (existing.status !== 'pending') {
+        throw new Error('Can only update pending sponsorships')
+      }
+    }
+    
+    const { data, error } = await supabase
+      .from('nclex_sponsorships')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  updateStatus: async (id: string, status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'awarded', adminNotes?: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const userId = await getCurrentUserId()
+    const updates: any = {
+      status,
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+    }
+    
+    if (adminNotes !== undefined) {
+      updates.admin_notes = adminNotes
+    }
+    
+    const { data, error } = await supabase
+      .from('nclex_sponsorships')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { error } = await supabase
+      .from('nclex_sponsorships')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  },
+}
+
+// Donations API
+export const donationsAPI = {
+  getAll: async () => {
+    const admin = await isAdmin()
+    if (!admin) {
+      // Non-admins can only see their own donations
+      const userId = await getCurrentUserId()
+      const { data: user } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .single()
+      
+      if (!user) throw new Error('User not found')
+      
+      const { data, error } = await supabase
+        .from('donations')
+        .select('*')
+        .eq('donor_email', user.email)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw new Error(error.message)
+      return data || []
+    }
+    
+    // Admins can see all donations
+    const { data, error } = await supabase
+      .from('donations')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getById: async (id: string) => {
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('donations')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (!admin) {
+      const userId = await getCurrentUserId()
+      const { data: user } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .single()
+      
+      if (user) {
+        query.eq('donor_email', user.email)
+      }
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  create: async (donationData: any) => {
+    // Anyone can create donations (including anonymous)
+    const { data, error } = await supabase
+      .from('donations')
+      .insert(donationData)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<Tables<'donations'>>) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('donations')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  updateStatus: async (id: string, status: 'pending' | 'completed' | 'failed' | 'refunded') => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('donations')
+      .update({ status })
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  getStats: async () => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('donations')
+      .select('amount, status, currency')
+    
+    if (error) throw new Error(error.message)
+    
+    const donations = data || []
+    const total = donations
+      .filter(d => d.status === 'completed')
+      .reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0)
+    
+    const count = donations.filter(d => d.status === 'completed').length
+    
+    return {
+      total,
+      count,
+      pending: donations.filter(d => d.status === 'pending').length,
+      failed: donations.filter(d => d.status === 'failed').length,
+    }
+  },
+
+  createPaymentIntent: async (donationId: string, amount: number) => {
+    // Get session if available (donations can be anonymous)
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    // Call Supabase Edge Function to create Stripe payment intent
+    const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+      body: { 
+        donation_id: donationId,
+        amount: amount * 100, // Convert to cents
+      },
+      headers: session ? {
+        Authorization: `Bearer ${session.access_token}`,
+      } : {},
+    })
+    
+    if (error) throw new Error(error.message)
+    return data as { client_secret: string; payment_intent_id: string }
+  },
+}
+
+// Partner Agencies API
+export const partnerAgenciesAPI = {
+  getAll: async (activeOnly: boolean = false) => {
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('partner_agencies')
+      .select('*')
+      .order('name', { ascending: true })
+    
+    if (!admin || activeOnly) {
+      query.eq('is_active', true)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getById: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('partner_agencies')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  create: async (agencyData: any) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('partner_agencies')
+      .insert(agencyData)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<any>) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { data, error } = await supabase
+      .from('partner_agencies')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { error } = await supabase
+      .from('partner_agencies')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  },
+}
+
+// Career Applications API
+export const careerApplicationsAPI = {
+  getAll: async () => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('career_applications')
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email,
+          contact_person_name,
+          contact_person_email
+        )
+      `)
+      .order('created_at', { ascending: false })
+    
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getById: async (id: string) => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('career_applications')
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email,
+          contact_person_name,
+          contact_person_email,
+          phone,
+          website
+        )
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  create: async (applicationData: any) => {
+    // Allow anonymous users to create career applications
+    let userId: string | null = null
+    try {
+      userId = await getCurrentUserId()
+    } catch {
+      // User is not authenticated, allow anonymous application
+      userId = null
+    }
+    
+    const { data, error } = await supabase
+      .from('career_applications')
+      .insert({
+        ...applicationData,
+        user_id: userId,
+      })
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    
+    // Increment applications count for the career if career_id is provided
+    if (applicationData.career_id) {
+      try {
+        await supabase.rpc('increment_career_applications', { career_uuid: applicationData.career_id })
+      } catch (err) {
+        // Ignore errors in increment
+        console.error('Error incrementing applications count:', err)
+      }
+    }
+    
+    return data
+  },
+
+  update: async (id: string, updates: Partial<any>) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      // Non-admins can only update pending applications
+      const { data: existing } = await supabase
+        .from('career_applications')
+        .select('status, user_id')
+        .eq('id', id)
+        .single()
+      
+      if (!existing) throw new Error('Career application not found')
+      
+      const userId = await getCurrentUserId()
+      if (existing.user_id !== userId) {
+        throw new Error('Unauthorized')
+      }
+      
+      if (existing.status !== 'pending') {
+        throw new Error('Can only update pending applications')
+      }
+    }
+    
+    const { data, error } = await supabase
+      .from('career_applications')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  updateStatus: async (
+    id: string,
+    status: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected',
+    adminNotes?: string,
+    partnerAgencyId?: string
+  ) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const userId = await getCurrentUserId()
+    const updates: any = {
+      status,
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+    }
+    
+    if (adminNotes !== undefined) {
+      updates.admin_notes = adminNotes
+    }
+    
+    if (partnerAgencyId !== undefined) {
+      updates.partner_agency_id = partnerAgencyId
+      if (status === 'forwarded') {
+        updates.forwarded_to_agency_at = new Date().toISOString()
+      }
+    }
+    
+    const { data, error } = await supabase
+      .from('career_applications')
+      .update(updates)
+      .eq('id', id)
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email,
+          contact_person_name,
+          contact_person_email,
+          phone,
+          website
+        )
+      `)
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  forwardToAgency: async (id: string, partnerAgencyId: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    // Get application and agency details
+    const { data: application } = await supabase
+      .from('career_applications')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (!application) throw new Error('Application not found')
+    
+    const { data: agency } = await supabase
+      .from('partner_agencies')
+      .select('*')
+      .eq('id', partnerAgencyId)
+      .single()
+    
+    if (!agency) throw new Error('Partner agency not found')
+    
+    // Update application status
+    const userId = await getCurrentUserId()
+    const { data, error } = await supabase
+      .from('career_applications')
+      .update({
+        status: 'forwarded',
+        partner_agency_id: partnerAgencyId,
+        forwarded_to_agency_at: new Date().toISOString(),
+        forwarded_email_sent: false,
+        reviewed_by: userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email,
+          contact_person_name,
+          contact_person_email,
+          phone,
+          website
+        )
+      `)
+      .single()
+    
+    if (error) throw new Error(error.message)
+    
+    // Send email to partner agency (async, don't wait)
+    try {
+      const { sendEmail } = await import('./email-service')
+      const emailSubject = `New Career Application from GritSync - ${application.first_name} ${application.last_name}`
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2563eb; margin-bottom: 20px;">New Career Application</h2>
+          <p>Dear ${agency.contact_person_name || agency.name},</p>
+          <p>We have received a new career application that has been forwarded to your agency.</p>
+          
+          <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #111827; margin-bottom: 15px;">Applicant Information</h3>
+            <p><strong>Name:</strong> ${application.first_name} ${application.last_name}</p>
+            <p><strong>Email:</strong> ${application.email}</p>
+            <p><strong>Phone:</strong> ${application.mobile_number}</p>
+            ${application.date_of_birth ? `<p><strong>Date of Birth:</strong> ${application.date_of_birth}</p>` : ''}
+            ${application.country ? `<p><strong>Country:</strong> ${application.country}</p>` : ''}
+            ${application.nursing_school ? `<p><strong>Nursing School:</strong> ${application.nursing_school}</p>` : ''}
+            ${application.graduation_date ? `<p><strong>Graduation Date:</strong> ${application.graduation_date}</p>` : ''}
+            ${application.years_of_experience ? `<p><strong>Years of Experience:</strong> ${application.years_of_experience}</p>` : ''}
+            ${application.license_number ? `<p><strong>License Number:</strong> ${application.license_number}</p>` : ''}
+            ${application.license_state ? `<p><strong>License State:</strong> ${application.license_state}</p>` : ''}
+          </div>
+          
+          <p>Please review this application and contact the applicant directly if interested.</p>
+          <p>Best regards,<br>GritSync Team</p>
+        </div>
+      `
+      
+      const recipientEmail = agency.contact_person_email || agency.email
+      sendEmail({
+        to: recipientEmail,
+        subject: emailSubject,
+        html: emailHtml,
+        text: `New Career Application from GritSync\n\nApplicant: ${application.first_name} ${application.last_name}\nEmail: ${application.email}\nPhone: ${application.mobile_number}`,
+      }).catch((emailError) => {
+        console.error('Failed to send forwarding email:', emailError)
+      })
+      
+      // Mark email as sent
+      await supabase
+        .from('career_applications')
+        .update({ forwarded_email_sent: true })
+        .eq('id', id)
+    } catch (emailError) {
+      console.error('Error sending forwarding email:', emailError)
+      // Don't throw - email failure shouldn't break the forwarding
+    }
+    
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) throw new Error('Admin access required')
+    
+    const { error } = await supabase
+      .from('career_applications')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  },
+}
+
+// Careers API
+export const careersAPI = {
+  getAll: async (includeInactive: boolean = false) => {
+    const admin = await isAdmin()
+    
+    const query = supabase
+      .from('careers')
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email
+        )
+      `)
+      .order('created_at', { ascending: false })
+    
+    // Only show active careers to non-admins
+    if (!admin && !includeInactive) {
+      query.eq('is_active', true)
+    }
+    
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getById: async (id: string) => {
+    const { data, error } = await supabase
+      .from('careers')
+      .select(`
+        *,
+        partner_agencies (
+          id,
+          name,
+          email,
+          phone,
+          website
+        )
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (error) throw new Error(error.message)
+    
+    // Increment views count
+    try {
+      await supabase.rpc('increment_career_views', { career_uuid: id })
+    } catch (err) {
+      // Ignore errors in view increment
+      console.error('Error incrementing views:', err)
+    }
+    
+    return data
+  },
+
+  create: async (careerData: any) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Unauthorized: Only admins can create careers')
+    }
+    
+    const userId = await getCurrentUserId()
+    
+    const { data, error } = await supabase
+      .from('careers')
+      .insert({
+        ...careerData,
+        created_by: userId,
+      })
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<any>) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Unauthorized: Only admins can update careers')
+    }
+    
+    const { data, error } = await supabase
+      .from('careers')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Unauthorized: Only admins can delete careers')
+    }
+    
+    const { error } = await supabase
+      .from('careers')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
   },
 }
 

@@ -34,16 +34,25 @@ serve(async (req) => {
         const paymentId = paymentIntent.metadata.payment_id
 
         if (paymentId) {
-          // Update payment status
-          await supabaseClient
+          // Update payment status - use upsert to handle race conditions
+          // Only update if status is not already 'paid' to prevent duplicate processing
+          const { data: existingPayment } = await supabaseClient
             .from('application_payments')
-            .update({
-              status: 'paid',
-              stripe_payment_intent_id: paymentIntent.id,
-              transaction_id: paymentIntent.id,
-              payment_method: 'stripe',
-            })
+            .select('status')
             .eq('id', paymentId)
+            .single()
+          
+          // Only update if not already paid (prevents duplicate processing)
+          if (!existingPayment || existingPayment.status !== 'paid') {
+            await supabaseClient
+              .from('application_payments')
+              .update({
+                status: 'paid',
+                stripe_payment_intent_id: paymentIntent.id,
+                transaction_id: paymentIntent.id,
+                payment_method: 'stripe',
+              })
+              .eq('id', paymentId)
 
           // Get payment details
           const { data: payment } = await supabaseClient
@@ -156,16 +165,26 @@ serve(async (req) => {
               .single()
 
             if (paymentForReceipt) {
-              const receiptNumber = `RCP-${Date.now()}`
-              await supabaseClient.from('receipts').insert({
-                payment_id: paymentId,
-                application_id: paymentForReceipt.application_id,
-                user_id: paymentForReceipt.user_id,
-                receipt_number: receiptNumber,
-                amount: paymentForReceipt.amount,
-                payment_type: paymentForReceipt.payment_type,
-                items: paymentForReceipt.items || [],
-              })
+              // Check if receipt already exists to prevent duplicates
+              const { data: existingReceipt } = await supabaseClient
+                .from('receipts')
+                .select('id')
+                .eq('payment_id', paymentId)
+                .maybeSingle()
+              
+              // Only create receipt if it doesn't exist
+              if (!existingReceipt) {
+                const receiptNumber = `RCP-${Date.now()}`
+                await supabaseClient.from('receipts').insert({
+                  payment_id: paymentId,
+                  application_id: paymentForReceipt.application_id,
+                  user_id: paymentForReceipt.user_id,
+                  receipt_number: receiptNumber,
+                  amount: paymentForReceipt.amount,
+                  payment_type: paymentForReceipt.payment_type,
+                  items: paymentForReceipt.items || [],
+                })
+              }
 
               // Check if email notifications are enabled for payment updates
               const { data: emailSettings } = await supabaseClient

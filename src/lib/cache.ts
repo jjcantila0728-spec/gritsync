@@ -154,11 +154,26 @@ export async function cachedFetch<T = any>(
     }
   }
 
-  // Fetch from network
-  const response = await fetch(url, options)
+  // Fetch from network with error handling
+  let response: Response
+  try {
+    response = await fetch(url, options)
+  } catch (error: any) {
+    // Import error handler dynamically to avoid circular dependencies
+    const { normalizeError } = await import('./error-handler')
+    throw normalizeError(error, { url, method: options?.method || 'GET' })
+  }
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    // Import error handler dynamically to avoid circular dependencies
+    const { normalizeError } = await import('./error-handler')
+    const error = new Error(`HTTP error! status: ${response.status}`)
+    throw normalizeError(error, { 
+      url, 
+      method: options?.method || 'GET',
+      status: response.status,
+      statusText: response.statusText 
+    })
   }
 
   const data = await response.json()

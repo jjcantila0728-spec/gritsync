@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/Modal'
 import { DocumentImagePreview } from '@/components/ui/DocumentImagePreview'
 import { applicationsAPI, applicationPaymentsAPI, getFileUrl, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI } from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { generalSettings } from '@/lib/settings'
 import jsPDF from 'jspdf'
 import { Elements } from '@stripe/react-stripe-js'
 import { stripePromise } from '@/lib/stripe'
@@ -147,6 +148,7 @@ export function ApplicationDetail() {
   const [loadingAccounts, setLoadingAccounts] = useState(false)
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState<any>(null)
+  const [phoneNumber, setPhoneNumber] = useState('+1 (509) 270-3437')
   const [accountForm, setAccountForm] = useState({ 
     account_type: 'gmail', 
     name: '',
@@ -264,6 +266,18 @@ export function ApplicationDetail() {
       loadServices()
     }
   }, [id])
+
+  useEffect(() => {
+    const loadPhoneNumber = async () => {
+      try {
+        const phone = await generalSettings.getPhoneNumber()
+        setPhoneNumber(phone)
+      } catch (error) {
+        console.error('Error loading phone number:', error)
+      }
+    }
+    loadPhoneNumber()
+  }, [])
 
   // Set up real-time subscriptions for application updates
   useEffect(() => {
@@ -3757,33 +3771,33 @@ export function ApplicationDetail() {
                               </div>
 
                               {payments.length > 0 ? (
-                                <Card className="p-6">
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full">
+                                <Card className="p-3 sm:p-6">
+                                  <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                    <table className="w-full min-w-[600px]">
                                       <thead>
                                         <tr className="border-b border-gray-200 dark:border-gray-700">
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Type</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Amount</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
+                                          <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
+                                          <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Type</th>
+                                          <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Amount</th>
+                                          <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
+                                          <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                                         </tr>
                                       </thead>
                                       <tbody>
                                         {payments.map((payment: any) => (
                                           <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
-                                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                                               {formatDate(payment.created_at)}
                                             </td>
-                                            <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
+                                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-900 dark:text-gray-100">
                                               {payment.payment_type === 'step1' ? 'Step 1' : 
                                                payment.payment_type === 'step2' ? 'Step 2' : 
                                                'Full'}
                                             </td>
-                                            <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                            <td className="py-3 px-2 sm:px-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                                               {formatCurrency(payment.amount)}
                                             </td>
-                                            <td className="py-3 px-4">
+                                            <td className="py-3 px-2 sm:px-4">
                                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                                                 payment.status === 'paid' 
                                                   ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
@@ -4625,17 +4639,77 @@ function TimelineStep({
                                 body {
                                   display: flex;
                                   justify-content: center;
-                                  align-items: center;
+                                  align-items: flex-start;
                                   min-height: 100vh;
-                                  background: white;
-                                  padding: 20px;
+                                  background: #f3f4f6;
+                                  padding: 10px;
                                 }
                                 .letter-container {
                                   background: white;
                                   box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-                                  width: 8.5in;
+                                  width: 100%;
+                                  max-width: 8.5in;
                                   min-height: 11in;
                                   margin: 0 auto;
+                                }
+                              }
+                              @media screen and (max-width: 768px) {
+                                body {
+                                  padding: 5px;
+                                }
+                                .letter-container {
+                                  width: 100%;
+                                  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                                }
+                                .letter-header-gradient {
+                                  padding: 0.5em 0.5em !important;
+                                  flex-direction: column;
+                                  gap: 0.5em;
+                                }
+                                .letter-header-left {
+                                  flex-direction: column;
+                                  text-align: center;
+                                  gap: 0.5em;
+                                }
+                                .letter-logo {
+                                  width: 40px;
+                                  height: 40px;
+                                }
+                                .letter-company-name {
+                                  font-size: 16pt !important;
+                                }
+                                .letter-company-tagline {
+                                  font-size: 8pt !important;
+                                }
+                                .letter-content-wrapper {
+                                  padding: 0.4in 0.5em !important;
+                                }
+                                .letter-footer-gradient {
+                                  padding: 0.4em 0.5em !important;
+                                  font-size: 7pt !important;
+                                }
+                                .letter-footer-content {
+                                  flex-direction: column;
+                                  gap: 0.3em;
+                                }
+                                .print-button {
+                                  position: fixed;
+                                  bottom: 20px;
+                                  right: 20px;
+                                  top: auto;
+                                  padding: 10px 20px;
+                                  font-size: 12px;
+                                }
+                              }
+                              @media screen and (max-width: 480px) {
+                                .letter-content-wrapper {
+                                  padding: 0.3in 0.4em !important;
+                                }
+                                body {
+                                  font-size: 11pt;
+                                }
+                                .letter-body {
+                                  font-size: 10pt !important;
                                 }
                               }
                               @media print {
@@ -4669,7 +4743,8 @@ function TimelineStep({
                                 color: #000;
                               }
                               .letter-container {
-                                width: 8.5in;
+                                width: 100%;
+                                max-width: 8.5in;
                                 min-height: 11in;
                                 padding: 0;
                                 margin: 0 auto;
@@ -4895,7 +4970,7 @@ function TimelineStep({
                                   <div class="letter-signature-name">JJ Cantila, BSN, CADRN, USRN</div>
                                   <div>Program Advisor, GritSync</div>
                                   <div>office@gritsync.com</div>
-                                  <div>+1509 270 3437</div>
+                                  <div>${phoneNumber.replace(/\D/g, '')}</div>
                                 </div>
                                 
                                 <!-- On Behalf Of -->
@@ -4914,7 +4989,7 @@ function TimelineStep({
                                   <span class="letter-footer-separator">/</span>
                                   <span>office@gritsync.com</span>
                                   <span class="letter-footer-separator">/</span>
-                                  <span>+1509 270 3437</span>
+                                  <span>${phoneNumber.replace(/\D/g, '')}</span>
                                   <span class="letter-footer-separator">/</span>
                                   <span>NCLEX Application Processing</span>
                                 </div>

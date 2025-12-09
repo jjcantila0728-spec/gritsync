@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { Button } from '@/components/ui/Button'
+import { SEO } from '@/components/SEO'
 import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
@@ -43,13 +44,13 @@ export function Dashboard() {
   const [stats, setStats] = useState({
     applications: 0,
     pending: 0,
-    approved: 0,
+    completed: 0,
     quotations: 0,
     totalClients: 0,
     revenue: 0,
     pendingApplications: 0,
     pendingQuotations: 0,
-    approvedApplications: 0,
+    completedApplications: 0,
     rejectedApplications: 0,
     paidQuotations: 0,
   })
@@ -57,7 +58,24 @@ export function Dashboard() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([])
   const [pendingPayments, setPendingPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [firstName, setFirstName] = useState<string | null>(null)
+  // Load firstName from cache on mount
+  const getCachedFirstName = (userId: string | undefined): string | null => {
+    if (!userId) return null
+    try {
+      const cached = localStorage.getItem(`firstName_${userId}`)
+      if (cached) {
+        return cached
+      }
+    } catch {
+      // Ignore errors
+    }
+    return null
+  }
+
+  const [firstName, setFirstName] = useState<string | null>(() => {
+    // Initialize from cache if available
+    return getCachedFirstName(user?.id)
+  })
   const [profileCompletion, setProfileCompletion] = useState(0)
   const [documentsStatus, setDocumentsStatus] = useState({
     picture: false,
@@ -66,6 +84,18 @@ export function Dashboard() {
   })
   const { showToast } = useToast()
   const channelsRef = useRef<RealtimeChannel[]>([])
+
+  // Helper to set firstName and cache it
+  const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
+    setFirstName(name)
+    if (userId && name) {
+      try {
+        localStorage.setItem(`firstName_${userId}`, name)
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
 
   // Helper function to calculate completion percentage (same as MyDetails)
   const calculateCompletion = (details: any): number => {
@@ -107,6 +137,18 @@ export function Dashboard() {
 
   useEffect(() => {
     if (user) {
+      // Set firstName immediately from cache, user object, or email to prevent flickering during navigation
+      const cachedName = getCachedFirstName(user.id)
+      if (cachedName) {
+        setFirstName(cachedName)
+      } else if (user.first_name) {
+        setFirstNameWithCache(user.first_name, user.id)
+      } else if (user.email) {
+        // Fallback to email prefix if first_name not available
+        const emailName = user.email.split('@')[0]
+        setFirstNameWithCache(emailName, user.id)
+      }
+      
       fetchData()
       // Fetch first name and profile completion from user details
       userDetailsAPI.get()
@@ -151,10 +193,11 @@ export function Dashboard() {
             nursing_school_diploma_date?: string
           } | null
           if (typedDetails?.first_name) {
-            setFirstName(typedDetails.first_name)
+            setFirstNameWithCache(typedDetails.first_name, user.id)
           } else {
             const nameParts = user.first_name ? [user.first_name] : []
-            setFirstName(nameParts[0] || user.email.split('@')[0])
+            const fallbackName = nameParts[0] || user.email.split('@')[0]
+            setFirstNameWithCache(fallbackName, user.id)
           }
           
           // Calculate profile completion
@@ -201,8 +244,13 @@ export function Dashboard() {
           }
         })
         .catch(() => {
-          const nameParts = user.first_name ? [user.first_name] : []
-          setFirstName(nameParts[0] || user.email.split('@')[0])
+          // Keep cached name or use fallback
+          const cachedName = getCachedFirstName(user.id)
+          if (!cachedName) {
+            const nameParts = user.first_name ? [user.first_name] : []
+            const fallbackName = nameParts[0] || user.email.split('@')[0]
+            setFirstNameWithCache(fallbackName, user.id)
+          }
         })
       
       // Fetch documents status
@@ -605,7 +653,8 @@ export function Dashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved':
+      case 'approved': // Legacy support
+      case 'completed':
       case 'paid':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
       case 'rejected':
@@ -630,7 +679,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                    {greeting}, {firstName || (user?.first_name as string | undefined) || 'Admin'} 👋
+                    {greeting}, {firstName || user?.first_name || 'Admin'} 👋
                   </h1>
                   <p className="text-gray-600 dark:text-gray-400">
                     System overview and management dashboard
@@ -701,10 +750,10 @@ export function Dashboard() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
-                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.approvedApplications || stats.approved || 0}</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
                     <div className="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
                       <CheckCircle className="h-3 w-3" />
-                      <span>Approved & Completed</span>
+                      <span>Completed</span>
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-green-500/10 dark:bg-green-400/20">
@@ -1054,8 +1103,23 @@ export function Dashboard() {
   }
 
   // Regular User Dashboard (existing code)
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const isAdminDashboard = isAdmin()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title={isAdminDashboard ? 'Admin Dashboard - GritSync | NCLEX Processing Agency' : 'Dashboard - My NCLEX Applications | GritSync'}
+        description={isAdminDashboard ? 'Admin dashboard for managing NCLEX applications, clients, quotations, and payments. Comprehensive analytics and management tools.' : 'Your personal dashboard for managing NCLEX applications. View status, track progress, manage documents, and process payments all in one place.'}
+        keywords={isAdminDashboard ? 'admin dashboard, NCLEX admin, application management' : 'dashboard, NCLEX dashboard, my applications, application management'}
+        canonicalUrl={currentUrl}
+        ogTitle={isAdminDashboard ? 'Admin Dashboard - GritSync' : 'Dashboard - My NCLEX Applications | GritSync'}
+        ogDescription={isAdminDashboard ? 'Admin dashboard for managing NCLEX applications and clients' : 'Your personal dashboard for managing NCLEX applications'}
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        noindex={true}
+      />
       <Header />
       <div className="flex">
         <Sidebar />
@@ -1111,10 +1175,10 @@ export function Dashboard() {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
-                  <p className="text-3xl font-bold text-green-900 dark:text-green-100">{stats.approved || 0}</p>
+                  <p className="text-3xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
                   <div className="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
                     <CheckCircle className="h-3 w-3" />
-                    <span>Approved & Completed</span>
+                    <span>Completed</span>
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-green-500/10 dark:bg-green-400/20">

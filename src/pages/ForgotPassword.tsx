@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useToast } from '@/components/ui/Toast'
+import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { isValidEmail } from '@/lib/utils'
@@ -41,8 +43,27 @@ export function ForgotPassword() {
     }
   }
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const breadcrumbs = [
+    { name: 'Home', url: baseUrl },
+    { name: 'Forgot Password', url: currentUrl },
+  ]
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title="Forgot Password - Reset Your GritSync Account | NCLEX Processing Agency"
+        description="Reset your GritSync account password. Enter your email address to receive password reset instructions. Secure password recovery for your NCLEX application account."
+        keywords="forgot password, password reset, account recovery, GritSync password, NCLEX account recovery"
+        canonicalUrl={currentUrl}
+        ogTitle="Forgot Password - Reset Your GritSync Account"
+        ogDescription="Reset your GritSync account password. Enter your email to receive password reset instructions."
+        ogImage={`${baseUrl}/gritsync_logo.png`}
+        ogUrl={currentUrl}
+        noindex={true}
+        structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
+      />
       <Header />
       <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
         <Card className="w-full max-w-md border-0 shadow-xl">
@@ -135,6 +156,7 @@ export function ForgotPassword() {
           </div>
         </Card>
       </main>
+      <Footer />
     </div>
   )
 }

@@ -22,25 +22,184 @@ export function Header() {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [firstName, setFirstName] = useState<string | null>(null)
-  const [fullName, setFullName] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<any[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [loadingNotifications, setLoadingNotifications] = useState(false)
+  const [exploreMenuOpen, setExploreMenuOpen] = useState(false)
+  
+  // Refs must be declared before useState that uses them
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
+  const exploreMenuRef = useRef<HTMLDivElement>(null)
   const notificationChannelRef = useRef<RealtimeChannel | null>(null)
   const avatarPathRef = useRef<string | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const avatarImageRef = useRef<HTMLImageElement | null>(null)
   const isFetchingAvatarRef = useRef(false)
+  const persistedFirstNameRef = useRef<string | null>(null)
+
+  // Load firstName from cache on mount
+  const getCachedFirstName = (userId: string | undefined): string | null => {
+    if (!userId) return null
+    try {
+      const cached = localStorage.getItem(`firstName_${userId}`)
+      if (cached) {
+        return cached
+      }
+    } catch {
+      // Ignore errors
+    }
+    return null
+  }
+
+  // Initialize firstName from cache if available
+  const [firstName, setFirstName] = useState<string | null>(() => {
+    const cached = getCachedFirstName(user?.id)
+    if (cached) {
+      persistedFirstNameRef.current = cached
+      return cached
+    }
+    return null
+  })
+  const [fullName, setFullName] = useState<string | null>(null)
+
+  // Helper to set firstName and cache it
+  const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
+    setFirstName(name)
+    if (name) {
+      persistedFirstNameRef.current = name
+      if (userId) {
+        try {
+          localStorage.setItem(`firstName_${userId}`, name)
+        } catch {
+          // Ignore errors
+        }
+      }
+    }
+  }
+
+  // Initialize avatarUrl from cache on mount
+  const getCachedAvatar = (userId: string | undefined): { url: string | null; path: string | null } => {
+    if (!userId) return { url: null, path: null }
+    try {
+      const cachedUrl = localStorage.getItem(`avatar_${userId}`)
+      const cachedPath = localStorage.getItem(`avatar_path_${userId}`)
+      if (cachedUrl && cachedPath) {
+        return { url: cachedUrl, path: cachedPath }
+      }
+    } catch {
+      // Ignore errors
+    }
+    return { url: null, path: null }
+  }
+
+  // Get cached default avatar design
+  const getCachedDefaultDesign = (userId: string | undefined): string => {
+    if (!userId) return 'default'
+    try {
+      const cached = localStorage.getItem(`default_avatar_design_${userId}`)
+      return cached || 'default'
+    } catch {
+      return 'default'
+    }
+  }
+
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
+    // Initialize from cache if available
+    const cached = getCachedAvatar(user?.id)
+    if (cached.url && cached.path) {
+      avatarPathRef.current = cached.path
+      return cached.url
+    }
+    return null
+  })
+  
+  // State for default avatar design (updated when fetched from DB)
+  const [defaultAvatarDesign, setDefaultAvatarDesign] = useState<string>(() => {
+    return getCachedDefaultDesign(user?.id)
+  })
+  
+  // Function to get current design from cache - always reads fresh from cache
+  // This ensures the design is always consistent and never flickers
+  const getCurrentDesign = (): string => {
+    if (!user?.id) return 'default'
+    // Always read from cache synchronously - this prevents flickering
+    // Cache is updated immediately when design changes, so this is always current
+    return getCachedDefaultDesign(user.id)
+  }
+  
+  // Update state when fetched from DB, but render always uses getCurrentDesign()
+  useEffect(() => {
+    if (user?.id) {
+      const cached = getCachedDefaultDesign(user.id)
+      if (cached !== defaultAvatarDesign) {
+        setDefaultAvatarDesign(cached)
+      }
+    }
+  }, [user?.id, defaultAvatarDesign])
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
+
+  // Helper to cache avatar URL and path
+  const cacheAvatar = (userId: string | undefined, url: string, path: string) => {
+    if (!userId) return
+    try {
+      localStorage.setItem(`avatar_${userId}`, url)
+      localStorage.setItem(`avatar_path_${userId}`, path)
+    } catch (error) {
+      // Ignore localStorage errors (quota exceeded, etc.)
+      console.warn('Failed to cache avatar:', error)
+    }
+  }
+
+  // Helper to cache default avatar design
+  const cacheDefaultDesign = (userId: string | undefined, design: string) => {
+    if (!userId) return
+    try {
+      localStorage.setItem(`default_avatar_design_${userId}`, design)
+    } catch (error) {
+      // Ignore localStorage errors
+      console.warn('Failed to cache default avatar design:', error)
+    }
+  }
+
+  // Helper to clear avatar cache
+  const clearAvatarCache = (userId: string | undefined) => {
+    if (!userId) return
+    try {
+      localStorage.removeItem(`avatar_${userId}`)
+      localStorage.removeItem(`avatar_path_${userId}`)
+    } catch {
+      // Ignore errors
+    }
+  }
 
   // Compute display name synchronously from user object to prevent flickering
+  // Use persisted ref and cache as fallback to prevent showing empty during navigation
   const displayFirstName = useMemo(() => {
-    return user?.first_name || firstName || null
-  }, [user, firstName])
+    // Priority: 1. user.first_name (immediate), 2. firstName state, 3. persisted ref, 4. cache
+    let name = user?.first_name || firstName || persistedFirstNameRef.current
+    if (!name && user?.id) {
+      // Fallback to cache if nothing else is available
+      const cached = getCachedFirstName(user.id)
+      if (cached) {
+        name = cached
+        persistedFirstNameRef.current = cached
+      }
+    }
+    // Update ref and cache whenever we have a valid name
+    if (name) {
+      persistedFirstNameRef.current = name
+      if (user?.id && name !== firstName) {
+        // Cache it if not already cached
+        try {
+          localStorage.setItem(`firstName_${user.id}`, name)
+        } catch {
+          // Ignore errors
+        }
+      }
+    }
+    return name || null
+  }, [user?.first_name, user?.id, firstName])
 
   // Compute full name for display (first + last name only, no middle name)
   // This matches the avatar generation logic in MyDetails page
@@ -69,29 +228,34 @@ export function Header() {
   // Initialize avatar from localStorage on mount or when user changes
   useEffect(() => {
     if (user) {
-      const cachedAvatarKey = `avatar_${user.id}`
-      const cachedAvatarPathKey = `avatar_path_${user.id}`
-      const cachedUrl = localStorage.getItem(cachedAvatarKey)
-      const cachedPath = localStorage.getItem(cachedAvatarPathKey)
+      const cached = getCachedAvatar(user.id)
       
-      if (cachedUrl && cachedPath) {
+      if (cached.url && cached.path) {
         // Set immediately from cache to prevent flicker
-        setAvatarUrl(cachedUrl)
-        avatarPathRef.current = cachedPath
+        setAvatarUrl(cached.url)
+        avatarPathRef.current = cached.path
         
         // Preload the image in the background to verify it's still valid
         const img = new Image()
+        img.onload = () => {
+          // Image is valid, keep it
+        }
         img.onerror = () => {
           // If cached image fails, clear cache - will be refetched in main effect
-          localStorage.removeItem(cachedAvatarKey)
-          localStorage.removeItem(cachedAvatarPathKey)
-          // Don't reset state here - let the main effect handle it
+          clearAvatarCache(user.id)
+          // Only reset if this is still the current user's avatar
+          if (currentUserIdRef.current === user.id) {
+            setAvatarUrl(null)
+            avatarPathRef.current = null
+          }
         }
-        img.src = cachedUrl
+        img.src = cached.url
       } else {
-        // No cache, clear state
-        setAvatarUrl(null)
-        avatarPathRef.current = null
+        // No cache, but don't clear if we already have a cached avatar from initialization
+        if (currentUserIdRef.current !== user.id) {
+          setAvatarUrl(null)
+          avatarPathRef.current = null
+        }
       }
     }
   }, [user?.id])
@@ -102,9 +266,30 @@ export function Header() {
       const userIdChanged = currentUserIdRef.current !== user.id
       currentUserIdRef.current = user.id
       
+          // Design is already computed from cache via useMemo, no need to set here
+      
       // Always set from user object first (immediate) - this prevents avatar changes during loading
-      if (user.first_name) {
-        setFirstName(user.first_name)
+      // Check cache first, then user object, then email fallback
+      const cachedName = getCachedFirstName(user.id)
+      if (cachedName) {
+        // Use cached name immediately
+        persistedFirstNameRef.current = cachedName
+        if (firstName !== cachedName) {
+          setFirstName(cachedName)
+        }
+      } else if (user.first_name) {
+        // Update ref and cache immediately to persist across navigation
+        persistedFirstNameRef.current = user.first_name
+        setFirstNameWithCache(user.first_name, user.id)
+      } else if (user.email) {
+        // Fallback to email prefix
+        const emailName = user.email.split('@')[0]
+        persistedFirstNameRef.current = emailName
+        setFirstNameWithCache(emailName, user.id)
+      } else if (userIdChanged) {
+        // Only clear if user actually changed and we have no fallback
+        setFirstName(null)
+        persistedFirstNameRef.current = null
       }
       // Set full name immediately from user object to ensure consistent avatar from the start
       if (user.first_name && user.last_name) {
@@ -130,7 +315,7 @@ export function Header() {
         try {
           const { data: userData, error } = await supabase
             .from('users')
-            .select('avatar_path')
+            .select('avatar_path, default_avatar_design')
             .eq('id', user.id)
             .single()
           
@@ -138,8 +323,8 @@ export function Header() {
             // Only reset if user changed
             if (userIdChanged) {
               setAvatarUrl(null)
-              localStorage.removeItem(cachedAvatarKey)
-              localStorage.removeItem(cachedAvatarPathKey)
+              clearAvatarCache(user.id)
+              // Design will be computed from cache via useMemo
             }
             avatarPathRef.current = null
             isFetchingAvatarRef.current = false
@@ -148,6 +333,16 @@ export function Header() {
           
           const userDataTyped = userData as any
           const newAvatarPath = userDataTyped?.avatar_path || null
+          const newDefaultDesign = userDataTyped?.default_avatar_design || 'default'
+          
+          // Cache the design immediately (this ensures it's available for next render)
+          // This is critical - cache must be updated before state to prevent flickering
+          cacheDefaultDesign(user.id, newDefaultDesign)
+          
+          // Update state if it changed (computedDefaultDesign will update on next render via useMemo)
+          if (newDefaultDesign !== defaultAvatarDesign) {
+            setDefaultAvatarDesign(newDefaultDesign)
+          }
           const currentCachedPath = localStorage.getItem(cachedAvatarPathKey)
           
           // Check if avatar path has changed (even if user hasn't changed)
@@ -163,11 +358,10 @@ export function Header() {
               const img = new Image()
               img.onload = () => {
                 // Only update if this is still the current avatar path (prevent race conditions)
-                if (avatarPathRef.current === newAvatarPath) {
+                if (avatarPathRef.current === newAvatarPath && currentUserIdRef.current === user.id) {
                   setAvatarUrl(url)
                   // Cache the URL and path
-                  localStorage.setItem(cachedAvatarKey, url)
-                  localStorage.setItem(cachedAvatarPathKey, newAvatarPath)
+                  cacheAvatar(user.id, url, newAvatarPath)
                 }
                 isFetchingAvatarRef.current = false
               }
@@ -175,8 +369,7 @@ export function Header() {
                 // Only reset if user changed or path changed
                 if (userIdChanged || avatarPathChanged) {
                   setAvatarUrl(null)
-                  localStorage.removeItem(cachedAvatarKey)
-                  localStorage.removeItem(cachedAvatarPathKey)
+                  clearAvatarCache(user.id)
                 }
                 isFetchingAvatarRef.current = false
               }
@@ -185,8 +378,7 @@ export function Header() {
               // Only reset if user changed or path changed
               if (userIdChanged || avatarPathChanged) {
                 setAvatarUrl(null)
-                localStorage.removeItem(cachedAvatarKey)
-                localStorage.removeItem(cachedAvatarPathKey)
+                clearAvatarCache(user.id)
               }
               isFetchingAvatarRef.current = false
             }
@@ -195,22 +387,25 @@ export function Header() {
             avatarPathRef.current = null
             if (userIdChanged) {
               setAvatarUrl(null)
-              localStorage.removeItem(cachedAvatarKey)
-              localStorage.removeItem(cachedAvatarPathKey)
+              clearAvatarCache(user.id)
             }
             isFetchingAvatarRef.current = false
           } else {
             // Avatar path hasn't changed, keep existing URL (don't reset)
             // Update ref to match current path
             avatarPathRef.current = newAvatarPath
+            // Ensure cached URL is still set
+            const cached = getCachedAvatar(user.id)
+            if (cached.url && !avatarUrl) {
+              setAvatarUrl(cached.url)
+            }
             isFetchingAvatarRef.current = false
           }
         } catch (error) {
           // Only reset if user changed
           if (userIdChanged) {
             setAvatarUrl(null)
-            localStorage.removeItem(cachedAvatarKey)
-            localStorage.removeItem(cachedAvatarPathKey)
+            clearAvatarCache(user.id)
           }
           avatarPathRef.current = null
           isFetchingAvatarRef.current = false
@@ -221,7 +416,9 @@ export function Header() {
       userDetailsAPI.get()
         .then((details: any) => {
           if (details?.first_name) {
-            setFirstName(details.first_name)
+            // Update ref and cache to persist across navigation
+            persistedFirstNameRef.current = details.first_name
+            setFirstNameWithCache(details.first_name, user.id)
           }
           // Build full name from user details (first name + last name only, no middle name)
           // This matches the avatar generation logic in MyDetails page
@@ -242,11 +439,13 @@ export function Header() {
           // Keep the current name if fetch fails
         })
     } else {
+      // Only reset if user is actually null (logged out)
       setFirstName(null)
       setFullName(null)
       setAvatarUrl(null)
       avatarPathRef.current = null
       currentUserIdRef.current = null
+      persistedFirstNameRef.current = null
       isFetchingAvatarRef.current = false
     }
   }, [user])
@@ -256,8 +455,10 @@ export function Header() {
     if (!user) return
     setLoadingNotifications(true)
     try {
+      // Optimize: Limit initial fetch to recent 20 notifications for better performance
+      // Full list can be loaded on demand if needed
       const [notifs, count] = await Promise.all([
-        notificationsAPI.getAll(),
+        notificationsAPI.getAll(false, 20),
         notificationsAPI.getUnreadCount()
       ])
       setNotifications(notifs || [])
@@ -295,11 +496,14 @@ export function Header() {
     try {
       const eventType = payload.eventType || payload.event
       const newRecord = payload.new
+      const oldRecord = payload.old
 
       if (eventType === 'INSERT' && newRecord) {
         // New notification received - add to list and update count
         setNotifications((prev) => [newRecord, ...prev])
-        setUnreadCount((prev) => prev + 1)
+        if (!newRecord.read) {
+          setUnreadCount((prev) => prev + 1)
+        }
         
         // Show browser notification if permission granted
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -307,6 +511,19 @@ export function Header() {
             body: newRecord.message || '',
             icon: '/favicon.ico',
           })
+        }
+      } else if (eventType === 'UPDATE' && newRecord && oldRecord) {
+        // Notification was updated (e.g., marked as read)
+        setNotifications((prev) => 
+          prev.map(n => n.id === newRecord.id ? newRecord : n)
+        )
+        // Update count if read status changed
+        if (oldRecord.read !== newRecord.read) {
+          if (newRecord.read) {
+            setUnreadCount((prev) => Math.max(0, prev - 1))
+          } else {
+            setUnreadCount((prev) => prev + 1)
+          }
         }
       }
     } catch (error) {
@@ -357,21 +574,31 @@ export function Header() {
       if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false)
       }
+      if (exploreMenuRef.current && !exploreMenuRef.current.contains(event.target as Node)) {
+        setExploreMenuOpen(false)
+      }
     }
 
-    if (userMenuOpen || notificationsOpen) {
+    if (userMenuOpen || notificationsOpen || exploreMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [userMenuOpen, notificationsOpen])
+  }, [userMenuOpen, notificationsOpen, exploreMenuOpen])
 
   const navLinks = [
     { label: 'Home', path: '/', hash: '' },
     { label: 'Quote', path: '/quote', hash: '' },
     { label: 'Tracking', path: '/tracking', hash: '' },
+  ]
+
+  const exploreMenuItems = [
+    { label: 'Sponsorship', path: '/sponsorship', hash: '' },
+    { label: 'Career', path: '/career', hash: '' },
+    { label: 'Donate', path: '/donate', hash: '' },
+    { label: 'About Us', path: '/about-us', hash: '' },
   ]
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string, hash: string) => {
@@ -414,6 +641,10 @@ export function Header() {
     }
     
     // Handle route aliases for Quote and Tracking
+    if (path === '/about-us') {
+      return location.pathname === '/about-us'
+    }
+    
     if (path === '/quote') {
       // Quote page can be accessed via /quote or /quotations
       return location.pathname === '/quote' || location.pathname === '/quotations'
@@ -426,6 +657,10 @@ export function Header() {
     }
     
     return false
+  }
+
+  const isExploreActive = () => {
+    return exploreMenuItems.some(item => isActive(item.path, item.hash))
   }
 
   return (
@@ -470,6 +705,48 @@ export function Header() {
                   {link.label}
                 </a>
               ))}
+              
+              {/* Explore Dropdown */}
+              <div
+                ref={exploreMenuRef}
+                className="relative"
+              >
+                <button
+                  onClick={() => setExploreMenuOpen(!exploreMenuOpen)}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer flex items-center gap-1',
+                    exploreMenuOpen || isExploreActive()
+                      ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  )}
+                >
+                  Explore
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', exploreMenuOpen && 'rotate-180')} />
+                </button>
+                
+                {exploreMenuOpen && (
+                  <div className="absolute top-full left-0 mt-1 w-48 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg z-50">
+                    {exploreMenuItems.map((item) => (
+                      <a
+                        key={`${item.path}-${item.hash}`}
+                        href={item.hash ? `${item.path}#${item.hash}` : item.path}
+                        onClick={(e) => {
+                          handleNavClick(e, item.path, item.hash)
+                          setExploreMenuOpen(false)
+                        }}
+                        className={cn(
+                          'block px-4 py-2 text-sm transition-colors cursor-pointer first:rounded-t-lg last:rounded-b-lg',
+                          isActive(item.path, item.hash)
+                            ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        )}
+                      >
+                        {item.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
             </nav>
           )}
 
@@ -514,7 +791,7 @@ export function Header() {
 
                   {/* Notifications Dropdown */}
                   {notificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-80 md:w-96 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg z-50 max-h-[500px] flex flex-col">
+                    <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 md:w-96 max-w-[calc(100vw-2rem)] sm:max-w-none rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg z-50 max-h-[500px] flex flex-col">
                       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                           Notifications
@@ -587,13 +864,16 @@ export function Header() {
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    aria-label="User menu"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
                   >
                     <div className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold overflow-hidden shadow-lg",
-                      !avatarUrl && getAvatarColor(avatarName),
-                      !avatarUrl && getAvatarColorDark(avatarName),
-                      !avatarUrl && getAvatarTextColor(avatarName),
-                      !avatarUrl && getAvatarTextColorDark(avatarName)
+                      !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
+                      !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
+                      !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
+                      !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
                     )}>
                       {avatarUrl ? (
                         <img 
@@ -601,6 +881,8 @@ export function Header() {
                           src={avatarUrl} 
                           alt="Profile" 
                           className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
                           onError={(_e) => {
                             // If image fails to load, clear cache and reset to initials
                             const cachedAvatarKey = `avatar_${user?.id}`
@@ -615,8 +897,8 @@ export function Header() {
                         getInitials(avatarName)
                       )}
                     </div>
-                    <span className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {displayFirstName || ''}
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {displayFirstName || user?.email?.split('@')[0] || 'User'}
                     </span>
                     <ChevronDown className={cn(
                       "h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform",
@@ -626,21 +908,27 @@ export function Header() {
 
                   {/* Dropdown Menu */}
                   {userMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg py-2">
+                    <div 
+                      className="absolute right-0 mt-2 w-56 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg py-2"
+                      role="menu"
+                      aria-label="User menu"
+                    >
                       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                         <div className="flex items-center gap-3 mb-2">
                           <div className={cn(
                             "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 overflow-hidden shadow-lg",
-                            !avatarUrl && getAvatarColor(avatarName),
-                            !avatarUrl && getAvatarColorDark(avatarName),
-                            !avatarUrl && getAvatarTextColor(avatarName),
-                            !avatarUrl && getAvatarTextColorDark(avatarName)
+                            !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
+                            !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
+                            !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
+                            !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
                           )}>
                             {avatarUrl ? (
                               <img 
                                 src={avatarUrl} 
                                 alt="Profile" 
                                 className="w-full h-full object-cover"
+                                loading="lazy"
+                                decoding="async"
                                 onError={(_e) => {
                                   // If image fails to load, clear cache and reset to initials
                                   const cachedAvatarKey = `avatar_${user?.id}`
@@ -756,6 +1044,29 @@ export function Header() {
                   {link.label}
                 </a>
               ))}
+              <div className="pt-2 mt-2">
+                <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Explore
+                </div>
+                {exploreMenuItems.map((item) => (
+                  <a
+                    key={`${item.path}-${item.hash}`}
+                    href={item.hash ? `${item.path}#${item.hash}` : item.path}
+                    onClick={(e) => {
+                      handleNavClick(e, item.path, item.hash)
+                      setMobileMenuOpen(false)
+                    }}
+                    className={cn(
+                      'block px-4 py-2 rounded-lg text-base font-medium transition-colors cursor-pointer',
+                      isActive(item.path, item.hash)
+                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    )}
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-800 mt-4 space-y-2">
                 <Link
                   to="/login"
