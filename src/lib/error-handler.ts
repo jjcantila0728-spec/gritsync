@@ -413,3 +413,5 @@ export function handleSupabaseError(error: any, context?: Record<string, any>): 
   throw normalizedError
 }
 
+
+

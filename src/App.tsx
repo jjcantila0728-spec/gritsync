@@ -44,6 +44,8 @@ const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.Abo
 const NCLEXSponsorship = lazy(() => import('./pages/NCLEXSponsorship').then(m => ({ default: m.NCLEXSponsorship })))
 const SponsorshipLanding = lazy(() => import('./pages/SponsorshipLanding').then(m => ({ default: m.SponsorshipLanding })))
 const Donate = lazy(() => import('./pages/Donate').then(m => ({ default: m.Donate })))
+const DonateCheckout = lazy(() => import('./pages/DonateCheckout').then(m => ({ default: m.DonateCheckout })))
+const DonateSuccess = lazy(() => import('./pages/DonateSuccess').then(m => ({ default: m.DonateSuccess })))
 const AdminSponsorships = lazy(() => import('./pages/AdminSponsorships').then(m => ({ default: m.AdminSponsorships })))
 const AdminDonations = lazy(() => import('./pages/AdminDonations').then(m => ({ default: m.AdminDonations })))
 const Career = lazy(() => import('./pages/Career').then(m => ({ default: m.Career })))
@@ -197,6 +199,8 @@ function AppRoutes() {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/donate" element={<Donate />} />
+        <Route path="/donate/checkout" element={<DonateCheckout />} />
+        <Route path="/donate/success" element={<DonateSuccess />} />
         <Route path="/career/apply" element={<Career />} />
         <Route path="/career" element={<CareerListing />} />
         <Route path="/test-supabase" element={<TestSupabase />} />

@@ -387,6 +387,29 @@ export async function sendPaymentReceipt(
 }
 
 /**
+ * Send donation receipt email
+ */
+export async function sendDonationReceipt(
+  email: string,
+  data: {
+    donorName?: string | null
+    donationId: string
+    amount: number
+    donationDate: string
+    isAnonymous?: boolean
+    message?: string | null
+  }
+): Promise<boolean> {
+  const template = await emailTemplates.donationReceipt(data)
+
+  return sendEmail({
+    to: email,
+    subject: `Donation Receipt - Thank You for Your Generosity!`,
+    html: template,
+  })
+}
+
+/**
  * Send birthday greeting
  */
 export async function sendBirthdayGreeting(
@@ -643,6 +666,89 @@ export const emailTemplates = {
       actionUrl: data.actionUrl || (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard'),
       actionText: 'Take Action',
       footerText: 'This is an automated reminder from GritSync.',
+    })
+  },
+
+  donationReceipt: async (data: {
+    donorName?: string | null
+    donationId: string
+    amount: number
+    donationDate: string
+    isAnonymous?: boolean
+    message?: string | null
+  }) => {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+    const donorName = data.donorName || (data.isAnonymous ? 'Generous Donor' : 'Valued Supporter')
+    
+    const receiptHtml = `
+      <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; border-radius: 12px; margin: 20px 0; text-align: center;">
+        <h2 style="margin: 0 0 10px 0; font-size: 28px;">Thank You for Your Donation!</h2>
+        <p style="margin: 0; font-size: 18px; opacity: 0.95;">Your generosity is making a real difference</p>
+      </div>
+      
+      <p style="font-size: 16px; line-height: 1.6; color: #333;">
+        Dear ${donorName},
+      </p>
+      
+      <p style="font-size: 16px; line-height: 1.6; color: #333;">
+        We are incredibly grateful for your generous donation of <strong style="color: #2563eb; font-size: 18px;">$${data.amount.toFixed(2)}</strong>. 
+        Your contribution directly supports aspiring nurses in achieving their USRN dreams.
+      </p>
+      
+      ${data.message ? `
+      <div style="background: #f0f9ff; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-style: italic; color: #1e40af;">
+          "${data.message}"
+        </p>
+      </div>
+      ` : ''}
+      
+      <div style="background: #f9fafb; padding: 25px; border-radius: 8px; margin: 25px 0; border: 2px solid #e5e7eb;">
+        <h3 style="margin-top: 0; color: #1f2937; font-size: 20px;">Donation Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 10px 0; font-weight: 600; color: #4b5563; width: 40%;">Donation ID:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-family: monospace;">${data.donationId.substring(0, 8)}...</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Amount:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 18px; font-weight: bold; color: #2563eb;">$${data.amount.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Date:</td>
+            <td style="padding: 10px 0; color: #1f2937;">${new Date(data.donationDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Status:</td>
+            <td style="padding: 10px 0; color: #059669; font-weight: 600;">✓ Completed</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 4px;">
+        <h4 style="margin-top: 0; color: #065f46; font-size: 18px;">Your Impact</h4>
+        <p style="margin: 0; color: #047857; line-height: 1.6;">
+          Your donation helps remove financial barriers for nurses pursuing their USRN certification. 
+          Every contribution directly funds NCLEX exam fees and processing costs, making dreams achievable.
+        </p>
+      </div>
+      
+      <p style="font-size: 16px; line-height: 1.6; color: #333;">
+        This email serves as your receipt for tax purposes. Please keep it for your records.
+      </p>
+      
+      <p style="font-size: 16px; line-height: 1.6; color: #333;">
+        Thank you again for your generosity and for being part of our mission to support nurses worldwide.
+      </p>
+    `
+    
+    return generateEmailTemplate({
+      userName: donorName,
+      title: 'Donation Receipt',
+      customHtml: receiptHtml,
+      actionUrl: `${baseUrl}/donate`,
+      actionText: 'Make Another Donation',
+      footerText: 'This is your official donation receipt. Your donation may be tax-deductible.',
     })
   },
 }

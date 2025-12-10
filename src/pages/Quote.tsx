@@ -227,6 +227,12 @@ export function Quote() {
   }
 
   const [formData, setFormData] = useState<QuoteFormData>(getInitialFormData())
+  const [validationErrors, setValidationErrors] = useState<{
+    firstName?: string
+    lastName?: string
+    email?: string
+    mobileNumber?: string
+  }>({})
 
   useEffect(() => {
     if (quoteId) {
@@ -893,9 +899,37 @@ export function Quote() {
       }
       setCurrentStep(2)
     } else if (currentStep === 2) {
-      // Validate client details
-      if (!formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber) {
-        showToast('Please fill in all client details', 'error')
+      // Validate client details with detailed validation
+      const validateField = (field: string, value: string): string | undefined => {
+        if (!value.trim()) return `${field} is required`
+        if (field === 'Email') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+          if (!emailRegex.test(value.trim())) return 'Please enter a valid email address'
+        } else if (field === 'First Name' || field === 'Last Name') {
+          if (value.trim().length < 2) return `${field} must be at least 2 characters`
+          if (!/^[a-zA-Z\s'-]+$/.test(value.trim())) return `${field} can only contain letters, spaces, hyphens, and apostrophes`
+        } else if (field === 'Mobile Number') {
+          const cleaned = value.replace(/[\s\-\(\)\+]/g, '')
+          if (!/^\d+$/.test(cleaned)) return 'Mobile number can only contain digits and formatting characters'
+          if (cleaned.length < 7 || cleaned.length > 15) return 'Mobile number must be between 7 and 15 digits'
+        }
+        return undefined
+      }
+      
+      const errors: typeof validationErrors = {}
+      const firstNameError = validateField('First Name', formData.firstName)
+      if (firstNameError) errors.firstName = firstNameError
+      const lastNameError = validateField('Last Name', formData.lastName)
+      if (lastNameError) errors.lastName = lastNameError
+      const emailError = validateField('Email', formData.email)
+      if (emailError) errors.email = emailError
+      const mobileNumberError = validateField('Mobile Number', formData.mobileNumber)
+      if (mobileNumberError) errors.mobileNumber = mobileNumberError
+      
+      setValidationErrors(errors)
+      
+      if (Object.keys(errors).length > 0) {
+        showToast('Please fix the validation errors before proceeding', 'error')
         return
       }
       setCurrentStep(3)
@@ -1849,33 +1883,97 @@ export function Quote() {
                             label="First Name *"
                             type="text"
                             value={formData.firstName}
-                            onChange={(e) => updateFormField('firstName', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('firstName', e.target.value)
+                              if (validationErrors.firstName) {
+                                setValidationErrors(prev => ({ ...prev, firstName: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const error = !formData.firstName.trim() 
+                                ? 'First name is required'
+                                : formData.firstName.trim().length < 2
+                                ? 'First name must be at least 2 characters'
+                                : !/^[a-zA-Z\s'-]+$/.test(formData.firstName.trim())
+                                ? 'First name can only contain letters, spaces, hyphens, and apostrophes'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, firstName: error }))
+                            }}
                             placeholder="John"
                             required
+                            error={validationErrors.firstName}
                           />
                           <Input
                             label="Last Name *"
                             type="text"
                             value={formData.lastName}
-                            onChange={(e) => updateFormField('lastName', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('lastName', e.target.value)
+                              if (validationErrors.lastName) {
+                                setValidationErrors(prev => ({ ...prev, lastName: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const error = !formData.lastName.trim() 
+                                ? 'Last name is required'
+                                : formData.lastName.trim().length < 2
+                                ? 'Last name must be at least 2 characters'
+                                : !/^[a-zA-Z\s'-]+$/.test(formData.lastName.trim())
+                                ? 'Last name can only contain letters, spaces, hyphens, and apostrophes'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, lastName: error }))
+                            }}
                             placeholder="Doe"
                             required
+                            error={validationErrors.lastName}
                           />
                           <Input
                             label="Email *"
                             type="email"
                             value={formData.email}
-                            onChange={(e) => updateFormField('email', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('email', e.target.value)
+                              if (validationErrors.email) {
+                                setValidationErrors(prev => ({ ...prev, email: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                              const error = !formData.email.trim() 
+                                ? 'Email is required'
+                                : !emailRegex.test(formData.email.trim())
+                                ? 'Please enter a valid email address'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, email: error }))
+                            }}
                             placeholder="client@example.com"
                             required
+                            error={validationErrors.email}
                           />
                           <Input
                             label="Mobile Number *"
                             type="tel"
                             value={formData.mobileNumber}
-                            onChange={(e) => updateFormField('mobileNumber', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('mobileNumber', e.target.value)
+                              if (validationErrors.mobileNumber) {
+                                setValidationErrors(prev => ({ ...prev, mobileNumber: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const cleaned = formData.mobileNumber.replace(/[\s\-\(\)\+]/g, '')
+                              const error = !formData.mobileNumber.trim() 
+                                ? 'Mobile number is required'
+                                : !/^\d+$/.test(cleaned)
+                                ? 'Mobile number can only contain digits and formatting characters'
+                                : cleaned.length < 7 || cleaned.length > 15
+                                ? 'Mobile number must be between 7 and 15 digits'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, mobileNumber: error }))
+                            }}
                             placeholder="+1 (555) 123-4567"
                             required
+                            error={validationErrors.mobileNumber}
                           />
                         </div>
                         <div className="flex justify-between mt-6">
@@ -1893,51 +1991,90 @@ export function Quote() {
                   )}
 
                   {/* Section 3: Payment Type */}
-                  {currentStep === 3 && (
-                    <Card>
-                      <div className="py-6">
-                        <div className="flex items-center gap-2 mb-6">
-                          <DollarSign className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                            Section 3: Select Payment Type
-                          </h2>
-                        </div>
-                        <div className="space-y-4">
-                          {/* First Time Taker: Show both Full and Staggered Payment */}
-                          {formData.takerType === 'first-time' && (
-                            <>
-                              {/* Full Payment Option */}
-                              <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.paymentType === 'full'
-                                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                                  : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                              }`}>
-                                <div className="flex items-start gap-3">
-                                  <input
-                                    type="radio"
-                                    name="paymentType"
-                                    value="full"
-                                    checked={formData.paymentType === 'full'}
-                                    onChange={(e) => updateFormField('paymentType', e.target.value)}
-                                    className="mt-1"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                                      Full Payment
-                                    </div>
-                                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                      Pay for both steps upfront:
-                                    </div>
-                                    <div className="text-sm space-y-1 ml-6">
-                                      <div><strong>Step 1:</strong> {formatCurrency(serviceConfig.step1.total)}</div>
-                                      <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)}</div>
-                                      <div className="font-semibold text-primary-600 dark:text-primary-400 mt-2">
-                                        Total: {formatCurrency(serviceConfig.step1.total + serviceConfig.step2.total)}
+                  {currentStep === 3 && (() => {
+                    // Real-time calculation helpers for Step 1 and Step 2
+                    const calculateStep1 = () => {
+                      const subtotal = serviceConfig.step1.items.reduce((sum, item) => sum + item.amount, 0)
+                      const tax = serviceConfig.step1.items.reduce((sum, item) => 
+                        sum + (item.taxable ? item.amount * TAX_RATE : 0), 0)
+                      const total = subtotal + tax
+                      return { subtotal, tax, total }
+                    }
+
+                    const calculateStep2 = () => {
+                      const subtotal = serviceConfig.step2.items.reduce((sum, item) => sum + item.amount, 0)
+                      const tax = serviceConfig.step2.items.reduce((sum, item) => 
+                        sum + (item.taxable ? item.amount * TAX_RATE : 0), 0)
+                      const total = subtotal + tax
+                      return { subtotal, tax, total }
+                    }
+
+                    const step1 = calculateStep1()
+                    const step2 = calculateStep2()
+                    const fullTotal = step1.total + step2.total
+                    const fullSubtotal = step1.subtotal + step2.subtotal
+                    const fullTax = step1.tax + step2.tax
+
+                    return (
+                      <Card>
+                        <div className="py-6">
+                          <div className="flex items-center gap-2 mb-6">
+                            <DollarSign className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                              Section 3: Select Payment Type
+                            </h2>
+                          </div>
+                          <div className="space-y-4">
+                            {/* First Time Taker: Show both Full and Staggered Payment */}
+                            {formData.takerType === 'first-time' && (
+                              <>
+                                {/* Full Payment Option */}
+                                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                  formData.paymentType === 'full'
+                                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                }`}>
+                                  <div className="flex items-start gap-3">
+                                    <input
+                                      type="radio"
+                                      name="paymentType"
+                                      value="full"
+                                      checked={formData.paymentType === 'full'}
+                                      onChange={(e) => updateFormField('paymentType', e.target.value)}
+                                      className="mt-1"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                                        Full Payment
+                                      </div>
+                                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        Pay for both steps upfront:
+                                      </div>
+                                      <div className="text-sm space-y-1 ml-6">
+                                        <div className="space-y-0.5">
+                                          <div><strong>Step 1:</strong> {formatCurrency(step1.total)}</div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(step1.subtotal)} + Tax: {formatCurrency(step1.tax)}
+                                          </div>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <div><strong>Step 2:</strong> {formatCurrency(step2.total)}</div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(step2.subtotal)} + Tax: {formatCurrency(step2.tax)}
+                                          </div>
+                                        </div>
+                                        <div className="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600 space-y-0.5">
+                                          <div className="font-semibold text-primary-600 dark:text-primary-400">
+                                            Total: {formatCurrency(fullTotal)}
+                                          </div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(fullSubtotal)} + Estimated Tax: {formatCurrency(fullTax)}
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              </label>
+                                </label>
 
                               {/* Staggered Payment Option */}
                               <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
@@ -1962,17 +2099,36 @@ export function Quote() {
                                       Pay Step 1 now, Step 2 later:
                                     </div>
                                     <div className="text-sm space-y-1 ml-6">
-                                      <div><strong>Step 1:</strong> {formatCurrency(serviceConfig.step1.total)} (Pay Now)</div>
-                                      <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)} (Pay later)</div>
-                                      <div className="mt-2 space-y-1">
+                                      <div className="space-y-0.5">
+                                        <div><strong>Step 1:</strong> {formatCurrency(step1.total)} (Pay Now)</div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step1.subtotal)} + Estimated Tax: {formatCurrency(step1.tax)}
+                                        </div>
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        <div><strong>Step 2:</strong> {formatCurrency(step2.total)} (Pay later)</div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 space-y-1 pt-2 border-t border-gray-300 dark:border-gray-600">
                                         <div className="font-semibold text-primary-600 dark:text-primary-400">
-                                          Pay Now: {formatCurrency(serviceConfig.step1.total)}
+                                          Pay Now: {formatCurrency(step1.total)}
                                         </div>
-                                        <div className="text-gray-900 dark:text-gray-100">
-                                          Pay Later: {formatCurrency(serviceConfig.step2.total)}
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step1.subtotal)} + Estimated Tax: {formatCurrency(step1.tax)}
                                         </div>
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 pt-1 border-t border-gray-300 dark:border-gray-600">
-                                          Total: {formatCurrency(serviceConfig.step1.total + serviceConfig.step2.total)}
+                                        <div className="text-gray-900 dark:text-gray-100 mt-1">
+                                          Pay Later: {formatCurrency(step2.total)}
+                                        </div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                        </div>
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 pt-1 border-t border-gray-300 dark:border-gray-600 mt-1">
+                                          Total: {formatCurrency(fullTotal)}
+                                        </div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(fullSubtotal)} + Estimated Tax: {formatCurrency(fullTax)}
                                         </div>
                                       </div>
                                     </div>
@@ -2006,9 +2162,19 @@ export function Quote() {
                                     Pay Step 2 only (Retaker):
                                   </div>
                                   <div className="text-sm space-y-1 ml-6">
-                                    <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)}</div>
-                                    <div className="font-semibold text-primary-600 dark:text-primary-400 mt-2">
-                                      Total: {formatCurrency(serviceConfig.step2.total)}
+                                    <div className="space-y-0.5">
+                                      <div><strong>Step 2:</strong> {formatCurrency(step2.total)}</div>
+                                      <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                        Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                      </div>
+                                    </div>
+                                    <div className="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600">
+                                      <div className="font-semibold text-primary-600 dark:text-primary-400">
+                                        Total: {formatCurrency(step2.total)}
+                                      </div>
+                                      <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                        Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -2146,7 +2312,8 @@ export function Quote() {
                         </div>
                       </div>
                     </Card>
-                  )}
+                    )
+                  })()}
 
                   {/* Result Section (Step 4) */}
                   {currentStep === 4 && (generatedQuote || viewingQuote) && (

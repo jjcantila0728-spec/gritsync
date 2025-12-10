@@ -5,7 +5,9 @@ import {
   normalizeError, 
   retryWithBackoff,
   isRetryableError,
-  type AppError 
+  AppError,
+  ErrorType,
+  ErrorSeverity
 } from './error-handler'
 
 type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
@@ -2850,7 +2852,7 @@ export const applicationPaymentsAPI = {
       
       // Call Supabase Edge Function for Stripe payment intent creation with retry logic
       const executeInvoke = async () => {
-        const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+        const { data, error } = await supabase.functions.invoke('create-application-payment-intent', {
           body: { payment_id: paymentId },
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -3946,23 +3948,474 @@ export const donationsAPI = {
     }
   },
 
+  getPublicStats: async () => {
+    // Public stats - only shows completed donations (works for anonymous users)
+    // Uses database function for better performance
+    try {
+      const { data, error } = await supabase.rpc('get_donation_statistics')
+      
+      if (error) {
+        // Fallback to direct query if function doesn't exist
+        const { data: donations, error: queryError } = await supabase
+          .from('donations')
+          .select('amount, status')
+          .eq('status', 'completed')
+        
+        if (queryError) {
+          console.error('Error fetching public donation stats:', queryError)
+          return { total: 0, count: 0 }
+        }
+        
+        const total = (donations || [])
+          .reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0)
+        const count = donations?.length || 0
+        
+        return { total, count }
+      }
+      
+      return {
+        total: parseFloat(data?.completed_amount?.toString() || '0'),
+        count: parseInt(data?.completed_donations?.toString() || '0'),
+      }
+    } catch (err) {
+      console.error('Error getting public stats:', err)
+      return { total: 0, count: 0 }
+    }
+  },
+
+  createCheckoutSession: async (donationId: string, amount: number, retryCount = 0) => {
+    const context = { operation: 'donationsAPI.createCheckoutSession', donationId, amount, retryCount }
+    const maxRetries = 2
+    const retryDelay = 1000 // 1 second
+    
+    try {
+      // Get session if available (donations can be anonymous)
+      let authHeader: string | undefined = undefined
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (!sessionError && session?.access_token) {
+          const { error: userError } = await supabase.auth.getUser()
+          if (!userError) {
+            authHeader = `Bearer ${session.access_token}`
+          }
+        }
+      } catch (sessionCheckError) {
+        // Treat as anonymous
+      }
+      
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new AppError(
+          'Payment system configuration error. Please contact support.',
+          ErrorType.SERVER,
+          ErrorSeverity.HIGH,
+          false,
+          undefined,
+          context
+        )
+      }
+      
+      // Validate amount
+      if (!amount || amount <= 0) {
+        throw new AppError(
+          'Invalid donation amount. Please enter a valid amount.',
+          ErrorType.VALIDATION,
+          ErrorSeverity.LOW,
+          false,
+          undefined,
+          context
+        )
+      }
+      
+      // Ensure minimum amount ($0.50)
+      if (amount < 0.5) {
+        throw new AppError(
+          'Minimum donation amount is $0.50. Please increase your donation amount.',
+          ErrorType.VALIDATION,
+          ErrorSeverity.LOW,
+          false,
+          undefined,
+          context
+        )
+      }
+      
+      const functionUrl = `${supabaseUrl}/functions/v1/create-payment-intent`
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+      }
+      
+      if (authHeader) {
+        headers['Authorization'] = authHeader
+      } else {
+        headers['Authorization'] = `Bearer ${supabaseAnonKey}`
+      }
+      
+      // Create AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
+      let response: Response
+      try {
+        response = await fetch(functionUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            donation_id: donationId,
+            amount: amount * 100,
+            use_checkout: true,
+          }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        
+        // Handle timeout
+        if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)))
+            return donationsAPI.createCheckoutSession(donationId, amount, retryCount + 1)
+          }
+          throw new AppError(
+            'Request timed out. Please check your connection and try again.',
+            ErrorType.TIMEOUT,
+            ErrorSeverity.MEDIUM,
+            true,
+            fetchError,
+            context
+          )
+        }
+        
+        // Handle network errors
+        if (fetchError.message?.includes('fetch') || fetchError.message?.includes('network')) {
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)))
+            return donationsAPI.createCheckoutSession(donationId, amount, retryCount + 1)
+          }
+          throw new AppError(
+            'Network error. Please check your internet connection and try again.',
+            ErrorType.NETWORK,
+            ErrorSeverity.MEDIUM,
+            true,
+            fetchError,
+            context
+          )
+        }
+        
+        throw fetchError
+      }
+      
+      if (!response.ok) {
+        let errorBody: any = null
+        let errorText = ''
+        try {
+          errorText = await response.text()
+          try {
+            errorBody = JSON.parse(errorText)
+          } catch (parseError) {
+            // Not JSON
+          }
+        } catch (readError) {
+          // Failed to read
+        }
+        
+        // Determine error type and message based on status code
+        let errorType = ErrorType.VALIDATION
+        let errorMessage = 'Failed to create checkout session'
+        let isRetryable = false
+        
+        if (response.status === 400) {
+          errorType = ErrorType.VALIDATION
+          errorMessage = 'Invalid donation request. Please check your donation details.'
+        } else if (response.status === 401 || response.status === 403) {
+          errorType = ErrorType.AUTHORIZATION
+          errorMessage = 'Authentication error. Please refresh the page and try again.'
+        } else if (response.status === 404) {
+          errorType = ErrorType.NOT_FOUND
+          errorMessage = 'Donation not found. Please start over.'
+        } else if (response.status === 429) {
+          errorType = ErrorType.RATE_LIMIT
+          errorMessage = 'Too many requests. Please wait a moment and try again.'
+          isRetryable = true
+        } else if (response.status >= 500) {
+          errorType = ErrorType.SERVER
+          errorMessage = 'Server error. Please try again in a moment.'
+          isRetryable = true
+        }
+        
+        // Extract user-friendly error message from response
+        if (errorBody?.error) {
+          const extractedError = typeof errorBody.error === 'string' 
+            ? errorBody.error 
+            : errorBody.error.message
+          
+          // Use extracted error if it's user-friendly
+          if (extractedError && extractedError.length < 150 && !extractedError.includes('at ')) {
+            errorMessage = extractedError
+          }
+        } else if (errorText && errorText.length < 150 && !errorText.includes('at ')) {
+          errorMessage = errorText
+        }
+        
+        // Retry on server errors
+        if (isRetryable && retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)))
+          return donationsAPI.createCheckoutSession(donationId, amount, retryCount + 1)
+        }
+        
+        throw new AppError(
+          errorMessage,
+          errorType,
+          ErrorSeverity.MEDIUM,
+          isRetryable,
+          { status: response.status },
+          { ...context, errorBody, errorText }
+        )
+      }
+      
+      let data: any
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        throw new AppError(
+          'Invalid response from server. Please try again.',
+          ErrorType.SERVER,
+          ErrorSeverity.HIGH,
+          true,
+          parseError,
+          context
+        )
+      }
+      
+      if (data.error) {
+        const errorMsg = typeof data.error === 'string' ? data.error : data.error.message || 'Checkout session creation failed'
+        throw new AppError(
+          errorMsg,
+          ErrorType.VALIDATION,
+          ErrorSeverity.MEDIUM,
+          false,
+          data,
+          context
+        )
+      }
+      
+      if (!data.checkout_url) {
+        throw new AppError(
+          'Checkout session created but no URL returned. Please try again.',
+          ErrorType.SERVER,
+          ErrorSeverity.HIGH,
+          true,
+          data,
+          context
+        )
+      }
+      
+      return {
+        checkout_url: data.checkout_url,
+        session_id: data.session_id,
+      }
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        throw err
+      }
+      throw normalizeError(err, context)
+    }
+  },
+
   createPaymentIntent: async (donationId: string, amount: number) => {
-    // Get session if available (donations can be anonymous)
-    const { data: { session } } = await supabase.auth.getSession()
+    const context = { operation: 'donationsAPI.createPaymentIntent', donationId, amount }
     
-    // Call Supabase Edge Function to create Stripe payment intent
-    const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-      body: { 
-        donation_id: donationId,
-        amount: amount * 100, // Convert to cents
-      },
-      headers: session ? {
-        Authorization: `Bearer ${session.access_token}`,
-      } : {},
-    })
-    
-    if (error) throw new Error(error.message)
-    return data as { client_secret: string; payment_intent_id: string }
+    try {
+      // Get session if available (donations can be anonymous)
+      // Check for valid session - if expired, treat as anonymous
+      let authHeader: string | undefined = undefined
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        // Only use session if it exists and is valid
+        if (!sessionError && session?.access_token) {
+          // Verify the token is still valid by checking if we can get the user
+          // This prevents sending expired tokens
+          const { error: userError } = await supabase.auth.getUser()
+          if (!userError) {
+            authHeader = `Bearer ${session.access_token}`
+          }
+        }
+      } catch (sessionCheckError) {
+        // If session check fails, treat as anonymous (no auth header)
+        // This is fine for donations which can be anonymous
+      }
+      
+      // Call Supabase Edge Function to create Stripe payment intent
+      // For anonymous donations, don't send auth header
+      // Use a direct fetch call to avoid Supabase client automatically attaching expired tokens
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase configuration is missing')
+      }
+      
+      const functionUrl = `${supabaseUrl}/functions/v1/create-donation-payment-intent`
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+      }
+      
+      // Supabase Edge Functions require Authorization header
+      // For anonymous requests, use the anon key as bearer token
+      // For authenticated requests, use the user's access token
+      if (authHeader) {
+        headers['Authorization'] = authHeader
+      } else {
+        // For anonymous requests, send anon key as bearer token
+        // This allows the Edge Function to be called without user authentication
+        headers['Authorization'] = `Bearer ${supabaseAnonKey}`
+      }
+      
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          donation_id: donationId,
+          amount: amount * 100, // Convert to cents
+        }),
+      })
+      
+      let data: any = null
+      let error: any = null
+      
+      if (!response.ok) {
+        // Try to parse error response - read body once
+        let errorBody: any = null
+        let errorText = ''
+        try {
+          errorText = await response.text()
+          try {
+            errorBody = JSON.parse(errorText)
+          } catch (parseError) {
+            // Not JSON, use text as is
+          }
+        } catch (readError) {
+          // Failed to read body
+        }
+        
+        // Extract error message from response
+        let errorMessage = 'Failed to create payment intent'
+        if (errorBody) {
+          if (errorBody.error) {
+            errorMessage = typeof errorBody.error === 'string' 
+              ? errorBody.error 
+              : errorBody.error.message || errorMessage
+          } else if (errorBody.message) {
+            errorMessage = errorBody.message
+          }
+        } else if (errorText && errorText.length < 500) {
+          errorMessage = errorText
+        }
+        
+        error = {
+          message: errorMessage,
+          status: response.status,
+          context: { errorBody, errorText },
+        }
+      } else {
+        // Parse success response
+        data = await response.json()
+      }
+      
+      if (error) {
+        // Use the already extracted error message
+        let errorMessage = error.message || 'Failed to create payment intent'
+        let extractedError = error.context?.errorBody || null
+        
+        // For donations, preserve the actual error message from Edge Function
+        // Don't misclassify validation errors (400) as authentication errors
+        // Check the actual HTTP status code from the response
+        const httpStatus = error.status || 400
+        
+        // Check if error message indicates it's from old Edge Function code
+        // Old code requires auth and throws "Unauthorized: Invalid or expired token"
+        const isOldFunctionError = errorMessage.includes('Unauthorized: Invalid or expired token') ||
+                                   errorMessage.includes('Missing authorization header')
+        
+        // Only classify as auth error if it's actually a 401 status code
+        // OR if it's clearly an auth error from the old function
+        const isAuthError = httpStatus === 401 || (isOldFunctionError && httpStatus === 400)
+        
+        if (isAuthError && isOldFunctionError) {
+          // This means the Edge Function hasn't been updated yet
+          throw new AppError(
+            'The payment service needs to be updated. Please contact support or try again later. (Edge Function update required)',
+            ErrorType.SERVER,
+            ErrorSeverity.HIGH,
+            false,
+            error,
+            { ...context, step: 'invokeFunction', extractedError, httpStatus, isOldFunctionError: true }
+          )
+        } else if (isAuthError) {
+          throw normalizeError(new Error(errorMessage), { ...context, step: 'invokeFunction', originalError: error })
+        } else {
+          // For non-auth errors (like validation errors), throw with the actual message
+          // but still use AppError for consistency
+          const errorType = httpStatus === 400 ? ErrorType.VALIDATION : 
+                           httpStatus === 404 ? ErrorType.NOT_FOUND :
+                           httpStatus && httpStatus >= 500 ? ErrorType.SERVER :
+                           ErrorType.UNKNOWN
+          
+          const appError = new AppError(
+            errorMessage,
+            errorType,
+            ErrorSeverity.MEDIUM,
+            false,
+            error,
+            { ...context, step: 'invokeFunction', extractedError, httpStatus }
+          )
+          throw appError
+        }
+      }
+      
+      // Handle edge function error response (function executed but returned error)
+      if (data && typeof data === 'object') {
+        if (data.error) {
+          const errorMsg = typeof data.error === 'string' 
+            ? data.error 
+            : data.error.message || data.error.error || 'Payment intent creation failed'
+          throw normalizeError(new Error(errorMsg), { ...context, step: 'processResponse' })
+        }
+        
+        // Edge function returns snake_case, convert to camelCase for consistency
+        const clientSecret = data.client_secret || data.clientSecret
+        const paymentIntentId = data.payment_intent_id || data.paymentIntentId
+        
+        if (!clientSecret) {
+          throw normalizeError(
+            new Error('Payment intent created but no client secret returned. Please contact support.'),
+            { ...context, step: 'validateResponse' }
+          )
+        }
+        
+        return {
+          client_secret: clientSecret,
+          payment_intent_id: paymentIntentId,
+        }
+      }
+      
+      // No data returned
+      throw normalizeError(
+        new Error('No response from payment service. Please try again or contact support.'),
+        { ...context, step: 'validateResponse' }
+      )
+    } catch (err: any) {
+      if (err instanceof Error && err.message.includes('normalizeError')) {
+        throw err
+      }
+      throw normalizeError(err, context)
+    }
   },
 }
 

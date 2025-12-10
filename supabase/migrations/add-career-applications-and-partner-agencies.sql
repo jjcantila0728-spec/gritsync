@@ -224,3 +224,5 @@ CREATE TRIGGER update_career_applications_updated_at
   BEFORE UPDATE ON career_applications
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+
+

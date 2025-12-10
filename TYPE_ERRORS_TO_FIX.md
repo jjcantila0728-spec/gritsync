@@ -128,3 +128,5 @@ Some type assertions need to be fixed after types are added:
 
 These are **compile-time errors only**. The application will still run, but TypeScript won't provide type safety for the new tables until types are added.
 
+
+

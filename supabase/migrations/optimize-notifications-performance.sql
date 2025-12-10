@@ -32,3 +32,5 @@ WHERE application_id IS NOT NULL;
 -- Analyze the table to update statistics
 ANALYZE notifications;
 
+
+
