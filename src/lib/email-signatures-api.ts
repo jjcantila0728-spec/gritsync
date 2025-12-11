@@ -253,6 +253,10 @@ export async function getAllLogos(): Promise<BusinessLogo[]> {
 
   if (error) {
     console.error('Error fetching logos:', error);
+    // If the table doesn't exist yet (migration not applied), treat as no logos
+    if ((error as any).code === 'PGRST205') {
+      return [];
+    }
     throw error;
   }
 
@@ -270,6 +274,10 @@ export async function getLogosByType(logoType: BusinessLogo['logo_type']): Promi
 
   if (error) {
     console.error('Error fetching logos by type:', error);
+    // If the table doesn't exist yet (migration not applied), treat as no logos
+    if ((error as any).code === 'PGRST205') {
+      return [];
+    }
     throw error;
   }
 
@@ -317,6 +325,10 @@ export async function uploadLogo(
 
   if (uploadError) {
     console.error('Error uploading logo:', uploadError);
+    // Provide a more helpful error message for missing bucket
+    if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('bucket')) {
+      throw new Error('Storage bucket "email-logos" not found. Please run database migrations to create the bucket.');
+    }
     throw uploadError;
   }
 

@@ -60,6 +60,7 @@ const AdminEmails = lazy(() => import('./pages/AdminEmails').then(m => ({ defaul
 const AdminEmailAddresses = lazy(() => import('./pages/AdminEmailAddresses').then(m => ({ default: m.AdminEmailAddresses })))
 const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').then(m => ({ default: m.default })))
 const AdminEmailSignatures = lazy(() => import('./pages/AdminEmailSignatures').then(m => ({ default: m.default })))
+const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ default: m.ClientEmails })))
 
 // Loading fallback component
 function PageLoader() {
@@ -517,6 +518,40 @@ function AppRoutes() {
           <AdminRoute>
             <AdminEmails />
           </AdminRoute>
+        }
+      />
+      
+      {/* Client Email Routes */}
+      <Route
+        path="/client/emails"
+        element={
+          <ProtectedRoute>
+            <ClientEmails />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/emails/inbox"
+        element={
+          <ProtectedRoute>
+            <ClientEmails />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/emails/sent"
+        element={
+          <ProtectedRoute>
+            <ClientEmails />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/emails/templates"
+        element={
+          <ProtectedRoute>
+            <ClientEmails />
+          </ProtectedRoute>
         }
       />
       </Routes>

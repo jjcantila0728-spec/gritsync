@@ -9,11 +9,12 @@
  * - Bulk operations
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
+import { useToast } from '@/components/ui/Toast'
 import { 
   Mail, 
   Send, 
@@ -47,6 +48,10 @@ import {
   Settings,
   Upload,
   Image as ImageIcon,
+  ChevronDown,
+  MoreVertical,
+  Paperclip,
+  Minimize2,
 } from 'lucide-react'
 import { emailLogsAPI, sendEmailWithLogging, EmailLog, EmailStats } from '@/lib/email-api'
 import { Loading } from '@/components/ui/Loading'
@@ -62,6 +67,7 @@ type Tab = 'inbox' | 'sent' | 'templates' | 'signatures' | 'email-setup'
 
 // Email Templates Manager Component
 function EmailTemplatesManager() {
+  const { showToast } = useToast()
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -92,7 +98,7 @@ function EmailTemplatesManager() {
       setTemplates(data);
     } catch (error) {
       console.error('Error loading templates:', error);
-      alert('Failed to load templates');
+      showToast('Failed to load templates', 'error');
     } finally {
       setLoading(false);
     }
@@ -132,28 +138,28 @@ function EmailTemplatesManager() {
   const handleClone = async (template: EmailTemplate) => {
     try {
       await emailTemplatesAPI.clone(template.id);
-      alert('Template cloned successfully');
+      showToast('Template cloned successfully', 'success');
       loadTemplates();
     } catch (error) {
       console.error('Error cloning template:', error);
-      alert('Failed to clone template');
+      showToast('Failed to clone template', 'error');
     }
   };
 
   const handleToggleActive = async (template: EmailTemplate) => {
     try {
       await emailTemplatesAPI.update(template.id, { is_active: !template.is_active });
-      alert(`Template ${template.is_active ? 'deactivated' : 'activated'}`);
+      showToast(`Template ${template.is_active ? 'deactivated' : 'activated'}`, 'success');
       loadTemplates();
     } catch (error) {
       console.error('Error toggling template:', error);
-      alert('Failed to update template');
+      showToast('Failed to update template', 'error');
     }
   };
 
   const handleDelete = async (template: EmailTemplate) => {
     if (template.template_type === 'system') {
-      alert('Cannot delete system templates');
+      showToast('Cannot delete system templates', 'warning');
       return;
     }
 
@@ -163,11 +169,11 @@ function EmailTemplatesManager() {
 
     try {
       await emailTemplatesAPI.delete(template.id);
-      alert('Template deleted successfully');
+      showToast('Template deleted successfully', 'success');
       loadTemplates();
     } catch (error) {
       console.error('Error deleting template:', error);
-      alert('Failed to delete template');
+      showToast('Failed to delete template', 'error');
     }
   };
 
@@ -175,24 +181,24 @@ function EmailTemplatesManager() {
     if (!editingTemplate) return;
 
     if (!editingTemplate.name || !editingTemplate.slug || !editingTemplate.subject || !editingTemplate.html_content) {
-      alert('Please fill in all required fields');
+      showToast('Please fill in all required fields', 'warning');
       return;
     }
 
     try {
       if (editingTemplate.id) {
         await emailTemplatesAPI.update(editingTemplate.id, editingTemplate);
-        alert('Template updated successfully');
+        showToast('Template updated successfully', 'success');
       } else {
         await emailTemplatesAPI.create(editingTemplate as any);
-        alert('Template created successfully');
+        showToast('Template created successfully', 'success');
       }
       setShowEditor(false);
       setEditingTemplate(null);
       loadTemplates();
     } catch (error) {
       console.error('Error saving template:', error);
-      alert('Failed to save template');
+      showToast('Failed to save template', 'error');
     }
   };
 
@@ -670,6 +676,7 @@ export function AdminEmails() {
   const { isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { showToast } = useToast()
   
   // Get initial tab from URL path or hash
   const getInitialTab = (): Tab => {
@@ -727,6 +734,17 @@ export function AdminEmails() {
   const [businessLogos, setBusinessLogos] = useState<BusinessLogo[]>([])
   const [showLogoUpload, setShowLogoUpload] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [editingEmail, setEditingEmail] = useState<any | null>(null)
+  const [showEmailEditor, setShowEmailEditor] = useState(false)
+  const [showAddEmailModal, setShowAddEmailModal] = useState(false)
+  const [newEmailData, setNewEmailData] = useState({
+    email_address: '',
+    display_name: '',
+    address_type: 'admin' as 'admin' | 'support' | 'noreply' | 'department',
+    department: '',
+    can_send: true,
+    can_receive: true,
+  })
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -750,6 +768,12 @@ export function AdminEmails() {
     replyTo: '',
   })
   const [sending, setSending] = useState(false)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+  const [showSignatureMenu, setShowSignatureMenu] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(false)
+  const templateMenuRef = useRef<HTMLDivElement>(null)
+  const signatureMenuRef = useRef<HTMLDivElement>(null)
   
   // Email addresses
   const [adminEmailAddresses, setAdminEmailAddresses] = useState<any[]>([])
@@ -780,16 +804,42 @@ export function AdminEmails() {
       loadEmailSignatures()
     }
   }, [currentPage, statusFilter, typeFilter, categoryFilter, searchQuery, dateRange, activeTab])
+
+  // Close dropdown menus when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) {
+        setShowTemplateMenu(false)
+      }
+      if (signatureMenuRef.current && !signatureMenuRef.current.contains(event.target as Node)) {
+        setShowSignatureMenu(false)
+      }
+    }
+
+    if (showTemplateMenu || showSignatureMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showTemplateMenu, showSignatureMenu])
   
   const loadAdminEmailAddresses = async () => {
     setLoadingAddresses(true)
     try {
       const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
-      const addresses = await emailAddressesAPI.getAdminAddresses()
-      setAdminEmailAddresses(addresses)
-      // Set default from address
-      if (addresses.length > 0 && !composeData.fromEmailAddressId) {
-        setComposeData(prev => ({ ...prev, fromEmailAddressId: addresses[0].id }))
+      // Load all email addresses and filter for business/system addresses (admin, support, noreply, department)
+      // Show all, including unverified and inactive
+      const allAddresses = await emailAddressesAPI.getAll()
+      const businessAddresses = allAddresses.filter(addr => 
+        ['admin', 'support', 'noreply', 'department'].includes(addr.address_type)
+      )
+      setAdminEmailAddresses(businessAddresses)
+      // Set default from address (prefer active/verified addresses)
+      const defaultAddress = businessAddresses.find(addr => addr.is_active && addr.is_verified) || businessAddresses[0]
+      if (defaultAddress && !composeData.fromEmailAddressId) {
+        setComposeData(prev => ({ ...prev, fromEmailAddressId: defaultAddress.id }))
       }
     } catch (error) {
       console.error('Error loading admin email addresses:', error)
@@ -966,13 +1016,13 @@ export function AdminEmails() {
     try {
       const success = await emailLogsAPI.retry(emailId)
       if (success) {
-        alert('Email resent successfully!')
+        showToast('Email resent successfully!', 'success')
         loadData()
       } else {
-        alert('Failed to resend email. Please check the logs.')
+        showToast('Failed to resend email. Please check the logs.', 'error')
       }
     } catch (error: any) {
-      alert(error.message || 'Failed to retry email')
+      showToast(error.message || 'Failed to retry email', 'error')
     }
   }
 
@@ -1017,10 +1067,10 @@ export function AdminEmails() {
       }
       
       setDeleteModal({ isOpen: false, type: 'sent', emailId: null, emailSubject: '' })
-      alert('Email deleted successfully')
+      showToast('Email deleted successfully', 'success')
     } catch (error) {
       console.error('Error deleting email:', error)
-      alert('Failed to delete email')
+      showToast('Failed to delete email', 'error')
     }
   }
 
@@ -1028,7 +1078,7 @@ export function AdminEmails() {
     const selectedIds = activeTab === 'sent' ? selectedSentIds : selectedInboxIds
     
     if (selectedIds.size === 0) {
-      alert('Please select at least one email to delete')
+      showToast('Please select at least one email to delete', 'warning')
       return
     }
 
@@ -1057,14 +1107,14 @@ export function AdminEmails() {
         loadInboxEmails()
         
         if (errors.length > 0) {
-          alert(`Failed to delete ${errors.length} email(s). ${selectedIds.size - errors.length} deleted successfully.`)
+          showToast(`Failed to delete ${errors.length} email(s). ${selectedIds.size - errors.length} deleted successfully.`, 'warning')
         } else {
-          alert(`${selectedIds.size} email(s) deleted successfully`)
+          showToast(`${selectedIds.size} email(s) deleted successfully`, 'success')
         }
       }
     } catch (error) {
       console.error('Error deleting emails:', error)
-      alert('Failed to delete emails')
+      showToast('Failed to delete emails', 'error')
     }
   }
 
@@ -1112,24 +1162,24 @@ export function AdminEmails() {
     if (!editingSignature) return
 
     if (!editingSignature.name || !editingSignature.signature_html) {
-      alert('Please fill in name and HTML content')
+      showToast('Please fill in name and HTML content', 'warning')
       return
     }
 
     try {
       if (editingSignature.id) {
         await emailSignaturesAPI.update(editingSignature.id, editingSignature)
-        alert('Signature updated successfully')
+        showToast('Signature updated successfully', 'success')
       } else {
         await emailSignaturesAPI.create(editingSignature)
-        alert('Signature created successfully')
+        showToast('Signature created successfully', 'success')
       }
       setShowSignatureEditor(false)
       setEditingSignature(null)
       loadSignaturesData()
     } catch (error) {
       console.error('Error saving signature:', error)
-      alert('Failed to save signature')
+      showToast('Failed to save signature', 'error')
     }
   }
 
@@ -1138,22 +1188,22 @@ export function AdminEmails() {
 
     try {
       await emailSignaturesAPI.delete(id)
-      alert('Signature deleted successfully')
+      showToast('Signature deleted successfully', 'success')
       loadSignaturesData()
     } catch (error) {
       console.error('Error deleting signature:', error)
-      alert('Failed to delete signature')
+      showToast('Failed to delete signature', 'error')
     }
   }
 
   const handleSetDefaultSignature = async (id: string) => {
     try {
       await emailSignaturesAPI.setDefault(id)
-      alert('Default signature updated')
+      showToast('Default signature updated', 'success')
       loadSignaturesData()
     } catch (error) {
       console.error('Error setting default signature:', error)
-      alert('Failed to set default signature')
+      showToast('Failed to set default signature', 'error')
     }
   }
 
@@ -1164,14 +1214,23 @@ export function AdminEmails() {
       const [addresses, logos] = await Promise.all([
         (async () => {
           const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
-          return emailAddressesAPI.getAdminAddresses()
+          // Load ALL email addresses, not just admin ones, to show noreply and support
+          return emailAddressesAPI.getAll()
         })(),
-        businessLogosAPI.getAll(),
+        businessLogosAPI.getAll().catch((error) => {
+          // Handle missing table gracefully
+          if ((error as any)?.code === 'PGRST205') {
+            console.warn('business_logos table not found. Run database migrations to enable logo management.')
+            return []
+          }
+          throw error
+        }),
       ])
       setAdminEmailAddresses(addresses)
       setBusinessLogos(logos)
     } catch (error) {
       console.error('Error loading email setup data:', error)
+      // Don't show toast here as this is called on mount and errors are expected if tables don't exist
     } finally {
       setLoading(false)
     }
@@ -1183,25 +1242,30 @@ export function AdminEmails() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file')
+      showToast('Please upload an image file', 'warning')
       return
     }
 
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB')
+      showToast('File size must be less than 5MB', 'warning')
       return
     }
 
     try {
       setUploadingLogo(true)
       await businessLogosAPI.upload(file, logoType, file.name)
-      alert('Logo uploaded successfully')
+      showToast('Logo uploaded successfully', 'success')
       loadEmailSetupData()
       setShowLogoUpload(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading logo:', error)
-      alert('Failed to upload logo')
+      const errorMessage = error.message || 'Failed to upload logo'
+      if (errorMessage.includes('Bucket not found')) {
+        showToast('Storage bucket not configured. Please run database migrations.', 'error')
+      } else {
+        showToast(errorMessage, 'error')
+      }
     } finally {
       setUploadingLogo(false)
     }
@@ -1212,23 +1276,182 @@ export function AdminEmails() {
 
     try {
       await businessLogosAPI.delete(id)
-      alert('Logo deleted successfully')
+      showToast('Logo deleted successfully', 'success')
       loadEmailSetupData()
     } catch (error) {
       console.error('Error deleting logo:', error)
-      alert('Failed to delete logo')
+      showToast('Failed to delete logo', 'error')
     }
   }
 
   const handleSetDefaultLogo = async (id: string, logoType: BusinessLogo['logo_type']) => {
     try {
       await businessLogosAPI.setDefault(id, logoType)
-      alert('Default logo updated')
+      showToast('Default logo updated', 'success')
       loadEmailSetupData()
     } catch (error) {
       console.error('Error setting default logo:', error)
-      alert('Failed to set default logo')
+      showToast('Failed to set default logo', 'error')
     }
+  }
+
+  const handleEditEmail = (email: any) => {
+    setEditingEmail(email)
+    setShowEmailEditor(true)
+  }
+
+  const handleSaveEmail = async () => {
+    if (!editingEmail) return
+
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      await emailAddressesAPI.update(editingEmail.id, {
+        display_name: editingEmail.display_name,
+        department: editingEmail.department,
+        can_send: editingEmail.can_send,
+        can_receive: editingEmail.can_receive,
+        is_active: editingEmail.is_active,
+        metadata: editingEmail.metadata || {},
+      })
+      showToast('Email address updated successfully', 'success')
+      setShowEmailEditor(false)
+      setEditingEmail(null)
+      loadEmailSetupData()
+    } catch (error) {
+      console.error('Error updating email address:', error)
+      showToast('Failed to update email address', 'error')
+    }
+  }
+
+  const handleAddEmail = async () => {
+    if (!newEmailData.email_address) {
+      showToast('Please enter an email address', 'warning')
+      return
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmailData.email_address)) {
+      showToast('Please enter a valid email address', 'warning')
+      return
+    }
+
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      
+      // Check if email already exists
+      const existingEmail = await emailAddressesAPI.getByEmail(newEmailData.email_address.toLowerCase())
+      if (existingEmail) {
+        showToast(`Email address "${newEmailData.email_address}" already exists in the system. Please use a different email address.`, 'warning')
+        return
+      }
+
+      await emailAddressesAPI.create({
+        ...newEmailData,
+        email_address: newEmailData.email_address.toLowerCase(), // Normalize to lowercase
+        is_system_address: true,
+        is_active: true,
+        is_verified: false,
+      })
+      showToast('Email address added successfully', 'success')
+      setShowAddEmailModal(false)
+      setNewEmailData({
+        email_address: '',
+        display_name: '',
+        address_type: 'admin',
+        department: '',
+        can_send: true,
+        can_receive: true,
+      })
+      loadEmailSetupData()
+    } catch (error: any) {
+      console.error('Error adding email address:', error)
+      
+      // Handle specific error cases
+      if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('unique constraint')) {
+        showToast(`Email address "${newEmailData.email_address}" already exists in the system. Please use a different email address.`, 'warning')
+      } else if (error?.message) {
+        showToast(`Failed to add email address: ${error.message}`, 'error')
+      } else {
+        showToast('Failed to add email address. Please try again.', 'error')
+      }
+    }
+  }
+
+  const handleDeleteEmail = async (id: string, emailAddress: string) => {
+    if (!confirm(`Are you sure you want to delete "${emailAddress}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      await emailAddressesAPI.delete(id)
+      showToast('Email address deleted successfully', 'success')
+      loadEmailSetupData()
+    } catch (error) {
+      console.error('Error deleting email address:', error)
+      showToast('Failed to delete email address', 'error')
+    }
+  }
+
+  const handleAssignLogo = async (emailId: string, logoId: string | null) => {
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      const email = await emailAddressesAPI.getById(emailId)
+      const updatedMetadata = {
+        ...(email.metadata || {}),
+        logo_id: logoId,
+      }
+      await emailAddressesAPI.update(emailId, { metadata: updatedMetadata })
+      showToast('Logo assigned successfully', 'success')
+      loadEmailSetupData()
+    } catch (error) {
+      console.error('Error assigning logo:', error)
+      showToast('Failed to assign logo', 'error')
+    }
+  }
+
+  const getEmailLogo = (email: any): BusinessLogo | null => {
+    if (!email || !businessLogos || businessLogos.length === 0) return null
+    
+    // Handle metadata that might be a string or object
+    let metadata = email.metadata
+    if (!metadata) return null
+    
+    if (typeof metadata === 'string') {
+      try {
+        metadata = JSON.parse(metadata)
+      } catch {
+        return null
+      }
+    }
+    
+    const logoId = metadata?.logo_id
+    if (!logoId) return null
+    
+    // Find the logo and ensure it's an avatar
+    const logo = businessLogos.find((logo) => logo.id === logoId && logo.logo_type === 'avatar')
+    return logo || null
+  }
+
+  // Get avatar for an email address string (for inbox/sent emails)
+  const getAvatarForEmail = (emailAddress: string): BusinessLogo | null => {
+    // Extract email from string (handle formats like "Name <email@domain.com>" or just "email@domain.com")
+    const emailMatch = emailAddress.match(/<([^>]+)>/) || [emailAddress]
+    const cleanEmail = emailMatch[1] || emailMatch[0]
+    
+    // Find matching email address in adminEmailAddresses
+    const emailAddr = adminEmailAddresses.find(
+      addr => addr.email_address.toLowerCase() === cleanEmail.toLowerCase()
+    )
+    
+    if (!emailAddr) return null
+    
+    // Get logo from email address metadata
+    const logoId = emailAddr.metadata?.logo_id
+    if (!logoId) return null
+    
+    return businessLogos.find((logo) => logo.id === logoId) || null
   }
 
   const toggleInboxSelection = (id: string) => {
@@ -1259,7 +1482,7 @@ export function AdminEmails() {
 
   const handleSendEmail = async () => {
     if (!composeData.to || !composeData.subject || !composeData.body) {
-      alert('Please fill in all required fields')
+      showToast('Please fill in all required fields', 'warning')
       return
     }
 
@@ -1278,7 +1501,7 @@ export function AdminEmails() {
       })
 
       if (success) {
-        alert('Email sent successfully!')
+        showToast('Email sent successfully!', 'success')
         setComposing(false)
         setComposeData({
           to: '',
@@ -1293,11 +1516,11 @@ export function AdminEmails() {
         })
         loadData()
       } else {
-        alert('Failed to send email. Please check your email configuration.')
+        showToast('Failed to send email. Please check your email configuration.', 'error')
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert('Failed to send email')
+      showToast('Failed to send email', 'error')
     } finally {
       setSending(false)
     }
@@ -1687,6 +1910,24 @@ export function AdminEmails() {
                                       />
                                     </div>
 
+                                    {/* Avatar */}
+                                    <div className="w-10 h-10 flex-shrink-0 mr-2 sm:mr-3">
+                                      {(() => {
+                                        const avatar = getAvatarForEmail(log.sender_email);
+                                        return avatar ? (
+                                          <img
+                                            src={avatar.public_url}
+                                            alt={avatar.alt_text || 'Avatar'}
+                                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                                          />
+                                        ) : (
+                                          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center border-2 border-gray-200 dark:border-gray-700">
+                                            <Mail className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+
                                     {/* Content Area */}
                                     <div className="flex-1 min-w-0 pr-2">
                                       {/* Recipient & Status (Mobile: stacked, Desktop: inline) */}
@@ -2049,6 +2290,24 @@ export function AdminEmails() {
                                       />
                                     </div>
 
+                                    {/* Avatar */}
+                                    <div className="w-10 h-10 flex-shrink-0 mr-2 sm:mr-3">
+                                      {(() => {
+                                        const avatar = getAvatarForEmail(email.from);
+                                        return avatar ? (
+                                          <img
+                                            src={avatar.public_url}
+                                            alt={avatar.alt_text || 'Avatar'}
+                                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                                          />
+                                        ) : (
+                                          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center border-2 border-gray-200 dark:border-gray-700">
+                                            <Mail className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+
                                     {/* Content Area */}
                                     <div className="flex-1 min-w-0 pr-2">
                                       {/* Sender & Attachment Icon (Mobile: stacked, Desktop: inline) */}
@@ -2303,7 +2562,7 @@ export function AdminEmails() {
                             Admin Business Emails
                           </h3>
                           <button
-                            onClick={() => window.location.href = '/admin/email-addresses'}
+                            onClick={() => setShowAddEmailModal(true)}
                             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
                           >
                             <Plus className="h-4 w-4" />
@@ -2317,141 +2576,161 @@ export function AdminEmails() {
                             <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">No Business Emails</h4>
                             <p className="text-gray-500 dark:text-gray-400 mb-4">Add your first admin business email address</p>
                             <button
-                              onClick={() => window.location.href = '/admin/email-addresses'}
+                              onClick={() => setShowAddEmailModal(true)}
                               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                             >
                               Add Email Address
                             </button>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {adminEmailAddresses.map((email) => (
-                              <div
-                                key={email.id}
-                                className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow"
-                              >
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <Mail className="h-4 w-4 text-primary-600" />
-                                      <span className="font-medium text-gray-900 dark:text-gray-100">
-                                        {email.email}
-                                      </span>
-                                    </div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                      {email.name || email.display_name || 'No display name'}
-                                    </p>
-                                  </div>
-                                  {email.is_default && (
-                                    <span className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded-full flex items-center gap-1">
-                                      <Star className="h-3 w-3" fill="currentColor" />
-                                      Default
-                                    </span>
-                                  )}
-                                </div>
-                                {email.is_verified && (
-                                  <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Verified
-                                  </div>
-                                )}
-                                {!email.is_active && (
-                                  <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-2">
-                                    <EyeOff className="h-3 w-3" />
-                                    Inactive
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                                  <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Email Address
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Display Name
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Avatar
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Type
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Department
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Status
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Capabilities
+                                    </th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Actions
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                  {adminEmailAddresses.map((email) => (
+                                    <tr key={email.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          <Mail className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                            {email.email_address}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                                          {email.display_name || '-'}
+                                        </span>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        {(() => {
+                                          const avatar = getEmailLogo(email)
+                                          return avatar && avatar.public_url ? (
+                                            <img
+                                              src={avatar.public_url}
+                                              alt={avatar.alt_text || 'Avatar'}
+                                              className="h-8 w-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                                              onError={(e) => {
+                                                // Fallback if image fails to load
+                                                e.currentTarget.style.display = 'none'
+                                              }}
+                                            />
+                                          ) : (
+                                            <button
+                                              onClick={() => handleEditEmail(email)}
+                                              className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                                              title="Click to assign avatar"
+                                            >
+                                              Assign
+                                            </button>
+                                          )
+                                        })()}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 capitalize">
+                                          {email.address_type}
+                                        </span>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                                          {email.department || '-'}
+                                        </span>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          {email.is_verified && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 flex items-center gap-1">
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              Verified
+                                            </span>
+                                          )}
+                                          {email.is_active ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                                              Active
+                                            </span>
+                                          ) : (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 flex items-center gap-1">
+                                              <EyeOff className="h-3 w-3" />
+                                              Inactive
+                                            </span>
+                                          )}
+                                          {email.is_primary && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 flex items-center gap-1">
+                                              <Star className="h-3 w-3" fill="currentColor" />
+                                              Primary
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          {email.can_send && (
+                                            <span className="px-2 py-1 text-xs rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                                              Send
+                                            </span>
+                                          )}
+                                          {email.can_receive && (
+                                            <span className="px-2 py-1 text-xs rounded bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300">
+                                              Receive
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div className="flex items-center justify-end gap-2">
+                                          <button
+                                            onClick={() => handleEditEmail(email)}
+                                            className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                                            title="Edit"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteEmail(email.id, email.email_address)}
+                                            className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                            title="Delete"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Business Logos Section */}
-                      <div>
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            Official Business Logos
-                          </h3>
-                          <button
-                            onClick={() => setShowLogoUpload(true)}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
-                          >
-                            <Upload className="h-4 w-4" />
-                            Upload Logo
-                          </button>
-                        </div>
-
-                        {businessLogos.length === 0 ? (
-                          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-                            <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">No Business Logos</h4>
-                            <p className="text-gray-500 dark:text-gray-400 mb-4">Upload your official business logo</p>
-                            <button
-                              onClick={() => setShowLogoUpload(true)}
-                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                            >
-                              Upload Logo
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {businessLogos.map((logo) => (
-                              <div
-                                key={logo.id}
-                                className={cn(
-                                  'bg-white dark:bg-gray-800 rounded-lg border p-4 hover:shadow-md transition-all',
-                                  logo.is_default
-                                    ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
-                                    : 'border-gray-200 dark:border-gray-700'
-                                )}
-                              >
-                                <div className="aspect-square bg-gray-50 dark:bg-gray-900 rounded-lg mb-3 flex items-center justify-center p-3">
-                                  <img
-                                    src={logo.public_url}
-                                    alt={logo.alt_text || logo.file_name}
-                                    className="max-w-full max-h-full object-contain"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                    {logo.file_name}
-                                  </p>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                                      {logo.logo_type.replace('_', ' ')}
-                                    </span>
-                                    {logo.is_default && (
-                                      <span className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded-full">
-                                        Default
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {(logo.file_size / 1024).toFixed(1)} KB • {logo.width}×{logo.height}
-                                  </p>
-                                  <div className="flex gap-2 pt-2">
-                                    {!logo.is_default && (
-                                      <button
-                                        onClick={() => handleSetDefaultLogo(logo.id, logo.logo_type)}
-                                        className="flex-1 px-2 py-1.5 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
-                                      >
-                                        <Star className="h-3 w-3 inline" />
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => handleDeleteLogo(logo.id)}
-                                      className="flex-1 px-2 py-1.5 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded hover:bg-red-100 dark:hover:bg-red-900/30"
-                                    >
-                                      <Trash2 className="h-3 w-3 inline" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   )}
                 </div>
@@ -2459,12 +2738,357 @@ export function AdminEmails() {
             </div>
           </div>
 
+          {/* Add Email Address Modal */}
+          {showAddEmailModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Add Email Address</h3>
+                  <button
+                    onClick={() => {
+                      setShowAddEmailModal(false)
+                      setNewEmailData({
+                        email_address: '',
+                        display_name: '',
+                        address_type: 'admin',
+                        department: '',
+                        can_send: true,
+                        can_receive: true,
+                      })
+                    }}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Email Address <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={newEmailData.email_address}
+                      onChange={(e) => setNewEmailData({ ...newEmailData, email_address: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., support@gritsync.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newEmailData.display_name}
+                      onChange={(e) => setNewEmailData({ ...newEmailData, display_name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., GritSync Support"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Address Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={newEmailData.address_type}
+                      onChange={(e) => setNewEmailData({ ...newEmailData, address_type: e.target.value as any })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="support">Support</option>
+                      <option value="noreply">No Reply</option>
+                      <option value="department">Department</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      value={newEmailData.department}
+                      onChange={(e) => setNewEmailData({ ...newEmailData, department: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., Support, Sales, Admin"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="can_send_new"
+                        checked={newEmailData.can_send}
+                        onChange={(e) => setNewEmailData({ ...newEmailData, can_send: e.target.checked })}
+                        className="rounded border-gray-300 text-primary-600"
+                      />
+                      <label htmlFor="can_send_new" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Can Send Emails
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="can_receive_new"
+                        checked={newEmailData.can_receive}
+                        onChange={(e) => setNewEmailData({ ...newEmailData, can_receive: e.target.checked })}
+                        className="rounded border-gray-300 text-primary-600"
+                      />
+                      <label htmlFor="can_receive_new" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Can Receive Emails
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      setShowAddEmailModal(false)
+                      setNewEmailData({
+                        email_address: '',
+                        display_name: '',
+                        address_type: 'admin',
+                        department: '',
+                        can_send: true,
+                        can_receive: true,
+                      })
+                    }}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddEmail}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Email Address
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Email Editor Modal */}
+          {showEmailEditor && editingEmail && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Edit Email Address</h3>
+                  <button
+                    onClick={() => {
+                      setShowEmailEditor(false)
+                      setEditingEmail(null)
+                    }}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={editingEmail.email_address}
+                      disabled
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white bg-gray-100"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Email address cannot be changed</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editingEmail.display_name || ''}
+                      onChange={(e) => setEditingEmail({ ...editingEmail, display_name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., GritSync Office"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      value={editingEmail.department || ''}
+                      onChange={(e) => setEditingEmail({ ...editingEmail, department: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., Office, Support, Admin"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Assign Avatar
+                      </label>
+                      <label className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                        <Upload className="h-4 w-4" />
+                        <span>Upload Avatar</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              handleLogoUpload(e as any, 'avatar' as BusinessLogo['logo_type'])
+                              // Reset input so same file can be selected again
+                              e.target.value = ''
+                            }
+                          }}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                      </label>
+                    </div>
+                    {uploadingLogo && (
+                      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                        <span className="text-sm text-blue-700 dark:text-blue-300">Uploading avatar...</span>
+                      </div>
+                    )}
+                    {businessLogos.filter(logo => logo.logo_type === 'avatar').length > 0 ? (
+                      <div className="grid grid-cols-3 gap-3 max-h-48 overflow-y-auto">
+                        <button
+                          onClick={() => handleAssignLogo(editingEmail.id, null)}
+                          className={cn(
+                            'aspect-video bg-gray-50 dark:bg-gray-900 rounded-lg border-2 flex flex-col items-center justify-center p-2 transition-all',
+                            !getEmailLogo(editingEmail)
+                              ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-primary-400'
+                          )}
+                        >
+                          <X className="h-6 w-6 text-gray-400 mb-1" />
+                          <span className="text-xs text-gray-400">No Avatar</span>
+                        </button>
+                        {businessLogos.filter(logo => logo.logo_type === 'avatar').map((logo) => (
+                          <button
+                            key={logo.id}
+                            onClick={() => handleAssignLogo(editingEmail.id, logo.id)}
+                            className={cn(
+                              'aspect-video bg-gray-50 dark:bg-gray-900 rounded-lg border-2 flex items-center justify-center p-2 transition-all',
+                              getEmailLogo(editingEmail)?.id === logo.id
+                                ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
+                                : 'border-gray-300 dark:border-gray-600 hover:border-primary-400'
+                            )}
+                          >
+                            <img
+                              src={logo.public_url}
+                              alt={logo.alt_text || logo.file_name}
+                              className="max-w-full max-h-full object-contain rounded-full"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg text-center border border-gray-200 dark:border-gray-700">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No avatars available</p>
+                        <label className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                          <Upload className="h-4 w-4" />
+                          <span>Upload Avatar</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                handleLogoUpload(e as any, 'avatar' as BusinessLogo['logo_type'])
+                                // Reset input so same file can be selected again
+                                e.target.value = ''
+                              }
+                            }}
+                            className="hidden"
+                            disabled={uploadingLogo}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="can_send"
+                        checked={editingEmail.can_send ?? true}
+                        onChange={(e) => setEditingEmail({ ...editingEmail, can_send: e.target.checked })}
+                        className="rounded border-gray-300 text-primary-600"
+                      />
+                      <label htmlFor="can_send" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Can Send Emails
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="can_receive"
+                        checked={editingEmail.can_receive ?? true}
+                        onChange={(e) => setEditingEmail({ ...editingEmail, can_receive: e.target.checked })}
+                        className="rounded border-gray-300 text-primary-600"
+                      />
+                      <label htmlFor="can_receive" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Can Receive Emails
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="is_active"
+                      checked={editingEmail.is_active ?? true}
+                      onChange={(e) => setEditingEmail({ ...editingEmail, is_active: e.target.checked })}
+                      className="rounded border-gray-300 text-primary-600"
+                    />
+                    <label htmlFor="is_active" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Active
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      setShowEmailEditor(false)
+                      setEditingEmail(null)
+                    }}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEmail}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Logo Upload Modal */}
           {showLogoUpload && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Upload Business Logo</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Upload Avatar</h3>
                   <button
                     onClick={() => setShowLogoUpload(false)}
                     className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -2474,25 +3098,23 @@ export function AdminEmails() {
                 </div>
 
                 <div className="space-y-4">
-                  {['company_logo', 'email_header', 'email_signature', 'avatar'].map((type) => (
-                    <div key={type} className="relative">
-                      <label className="block w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary-500 dark:hover:border-primary-400 cursor-pointer transition-colors">
-                        <div className="flex items-center justify-center gap-2">
-                          <ImageIcon className="h-5 w-5 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
-                            Upload {type.replace('_', ' ')}
-                          </span>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleLogoUpload(e, type as BusinessLogo['logo_type'])}
-                          className="hidden"
-                          disabled={uploadingLogo}
-                        />
-                      </label>
-                    </div>
-                  ))}
+                  <div className="relative">
+                    <label className="block w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary-500 dark:hover:border-primary-400 cursor-pointer transition-colors">
+                      <div className="flex items-center justify-center gap-2">
+                        <ImageIcon className="h-5 w-5 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Upload Avatar
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleLogoUpload(e, 'avatar' as BusinessLogo['logo_type'])}
+                        className="hidden"
+                        disabled={uploadingLogo}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 {uploadingLogo && (
@@ -2509,247 +3131,345 @@ export function AdminEmails() {
             </div>
           )}
 
-          {/* Compose Email Modal */}
+          {/* Compose Email Modal - Gmail Style */}
           {composing && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    Compose Email
-                  </h2>
-                  <button
-                    onClick={() => setComposing(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-160px)] space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">From Address *</label>
-                    <select
-                      value={composeData.fromEmailAddressId}
-                      onChange={(e) => setComposeData({ ...composeData, fromEmailAddressId: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                    >
-                      <option value="">Select sender address...</option>
-                      {adminEmailAddresses.map((addr) => (
-                        <option key={addr.id} value={addr.id}>
-                          {addr.display_name} &lt;{addr.email_address}&gt;
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Choose which admin email address to send from
-                    </p>
-                  </div>
-
-                  {/* Template Selection */}
-                  <div className="border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                    <label className="block text-sm font-medium mb-2 text-blue-900 dark:text-blue-100">
-                      <FileText className="h-4 w-4 inline mr-1" />
-                      Use Email Template (Optional)
-                    </label>
-                    <div className="space-y-3">
+            <div 
+              className="fixed inset-0 z-50 flex items-end justify-end p-4 pointer-events-none"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setComposing(false)
+                  setIsMinimized(false)
+                  setShowAdvancedOptions(false)
+                }
+              }}
+            >
+              <div 
+                className={cn(
+                  "bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl flex flex-col pointer-events-auto",
+                  isMinimized ? "h-auto" : "max-h-[85vh]"
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Compact Header */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">New Message</span>
+                    {!isMinimized && (
                       <select
-                        value={selectedTemplateId}
-                        onChange={(e) => handleTemplateSelect(e.target.value)}
-                        className="w-full px-4 py-2 border border-blue-300 dark:border-blue-700 rounded-lg dark:bg-gray-700"
+                        value={composeData.fromEmailAddressId}
+                        onChange={(e) => setComposeData({ ...composeData, fromEmailAddressId: e.target.value })}
+                        className="text-xs border-0 bg-transparent text-gray-600 dark:text-gray-400 cursor-pointer focus:ring-0 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <option value="">-- Select a template --</option>
-                        {emailTemplates.map((template) => (
-                          <option key={template.id} value={template.id}>
-                            {template.name} ({template.category})
+                        {adminEmailAddresses.map((addr) => (
+                          <option key={addr.id} value={addr.id}>
+                            {addr.display_name || addr.email_address}
                           </option>
                         ))}
                       </select>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setIsMinimized(!isMinimized)}
+                      className="p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                      title={isMinimized ? "Expand" : "Minimize"}
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setComposing(false)
+                        setIsMinimized(false)
+                        setShowAdvancedOptions(false)
+                      }}
+                      className="p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
 
-                      {selectedTemplateId && (
-                        <>
-                          <div className="space-y-2">
-                            <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
-                              Fill in template variables:
-                            </p>
-                            {Object.keys(templateVariables).map((varName) => (
-                              <div key={varName}>
-                                <label className="block text-xs text-blue-900 dark:text-blue-100 mb-1">
-                                  {varName}
-                                </label>
-                                <input
-                                  type="text"
-                                  value={templateVariables[varName]}
-                                  onChange={(e) =>
-                                    setTemplateVariables({
-                                      ...templateVariables,
-                                      [varName]: e.target.value,
-                                    })
-                                  }
-                                  placeholder={`Enter ${varName}`}
-                                  className="w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-700 rounded dark:bg-gray-700"
-                                />
-                              </div>
-                            ))}
-                          </div>
+                {!isMinimized && (
+                  <>
+                    {/* Compact To Field */}
+                    <div className="px-4 py-1.5 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 w-12 flex-shrink-0">To</span>
+                        <input
+                          type="email"
+                          value={composeData.to}
+                          onChange={(e) => setComposeData({ ...composeData, to: e.target.value })}
+                          placeholder="Recipients"
+                          className="flex-1 border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400"
+                          autoFocus
+                        />
+                        {composeData.toName && (
+                          <input
+                            type="text"
+                            value={composeData.toName}
+                            onChange={(e) => setComposeData({ ...composeData, toName: e.target.value })}
+                            placeholder="Name"
+                            className="w-32 border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400 text-gray-500"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Cc/Bcc Toggle */}
+                    <div className="px-4 py-0.5 border-b border-gray-200 dark:border-gray-700">
+                      {showAdvancedOptions ? (
+                        <div className="space-y-1.5 py-1">
                           <button
-                            type="button"
-                            onClick={handleApplyTemplate}
-                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                            onClick={() => setShowAdvancedOptions(false)}
+                            className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                           >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Apply Template to Email
+                            Cc Bcc
                           </button>
-                        </>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-600 dark:text-gray-400 w-12 flex-shrink-0">Cc</span>
+                              <input
+                                type="email"
+                                placeholder="Cc"
+                                className="flex-1 border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-600 dark:text-gray-400 w-12 flex-shrink-0">Bcc</span>
+                              <input
+                                type="email"
+                                placeholder="Bcc"
+                                className="flex-1 border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-600 dark:text-gray-400 w-12 flex-shrink-0">Reply-To</span>
+                              <input
+                                type="email"
+                                value={composeData.replyTo}
+                                onChange={(e) => setComposeData({ ...composeData, replyTo: e.target.value })}
+                                placeholder="Optional reply-to address"
+                                className="flex-1 border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowAdvancedOptions(true)}
+                          className="text-xs text-primary-600 dark:text-primary-400 hover:underline py-1"
+                        >
+                          Cc Bcc
+                        </button>
                       )}
                     </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Recipient Email *</label>
-                    <input
-                      type="email"
-                      value={composeData.to}
-                      onChange={(e) => setComposeData({ ...composeData, to: e.target.value })}
-                      placeholder="recipient@example.com"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                    />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Recipient Name</label>
-                    <input
-                      type="text"
-                      value={composeData.toName}
-                      onChange={(e) => setComposeData({ ...composeData, toName: e.target.value })}
-                      placeholder="John Doe"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                    />
-                  </div>
-
-                  {/* Email Signature Selection */}
-                  <div className="border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                    <label className="block text-sm font-medium mb-2 text-green-900 dark:text-green-100">
-                      <Type className="h-4 w-4 inline mr-1" />
-                      Email Signature (Optional)
-                    </label>
-                    <select
-                      value={selectedSignatureId}
-                      onChange={(e) => handleSignatureSelect(e.target.value)}
-                      className="w-full px-4 py-2 border border-green-300 dark:border-green-700 rounded-lg dark:bg-gray-700"
-                    >
-                      <option value="">-- No signature --</option>
-                      {emailSignatures.map((sig) => (
-                        <option key={sig.id} value={sig.id}>
-                          {sig.name} {sig.is_default ? '(Default)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-green-800 dark:text-green-200 mt-2">
-                      Signature will be appended to your email.{' '}
-                      <a href="/admin/email-signatures" className="underline hover:text-green-600 dark:hover:text-green-400">
-                        Manage signatures
-                      </a>
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Subject *</label>
-                    <input
-                      type="text"
-                      value={composeData.subject}
-                      onChange={(e) => setComposeData({ ...composeData, subject: e.target.value })}
-                      placeholder="Email subject"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Email Body (HTML) *</label>
-                    <textarea
-                      value={composeData.body}
-                      onChange={(e) => setComposeData({ ...composeData, body: e.target.value })}
-                      placeholder="<p>Your email content here...</p>"
-                      rows={12}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 font-mono text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      You can use HTML for formatting. Use email templates for pre-designed emails.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Reply-To Address</label>
-                    <input
-                      type="email"
-                      value={composeData.replyTo}
-                      onChange={(e) => setComposeData({ ...composeData, replyTo: e.target.value })}
-                      placeholder="Optional reply-to address"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Leave empty to use sender address
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Email Type</label>
-                      <select
-                        value={composeData.emailType}
-                        onChange={(e) =>
-                          setComposeData({
-                            ...composeData,
-                            emailType: e.target.value as 'manual',
-                          })
-                        }
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                      >
-                        <option value="manual">Manual</option>
-                        <option value="marketing">Marketing</option>
-                        <option value="notification">Notification</option>
-                      </select>
+                    {/* Subject */}
+                    <div className="px-4 py-1.5 border-b border-gray-200 dark:border-gray-700">
+                      <input
+                        type="text"
+                        value={composeData.subject}
+                        onChange={(e) => setComposeData({ ...composeData, subject: e.target.value })}
+                        placeholder="Subject"
+                        className="w-full border-0 focus:ring-0 p-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400"
+                      />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Category</label>
-                      <select
-                        value={composeData.category}
-                        onChange={(e) => setComposeData({ ...composeData, category: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-                      >
-                        <option value="custom">Custom</option>
-                        <option value="general">General</option>
-                        <option value="update">Update</option>
-                        <option value="announcement">Announcement</option>
-                      </select>
+                    {/* Body */}
+                    <div className="flex-1 overflow-y-auto min-h-[300px]">
+                      <textarea
+                        value={composeData.body}
+                        onChange={(e) => setComposeData({ ...composeData, body: e.target.value })}
+                        placeholder="Compose email..."
+                        className="w-full h-full px-4 py-3 border-0 focus:ring-0 text-sm bg-transparent dark:bg-transparent placeholder-gray-400 resize-none font-mono"
+                        style={{ minHeight: '300px' }}
+                      />
                     </div>
-                  </div>
 
-                </div>
-                <div className="flex justify-end gap-4 p-6 border-t border-gray-200 dark:border-gray-700">
-                  <button
-                    onClick={() => setComposing(false)}
-                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSendEmail}
-                    disabled={sending}
-                    className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {sending ? (
-                      <>
-                        <RefreshCw className="h-5 w-5 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-5 w-5" />
-                        Send Email
-                      </>
-                    )}
-                  </button>
-                </div>
+                    {/* Footer Toolbar */}
+                    <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={handleSendEmail}
+                          disabled={sending || !composeData.to || !composeData.subject || !composeData.body}
+                          className={cn(
+                            "px-6 py-2 bg-primary-600 text-white text-sm font-medium rounded-full hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors",
+                            sending && "opacity-75"
+                          )}
+                        >
+                          {sending ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              Send
+                            </>
+                          )}
+                        </button>
+                        
+                        {/* Options Menu */}
+                        <div className="relative ml-2" ref={templateMenuRef}>
+                          <button
+                            onClick={() => setShowTemplateMenu(!showTemplateMenu)}
+                            className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                            title="Templates"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </button>
+                          {showTemplateMenu && (
+                            <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 min-w-[200px] max-h-[300px] overflow-y-auto">
+                              <div className="p-2">
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                  Templates
+                                </div>
+                                {emailTemplates.length > 0 ? (
+                                  emailTemplates.map((template) => (
+                                    <button
+                                      key={template.id}
+                                      onClick={() => {
+                                        handleTemplateSelect(template.id)
+                                        setShowTemplateMenu(false)
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                    >
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">{template.name}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400">{template.category}</div>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No templates</div>
+                                )}
+                              </div>
+                              {selectedTemplateId && Object.keys(templateVariables).length > 0 && (
+                                <div className="border-t border-gray-200 dark:border-gray-700 p-2">
+                                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                                    Template Variables
+                                  </div>
+                                  {Object.keys(templateVariables).map((varName) => (
+                                    <div key={varName} className="mb-2">
+                                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 px-3">
+                                        {varName}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={templateVariables[varName]}
+                                        onChange={(e) =>
+                                          setTemplateVariables({
+                                            ...templateVariables,
+                                            [varName]: e.target.value,
+                                          })
+                                        }
+                                        className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700"
+                                        placeholder={`Enter ${varName}`}
+                                      />
+                                    </div>
+                                  ))}
+                                  <button
+                                    onClick={() => {
+                                      handleApplyTemplate()
+                                      setShowTemplateMenu(false)
+                                    }}
+                                    className="w-full mt-2 px-3 py-2 bg-primary-600 text-white text-sm rounded hover:bg-primary-700"
+                                  >
+                                    Apply Template
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative" ref={signatureMenuRef}>
+                          <button
+                            onClick={() => setShowSignatureMenu(!showSignatureMenu)}
+                            className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                            title="Signature"
+                          >
+                            <Type className="h-4 w-4" />
+                          </button>
+                          {showSignatureMenu && (
+                            <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 min-w-[200px]">
+                              <div className="p-2">
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                  Signatures
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    handleSignatureSelect('')
+                                    setShowSignatureMenu(false)
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                >
+                                  <span className="text-gray-500 dark:text-gray-400">No signature</span>
+                                </button>
+                                {emailSignatures.map((sig) => (
+                                  <button
+                                    key={sig.id}
+                                    onClick={() => {
+                                      handleSignatureSelect(sig.id)
+                                      setShowSignatureMenu(false)
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                  >
+                                    <div className="font-medium text-gray-900 dark:text-gray-100">{sig.name}</div>
+                                    {sig.is_default && (
+                                      <div className="text-xs text-gray-500 dark:text-gray-400">Default</div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                          title="Attach files"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                          title="More options"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={composeData.emailType}
+                          onChange={(e) =>
+                            setComposeData({
+                              ...composeData,
+                              emailType: e.target.value as 'manual',
+                            })
+                          }
+                          className="text-xs border-0 bg-transparent text-gray-600 dark:text-gray-400 cursor-pointer focus:ring-0 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="marketing">Marketing</option>
+                          <option value="notification">Notification</option>
+                        </select>
+                        <select
+                          value={composeData.category}
+                          onChange={(e) => setComposeData({ ...composeData, category: e.target.value })}
+                          className="text-xs border-0 bg-transparent text-gray-600 dark:text-gray-400 cursor-pointer focus:ring-0 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                        >
+                          <option value="custom">Custom</option>
+                          <option value="general">General</option>
+                          <option value="update">Update</option>
+                          <option value="announcement">Announcement</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
