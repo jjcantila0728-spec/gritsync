@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -226,6 +226,7 @@ export function NCLEXApplication() {
   const [retakeService, setRetakeService] = useState<any>(null)
   const [loadingServices, setLoadingServices] = useState(true)
 
+
   // Validation functions
   const validateEmail = (email: string): string => {
     if (!email) return 'Email is required'
@@ -332,7 +333,7 @@ export function NCLEXApplication() {
         }
         break
       case 'singleFullName':
-        if (maritalStatus === 'single' && !singleFullName.trim()) {
+        if (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && !singleFullName.trim()) {
           errors.singleFullName = 'Full name when single is required'
         } else {
           delete errors.singleFullName
@@ -502,6 +503,18 @@ export function NCLEXApplication() {
   // Calculate item total (amount + tax)
   const calculateItemTotal = (item: any): number => {
     return (item.amount || 0) + calculateItemTax(item)
+  }
+
+  // Calculate payment amount based on payment type
+  const calculatePaymentAmount = (): number => {
+    if (paymentType === 'full' && firstTakeService) {
+      return firstTakeService.total_full || 0
+    } else if (paymentType === 'step1' && firstTakeService) {
+      return firstTakeService.staggered?.total_step1 || 0
+    } else if (paymentType === 'retake' && retakeService) {
+      return retakeService.total_step2 || retakeService.total_full || 0
+    }
+    return 0
   }
 
   async function checkRetakerStatus() {
@@ -878,7 +891,7 @@ export function NCLEXApplication() {
         email: email,
         gender: gender,
         marital_status: maritalStatus,
-        single_full_name: maritalStatus === 'single' ? singleFullName : null,
+        single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? singleFullName : null,
         date_of_birth: dbDate || dateOfBirth,
         birth_place: birthPlace,
         country_of_birth: country, // Assuming country is country_of_birth
@@ -918,17 +931,30 @@ export function NCLEXApplication() {
         passport_path: passportPath,
       }
 
+      // Create application and navigate directly to checkout page
       const result = await applicationsAPI.create(applicationData)
-      showToast('Application submitted successfully! Redirecting to payment...', 'success')
-      
-      // Determine payment type for redirect
-      let paymentTypeParam = paymentType
-      if (paymentType === 'retake') {
-        paymentTypeParam = 'full' // Retake uses 'full' payment type in the backend
-      }
-      
       const typedResult = result as { grit_app_id?: string; id?: string }
-      navigate(`/applications/${typedResult.grit_app_id || typedResult.id}/payment?type=${paymentTypeParam}`)
+      const applicationId = typedResult.grit_app_id || typedResult.id
+      
+      if (!applicationId) {
+        throw new Error('Application ID not returned')
+      }
+
+      // Calculate payment amount
+      const amount = calculatePaymentAmount()
+      if (!amount) {
+        throw new Error('Invalid payment amount')
+      }
+
+      // Determine payment type for API
+      const paymentTypeForAPI = paymentType === 'retake' ? 'step2' : paymentType as 'step1' | 'step2' | 'full'
+      
+      // Create payment record
+      const payment = await applicationPaymentsAPI.create(applicationId, paymentTypeForAPI, amount)
+      
+      // Navigate to checkout page
+      showToast('Application created! Complete your payment to finalize submission.', 'success')
+      navigate(`/applications/${applicationId}/checkout?payment_id=${payment.id}`)
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to submit application'
       setError(errorMessage)
@@ -1394,7 +1420,7 @@ export function NCLEXApplication() {
                   ]}
                   required
                 />
-                {maritalStatus === 'single' && (
+                {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && (
                   <div>
                     <Input
                       label="Write Your Full Name When You Are Single *"
@@ -2191,7 +2217,7 @@ export function NCLEXApplication() {
                       <div><span className="font-medium">Mobile Number:</span> {mobileNumber || 'N/A'}</div>
                       <div><span className="font-medium">Gender:</span> {gender || 'N/A'}</div>
                       <div><span className="font-medium">Marital Status:</span> {maritalStatus || 'N/A'}</div>
-                      {maritalStatus === 'single' && singleFullName && (
+                      {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && singleFullName && (
                         <div className="md:col-span-2"><span className="font-medium">Full Name When Single:</span> {singleFullName}</div>
                       )}
                       <div><span className="font-medium">Date of Birth:</span> {dateOfBirth || 'N/A'}</div>
@@ -2264,9 +2290,9 @@ export function NCLEXApplication() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium">2x2 Picture:</span>
                           {(picture || (useUploadedDocs.picture && uploadedDocuments.picture)) ? (
-                            <span className="text-green-600 dark:text-green-400">✓ Uploaded</span>
+                            <span className="text-green-600 dark:text-green-400">âœ“ Uploaded</span>
                           ) : (
-                            <span className="text-red-600 dark:text-red-400">✗ Missing</span>
+                            <span className="text-red-600 dark:text-red-400">âœ— Missing</span>
                           )}
                         </div>
                         {(picture || (useUploadedDocs.picture && uploadedDocuments.picture)) && (
@@ -2279,9 +2305,9 @@ export function NCLEXApplication() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium">Nursing Diploma:</span>
                           {(diploma || (useUploadedDocs.diploma && uploadedDocuments.diploma)) ? (
-                            <span className="text-green-600 dark:text-green-400">✓ Uploaded</span>
+                            <span className="text-green-600 dark:text-green-400">âœ“ Uploaded</span>
                           ) : (
-                            <span className="text-red-600 dark:text-red-400">✗ Missing</span>
+                            <span className="text-red-600 dark:text-red-400">âœ— Missing</span>
                           )}
                         </div>
                         {(diploma || (useUploadedDocs.diploma && uploadedDocuments.diploma)) && (
@@ -2294,9 +2320,9 @@ export function NCLEXApplication() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium">Passport:</span>
                           {(passport || (useUploadedDocs.passport && uploadedDocuments.passport)) ? (
-                            <span className="text-green-600 dark:text-green-400">✓ Uploaded</span>
+                            <span className="text-green-600 dark:text-green-400">âœ“ Uploaded</span>
                           ) : (
-                            <span className="text-red-600 dark:text-red-400">✗ Missing</span>
+                            <span className="text-red-600 dark:text-red-400">âœ— Missing</span>
                           )}
                         </div>
                         {(passport || (useUploadedDocs.passport && uploadedDocuments.passport)) && (
@@ -2386,25 +2412,6 @@ export function NCLEXApplication() {
                           </label>
                           <div className="space-y-3">
                             <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                              paymentType === 'full'
-                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                            }`}>
-                              <input
-                                type="radio"
-                                name="firstTakePaymentType"
-                                value="full"
-                                checked={paymentType === 'full'}
-                                onChange={(e) => setPaymentType(e.target.value as 'full')}
-                                className="mt-1"
-                              />
-                              <div className="flex-1">
-                                <div className="font-semibold text-gray-900 dark:text-gray-100">
-                                  Full Payment (Both Step 1 and Step 2)
-                                </div>
-                              </div>
-                            </label>
-                            <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
                               paymentType === 'step1'
                                 ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                                 : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
@@ -2420,6 +2427,25 @@ export function NCLEXApplication() {
                               <div className="flex-1">
                                 <div className="font-semibold text-gray-900 dark:text-gray-100">
                                   Staggered Payment (Step 1 Only)
+                                </div>
+                              </div>
+                            </label>
+                            <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              paymentType === 'full'
+                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                            }`}>
+                              <input
+                                type="radio"
+                                name="firstTakePaymentType"
+                                value="full"
+                                checked={paymentType === 'full'}
+                                onChange={(e) => setPaymentType(e.target.value as 'full')}
+                                className="mt-1"
+                              />
+                              <div className="flex-1">
+                                <div className="font-semibold text-gray-900 dark:text-gray-100">
+                                  Full Payment (Both Step 1 and Step 2)
                                 </div>
                               </div>
                             </label>
@@ -2491,7 +2517,8 @@ export function NCLEXApplication() {
                               </div>
                             </div>
 
-                            {/* Step 2 Breakdown */}
+                            {/* Step 2 Breakdown - Only show for Full Payment */}
+                            {paymentType === 'full' && (
                             <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                               <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Step 2 Breakdown</h4>
                               <div className="space-y-2">
@@ -2548,6 +2575,7 @@ export function NCLEXApplication() {
                                 </div>
                               </div>
                             </div>
+                            )}
 
                             {/* Total Summary */}
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
@@ -2702,6 +2730,16 @@ export function NCLEXApplication() {
                 Cancel
               </Button>
                 )}
+                {currentStep === totalSteps && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/applications')}
+                    className="text-red-600 hover:text-red-700 border-red-300 hover:border-red-400 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    Cancel
+                  </Button>
+                )}
               </div>
               <div className="flex gap-4">
                 {currentStep < totalSteps && (
@@ -2716,23 +2754,13 @@ export function NCLEXApplication() {
                   </Button>
                 )}
                 {currentStep === totalSteps && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => navigate('/applications')}
-                      className="text-red-600 hover:text-red-700 border-red-300 hover:border-red-400 dark:text-red-400 dark:hover:text-red-300"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={loading || !canProceedToNext()}
-                      className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700"
-                    >
-                      {loading ? 'Submitting...' : 'Submit Application'}
-                    </Button>
-                  </>
+                  <Button
+                    type="submit"
+                    disabled={loading || !canProceedToNext() || !isReviewComplete}
+                    className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700"
+                  >
+                    {loading ? 'Submitting...' : 'Submit Application'}
+                  </Button>
                 )}
               </div>
             </div>
@@ -2814,7 +2842,11 @@ export function NCLEXApplication() {
           </div>
         )}
       </Modal>
+
     </div>
   )
 }
+
+
+
 

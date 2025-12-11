@@ -23,15 +23,18 @@ const NewQuotation = lazy(() => import('./pages/NewQuotation').then(m => ({ defa
 const Payment = lazy(() => import('./pages/Payment').then(m => ({ default: m.Payment })))
 const ApplicationPayment = lazy(() => import('./pages/ApplicationPayment').then(m => ({ default: m.ApplicationPayment })))
 const ApplicationPayments = lazy(() => import('./pages/ApplicationPayments').then(m => ({ default: m.ApplicationPayments })))
+const ApplicationCheckout = lazy(() => import('./pages/ApplicationCheckout').then(m => ({ default: m.ApplicationCheckout })))
 const AdminApplicationPayments = lazy(() => import('./pages/AdminApplicationPayments').then(m => ({ default: m.AdminApplicationPayments })))
 const AdminClients = lazy(() => import('./pages/AdminClients').then(m => ({ default: m.AdminClients })))
 const AdminSettings = lazy(() => import('./pages/admin-settings/AdminSettings').then(m => ({ default: m.AdminSettings })))
 const GeneralSettings = lazy(() => import('./pages/admin-settings/GeneralSettings').then(m => ({ default: m.GeneralSettings })))
 const NotificationSettings = lazy(() => import('./pages/admin-settings/NotificationSettings').then(m => ({ default: m.NotificationSettings })))
+const EmailTemplatePreview = lazy(() => import('./pages/admin-settings/EmailTemplatePreview').then(m => ({ default: m.EmailTemplatePreview })))
 const SecuritySettings = lazy(() => import('./pages/admin-settings/SecuritySettings').then(m => ({ default: m.SecuritySettings })))
 const PaymentSettings = lazy(() => import('./pages/admin-settings/PaymentSettings').then(m => ({ default: m.PaymentSettings })))
 const CurrencySettings = lazy(() => import('./pages/admin-settings/CurrencySettings').then(m => ({ default: m.CurrencySettings })))
 const SystemSettings = lazy(() => import('./pages/admin-settings/SystemSettings').then(m => ({ default: m.SystemSettings })))
+const PromoCodeSettings = lazy(() => import('./pages/admin-settings/PromoCodeSettings').then(m => ({ default: m.PromoCodeSettings })))
 const NotificationManagement = lazy(() => import('./pages/admin-settings/NotificationManagement').then(m => ({ default: m.NotificationManagement })))
 const AdminQuoteManagement = lazy(() => import('./pages/AdminQuoteManagement').then(m => ({ default: m.AdminQuoteManagement })))
 const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m.MyDetails })))
@@ -52,6 +55,11 @@ const Career = lazy(() => import('./pages/Career').then(m => ({ default: m.Caree
 const CareerListing = lazy(() => import('./pages/CareerListing').then(m => ({ default: m.CareerListing })))
 const AdminCareers = lazy(() => import('./pages/AdminCareers').then(m => ({ default: m.AdminCareers })))
 const AdminPartnerAgencies = lazy(() => import('./pages/AdminPartnerAgencies').then(m => ({ default: m.AdminPartnerAgencies })))
+const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
+const AdminEmails = lazy(() => import('./pages/AdminEmails').then(m => ({ default: m.AdminEmails })))
+const AdminEmailAddresses = lazy(() => import('./pages/AdminEmailAddresses').then(m => ({ default: m.AdminEmailAddresses })))
+const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').then(m => ({ default: m.default })))
+const AdminEmailSignatures = lazy(() => import('./pages/AdminEmailSignatures').then(m => ({ default: m.default })))
 
 // Loading fallback component
 function PageLoader() {
@@ -254,6 +262,10 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/applications/:id/checkout"
+        element={<ApplicationCheckout />}
+      />
+      <Route
         path="/applications/:id/:tab"
         element={
           <ProtectedRoute>
@@ -326,6 +338,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/admin/dashboard"
         element={
           <AdminRoute>
@@ -388,8 +408,10 @@ function AppRoutes() {
         <Route index element={<GeneralSettings />} />
         <Route path="general" element={<GeneralSettings />} />
         <Route path="notifications" element={<NotificationSettings />} />
+        <Route path="email-templates" element={<EmailTemplatePreview />} />
         <Route path="security" element={<SecuritySettings />} />
         <Route path="payment" element={<PaymentSettings />} />
+        <Route path="promo-codes" element={<PromoCodeSettings />} />
         <Route path="currency" element={<CurrencySettings />} />
         <Route path="system" element={<SystemSettings />} />
       </Route>
@@ -430,6 +452,70 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminPartnerAgencies />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails"
+        element={
+          <AdminRoute>
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails/history"
+        element={
+          <AdminRoute>
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails/analytics"
+        element={
+          <AdminRoute>
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails/compose"
+        element={
+          <AdminRoute>
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails/templates"
+        element={
+          <AdminRoute>
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/email-addresses"
+        element={
+          <AdminRoute>
+            <AdminEmailAddresses />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/email-templates"
+        element={
+          <AdminRoute>
+            <AdminEmailTemplates />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/email-signatures"
+        element={
+          <AdminRoute>
+            <AdminEmailSignatures />
           </AdminRoute>
         }
       />

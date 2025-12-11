@@ -29,7 +29,11 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Link as LinkIcon,
+  DollarSign,
+  Calendar,
+  Copy
 } from 'lucide-react'
 
 interface PaymentItem {
@@ -390,46 +394,31 @@ export function ApplicationPayments() {
     }
   }
 
-  async function handleCompletePayment(payment: Payment) {
-    if (!stripePromise) {
-      showToast('Stripe is not configured. Please contact support.', 'error')
-      return
-    }
-
+  function handleCompletePayment(payment: Payment) {
     if (!payment || !payment.id) {
       showToast('Payment information is missing. Please try again.', 'error')
       return
     }
 
-    setSelectedPayment(payment)
-    setLoading(true)
-    
-    try {
-      // Create payment intent
-      const intentData = await applicationPaymentsAPI.createPaymentIntent(payment.id)
-      
-      if (!intentData.clientSecret) {
-        throw new Error('Payment intent creation failed: No client secret returned')
-      }
-      
-      setClientSecret(intentData.clientSecret)
-      setPaymentIntentId(intentData.paymentIntentId)
-      setShowPaymentModal(true)
-    } catch (error: any) {
-      let errorMessage = 'Failed to initialize payment. '
-      
-      if (error.message) {
-        errorMessage = error.message
-      } else if (error.error?.message) {
-        errorMessage = error.error.message
-      } else {
-        errorMessage += 'Please try again or contact support if the problem persists.'
-      }
-      
-      showToast(errorMessage, 'error')
-    } finally {
-      setLoading(false)
+    // Navigate to checkout page
+    navigate(`/applications/${id}/checkout?payment_id=${payment.id}`)
+  }
+
+  function handleCopyPaymentLink(payment: Payment) {
+    if (!payment || !payment.id) {
+      showToast('Payment information is missing.', 'error')
+      return
     }
+
+    // Create the checkout link
+    const checkoutUrl = `${window.location.origin}/applications/${id}/checkout?payment_id=${payment.id}`
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(checkoutUrl).then(() => {
+      showToast('Payment link copied! Share it with anyone who will pay on your behalf.', 'success')
+    }).catch(() => {
+      showToast('Failed to copy link. Please try again.', 'error')
+    })
   }
 
   async function handlePaymentSuccess(
@@ -776,56 +765,208 @@ export function ApplicationPayments() {
 
             {pendingPayments.length > 0 ? (
               <div className="space-y-4">
-                {pendingPayments.map((payment) => (
-                  <Card key={payment.id} className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          {payment.status === 'pending_approval' ? (
-                            <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          ) : (
-                            <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                          )}
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            {payment.payment_type === 'step1' ? 'Step 1 Payment' : 
-                             payment.payment_type === 'step2' ? (application?.payment_type === 'retake' ? 'Retake Payment' : 'Step 2 Payment') : 
-                             'Full Payment'}
-                          </h3>
-                          {payment.status === 'pending_approval' && (
-                            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
-                              Awaiting Approval
-                            </span>
+                {pendingPayments.map((payment) => {
+                  // Get line items for this payment type
+                  const getPaymentItems = () => {
+                    if (payment.payment_type === 'step1' && staggeredService) {
+                      return staggeredService.line_items?.filter((item: any) => item.step === 1) || []
+                    } else if (payment.payment_type === 'step2') {
+                      if (application?.payment_type === 'retake' && retakeService) {
+                        return retakeService.line_items?.filter((item: any) => item.step === 2 || !item.step) || []
+                      } else if (staggeredService) {
+                        return staggeredService.line_items?.filter((item: any) => item.step === 2) || []
+                      }
+                    } else if (payment.payment_type === 'full' && fullService) {
+                      return fullService.line_items || []
+                    }
+                    return []
+                  }
+                  
+                  const items = getPaymentItems()
+                  const subtotal = items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+                  const tax = items.reduce((sum: number, item: any) => sum + calculateItemTax(item), 0)
+                  const total = subtotal + tax
+                  
+                  return (
+                  <div 
+                    key={payment.id} 
+                    className="rounded-xl border bg-gradient-to-br from-white to-amber-50 dark:from-gray-800 dark:to-amber-900/10 border-amber-200 dark:border-amber-800 shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
+                  >
+                    {/* Status Strip */}
+                    <div className={`h-1.5 ${payment.status === 'pending_approval' ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} />
+                    
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        {/* Left Section - Payment Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2.5 mb-3">
+                            <div className={`flex-shrink-0 p-2 rounded-lg shadow-sm ${
+                              payment.status === 'pending_approval' 
+                                ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
+                                : 'bg-gradient-to-br from-amber-500 to-orange-600'
+                            }`}>
+                              {payment.status === 'pending_approval' ? (
+                                <Clock className="h-4 w-4 text-white" />
+                              ) : (
+                                <DollarSign className="h-4 w-4 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                {payment.payment_type === 'step1' ? 'Step 1 Payment' : 
+                                 payment.payment_type === 'step2' ? (application?.payment_type === 'retake' ? 'Retake Payment' : 'Step 2 Payment') : 
+                                 'Full Payment'}
+                                {payment.status === 'pending_approval' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 rounded-full border border-blue-300 dark:border-blue-700">
+                                    <Clock className="h-3 w-3" />
+                                    Pending Approval
+                                  </span>
+                                )}
+                              </h3>
+                              <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                                    payment.status === 'pending_approval' ? 'bg-blue-500' : 'bg-amber-500'
+                                  }`}></span>
+                                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                                    payment.status === 'pending_approval' ? 'bg-blue-600' : 'bg-amber-600'
+                                  }`}></span>
+                                </span>
+                                <span className="font-medium">
+                                  {payment.status === 'pending_approval' ? 'Awaiting Review' : 'Action Required'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Payment Details Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                            <div className="flex items-center gap-2 text-xs bg-white/60 dark:bg-gray-800/60 rounded-lg px-2.5 py-1.5 border border-gray-200 dark:border-gray-700">
+                              <FileText className="h-3 w-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                              <span className="text-gray-600 dark:text-gray-400">ID:</span>
+                              <span className="font-mono font-semibold text-gray-900 dark:text-gray-100 truncate text-[10px]">{payment.id.slice(0, 8)}...</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(payment.id)
+                                  showToast('Payment ID copied!', 'success')
+                                }}
+                                className="ml-auto p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0"
+                                title="Copy Payment ID"
+                              >
+                                <Copy className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs bg-white/60 dark:bg-gray-800/60 rounded-lg px-2.5 py-1.5 border border-gray-200 dark:border-gray-700">
+                              <Calendar className="h-3 w-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                              <span className="text-gray-600 dark:text-gray-400">Created:</span>
+                              <span className="font-semibold text-gray-900 dark:text-gray-100 ml-auto">{formatDate(payment.created_at)}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Payment Breakdown - Collapsible */}
+                          {items.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <details className="group">
+                                <summary className="flex items-center justify-between cursor-pointer text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                                  <span className="flex items-center gap-1.5">
+                                    <Receipt className="h-3.5 w-3.5" />
+                                    Payment Breakdown
+                                  </span>
+                                  <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform" />
+                                </summary>
+                                <div className="mt-2 space-y-1.5 text-xs">
+                                  {/* Line Items */}
+                                  <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-2.5 border border-gray-200 dark:border-gray-700">
+                                    {items.map((item: any, idx: number) => (
+                                      <div key={idx} className="flex justify-between items-start py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                                        <div className="flex-1">
+                                          <div className="font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
+                                          {item.description && (
+                                            <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{item.description}</div>
+                                          )}
+                                        </div>
+                                        <div className="ml-3 text-right">
+                                          <div className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(item.amount || 0)}</div>
+                                          {item.taxable && (
+                                            <div className="text-[10px] text-gray-500 dark:text-gray-400">+ tax</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  
+                                  {/* Totals Summary */}
+                                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-2.5 border border-amber-200 dark:border-amber-800 space-y-1">
+                                    <div className="flex justify-between text-gray-700 dark:text-gray-300">
+                                      <span>Subtotal:</span>
+                                      <span className="font-semibold">{formatCurrency(subtotal)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-gray-700 dark:text-gray-300">
+                                      <span>Tax (12%):</span>
+                                      <span className="font-semibold">{formatCurrency(tax)}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-1 border-t border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 font-bold">
+                                      <span>Total:</span>
+                                      <span>{formatCurrency(total)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </details>
+                            </div>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Payment ID: {payment.id}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Created: {formatDate(payment.created_at)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                          {formatCurrency(payment.amount)}
-                        </p>
-                        {payment.status === 'pending_approval' ? (
-                          <div className="text-sm text-blue-600 dark:text-blue-400">
-                            Awaiting admin approval
+
+                        {/* Right Section - Amount & Actions */}
+                        <div className="flex flex-col items-end gap-3">
+                          {/* Amount Display */}
+                          <div className={`text-right px-4 py-2 rounded-lg ${
+                            payment.status === 'pending_approval' 
+                              ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800' 
+                              : 'bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 border border-amber-200 dark:border-amber-800'
+                          }`}>
+                            <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">Amount Due</div>
+                            <div className={`text-2xl font-bold ${
+                              payment.status === 'pending_approval' 
+                                ? 'text-blue-700 dark:text-blue-400' 
+                                : 'text-amber-700 dark:text-amber-400'
+                            }`}>
+                              {formatCurrency(payment.amount)}
+                            </div>
                           </div>
-                        ) : (
-                          <Button
-                            onClick={() => handleCompletePayment(payment)}
-                            disabled={loading}
-                            className="flex items-center gap-2"
-                          >
-                            <CreditCard className="h-4 w-4" />
-                            Complete Payment
-                          </Button>
-                        )}
+                          
+                          {/* Action Buttons */}
+                          {payment.status === 'pending_approval' ? (
+                            <div className="text-center px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                              Awaiting admin approval
+                            </div>
+                          ) : (
+                            <div className="flex flex-col w-full gap-1.5">
+                              <Button
+                                onClick={() => handleCompletePayment(payment)}
+                                disabled={loading}
+                                className="flex items-center justify-center gap-1.5 text-sm py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-md"
+                              >
+                                <CreditCard className="h-3.5 w-3.5" />
+                                Complete Payment
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => handleCopyPaymentLink(payment)}
+                                disabled={loading}
+                                className="flex items-center justify-center gap-1.5 text-xs py-1.5 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-400"
+                                title="Copy payment link to share with someone who will pay on your behalf"
+                              >
+                                <LinkIcon className="h-3 w-3" />
+                                Copy Link
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </Card>
-                ))}
+                  </div>
+                  )
+                })}
               </div>
             ) : null}
 

@@ -132,7 +132,6 @@ export function ApplicationDetail() {
   const [status, setStatus] = useState('')
   const [updating, setUpdating] = useState(false)
   const [copiedId, setCopiedId] = useState(false)
-  const [copiedEmail, setCopiedEmail] = useState(false)
   const [_imageErrors, _setImageErrors] = useState<{ [key: string]: boolean }>({})
   const [payments, setPayments] = useState<any[]>([])
   const [loadingPayments, setLoadingPayments] = useState(false)
@@ -172,6 +171,7 @@ export function ApplicationDetail() {
     diploma?: { file_path: string; file_name: string }
     passport?: { file_path: string; file_name: string }
   }>({})
+  const [detailsSubTab, setDetailsSubTab] = useState('personal')
   const [mandatoryCourseFiles, setMandatoryCourseFiles] = useState<any[]>([])
   const [uploadingCourseFile, setUploadingCourseFile] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'file' | 'account', id: string, name?: string } | null>(null)
@@ -1643,11 +1643,8 @@ export function ApplicationDetail() {
       if (type === 'id') {
         setCopiedId(true)
         setTimeout(() => setCopiedId(false), 2000)
-      } else {
-        setCopiedEmail(true)
-        setTimeout(() => setCopiedEmail(false), 2000)
       }
-      showToast(`${type === 'id' ? 'Application ID' : 'Email'} copied to clipboard!`, 'success')
+      showToast(`${type === 'id' ? 'Application ID' : 'Text'} copied to clipboard!`, 'success')
     } catch (error) {
       showToast('Failed to copy to clipboard', 'error')
     }
@@ -1704,102 +1701,146 @@ export function ApplicationDetail() {
             </h1>
           </div>
 
-          {/* Application Header Card */}
-          <Card className="mb-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-3">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                    {staggeredService?.service_name || 'NCLEX Processing'}, {staggeredService?.state || 'New York'}
-                  </h2>
-                  <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(calculateStatus() || application?.status || status)}`}>
-                    {getStatusIcon(calculateStatus() || application?.status || status)}
-                    {formatStatusDisplay(calculateStatus() || application?.status || status)}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    <span className="font-mono">{application.grit_app_id || application.id}</span>
-                    <button
-                      onClick={() => copyToClipboard(application.grit_app_id || application.id, 'id')}
-                      className="ml-1 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                      title="Copy GRIT APP ID"
-                    >
-                      {copiedId ? (
-                        <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
+          {/* Application Header Card - Enhanced */}
+          <div className="mb-6 rounded-xl border bg-gradient-to-br from-white via-primary-50 to-primary-100 dark:from-gray-800 dark:via-primary-900/20 dark:to-primary-900/30 border-primary-200 dark:border-primary-800 shadow-lg overflow-hidden">
+            {/* Progress Bar at Top */}
+            <div className="h-2 bg-gray-200 dark:bg-gray-700">
+              <div 
+                className={`h-full transition-all duration-500 ${
+                  calculateCompletionPercentage() === 100 
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                    : calculateCompletionPercentage() >= 76 
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600'
+                    : calculateCompletionPercentage() >= 51
+                    ? 'bg-gradient-to-r from-yellow-500 to-amber-500'
+                    : calculateCompletionPercentage() >= 26
+                    ? 'bg-gradient-to-r from-orange-500 to-red-500'
+                    : 'bg-gradient-to-r from-red-500 to-rose-500'
+                }`}
+                style={{ width: `${calculateCompletionPercentage()}%` }}
+              />
+            </div>
+            
+            <div className="p-5">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                {/* Left Section - Service Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="flex-shrink-0 p-2.5 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 shadow-md">
+                      <GraduationCap className="h-6 w-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1 leading-tight">
+                        {staggeredService?.service_name || 'NCLEX Processing'}, {staggeredService?.state || 'New York'}
+                      </h2>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${getStatusColor(calculateStatus() || application?.status || status)}`}>
+                          {getStatusIcon(calculateStatus() || application?.status || status)}
+                          {formatStatusDisplay(calculateStatus() || application?.status || status)}
+                        </span>
+                        {(() => {
+                          const percentage = calculateCompletionPercentage()
+                          let badgeColor = ''
+                          if (percentage === 100) {
+                            badgeColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-300 dark:border-green-700'
+                          } else if (percentage >= 76) {
+                            badgeColor = 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 border-primary-300 dark:border-primary-700'
+                          } else if (percentage >= 51) {
+                            badgeColor = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700'
+                          } else if (percentage >= 26) {
+                            badgeColor = 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-300 dark:border-orange-700'
+                          } else {
+                            badgeColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-300 dark:border-red-700'
+                          }
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${badgeColor}`}>
+                              <span className="relative flex h-2 w-2">
+                                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                                  percentage === 100 ? 'bg-green-500' :
+                                  percentage >= 76 ? 'bg-primary-500' :
+                                  percentage >= 51 ? 'bg-yellow-500' :
+                                  percentage >= 26 ? 'bg-orange-500' : 'bg-red-500'
+                                }`}></span>
+                                <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                                  percentage === 100 ? 'bg-green-600' :
+                                  percentage >= 76 ? 'bg-primary-600' :
+                                  percentage >= 51 ? 'bg-yellow-600' :
+                                  percentage >= 26 ? 'bg-orange-600' : 'bg-red-600'
+                                }`}></span>
+                              </span>
+                              {percentage}% Complete
+                            </span>
+                          )
+                        })()}
+                      </div>
+                    </div>
                   </div>
-                  {application.created_at && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      <span>Created: {formatDate(application.created_at)}</span>
+                  
+                  {/* Application ID & Dates Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
+                    <div className="flex items-center gap-2 text-xs bg-white/60 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-primary-200 dark:border-primary-800/50">
+                      <FileText className="h-3.5 w-3.5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                      <span className="font-mono font-semibold text-gray-900 dark:text-gray-100 truncate">{application.grit_app_id || application.id}</span>
+                      <button
+                        onClick={() => copyToClipboard(application.grit_app_id || application.id, 'id')}
+                        className="ml-auto p-1 hover:bg-primary-100 dark:hover:bg-primary-900/50 rounded transition-colors flex-shrink-0"
+                        title="Copy ID"
+                      >
+                        {copiedId ? (
+                          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 text-primary-600 dark:text-primary-400" />
+                        )}
+                      </button>
                     </div>
-                  )}
-                  {application.updated_at && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      <span>Updated: {formatDate(application.updated_at)}</span>
-                    </div>
-                  )}
+                    {application.created_at && (
+                      <div className="flex items-center gap-2 text-xs bg-white/60 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-green-200 dark:border-green-800/50">
+                        <Calendar className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                        <span className="text-gray-600 dark:text-gray-400">Created:</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100 ml-auto">{formatDate(application.created_at)}</span>
+                      </div>
+                    )}
+                    {application.updated_at && (
+                      <div className="flex items-center gap-2 text-xs bg-white/60 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-purple-200 dark:border-purple-800/50">
+                        <Clock className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                        <span className="text-gray-600 dark:text-gray-400">Updated:</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100 ml-auto">{formatDate(application.updated_at)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-col items-end gap-4">
-                {/* Completion Percentage */}
-                <div className="text-right">
-                  {(() => {
-                    const percentage = calculateCompletionPercentage()
-                    let colorClass = ''
-                    if (percentage === 100) {
-                      colorClass = 'text-green-600 dark:text-green-400'
-                    } else if (percentage >= 76) {
-                      colorClass = 'text-blue-600 dark:text-blue-400'
-                    } else if (percentage >= 51) {
-                      colorClass = 'text-yellow-600 dark:text-yellow-400'
-                    } else if (percentage >= 26) {
-                      colorClass = 'text-orange-600 dark:text-orange-400'
-                    } else {
-                      colorClass = 'text-red-600 dark:text-red-400'
-                    }
-                    return (
-                      <>
-                        <div className={`text-3xl font-bold ${colorClass} mb-1`}>
-                          {percentage}%
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          Complete
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-                {/* Admin Status Update */}
+
+                {/* Right Section - Admin Controls */}
                 {isAdmin() && (
-                  <div className="flex items-end gap-3">
-                    <Select
-                      label="Status"
-                      value={application.status || status}
-                      onChange={(e) => setStatus(e.target.value)}
-                      options={[
-                        { value: 'pending', label: 'Pending' },
-                        { value: 'initiated', label: 'Initiated' },
-                        { value: 'in-progress', label: 'In Progress' },
-                        { value: 'approved', label: 'Approved' },
-                        { value: 'rejected', label: 'Rejected' },
-                        { value: 'completed', label: 'Completed' },
-                      ]}
-                    />
-                    <Button onClick={updateStatus} disabled={updating}>
-                      {updating ? 'Updating...' : 'Update Status'}
-                    </Button>
+                  <div className="flex flex-col gap-2 lg:min-w-[240px]">
+                    <div className="bg-white/80 dark:bg-gray-800/80 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Update Status</label>
+                      <Select
+                        value={application.status || status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className="text-sm mb-2"
+                        options={[
+                          { value: 'pending', label: 'Pending' },
+                          { value: 'initiated', label: 'Initiated' },
+                          { value: 'in-progress', label: 'In Progress' },
+                          { value: 'approved', label: 'Approved' },
+                          { value: 'rejected', label: 'Rejected' },
+                          { value: 'completed', label: 'Completed' },
+                        ]}
+                      />
+                      <Button 
+                        onClick={updateStatus} 
+                        disabled={updating}
+                        className="w-full text-sm py-2"
+                      >
+                        {updating ? 'Updating...' : 'Update Status'}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-            </Card>
+          </div>
 
           <div className="w-full">
             {/* Tab Headers */}
@@ -1840,14 +1881,31 @@ export function ApplicationDetail() {
             {/* Tab Content */}
             <div className="mt-4">
               {tab === 'timeline' && (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {loadingTimeline ? (
                     <Card>
                       <Loading />
                     </Card>
                   ) : (
-                    <Card>
-                      <div className="space-y-8">
+                    <div className="rounded-xl border bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border-gray-200 dark:border-gray-700 shadow-lg p-6">
+                      <div className="flex items-center gap-3 mb-6 pb-4 border-b-2 border-primary-200 dark:border-primary-800">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 shadow-md">
+                          <History className="h-5 w-5 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-400 dark:to-primary-500 bg-clip-text text-transparent">
+                          Application Timeline
+                        </h3>
+                        <div className="ml-auto flex items-center gap-2">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">8 Steps</span>
+                          <div className="h-1.5 w-24 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500"
+                              style={{ width: `${calculateCompletionPercentage()}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-5">
                         {/* Step 1: Application Submission */}
                         <TimelineStep
                           stepNumber={1}
@@ -1948,6 +2006,7 @@ export function ApplicationDetail() {
                           }}
                           application={application}
                           showGenerateLetter={true}
+                          phoneNumber={phoneNumber}
                           subSteps={[
                             {
                               key: 'letter_generated',
@@ -2081,7 +2140,7 @@ export function ApplicationDetail() {
                           stepNumber={5}
                           title="Pearson VUE Application"
                           isCompleted={(() => {
-                            const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue')
+                            const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue' && acc.status === 'active')
                             const attRequested = getStepStatus('att_requested') === 'completed'
                             return pearsonAccountCreated && attRequested
                           })()}
@@ -2091,7 +2150,7 @@ export function ApplicationDetail() {
                             await updateTimelineStep(stepKey, status as 'completed' | 'pending', data)
                             // Check if all sub-steps are completed
                             setTimeout(async () => {
-                              const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue')
+                              const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue' && acc.status === 'active')
                               const attRequested = getStepStatus('att_requested') === 'completed'
                               
                               if (pearsonAccountCreated && attRequested) {
@@ -2106,8 +2165,8 @@ export function ApplicationDetail() {
                             {
                               key: 'pearson_account_created',
                               label: 'Pearson Vue Account Created',
-                              completed: getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue'),
-                              date: getStepData('pearson_account_created')?.date || processingAccounts.find(acc => acc.account_type === 'pearson_vue')?.created_at,
+                              completed: getStepStatus('pearson_account_created') === 'completed' || processingAccounts.some(acc => acc.account_type === 'pearson_vue' && acc.status === 'active'),
+                              date: getStepData('pearson_account_created')?.date || processingAccounts.find(acc => acc.account_type === 'pearson_vue' && acc.status === 'active')?.created_at,
                               data: getStepData('pearson_account_created')
                             },
                             {
@@ -2304,351 +2363,901 @@ export function ApplicationDetail() {
                           result={getStepData('quick_results')?.result}
                         />
                       </div>
-                    </Card>
+                    </div>
                   )}
                 </div>
               )}
 
               {tab === 'details' && (
-                <div className="space-y-6">
-                    <Card title={
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                        <span>Personal Information</span>
-                      </div>
-                    }>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    First Name
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.first_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Middle Name
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.middle_name || 'N/A'}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Last Name
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.last_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Gender</p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100 capitalize">{application.gender}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Marital Status</p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100 capitalize">{application.marital_status}</p>
-                </div>
-                {application.marital_status === 'married' && (application.single_name || application.single_full_name) && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Single Name</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.single_full_name || application.single_name}</p>
+                <div>
+                  {/* Sub-tabs for Details */}
+                  <div className="mb-4 border-b border-gray-200 dark:border-gray-700">
+                    <nav className="flex gap-1" aria-label="Detail Sections">
+                      {[
+                        { id: 'personal', label: 'Personal', icon: User },
+                        { id: 'contact', label: 'Contact', icon: Mail },
+                        { id: 'education', label: 'Education', icon: GraduationCap }
+                      ].map((subTab) => {
+                        const Icon = subTab.icon
+                        const isActive = detailsSubTab === subTab.id
+                        return (
+                          <button
+                            key={subTab.id}
+                            onClick={() => setDetailsSubTab(subTab.id)}
+                            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-all ${
+                              isActive
+                                ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {subTab.label}
+                          </button>
+                        )
+                      })}
+                    </nav>
                   </div>
-                )}
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Date of Birth
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{formatDate(application.date_of_birth)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Country of Birth
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.country_of_birth}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Place of Birth
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.place_of_birth || application.birth_place || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
 
-            <Card title={
-              <div className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                <span>Contact Information</span>
-              </div>
-            }>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Email
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.email}</p>
-                    <button
-                      onClick={() => copyToClipboard(application.email, 'email')}
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                      title="Copy Email"
-                    >
-                      {copiedEmail ? (
-                        <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <Copy className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    Mobile Number
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.mobile_number}</p>
-                </div>
-                <div className="md:col-span-2 space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Mailing Address
-                  </p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                    {application.mailing_address || 
-                     (application.house_number && application.street_name 
-                       ? `${application.house_number} ${application.street_name}` 
-                       : 'N/A')}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">City</p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.city}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Province</p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.province}</p>
-                </div>
-                {application.country && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Country</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.country}</p>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Zipcode</p>
-                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.zipcode}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Education Section */}
-            {(application.elementary_school || application.high_school || application.nursing_school) && (
-              <Card title={
-                <div className="flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  <span>Education</span>
-                </div>
-              }>
-                <div className="space-y-6">
-                  {/* Elementary School */}
-                  {application.elementary_school && (
-                    <div className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0">
-                      <div className="flex items-center gap-2 mb-4">
-                        <School className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Elementary School</h4>
+                  {/* Personal Information */}
+                  {detailsSubTab === 'personal' && (
+                    <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10">
+                      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-blue-200 dark:border-blue-800">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600">
+                          <User className="h-5 w-5 text-white" />
+                        </div>
+                        <h3 className="text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+                          Personal Information
+                        </h3>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">School Name</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_school}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-blue-100 dark:border-blue-800/50 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.first_name)
+                            showToast('First name copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+                            <User className="h-3 w-3" />
+                            First Name
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.first_name}</p>
+                            <Copy className="h-3 w-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">City</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_city || 'N/A'}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-blue-100 dark:border-blue-800/50 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group relative"
+                          onClick={() => {
+                            if (application.middle_name) {
+                              navigator.clipboard.writeText(application.middle_name)
+                              showToast('Middle name copied!', 'success')
+                            }
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+                            <User className="h-3 w-3" />
+                            Middle Name
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.middle_name || 'N/A'}</p>
+                            {application.middle_name && <Copy className="h-3 w-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Province</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_province || 'N/A'}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-blue-100 dark:border-blue-800/50 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.last_name)
+                            showToast('Last name copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+                            <User className="h-3 w-3" />
+                            Last Name
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.last_name}</p>
+                            <Copy className="h-3 w-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Country</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_country || 'N/A'}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-purple-100 dark:border-purple-800/50 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.gender)
+                            showToast('Gender copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">Gender</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100 capitalize">{application.gender}</p>
+                            <Copy className="h-3 w-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
                         </div>
-                        {application.elementary_years_attended && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Years Attended</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_years_attended}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-purple-100 dark:border-purple-800/50 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.marital_status)
+                            showToast('Marital status copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">Marital Status</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100 capitalize">{application.marital_status}</p>
+                            <Copy className="h-3 w-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        {application.marital_status === 'married' && (application.single_name || application.single_full_name) && (
+                          <div 
+                            className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-purple-100 dark:border-purple-800/50 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group relative"
+                            onClick={() => {
+                              const name = application.single_full_name || application.single_name
+                              if (name) {
+                                navigator.clipboard.writeText(name)
+                                showToast('Single name copied!', 'success')
+                              }
+                            }}
+                            title="Click to copy"
+                          >
+                            <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">Single Name</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.single_full_name || application.single_name}</p>
+                              <Copy className="h-3 w-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
                           </div>
                         )}
-                        {application.elementary_start_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Start Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_start_date}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-green-100 dark:border-green-800/50 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(formatDate(application.date_of_birth))
+                            showToast('Date of birth copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1 flex items-center gap-1.5">
+                            <Calendar className="h-3 w-3" />
+                            Date of Birth
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{formatDate(application.date_of_birth)}</p>
+                            <Copy className="h-3 w-3 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                        )}
-                        {application.elementary_end_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              End Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.elementary_end_date}</p>
+                        </div>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-green-100 dark:border-green-800/50 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors group relative"
+                          onClick={() => {
+                            if (application.country_of_birth) {
+                              navigator.clipboard.writeText(application.country_of_birth)
+                              showToast('Country of birth copied!', 'success')
+                            }
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1 flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3" />
+                            Country of Birth
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.country_of_birth}</p>
+                            <Copy className="h-3 w-3 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                        )}
+                        </div>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-green-100 dark:border-green-800/50 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors group relative"
+                          onClick={() => {
+                            const place = application.place_of_birth || application.birth_place || 'N/A'
+                            navigator.clipboard.writeText(place)
+                            showToast('Place of birth copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1 flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3" />
+                            Place of Birth
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.place_of_birth || application.birth_place || 'N/A'}</p>
+                            <Copy className="h-3 w-3 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </Card>
                   )}
 
-                  {/* High School */}
-                  {application.high_school && (
-                    <div className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0">
-                      <div className="flex items-center gap-2 mb-4">
-                        <School className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">High School</h4>
+                  {/* Contact Information */}
+                  {detailsSubTab === 'contact' && (
+                    <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10">
+                      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-emerald-200 dark:border-emerald-800">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
+                          <Mail className="h-5 w-5 text-white" />
+                        </div>
+                        <h3 className="text-lg font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                          Contact Information
+                        </h3>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">School Name</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">City</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_city || 'N/A'}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Province</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_province || 'N/A'}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Country</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_country || 'N/A'}</p>
-                        </div>
-                        {application.high_school_years_attended && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Years Attended</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_years_attended}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.email)
+                            showToast('Email copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
+                            <Mail className="h-3 w-3" />
+                            Email
+                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100 break-all">{application.email}</p>
+                            <Copy className="h-3 w-3 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                           </div>
-                        )}
-                        {application.high_school_start_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Start Date
+                        </div>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.mobile_number)
+                            showToast('Mobile number copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
+                            <Phone className="h-3 w-3" />
+                            Mobile Number
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.mobile_number}</p>
+                            <Copy className="h-3 w-3 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        <div 
+                          className="md:col-span-2 bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors group relative"
+                          onClick={() => {
+                            const address = application.mailing_address || 
+                             (application.house_number && application.street_name 
+                               ? `${application.house_number} ${application.street_name}` 
+                               : 'N/A')
+                            navigator.clipboard.writeText(address)
+                            showToast('Mailing address copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-teal-600 dark:text-teal-400 mb-1 flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3" />
+                            Mailing Address
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                              {application.mailing_address || 
+                               (application.house_number && application.street_name 
+                                 ? `${application.house_number} ${application.street_name}` 
+                                 : 'N/A')}
                             </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_start_date}</p>
+                            <Copy className="h-3 w-3 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.city)
+                            showToast('City copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-teal-600 dark:text-teal-400 mb-1">City</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.city}</p>
+                            <Copy className="h-3 w-3 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50 cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.province)
+                            showToast('Province copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-teal-600 dark:text-teal-400 mb-1">Province</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.province}</p>
+                            <Copy className="h-3 w-3 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        {application.country && (
+                          <div 
+                            className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-cyan-100 dark:border-cyan-800/50 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors group relative"
+                            onClick={() => {
+                              if (application.country) {
+                                navigator.clipboard.writeText(application.country)
+                                showToast('Country copied!', 'success')
+                              }
+                            }}
+                            title="Click to copy"
+                          >
+                            <p className="text-xs font-medium text-cyan-600 dark:text-cyan-400 mb-1">Country</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.country}</p>
+                              <Copy className="h-3 w-3 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
                           </div>
                         )}
-                        {application.high_school_end_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              End Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_end_date}</p>
+                        <div 
+                          className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-cyan-100 dark:border-cyan-800/50 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors group relative"
+                          onClick={() => {
+                            navigator.clipboard.writeText(application.zipcode)
+                            showToast('Zipcode copied!', 'success')
+                          }}
+                          title="Click to copy"
+                        >
+                          <p className="text-xs font-medium text-cyan-600 dark:text-cyan-400 mb-1">Zipcode</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{application.zipcode}</p>
+                            <Copy className="h-3 w-3 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                        )}
-                        {application.high_school_graduated && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Graduated</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100 capitalize">{application.high_school_graduated}</p>
-                          </div>
-                        )}
-                        {application.high_school_diploma_type && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Diploma Type</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_diploma_type}</p>
-                          </div>
-                        )}
-                        {application.high_school_diploma_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Diploma Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.high_school_diploma_date}</p>
-                          </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    </Card>
                   )}
 
-                  {/* Nursing School */}
-                  {application.nursing_school && (
-                    <div className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Building2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Nursing School</h4>
+                  {/* Education Section */}
+                  {detailsSubTab === 'education' && (application.elementary_school || application.high_school || application.nursing_school) && (
+                    <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+                      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-amber-200 dark:border-amber-800">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600">
+                          <GraduationCap className="h-5 w-5 text-white" />
+                        </div>
+                        <h3 className="text-lg font-semibold bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
+                          Education History
+                        </h3>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">School Name</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">City</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_city || 'N/A'}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Province</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_province || 'N/A'}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Country</p>
-                          <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_country || 'N/A'}</p>
-                        </div>
-                        {application.nursing_school_years_attended && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Years Attended</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_years_attended}</p>
+                      <div className="space-y-4">
+                        {/* Elementary School */}
+                        {application.elementary_school && (
+                          <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-amber-100 dark:border-amber-800/50">
+                            <div className="flex items-center gap-2 mb-3">
+                              <School className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">Elementary School</h4>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div 
+                                className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (application.elementary_school) {
+                                    navigator.clipboard.writeText(application.elementary_school)
+                                    showToast('School name copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between">
+                                  School Name
+                                  <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_school}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const city = application.elementary_city || 'N/A'
+                                  if (city !== 'N/A') {
+                                    navigator.clipboard.writeText(city)
+                                    showToast('City copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between">
+                                  City
+                                  {application.elementary_city && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_city || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const province = application.elementary_province || 'N/A'
+                                  if (province !== 'N/A') {
+                                    navigator.clipboard.writeText(province)
+                                    showToast('Province copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between">
+                                  Province
+                                  {application.elementary_province && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_province || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const country = application.elementary_country || 'N/A'
+                                  if (country !== 'N/A') {
+                                    navigator.clipboard.writeText(country)
+                                    showToast('Country copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between">
+                                  Country
+                                  {application.elementary_country && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_country || 'N/A'}</p>
+                              </div>
+                              {application.elementary_years_attended && (
+                                <div 
+                                  className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.elementary_years_attended) {
+                                      navigator.clipboard.writeText(application.elementary_years_attended)
+                                      showToast('Years attended copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between">
+                                    Years Attended
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_years_attended}</p>
+                                </div>
+                              )}
+                              {application.elementary_start_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.elementary_start_date) {
+                                      navigator.clipboard.writeText(application.elementary_start_date)
+                                      showToast('Start date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Start Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_start_date}</p>
+                                </div>
+                              )}
+                              {application.elementary_end_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.elementary_end_date) {
+                                      navigator.clipboard.writeText(application.elementary_end_date)
+                                      showToast('End date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      End Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.elementary_end_date}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
-                        {application.nursing_school_start_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Start Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_start_date}</p>
+
+                        {/* High School */}
+                        {application.high_school && (
+                          <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-orange-100 dark:border-orange-800/50">
+                            <div className="flex items-center gap-2 mb-3">
+                              <School className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                              <h4 className="text-sm font-bold text-orange-900 dark:text-orange-100">High School</h4>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div 
+                                className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (application.high_school) {
+                                    navigator.clipboard.writeText(application.high_school)
+                                    showToast('School name copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                  School Name
+                                  <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const city = application.high_school_city || 'N/A'
+                                  if (city !== 'N/A') {
+                                    navigator.clipboard.writeText(city)
+                                    showToast('City copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                  City
+                                  {application.high_school_city && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_city || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const province = application.high_school_province || 'N/A'
+                                  if (province !== 'N/A') {
+                                    navigator.clipboard.writeText(province)
+                                    showToast('Province copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                  Province
+                                  {application.high_school_province && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_province || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const country = application.high_school_country || 'N/A'
+                                  if (country !== 'N/A') {
+                                    navigator.clipboard.writeText(country)
+                                    showToast('Country copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                  Country
+                                  {application.high_school_country && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_country || 'N/A'}</p>
+                              </div>
+                              {application.high_school_years_attended && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_years_attended) {
+                                      navigator.clipboard.writeText(application.high_school_years_attended)
+                                      showToast('Years attended copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                    Years Attended
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_years_attended}</p>
+                                </div>
+                              )}
+                              {application.high_school_start_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_start_date) {
+                                      navigator.clipboard.writeText(application.high_school_start_date)
+                                      showToast('Start date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Start Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_start_date}</p>
+                                </div>
+                              )}
+                              {application.high_school_end_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_end_date) {
+                                      navigator.clipboard.writeText(application.high_school_end_date)
+                                      showToast('End date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      End Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_end_date}</p>
+                                </div>
+                              )}
+                              {application.high_school_graduated && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_graduated) {
+                                      navigator.clipboard.writeText(application.high_school_graduated)
+                                      showToast('Graduated status copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                    Graduated
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 capitalize">{application.high_school_graduated}</p>
+                                </div>
+                              )}
+                              {application.high_school_diploma_type && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_diploma_type) {
+                                      navigator.clipboard.writeText(application.high_school_diploma_type)
+                                      showToast('Diploma type copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between">
+                                    Diploma Type
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_diploma_type}</p>
+                                </div>
+                              )}
+                              {application.high_school_diploma_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.high_school_diploma_date) {
+                                      navigator.clipboard.writeText(application.high_school_diploma_date)
+                                      showToast('Diploma date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Diploma Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.high_school_diploma_date}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
-                        {application.nursing_school_end_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              End Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_end_date}</p>
-                          </div>
-                        )}
-                        {application.nursing_school_major && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Major</p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_major}</p>
-                          </div>
-                        )}
-                        {application.nursing_school_diploma_date && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              Diploma Date
-                            </p>
-                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_diploma_date}</p>
+
+                        {/* Nursing School */}
+                        {application.nursing_school && (
+                          <div className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-rose-100 dark:border-rose-800/50">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Building2 className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                              <h4 className="text-sm font-bold text-rose-900 dark:text-rose-100">Nursing School</h4>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div 
+                                className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (application.nursing_school) {
+                                    navigator.clipboard.writeText(application.nursing_school)
+                                    showToast('School name copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                  School Name
+                                  <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const city = application.nursing_school_city || 'N/A'
+                                  if (city !== 'N/A') {
+                                    navigator.clipboard.writeText(city)
+                                    showToast('City copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                  City
+                                  {application.nursing_school_city && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_city || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const province = application.nursing_school_province || 'N/A'
+                                  if (province !== 'N/A') {
+                                    navigator.clipboard.writeText(province)
+                                    showToast('Province copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                  Province
+                                  {application.nursing_school_province && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_province || 'N/A'}</p>
+                              </div>
+                              <div 
+                                className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const country = application.nursing_school_country || 'N/A'
+                                  if (country !== 'N/A') {
+                                    navigator.clipboard.writeText(country)
+                                    showToast('Country copied!', 'success')
+                                  }
+                                }}
+                                title="Click to copy"
+                              >
+                                <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                  Country
+                                  {application.nursing_school_country && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                </p>
+                                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_country || 'N/A'}</p>
+                              </div>
+                              {application.nursing_school_years_attended && (
+                                <div 
+                                  className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.nursing_school_years_attended) {
+                                      navigator.clipboard.writeText(application.nursing_school_years_attended)
+                                      showToast('Years attended copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                    Years Attended
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_years_attended}</p>
+                                </div>
+                              )}
+                              {application.nursing_school_start_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.nursing_school_start_date) {
+                                      navigator.clipboard.writeText(application.nursing_school_start_date)
+                                      showToast('Start date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Start Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_start_date}</p>
+                                </div>
+                              )}
+                              {application.nursing_school_end_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.nursing_school_end_date) {
+                                      navigator.clipboard.writeText(application.nursing_school_end_date)
+                                      showToast('End date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      End Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_end_date}</p>
+                                </div>
+                              )}
+                              {application.nursing_school_major && (
+                                <div 
+                                  className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.nursing_school_major) {
+                                      navigator.clipboard.writeText(application.nursing_school_major)
+                                      showToast('Major copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between">
+                                    Major
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_major}</p>
+                                </div>
+                              )}
+                              {application.nursing_school_diploma_date && (
+                                <div 
+                                  className="cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/30 p-2 rounded transition-colors group"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (application.nursing_school_diploma_date) {
+                                      navigator.clipboard.writeText(application.nursing_school_diploma_date)
+                                      showToast('Diploma date copied!', 'success')
+                                    }
+                                  }}
+                                  title="Click to copy"
+                                >
+                                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-0.5 flex items-center justify-between gap-1">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Diploma Date
+                                    </span>
+                                    <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </p>
+                                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{application.nursing_school_diploma_date}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   )}
                 </div>
-              </Card>
-            )}
-
-                  </div>
               )}
 
               {tab === 'documents' && (
@@ -3209,29 +3818,39 @@ export function ApplicationDetail() {
                       <Card>
                         <Loading />
                       </Card>
-                    ) : processingAccounts.length > 0 ? (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {processingAccounts.map((account) => (
-                          <Card key={account.id}>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                    account.account_type === 'gmail'
-                                      ? 'bg-blue-100 dark:bg-blue-900/30'
-                                      : account.account_type === 'pearson_vue'
-                                      ? 'bg-purple-100 dark:bg-purple-900/30'
-                                      : 'bg-green-100 dark:bg-green-900/30'
-                                  }`}>
-                                    <Mail className={`h-5 w-5 ${
+                    ) : (() => {
+                        // Filter accounts based on user role
+                        const filteredAccounts = processingAccounts.filter((account) => {
+                          // Hide inactive Pearson Vue accounts from client users
+                          if (!isAdmin() && account.account_type === 'pearson_vue' && account.status === 'inactive') {
+                            return false
+                          }
+                          return true
+                        })
+                        
+                        return filteredAccounts.length > 0 ? (
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {filteredAccounts.map((account) => (
+                            <Card key={account.id}>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                                       account.account_type === 'gmail'
-                                        ? 'text-blue-600 dark:text-blue-400'
+                                        ? 'bg-blue-100 dark:bg-blue-900/30'
                                         : account.account_type === 'pearson_vue'
-                                        ? 'text-purple-600 dark:text-purple-400'
-                                        : 'text-green-600 dark:text-green-400'
-                                    }`} />
-                                  </div>
-                                  <div className="flex-1">
+                                        ? 'bg-purple-100 dark:bg-purple-900/30'
+                                        : 'bg-green-100 dark:bg-green-900/30'
+                                    }`}>
+                                      <Mail className={`h-5 w-5 ${
+                                        account.account_type === 'gmail'
+                                          ? 'text-blue-600 dark:text-blue-400'
+                                          : account.account_type === 'pearson_vue'
+                                          ? 'text-purple-600 dark:text-purple-400'
+                                          : 'text-green-600 dark:text-green-400'
+                                      }`} />
+                                    </div>
+                                    <div className="flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
                                         {account.account_type === 'gmail' 
@@ -3327,8 +3946,9 @@ export function ApplicationDetail() {
                                       {account.security_question_1 && (
                                         <div>
                                           <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Security Question 1</p>
+                                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 italic">What was the name of the first school you attended?</p>
                                           <div className="flex items-center gap-2">
-                                            <p className="text-sm text-gray-900 dark:text-gray-100 break-all">{account.security_question_1}</p>
+                                            <p className="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">{account.security_question_1}</p>
                                             <button
                                               onClick={() => copyToClipboard(account.security_question_1, 'security question 1')}
                                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
@@ -3342,8 +3962,9 @@ export function ApplicationDetail() {
                                       {account.security_question_2 && (
                                         <div>
                                           <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Security Question 2</p>
+                                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 italic">Who was your childhood hero?</p>
                                           <div className="flex items-center gap-2">
-                                            <p className="text-sm text-gray-900 dark:text-gray-100 break-all">{account.security_question_2}</p>
+                                            <p className="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">{account.security_question_2}</p>
                                             <button
                                               onClick={() => copyToClipboard(account.security_question_2, 'security question 2')}
                                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
@@ -3357,8 +3978,9 @@ export function ApplicationDetail() {
                                       {account.security_question_3 && (
                                         <div>
                                           <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Security Question 3</p>
+                                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 italic">What is your oldest sibling's middle name?</p>
                                           <div className="flex items-center gap-2">
-                                            <p className="text-sm text-gray-900 dark:text-gray-100 break-all">{account.security_question_3}</p>
+                                            <p className="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">{account.security_question_3}</p>
                                             <button
                                               onClick={() => copyToClipboard(account.security_question_3, 'security question 3')}
                                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
@@ -3400,14 +4022,15 @@ export function ApplicationDetail() {
                           </Card>
                         ))}
                       </div>
-                    ) : (
-                      <Card>
-                        <div className="py-8 text-center">
-                          <Lock className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                          <p className="text-gray-600 dark:text-gray-400">No processing accounts available for this application.</p>
-                        </div>
-                      </Card>
-                    )}
+                        ) : (
+                          <Card>
+                            <div className="py-8 text-center">
+                              <Lock className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                              <p className="text-gray-600 dark:text-gray-400">No processing accounts available for this application.</p>
+                            </div>
+                          </Card>
+                        )
+                      })()}
                   </div>
               )}
 
@@ -3978,27 +4601,42 @@ export function ApplicationDetail() {
                     <div className="space-y-4 pt-2">
                       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Security Questions</h4>
-                        <Input
-                          label="Security Question 1"
-                          type="text"
-                          value={accountForm.security_question_1}
-                          onChange={(e) => setAccountForm({ ...accountForm, security_question_1: e.target.value })}
-                          placeholder="Enter security question 1"
-                        />
-                        <Input
-                          label="Security Question 2"
-                          type="text"
-                          value={accountForm.security_question_2}
-                          onChange={(e) => setAccountForm({ ...accountForm, security_question_2: e.target.value })}
-                          placeholder="Enter security question 2"
-                        />
-                        <Input
-                          label="Security Question 3"
-                          type="text"
-                          value={accountForm.security_question_3}
-                          onChange={(e) => setAccountForm({ ...accountForm, security_question_3: e.target.value })}
-                          placeholder="Enter security question 3"
-                        />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Security Question 1
+                          </label>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2 italic">What was the name of the first school you attended?</p>
+                          <Input
+                            type="text"
+                            value={accountForm.security_question_1}
+                            onChange={(e) => setAccountForm({ ...accountForm, security_question_1: e.target.value })}
+                            placeholder="Enter answer (one word, lowercase)"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Security Question 2
+                          </label>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2 italic">Who was your childhood hero?</p>
+                          <Input
+                            type="text"
+                            value={accountForm.security_question_2}
+                            onChange={(e) => setAccountForm({ ...accountForm, security_question_2: e.target.value })}
+                            placeholder="Enter answer (one word, lowercase)"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Security Question 3
+                          </label>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2 italic">What is your oldest sibling's middle name?</p>
+                          <Input
+                            type="text"
+                            value={accountForm.security_question_3}
+                            onChange={(e) => setAccountForm({ ...accountForm, security_question_3: e.target.value })}
+                            placeholder="Enter answer (one word, lowercase)"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -4346,6 +4984,7 @@ interface TimelineStepProps {
   examTime?: string
   result?: 'pass' | 'failed'
   showGenerateLetter?: boolean
+  phoneNumber?: string
 }
 
 function TimelineStep({ 
@@ -4362,7 +5001,8 @@ function TimelineStep({
   examLocation,
   examTime,
   result,
-  showGenerateLetter = false
+  showGenerateLetter = false,
+  phoneNumber = '+1 (509) 270-3437'
 }: TimelineStepProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [attCodeValue, setAttCodeValue] = useState<string>('')

@@ -183,26 +183,47 @@ serve(async (req) => {
 
     // Use Resend if configured
     if (config.serviceProvider === 'resend' && config.resendApiKey) {
+      const emailPayload = {
+        from: from || `${config.fromName} <${config.fromEmail}>`,
+        to: [to],
+        subject,
+        html,
+        text: text || html.replace(/<[^>]*>/g, ''),
+      }
+      
+      console.log('Sending email via Resend:', {
+        to: emailPayload.to,
+        from: emailPayload.from,
+        subject: emailPayload.subject,
+        hasApiKey: !!config.resendApiKey,
+        apiKeyPrefix: config.resendApiKey ? config.resendApiKey.substring(0, 7) + '...' : 'none'
+      })
+      
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${config.resendApiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from: from || `${config.fromName} <${config.fromEmail}>`,
-          to: [to],
-          subject,
-          html,
-          text: text || html.replace(/<[^>]*>/g, ''),
-        }),
+        body: JSON.stringify(emailPayload),
+      })
+
+      const responseText = await resendResponse.text()
+      console.log('Resend API response:', {
+        status: resendResponse.status,
+        statusText: resendResponse.statusText,
+        body: responseText
       })
 
       if (!resendResponse.ok) {
-        const error = await resendResponse.text()
-        console.error('Resend API error:', error)
+        console.error('Resend API error:', responseText)
         return new Response(
-          JSON.stringify({ error: 'Failed to send email via Resend', details: error }),
+          JSON.stringify({ 
+            error: 'Failed to send email via Resend', 
+            details: responseText,
+            status: resendResponse.status,
+            statusText: resendResponse.statusText
+          }),
           {
             status: 500,
             headers: { 
@@ -213,9 +234,22 @@ serve(async (req) => {
         )
       }
 
-      const result = await resendResponse.json()
+      let result
+      try {
+        result = JSON.parse(responseText)
+      } catch (e) {
+        console.error('Failed to parse Resend response:', e)
+        result = { id: 'unknown' }
+      }
+      
+      console.log('Email sent successfully via Resend:', result)
+      
       return new Response(
-        JSON.stringify({ success: true, messageId: result.id }),
+        JSON.stringify({ 
+          success: true, 
+          messageId: result.id,
+          provider: 'resend'
+        }),
         {
           status: 200,
           headers: { 

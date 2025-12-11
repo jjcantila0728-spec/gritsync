@@ -32,42 +32,57 @@ serve(async (req) => {
   }
 
   try {
-    // Require authentication for application payments
+    // Allow both authenticated and public access for application payments
+    // (Public access is needed for shared checkout links)
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new Error('Authentication required for application payments')
-    }
-
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     
-    // Check if this is an anonymous request (should not be for applications)
-    const isAnonymousRequest = authHeader.replace('Bearer ', '') === anonKey
-    if (isAnonymousRequest) {
-      throw new Error('Authentication required for application payments')
+    let supabaseClient
+    let user: any = null
+    let isPublicAccess = false
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const isAnonymousRequest = authHeader.replace('Bearer ', '') === anonKey
+      
+      if (!isAnonymousRequest) {
+        // Try to get authenticated user
+        supabaseClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          anonKey,
+          {
+            global: {
+              headers: { Authorization: authHeader },
+            },
+          }
+        )
+
+        const {
+          data: { user: authUser },
+          error: userError,
+        } = await supabaseClient.auth.getUser()
+
+        if (!userError && authUser) {
+          user = authUser
+          console.log('Authenticated user:', user.id)
+        } else {
+          console.log('Invalid auth token, treating as public access')
+          isPublicAccess = true
+        }
+      } else {
+        isPublicAccess = true
+      }
+    } else {
+      isPublicAccess = true
     }
     
-    // Create Supabase client with user's token
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      anonKey,
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    )
-
-    // Get the authenticated user (required for applications)
-    const {
-      data: { user: authUser },
-      error: userError,
-    } = await supabaseClient.auth.getUser()
-
-    if (userError || !authUser) {
-      throw new Error('Authentication required. Please log in and try again.')
+    // Create supabase client for public access if needed
+    if (isPublicAccess || !supabaseClient) {
+      console.log('Using public access for payment intent')
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        anonKey
+      )
     }
-
-    const user = authUser
 
     // Get request body
     let body: any = {}
@@ -85,15 +100,20 @@ serve(async (req) => {
       throw new Error('payment_id is required')
     }
 
-    console.log('Creating payment intent for application payment:', { payment_id, user_id: user.id })
+    console.log('Creating payment intent for application payment:', { payment_id, user_id: user?.id || 'public', isPublicAccess })
 
-    // Fetch application payment (must belong to the authenticated user)
-    const { data: payment, error: paymentError } = await supabaseClient
+    // Fetch application payment
+    let query = supabaseClient
       .from('application_payments')
       .select('*, applications(*)')
       .eq('id', payment_id)
-      .eq('user_id', user.id)
-      .single()
+    
+    // Only filter by user_id if authenticated
+    if (user && !isPublicAccess) {
+      query = query.eq('user_id', user.id)
+    }
+    
+    const { data: payment, error: paymentError } = await query.single()
 
     if (paymentError) {
       console.error('Payment query error:', paymentError)
@@ -123,7 +143,8 @@ serve(async (req) => {
     const metadata: Record<string, string> = {
       payment_id: payment_id,
       application_id: payment.application_id,
-      user_id: user.id,
+      user_id: user?.id || payment.user_id || 'public',
+      access_type: isPublicAccess ? 'public' : 'authenticated',
     }
 
     // Create Stripe Payment Intent

@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase'
 import { generalSettings } from './settings'
+import * as EmailTemplates from './email-templates'
 
 interface EmailOptions {
   to: string
@@ -12,6 +13,8 @@ interface EmailOptions {
   html: string
   text?: string
   from?: string
+  fromEmailAddressId?: string  // Reference to email_addresses table
+  replyTo?: string
 }
 
 interface EmailTemplateData {
@@ -22,6 +25,11 @@ interface EmailTemplateData {
   actionText?: string
   footerText?: string
   [key: string]: any
+}
+
+// Re-export templates for easy access
+export {
+  EmailTemplates
 }
 
 /**
@@ -209,8 +217,23 @@ function generatePlainTextEmail(data: EmailTemplateData): string {
 /**
  * Send email via Supabase Edge Function or API
  * This will call a Supabase Edge Function that handles actual email sending
+ * Now includes automatic logging to email_logs table
  */
-export async function sendEmail(options: EmailOptions): Promise<boolean> {
+export async function sendEmail(options: EmailOptions & {
+  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated'
+  emailCategory?: string
+  recipientUserId?: string
+  recipientName?: string
+  applicationId?: string
+  quotationId?: string
+  donationId?: string
+  sponsorshipId?: string
+  metadata?: Record<string, any>
+  tags?: string[]
+  fromEmailAddressId?: string  // Reference to email_addresses table
+}): Promise<boolean> {
+  let logId: string | null = null
+  
   try {
     // Validate required fields before calling the function
     if (!options.to || !options.subject || !options.html) {
@@ -227,13 +250,90 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
 
     const config = await getEmailConfig()
     
+    // Get current user info
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Resolve from email address if ID provided
+    let fromEmailAddressId = options.fromEmailAddressId || null
+    let fromEmail = options.from || `${config.fromName} <${config.fromEmail}>`
+    
+    if (options.fromEmailAddressId) {
+      try {
+        const { emailAddressesAPI } = await import('./email-addresses-api')
+        const emailAddress = await emailAddressesAPI.getById(options.fromEmailAddressId)
+        if (emailAddress && emailAddress.is_active && emailAddress.can_send) {
+          fromEmail = `${emailAddress.display_name || config.fromName} <${emailAddress.email_address}>`
+          // Update last used timestamp
+          await emailAddressesAPI.updateLastUsed(emailAddress.id)
+        }
+      } catch (err) {
+        console.error('Error resolving from email address:', err)
+      }
+    }
+    
+    // Resolve recipient email address ID if it's a gritsync email
+    let toEmailAddressId: string | null = null
+    if (options.to.toLowerCase().endsWith('@gritsync.com')) {
+      try {
+        const { emailAddressesAPI } = await import('./email-addresses-api')
+        const recipientAddress = await emailAddressesAPI.getByEmail(options.to)
+        if (recipientAddress) {
+          toEmailAddressId = recipientAddress.id
+        }
+      } catch (err) {
+        // Not found or error, continue without ID
+      }
+    }
+    
+    // Create email log entry before sending
+    try {
+      const { data: logData, error: logError } = await supabase
+        .from('email_logs')
+        .insert({
+          recipient_email: options.to.trim(),
+          recipient_name: options.recipientName || null,
+          recipient_user_id: options.recipientUserId || null,
+          subject: options.subject.trim(),
+          body_html: options.html,
+          body_text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
+          sender_email: config.fromEmail,
+          sender_name: config.fromName,
+          sent_by_user_id: user?.id || null,
+          email_type: options.emailType || 'transactional',
+          email_category: options.emailCategory || null,
+          status: 'pending',
+          email_provider: config.serviceProvider,
+          application_id: options.applicationId || null,
+          quotation_id: options.quotationId || null,
+          donation_id: options.donationId || null,
+          sponsorship_id: options.sponsorshipId || null,
+          metadata: options.metadata || {},
+          tags: options.tags || [],
+          from_email_address_id: fromEmailAddressId,
+          to_email_address_id: toEmailAddressId,
+        })
+        .select()
+        .single()
+      
+      if (logError) {
+        console.error('Error creating email log:', logError)
+        // Continue with sending even if logging fails
+      } else if (logData) {
+        logId = logData.id
+      }
+    } catch (logError) {
+      console.error('Error creating email log:', logError)
+      // Continue with sending even if logging fails
+    }
+    
     // Prepare the email payload
     const emailPayload = {
       to: options.to.trim(),
       subject: options.subject.trim(),
       html: options.html,
       text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
-      from: options.from || `${config.fromName} <${config.fromEmail}>`,
+      from: fromEmail,
+      replyTo: options.replyTo || undefined,
     }
 
     console.log('Sending email with payload:', {
@@ -241,7 +341,8 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       subject: emailPayload.subject,
       htmlLength: emailPayload.html.length,
       hasText: !!emailPayload.text,
-      from: emailPayload.from
+      from: emailPayload.from,
+      logId
     })
     
     // Call Supabase Edge Function to send email
@@ -252,6 +353,19 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     if (error) {
       console.error('Error sending email:', error)
       
+      // Update log with error
+      if (logId) {
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'failed',
+            failed_at: new Date().toISOString(),
+            error_message: error.message || 'Failed to send email',
+            error_code: error.code || null,
+          })
+          .eq('id', logId)
+      }
+      
       // Check if it's a CORS error
       if (error.message?.includes('CORS') || error.message?.includes('Failed to send a request')) {
         console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
@@ -261,14 +375,85 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       return false
     }
 
-    // Check if the response indicates success
-    if (data && typeof data === 'object' && 'success' in data) {
-      return data.success === true
+    // Log the full response for debugging
+    console.log('Email service response:', data)
+
+    // Check if the response indicates failure
+    if (data && typeof data === 'object' && 'error' in data) {
+      console.error('Email service returned error:', data.error)
+      if ('details' in data) {
+        console.error('Error details:', data.details)
+      }
+      
+      // Update log with error
+      if (logId) {
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'failed',
+            failed_at: new Date().toISOString(),
+            error_message: data.error || 'Email service error',
+            provider_response: data,
+          })
+          .eq('id', logId)
+      }
+      
+      return false
     }
 
+    // Check if the response indicates success
+    if (data && typeof data === 'object' && 'success' in data) {
+      const success = data.success === true
+      
+      // Update log with success/failure
+      if (logId) {
+        await supabase
+          .from('email_logs')
+          .update({
+            status: success ? 'sent' : 'failed',
+            sent_at: success ? new Date().toISOString() : null,
+            failed_at: success ? null : new Date().toISOString(),
+            provider_message_id: data.messageId || null,
+            provider_response: data,
+            error_message: success ? null : 'Email service reported failure',
+          })
+          .eq('id', logId)
+      }
+      
+      if (success) {
+        console.log('Email sent successfully:', data)
+        return true
+      }
+      return false
+    }
+
+    // Default to success if no explicit success/error indicator
+    if (logId) {
+      await supabase
+        .from('email_logs')
+        .update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          provider_response: data,
+        })
+        .eq('id', logId)
+    }
+    
     return true
   } catch (error: any) {
     console.error('Error sending email:', error)
+    
+    // Update log with error
+    if (logId) {
+      await supabase
+        .from('email_logs')
+        .update({
+          status: 'failed',
+          failed_at: new Date().toISOString(),
+          error_message: error.message || 'Unknown error',
+        })
+        .eq('id', logId)
+    }
     
     // Check if it's a CORS error
     if (error?.message?.includes('CORS') || error?.message?.includes('Failed to send')) {
@@ -292,6 +477,7 @@ export async function sendNotificationEmail(
     message: string
     actionUrl?: string
     applicationId?: string
+    recipientUserId?: string
   }
 ): Promise<boolean> {
   const config = await getEmailConfig()
@@ -318,6 +504,12 @@ export async function sendNotificationEmail(
     to,
     subject: `${data.title} - ${config.fromName}`,
     html: emailHtml,
+    emailType: 'notification',
+    emailCategory: type,
+    recipientName: data.userName,
+    recipientUserId: data.recipientUserId,
+    applicationId: data.applicationId,
+    tags: ['notification', type],
   })
 }
 
@@ -350,15 +542,20 @@ export async function sendForgotPasswordEmail(
   userName: string,
   resetUrl: string
 ): Promise<boolean> {
-  const template = await emailTemplates.forgotPassword({
+  const { subject, html } = EmailTemplates.createForgotPasswordEmail({
     userName,
-    resetUrl,
+    resetLink: resetUrl,
+    expiryTime: '1 hour'
   })
 
   return sendEmail({
     to: email,
-    subject: 'Reset Your Password - GritSync',
-    html: template,
+    subject,
+    html,
+    emailType: 'transactional',
+    emailCategory: 'password_reset',
+    recipientName: userName,
+    tags: ['authentication', 'password-reset'],
   })
 }
 
@@ -375,6 +572,7 @@ export async function sendPaymentReceipt(
     items: Array<{ name: string; amount: number }>
     paymentDate: string
     applicationId?: string
+    userId?: string
   }
 ): Promise<boolean> {
   const template = await emailTemplates.paymentReceipt(data)
@@ -383,6 +581,17 @@ export async function sendPaymentReceipt(
     to: email,
     subject: `Payment Receipt ${data.receiptNumber} - GritSync`,
     html: template,
+    emailType: 'transactional',
+    emailCategory: 'payment_receipt',
+    recipientName: data.userName,
+    recipientUserId: data.userId,
+    applicationId: data.applicationId,
+    metadata: {
+      receiptNumber: data.receiptNumber,
+      amount: data.amount,
+      paymentType: data.paymentType,
+    },
+    tags: ['payment', 'receipt'],
   })
 }
 
@@ -467,6 +676,10 @@ export async function sendTestEmail(email: string): Promise<boolean> {
     to: email,
     subject: 'Test Email - GritSync Email Configuration',
     html: template,
+    emailType: 'manual',
+    emailCategory: 'custom',
+    recipientName: 'Test User',
+    tags: ['test', 'configuration'],
   })
 }
 

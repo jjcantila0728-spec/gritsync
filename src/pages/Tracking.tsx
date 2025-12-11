@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/components/ui/Toast'
 import { useSearchParams, useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
@@ -8,11 +9,12 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton } from '@/components/ui/Loading'
-import { applicationsAPI, trackingAPI, getSignedFileUrl, getFileUrl } from '@/lib/api'
+import { applicationsAPI, trackingAPI, getSignedFileUrl, getFileUrl, applicationPaymentsAPI } from '@/lib/api'
 import { formatDate, paginate } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
-import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -44,6 +46,7 @@ type SortDirection = 'asc' | 'desc'
 
 export function Tracking() {
   const { user, isAdmin } = useAuth()
+  const { showToast } = useToast()
   const [searchParams] = useSearchParams()
   const params = useParams()
   const location = useLocation()
@@ -71,6 +74,9 @@ export function Tracking() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
   const channelsRef = useRef<RealtimeChannel[]>([])
+  const [applicationsNeedingPayment, setApplicationsNeedingPayment] = useState<Set<string>>(new Set())
+  const [deletingAppId, setDeletingAppId] = useState<string | null>(null)
+  const [deleteConfirmApp, setDeleteConfirmApp] = useState<Application | null>(null)
 
   // Track application by ID
   const handleTrackById = async (id: string) => {
@@ -230,6 +236,11 @@ export function Tracking() {
       if (user) {
         const data = await applicationsAPI.getAll()
         setApplications(data || [])
+        
+        // Check which applications need payment
+        if (data && data.length > 0) {
+          checkApplicationsNeedingPayment(data)
+        }
       }
     } catch (error) {
       console.error('Error fetching applications:', error)
@@ -238,6 +249,30 @@ export function Tracking() {
       setLoading(false)
       setRefreshing(false)
     }
+  }
+
+  // Check which applications have pending payments
+  async function checkApplicationsNeedingPayment(apps: Application[]) {
+    const needingPayment = new Set<string>()
+    
+    await Promise.all(
+      apps.map(async (app) => {
+        try {
+          const payments = await applicationPaymentsAPI.getByApplication(app.id)
+          const hasPendingPayment = payments.some(
+            (p: any) => p.status === 'pending' || p.status === 'pending_approval'
+          )
+          if (hasPendingPayment) {
+            needingPayment.add(app.id)
+          }
+        } catch (error) {
+          // Silently fail - payment check is not critical
+          console.error(`Error checking payments for app ${app.id}:`, error)
+        }
+      })
+    )
+    
+    setApplicationsNeedingPayment(needingPayment)
   }
 
   // Handle real-time application updates
@@ -835,16 +870,15 @@ export function Tracking() {
                       variant="outline"
                       onClick={handleRefresh}
                       disabled={refreshing || loading}
-                      className="px-5"
+                      className="h-10 w-10 p-0"
+                      title="Refresh applications"
                     >
-                      <RefreshCw className={`h-5 w-5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                      Refresh
+                      <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
                     </Button>
                     {!isAdmin() && (
                       <Link to="/application/new">
-                        <Button className="px-5">
-                          <FileText className="h-5 w-5 mr-2" />
-                          New Application
+                        <Button className="h-10 w-10 p-0" title="New Application">
+                          <Plus className="h-5 w-5" />
                         </Button>
                       </Link>
                     )}
@@ -1298,7 +1332,9 @@ export function Tracking() {
                 )}
               </div>
               <div className="space-y-4">
-                {paginatedApplications.data.map((app) => (
+                {paginatedApplications.data.map((app) => {
+                  const needsPayment = applicationsNeedingPayment.has(app.id)
+                  return (
                   <Card 
                     key={app.id}
                     className="hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-200 relative overflow-hidden cursor-pointer"
@@ -1307,16 +1343,50 @@ export function Tracking() {
                       navigate(`${isAdmin() ? '/admin/applications' : '/applications'}/${routeId}/timeline`)
                     }}
                   >
+                      {/* Watermark Overlay - Payment Required (Optimized with CSS will-change) */}
+                      {needsPayment && (
+                        <div className="absolute inset-0 bg-red-50/80 dark:bg-red-900/20 z-30 pointer-events-none flex items-center justify-center">
+                          <div className="transform -rotate-12 text-red-600 dark:text-red-400 font-bold text-4xl md:text-5xl opacity-30 select-none will-change-transform">
+                            PAYMENT REQUIRED
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Delete Button - Top Left (only for applications needing payment) */}
+                      {needsPayment && (
+                        <div 
+                          className="absolute top-2 left-2 z-40"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirmApp(app)
+                            }}
+                            disabled={deletingAppId === app.id}
+                          >
+                            {deletingAppId === app.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                      
                       {/* Progress Percentage - Top Right Corner */}
                       {app.progress_percentage !== undefined && app.progress_percentage !== null ? (
-                        <div className="absolute top-2 right-2 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 px-3 py-1 rounded-bl-lg">
+                        <div className="absolute top-2 right-2 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 px-3 py-1 rounded-bl-lg z-40">
                           <span className={`text-2xl font-bold ${getProgressColor(Math.round(app.progress_percentage))}`}>
                             {Math.round(app.progress_percentage)}%
                           </span>
                         </div>
                       ) : null}
                       
-                      <div className="p-4">
+                      <div className="p-4 relative z-0">
                       {/* Header Section - Compact */}
                       <div className="flex items-start justify-between gap-3 mb-2 pr-16">
                         <div className="flex-1 min-w-0">
@@ -1490,7 +1560,8 @@ export function Tracking() {
                       </div>
                     </div>
                   </Card>
-                ))}
+                  )
+                })}
               </div>
               {/* Pagination */}
               {paginatedApplications.totalPages > 1 && (
@@ -1530,6 +1601,89 @@ export function Tracking() {
           </div>
         </main>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!deleteConfirmApp}
+        onClose={() => setDeleteConfirmApp(null)}
+        title="Delete Application"
+        size="md"
+      >
+        {deleteConfirmApp && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-1">
+                  Warning: This action cannot be undone
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  Are you sure you want to delete this application?
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Application ID:</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{deleteConfirmApp.grit_app_id || deleteConfirmApp.id}</span>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Service:</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{deleteConfirmApp.service_type || 'NCLEX Processing'}</span>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">State:</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{deleteConfirmApp.service_state || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Applicant:</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{deleteConfirmApp.first_name} {deleteConfirmApp.last_name}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirmApp(null)}
+                disabled={!!deletingAppId}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                onClick={async () => {
+                  if (!deleteConfirmApp) return
+                  
+                  setDeletingAppId(deleteConfirmApp.id)
+                  try {
+                    await applicationsAPI.delete(deleteConfirmApp.id)
+                    // Remove from local state
+                    setApplications(prev => prev.filter(a => a.id !== deleteConfirmApp.id))
+                    setApplicationsNeedingPayment(prev => {
+                      const newSet = new Set(prev)
+                      newSet.delete(deleteConfirmApp.id)
+                      return newSet
+                    })
+                    setDeleteConfirmApp(null)
+                    showToast('Application deleted successfully', 'success')
+                  } catch (error: any) {
+                    console.error('Error deleting application:', error)
+                    showToast(error.message || 'Failed to delete application. Please try again or contact support.', 'error')
+                  } finally {
+                    setDeletingAppId(null)
+                  }
+                }}
+                disabled={!!deletingAppId}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deletingAppId === deleteConfirmApp.id ? 'Deleting...' : 'Delete Application'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <Footer />
     </div>
   )

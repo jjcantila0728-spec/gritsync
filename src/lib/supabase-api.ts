@@ -576,6 +576,9 @@ export const applicationsAPI = {
     // Otherwise, fall back to UUID id
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(id)
     
+    console.log('Getting application by ID:', id, 'isGritAppId:', isGritAppId)
+    
+    // Try authenticated query first
     let query = supabase
       .from('applications')
       .select('*')
@@ -586,10 +589,68 @@ export const applicationsAPI = {
       query = query.eq('id', id)
     }
     
-    const { data, error } = await query.single()
+    let { data, error } = await query
+    
+    console.log('First query result:', { dataLength: Array.isArray(data) ? data.length : 'not array', error: error?.message })
+    
+    // If authenticated query fails, try without filters to see what's available
+    if (error || (Array.isArray(data) && data.length === 0)) {
+      console.log('Trying alternative query for application:', id)
+      
+      // Try case-insensitive search for grit_app_id
+      if (isGritAppId) {
+        const { data: allApps, error: allError } = await supabase
+          .from('applications')
+          .select('*')
+        
+        console.log('All applications count:', allApps?.length, 'error:', allError?.message)
+        
+        if (allApps && allApps.length > 0) {
+          // Find by case-insensitive grit_app_id
+          const found = allApps.find((app: any) => 
+            app.grit_app_id?.toUpperCase() === id.toUpperCase()
+          )
+          
+          if (found) {
+            console.log('Found application with case-insensitive match')
+            return found
+          }
+          
+          console.log('Available grit_app_ids:', allApps.map((a: any) => a.grit_app_id).filter(Boolean))
+        }
+      }
+      
+      // Last resort: try with UUID if we haven't already
+      if (isGritAppId) {
+        console.log('Trying to find UUID by grit_app_id')
+        const { data: uuidData, error: uuidError } = await supabase
+          .from('applications')
+          .select('*')
+          .ilike('grit_app_id', id)
+        
+        if (uuidData && uuidData.length > 0) {
+          console.log('Found via ilike query')
+          return uuidData[0]
+        }
+      }
+    }
     
     if (error) throw new Error(error.message)
-    return data as Tables<'user_documents'>
+    
+    // If using grit_app_id, return the first matching result
+    // If using UUID id, return the single result
+    if (Array.isArray(data)) {
+      if (data.length === 0) {
+        throw new Error(`Application not found with ID: ${id}. Please check that the application exists.`)
+      }
+      return data[0]
+    }
+    
+    if (!data) {
+      throw new Error(`Application not found with ID: ${id}. Please check that the application exists.`)
+    }
+    
+    return data
   },
 
   create: async (applicationData: any, files?: { picture?: File; diploma?: File; passport?: File }) => {
@@ -724,6 +785,33 @@ export const applicationsAPI = {
     }
     
     return data as unknown as Tables<'applications'>
+  },
+
+  delete: async (id: string) => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+    
+    // Check if user owns the application or is admin
+    const { data: existing, error: fetchError } = await supabase
+      .from('applications')
+      .select('user_id')
+      .eq('id', id)
+      .single()
+    
+    if (fetchError) throw new Error(fetchError.message)
+    if (!existing) throw new Error('Application not found')
+    
+    // Non-admins can only delete their own applications
+    if (!admin && existing.user_id !== userId) {
+      throw new Error('Unauthorized: You can only delete your own applications')
+    }
+    
+    const { error } = await supabase
+      .from('applications')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
   },
 }
 
@@ -1418,6 +1506,79 @@ export const notificationsAPI = {
     notificationsAPI.invalidateCountCache(userId)
     notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
   },
+
+  // Trigger notification generation functions
+  generateDocumentReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_document_reminders')
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error generating document reminders:', error)
+      throw error
+    }
+  },
+
+  generateProfileCompletionReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_profile_completion_reminders')
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error generating profile completion reminders:', error)
+      throw error
+    }
+  },
+
+  generatePaymentReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_payment_reminders')
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error generating payment reminders:', error)
+      throw error
+    }
+  },
+
+  generateCredentialingReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('notify_credentialing_reminder')
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error generating credentialing reminders:', error)
+      throw error
+    }
+  },
+
+  checkMissingDocuments: async (userId?: string) => {
+    try {
+      const targetUserId = userId || await getCurrentUserId()
+      const { data, error } = await supabase.rpc('check_missing_documents', {
+        p_user_id: targetUserId
+      })
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error checking missing documents:', error)
+      return []
+    }
+  },
+
+  checkIncompleteProfile: async (userId?: string) => {
+    try {
+      const targetUserId = userId || await getCurrentUserId()
+      const { data, error } = await supabase.rpc('check_incomplete_profile', {
+        p_user_id: targetUserId
+      })
+      if (error) throw error
+      return data || false
+    } catch (error) {
+      console.error('Error checking incomplete profile:', error)
+      return false
+    }
+  },
 }
 
 // User Details API
@@ -1958,6 +2119,49 @@ function generateGmailAddress(firstName: string, middleName: string | null, last
   return email
 }
 
+// Helper function to generate security question answers
+function generateSecurityAnswers(
+  elementarySchool: string | null,
+  gender: string | null,
+  middleName: string | null,
+  maritalStatus: string | null
+): { question1: string; question2: string; question3: string } {
+  // Question 1: What was the name of the first school you attended?
+  // Answer: First name of elementary school (lowercase, one word)
+  let question1 = 'unknown'
+  if (elementarySchool) {
+    const firstWord = elementarySchool.trim().split(/\s+/)[0].toLowerCase()
+    question1 = firstWord
+  }
+  
+  // Question 2: Who was your childhood hero?
+  // Answer: superman (male) or darna (female), lowercase
+  let question2 = 'superman' // default
+  if (gender) {
+    const genderLower = gender.toLowerCase()
+    if (genderLower === 'female') {
+      question2 = 'darna'
+    } else if (genderLower === 'male') {
+      question2 = 'superman'
+    }
+  }
+  
+  // Question 3: What is your oldest sibling's middle name?
+  // Answer: user's middle name (lowercase, one word)
+  // If married and previous not available, use user's middle name
+  let question3 = 'none'
+  if (middleName) {
+    const firstWord = middleName.trim().split(/\s+/)[0].toLowerCase()
+    question3 = firstWord
+  }
+  
+  return {
+    question1,
+    question2,
+    question3
+  }
+}
+
 // Processing Accounts API
 export const processingAccountsAPI = {
   getByApplication: async (applicationId: string) => {
@@ -1970,7 +2174,7 @@ export const processingAccountsAPI = {
     
     let query = supabase
       .from('applications')
-      .select('id, user_id, first_name, middle_name, last_name')
+      .select('id, user_id, first_name, middle_name, last_name, elementary_school, gender, marital_status')
     
     if (isGritAppId) {
       query = query.eq('grit_app_id', applicationId.toUpperCase())
@@ -2076,6 +2280,14 @@ export const processingAccountsAPI = {
     if (!existingPearson) {
       try {
         if (password && firstName && lastName) {
+          // Generate security question answers
+          const securityAnswers = generateSecurityAnswers(
+            typedApplication.elementary_school || null,
+            typedApplication.gender || null,
+            typedApplication.middle_name || null,
+            typedApplication.marital_status || null
+          )
+          
           const { error: pearsonError } = await supabase
             .from('processing_accounts')
             .insert({
@@ -2083,6 +2295,9 @@ export const processingAccountsAPI = {
               account_type: 'pearson_vue',
               email: gmailAddress,
               password: password,
+              security_question_1: securityAnswers.question1,
+              security_question_2: securityAnswers.question2,
+              security_question_3: securityAnswers.question3,
               status: 'inactive', // Inactive by default, must be activated by admin
               created_by: typedApplication.user_id,
             })
@@ -2771,6 +2986,22 @@ export const adminAPI = {
 }
 
 // Application Payments API
+// Helper function to calculate GritSync service fee based on payment type
+// This is the portion that promo codes can discount
+const calculateServiceFee = (paymentType: 'step1' | 'step2' | 'full'): number => {
+  const FULL_SERVICE_FEE = 150.00
+  
+  switch(paymentType) {
+    case 'full':
+      return FULL_SERVICE_FEE
+    case 'step1':
+    case 'step2':
+      return FULL_SERVICE_FEE / 2 // $75 per step
+    default:
+      return FULL_SERVICE_FEE
+  }
+}
+
 export const applicationPaymentsAPI = {
   checkRetaker: async () => {
     const userId = await getCurrentUserId()
@@ -2819,6 +3050,9 @@ export const applicationPaymentsAPI = {
       actualApplicationId = typedApp.id || ''
     }
     
+    // Calculate service fee amount for this payment type
+    const serviceFeeAmount = calculateServiceFee(paymentType)
+    
     const { data, error } = await supabase
       .from('application_payments')
       .insert({
@@ -2826,6 +3060,7 @@ export const applicationPaymentsAPI = {
         user_id: userId,
         payment_type: paymentType,
         amount,
+        service_fee_amount: serviceFeeAmount,
         status: 'pending',
       })
       .select('*')
@@ -2840,24 +3075,43 @@ export const applicationPaymentsAPI = {
     const context = { operation: 'applicationPaymentsAPI.createPaymentIntent', paymentId }
     
     try {
-      // Get the current session to ensure we have auth token
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError || !session) {
-        throw normalizeError(
-          sessionError || new Error('Not authenticated. Please log in and try again.'),
-          { ...context, step: 'getSession' }
-        )
+      // Get session if available (application payments can be made by anyone with the link)
+      let authHeader: string | undefined = undefined
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        // Only use session if it exists and is valid
+        if (!sessionError && session?.access_token) {
+          // Verify the token is still valid
+          const { error: userError } = await supabase.auth.getUser()
+          if (!userError) {
+            authHeader = `Bearer ${session.access_token}`
+            console.log('Using authenticated session for payment intent')
+          } else {
+            console.log('Session token invalid, proceeding as public user')
+          }
+        } else {
+          console.log('No session found, proceeding as public user')
+        }
+      } catch (sessionCheckError) {
+        // If session check fails, proceed as public user (no auth header)
+        console.log('Session check failed, proceeding as public user:', sessionCheckError)
       }
       
       // Call Supabase Edge Function for Stripe payment intent creation with retry logic
       const executeInvoke = async () => {
-        const { data, error } = await supabase.functions.invoke('create-application-payment-intent', {
+        const invokeOptions: any = {
           body: { payment_id: paymentId },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        })
+        }
+        
+        // Only add auth header if we have a valid session
+        if (authHeader) {
+          invokeOptions.headers = {
+            Authorization: authHeader,
+          }
+        }
+        
+        const { data, error } = await supabase.functions.invoke('create-application-payment-intent', invokeOptions)
         
         if (error) {
           // Try to extract error message from response body
@@ -3123,8 +3377,17 @@ export const applicationPaymentsAPI = {
   },
 
   getByApplication: async (applicationId: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
+    // Try to get user ID, but don't fail if not authenticated (public checkout access)
+    let userId: string | null = null
+    let admin = false
+    
+    try {
+      userId = await getCurrentUserId()
+      admin = await isAdmin()
+    } catch (e) {
+      // User not authenticated - allow public access for checkout
+      console.log('Public access to application payments')
+    }
     
     // Resolve application ID (could be grit_app_id or UUID)
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
@@ -3137,35 +3400,37 @@ export const applicationPaymentsAPI = {
         .from('applications')
         .select('id, user_id')
         .eq('grit_app_id', applicationId.toUpperCase())
-        .single()
+        .maybeSingle()
       
       if (appError || !application) {
         throw new Error(appError?.message || 'Application not found')
       }
       
-      // Check if user owns the application or is admin
+      // Check if user owns the application or is admin (skip if public access)
       const appCheckData = application as { user_id?: string; id?: string }
-      if (!admin && appCheckData.user_id !== userId) {
+      if (userId && !admin && appCheckData.user_id !== userId) {
         throw new Error('Unauthorized')
       }
       
       actualApplicationId = appCheckData.id || ''
     } else {
-      // If it's a UUID, verify the user has access to this application
-      const { data: application, error: appError } = await supabase
-        .from('applications')
-        .select('user_id')
-        .eq('id', applicationId)
-        .single()
-      
-      if (appError || !application) {
-        throw new Error(appError?.message || 'Application not found')
-      }
-      
-      // Check if user owns the application or is admin
-      const appCheckData = application as { user_id?: string }
-      if (!admin && appCheckData.user_id !== userId) {
-        throw new Error('Unauthorized')
+      // If it's a UUID, verify the user has access to this application (skip if public access)
+      if (userId) {
+        const { data: application, error: appError } = await supabase
+          .from('applications')
+          .select('user_id')
+          .eq('id', applicationId)
+          .maybeSingle()
+        
+        if (appError || !application) {
+          throw new Error(appError?.message || 'Application not found')
+        }
+        
+        // Check if user owns the application or is admin
+        const appCheckData = application as { user_id?: string }
+        if (!admin && appCheckData.user_id !== userId) {
+          throw new Error('Unauthorized')
+        }
       }
     }
     
@@ -3539,7 +3804,7 @@ export const trackingAPI = {
           return getStepStatus('nclex_eligibility_approved') === 'completed' || (stepData && stepData.status === 'completed')
         }
         case 'pearson_vue': {
-          const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || (allProcessingAccounts && allProcessingAccounts.some((acc: any) => acc.account_type === 'pearson_vue'))
+          const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || (allProcessingAccounts && allProcessingAccounts.some((acc: any) => acc.account_type === 'pearson_vue' && acc.status === 'active'))
           const attRequested = getStepStatus('att_requested') === 'completed'
           return (pearsonAccountCreated && attRequested) || (stepData && stepData.status === 'completed')
         }

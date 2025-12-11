@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -269,7 +269,7 @@ export function MyDetails() {
       const dateError = validateDate(dateOfBirth, 'Date of Birth')
       if (dateError) errors.dateOfBirth = dateError
     }
-    if (maritalStatus === 'single' && !singleFullName.trim()) {
+    if (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && !singleFullName.trim()) {
       errors.singleFullName = 'Full name when single is required'
     }
 
@@ -1047,7 +1047,7 @@ export function MyDetails() {
         last_name: safeTrim(lastName),
         gender: gender || null,
         marital_status: maritalStatus || null,
-        single_full_name: maritalStatus === 'single' ? safeTrim(singleFullName) : null,
+        single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? safeTrim(singleFullName) : null,
         date_of_birth: convertToDatabaseFormat(dateOfBirth) || null,
         birth_place: safeTrim(birthPlace),
         email: safeTrim(email) || user?.email || null,
@@ -1342,7 +1342,7 @@ export function MyDetails() {
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         {completionPercentage === 100 
-                          ? 'All details completed! 🎉' 
+                          ? 'All details completed! ðŸŽ‰' 
                           : `${completionPercentage}% complete - Fill in more details to speed up your applications`}
                       </p>
                     </div>
@@ -1647,7 +1647,7 @@ export function MyDetails() {
                         { value: 'widowed', label: 'Widowed' },
                       ]}
                     />
-                    {maritalStatus === 'single' && (
+                    {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && (
                       <div>
                         <Input
                           label="Write Your Full Name When You Are Single"
@@ -1777,7 +1777,7 @@ export function MyDetails() {
                       {mobileNumber || 'Not set'}
                     </p>
                   </div>
-                  {maritalStatus === 'single' && singleFullName && (
+                  {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && singleFullName && (
                     <div className="group">
                       <div className="flex items-center gap-2 mb-2">
                         <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name When Single</label>
