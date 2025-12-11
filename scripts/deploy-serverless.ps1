@@ -47,7 +47,8 @@ $FUNCTIONS = @(
     "admin-login-as",
     "create-payment-intent",
     "stripe-webhook",
-    "send-email"
+    "send-email",
+    "resend-inbox"
 )
 
 foreach ($func in $FUNCTIONS) {

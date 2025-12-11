@@ -35,34 +35,9 @@ export interface ListReceivedEmailsResponse {
   data: ReceivedEmail[]
 }
 
-const RESEND_API_URL = 'https://api.resend.com'
-
 /**
- * Get Resend API key from database settings
- */
-async function getResendApiKey(): Promise<string> {
-  try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'resendApiKey')
-      .single()
-
-    if (error || !data) {
-      console.error('Error fetching Resend API key from settings:', error)
-      // Fallback to env variable
-      return import.meta.env.VITE_RESEND_API_KEY || ''
-    }
-
-    return data.value || ''
-  } catch (error) {
-    console.error('Error fetching Resend API key:', error)
-    return import.meta.env.VITE_RESEND_API_KEY || ''
-  }
-}
-
-/**
- * List received emails from Resend
+ * List received emails via Supabase Edge Function proxy to Resend
+ * This avoids CORS issues when calling the Resend API directly from the browser.
  */
 export async function listReceivedEmails(options?: {
   limit?: number
@@ -70,42 +45,27 @@ export async function listReceivedEmails(options?: {
   before?: string
 }): Promise<ListReceivedEmailsResponse> {
   try {
-    const apiKey = await getResendApiKey()
-    
-    if (!apiKey) {
-      throw new Error('Resend API key not configured. Please configure it in Admin Settings > Notifications.')
-    }
-
-    const params = new URLSearchParams()
-    
-    if (options?.limit) {
-      params.append('limit', options.limit.toString())
-    }
-    if (options?.after) {
-      params.append('after', options.after)
-    }
-    if (options?.before) {
-      params.append('before', options.before)
-    }
-
-    const queryString = params.toString()
-    const url = `${RESEND_API_URL}/emails/receiving${queryString ? `?${queryString}` : ''}`
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+    const { data, error } = await supabase.functions.invoke('resend-inbox', {
+      body: {
+        action: 'list',
+        options: {
+          limit: options?.limit,
+          after: options?.after,
+          before: options?.before,
+        },
       },
     })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || `Failed to fetch received emails: ${response.statusText}`)
+    if (error) {
+      console.error('Error invoking resend-inbox function:', error)
+      throw new Error(error.message || 'Failed to load inbox emails')
     }
 
-    const data = await response.json()
-    return data
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response from resend-inbox function')
+    }
+
+    return data as ListReceivedEmailsResponse
   } catch (error) {
     console.error('Error fetching received emails:', error)
     throw error
@@ -113,75 +73,47 @@ export async function listReceivedEmails(options?: {
 }
 
 /**
- * Retrieve a specific received email by ID
+ * Delete a received email from Resend via Supabase Edge Function proxy
  */
-export async function getReceivedEmailById(emailId: string): Promise<ReceivedEmail> {
+export async function deleteReceivedEmail(emailId: string): Promise<void> {
   try {
-    const apiKey = await getResendApiKey()
-    
-    if (!apiKey) {
-      throw new Error('Resend API key not configured. Please configure it in Admin Settings > Notifications.')
-    }
-
-    const url = `${RESEND_API_URL}/emails/receiving/${emailId}`
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+    const { data, error } = await supabase.functions.invoke('resend-inbox', {
+      body: {
+        action: 'delete',
+        emailId,
       },
     })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || `Failed to fetch received email: ${response.statusText}`)
+    if (error) {
+      console.error('Error invoking resend-inbox delete function:', error)
+      throw new Error(error.message || 'Failed to delete inbox email')
     }
 
-    const data = await response.json()
-    return data
+    if (data && !data.success) {
+      throw new Error(data.message || 'Failed to delete inbox email')
+    }
   } catch (error) {
-    console.error('Error fetching received email:', error)
+    console.error('Error deleting received email:', error)
     throw error
   }
 }
 
-/**
- * Get attachment from a received email
- */
+// Placeholder functions for future use (e.g., viewing full message or downloading attachments)
+// Currently the UI only uses the list endpoint, so these remain unimplemented.
+export async function getReceivedEmailById(_emailId: string): Promise<ReceivedEmail> {
+  throw new Error('getReceivedEmailById is not implemented yet.')
+}
+
 export async function getReceivedEmailAttachment(
-  emailId: string,
-  attachmentId: string
+  _emailId: string,
+  _attachmentId: string
 ): Promise<Blob> {
-  try {
-    const apiKey = await getResendApiKey()
-    
-    if (!apiKey) {
-      throw new Error('Resend API key not configured. Please configure it in Admin Settings > Notifications.')
-    }
-
-    const url = `${RESEND_API_URL}/emails/receiving/${emailId}/attachments/${attachmentId}`
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch attachment: ${response.statusText}`)
-    }
-
-    return await response.blob()
-  } catch (error) {
-    console.error('Error fetching attachment:', error)
-    throw error
-  }
+  throw new Error('getReceivedEmailAttachment is not implemented yet.')
 }
 
 export const resendInboxAPI = {
   list: listReceivedEmails,
+  delete: deleteReceivedEmail,
   getById: getReceivedEmailById,
   getAttachment: getReceivedEmailAttachment,
 }

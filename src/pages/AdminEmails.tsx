@@ -42,6 +42,11 @@ import {
   Code,
   Monitor,
   Smartphone,
+  Star,
+  PenTool,
+  Settings,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { emailLogsAPI, sendEmailWithLogging, EmailLog, EmailStats } from '@/lib/email-api'
 import { Loading } from '@/components/ui/Loading'
@@ -49,10 +54,11 @@ import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import AdminEmailTemplates from './AdminEmailTemplates'
 import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
-import { emailSignaturesAPI } from '@/lib/email-signatures-api'
+import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
+import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
 
-type Tab = 'history' | 'analytics' | 'compose' | 'templates'
+type Tab = 'inbox' | 'sent' | 'templates' | 'signatures' | 'email-setup'
 
 // Email Templates Manager Component
 function EmailTemplatesManager() {
@@ -667,24 +673,23 @@ export function AdminEmails() {
   
   // Get initial tab from URL path or hash
   const getInitialTab = (): Tab => {
-    // Check URL path first (e.g., /admin/emails/compose)
+    // Check URL path first (e.g., /admin/emails/inbox, /admin/emails/sent, /admin/emails/signatures, /admin/emails/email-setup)
     const pathParts = location.pathname.split('/')
     const lastPart = pathParts[pathParts.length - 1]
-    if (lastPart && ['history', 'analytics', 'compose', 'templates'].includes(lastPart)) {
+    if (lastPart && ['inbox', 'sent', 'templates', 'signatures', 'email-setup'].includes(lastPart)) {
       return lastPart as Tab
     }
     
-    // Then check hash (e.g., /admin/emails#compose)
+    // Then check hash (e.g., /admin/emails#inbox)
     const hash = location.hash.replace('#', '')
-    if (hash && ['history', 'analytics', 'compose', 'templates'].includes(hash)) {
+    if (hash && ['inbox', 'sent', 'templates', 'signatures', 'email-setup'].includes(hash)) {
       return hash as Tab
     }
     
-    return 'history'
+    return 'inbox'
   }
   
   const [activeTab, setActiveTab] = useState<Tab>(getInitialTab())
-  const [mailboxType, setMailboxType] = useState<'sent' | 'inbox'>('inbox')
   const [loading, setLoading] = useState(true)
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([])
   const [receivedEmails, setReceivedEmails] = useState<any[]>([])
@@ -695,6 +700,33 @@ export function AdminEmails() {
   const [selectedEmail, setSelectedEmail] = useState<EmailLog | null>(null)
   const [selectedReceivedEmail, setSelectedReceivedEmail] = useState<any | null>(null)
   const [inboxHasMore, setInboxHasMore] = useState(false)
+  
+  // Selection state for bulk actions
+  const [selectedSentIds, setSelectedSentIds] = useState<Set<string>>(new Set())
+  const [selectedInboxIds, setSelectedInboxIds] = useState<Set<string>>(new Set())
+  
+  // Delete confirmation modal
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    type: 'sent' | 'inbox'
+    emailId: string | null
+    emailSubject: string
+  }>({
+    isOpen: false,
+    type: 'sent',
+    emailId: null,
+    emailSubject: ''
+  })
+
+  // Email signatures state
+  const [signatures, setSignatures] = useState<EmailSignature[]>([])
+  const [editingSignature, setEditingSignature] = useState<Partial<EmailSignature> | null>(null)
+  const [showSignatureEditor, setShowSignatureEditor] = useState(false)
+
+  // Email setup state
+  const [businessLogos, setBusinessLogos] = useState<BusinessLogo[]>([])
+  const [showLogoUpload, setShowLogoUpload] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -734,16 +766,20 @@ export function AdminEmails() {
 
   useEffect(() => {
     if (isAdmin()) {
-      if (mailboxType === 'sent') {
+      if (activeTab === 'sent') {
         loadData()
-      } else if (mailboxType === 'inbox') {
+      } else if (activeTab === 'inbox') {
         loadInboxEmails()
+      } else if (activeTab === 'signatures') {
+        loadSignaturesData()
+      } else if (activeTab === 'email-setup') {
+        loadEmailSetupData()
       }
       loadAdminEmailAddresses()
       loadEmailTemplates()
       loadEmailSignatures()
     }
-  }, [currentPage, statusFilter, typeFilter, categoryFilter, searchQuery, dateRange, mailboxType])
+  }, [currentPage, statusFilter, typeFilter, categoryFilter, searchQuery, dateRange, activeTab])
   
   const loadAdminEmailAddresses = async () => {
     setLoadingAddresses(true)
@@ -860,6 +896,12 @@ export function AdminEmails() {
     setActiveTab(tab)
     // Use path-based navigation for cleaner URLs
     navigate(`/admin/emails/${tab}`, { replace: true })
+    // Clear selections when switching tabs
+    if (tab === 'sent') {
+      setSelectedInboxIds(new Set())
+    } else if (tab === 'inbox') {
+      setSelectedSentIds(new Set())
+    }
   }
 
   // Listen for location changes (browser back/forward)
@@ -934,17 +976,284 @@ export function AdminEmails() {
     }
   }
 
-  const handleDelete = async (emailId: string) => {
-    if (!confirm('Are you sure you want to delete this email log?')) {
+  const handleDeleteSent = async (emailId: string, subject: string) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'sent',
+      emailId,
+      emailSubject: subject
+    })
+  }
+
+  const handleDeleteInbox = async (emailId: string, subject: string) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'inbox',
+      emailId,
+      emailSubject: subject
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteModal.emailId) return
+
+    try {
+      if (deleteModal.type === 'sent') {
+        await emailLogsAPI.delete(deleteModal.emailId)
+        setSelectedSentIds(prev => {
+          const next = new Set(prev)
+          next.delete(deleteModal.emailId!)
+          return next
+        })
+        loadData()
+      } else {
+        await resendInboxAPI.delete(deleteModal.emailId)
+        setSelectedInboxIds(prev => {
+          const next = new Set(prev)
+          next.delete(deleteModal.emailId!)
+          return next
+        })
+        loadInboxEmails()
+      }
+      
+      setDeleteModal({ isOpen: false, type: 'sent', emailId: null, emailSubject: '' })
+      alert('Email deleted successfully')
+    } catch (error) {
+      console.error('Error deleting email:', error)
+      alert('Failed to delete email')
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    const selectedIds = activeTab === 'sent' ? selectedSentIds : selectedInboxIds
+    
+    if (selectedIds.size === 0) {
+      alert('Please select at least one email to delete')
+      return
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} email(s)? This action cannot be undone.`)) {
       return
     }
 
     try {
-      await emailLogsAPI.delete(emailId)
-      loadData()
+      if (activeTab === 'sent') {
+        await emailLogsAPI.bulkDelete(Array.from(selectedIds))
+        setSelectedSentIds(new Set())
+        loadData()
+      } else {
+        // Delete inbox emails one by one
+        const errors: string[] = []
+        for (const emailId of Array.from(selectedIds)) {
+          try {
+            await resendInboxAPI.delete(emailId)
+          } catch (error) {
+            console.error(`Failed to delete email ${emailId}:`, error)
+            errors.push(emailId)
+          }
+        }
+        
+        setSelectedInboxIds(new Set())
+        loadInboxEmails()
+        
+        if (errors.length > 0) {
+          alert(`Failed to delete ${errors.length} email(s). ${selectedIds.size - errors.length} deleted successfully.`)
+        } else {
+          alert(`${selectedIds.size} email(s) deleted successfully`)
+        }
+      }
     } catch (error) {
-      console.error('Error deleting email:', error)
-      alert('Failed to delete email log')
+      console.error('Error deleting emails:', error)
+      alert('Failed to delete emails')
+    }
+  }
+
+  const toggleSentSelection = (id: string) => {
+    const newSelection = new Set(selectedSentIds)
+    if (newSelection.has(id)) {
+      newSelection.delete(id)
+    } else {
+      newSelection.add(id)
+    }
+    setSelectedSentIds(newSelection)
+  }
+
+  // Email Signatures functions
+  const loadSignaturesData = async () => {
+    try {
+      setLoading(true)
+      const sigs = await emailSignaturesAPI.getAll()
+      setSignatures(sigs)
+    } catch (error) {
+      console.error('Error loading signatures:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateSignature = () => {
+    setEditingSignature({
+      name: '',
+      signature_html: '',
+      signature_text: '',
+      signature_type: 'personal',
+      is_active: true,
+      is_default: false,
+    })
+    setShowSignatureEditor(true)
+  }
+
+  const handleEditSignature = (signature: EmailSignature) => {
+    setEditingSignature(signature)
+    setShowSignatureEditor(true)
+  }
+
+  const handleSaveSignature = async () => {
+    if (!editingSignature) return
+
+    if (!editingSignature.name || !editingSignature.signature_html) {
+      alert('Please fill in name and HTML content')
+      return
+    }
+
+    try {
+      if (editingSignature.id) {
+        await emailSignaturesAPI.update(editingSignature.id, editingSignature)
+        alert('Signature updated successfully')
+      } else {
+        await emailSignaturesAPI.create(editingSignature)
+        alert('Signature created successfully')
+      }
+      setShowSignatureEditor(false)
+      setEditingSignature(null)
+      loadSignaturesData()
+    } catch (error) {
+      console.error('Error saving signature:', error)
+      alert('Failed to save signature')
+    }
+  }
+
+  const handleDeleteSignature = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) return
+
+    try {
+      await emailSignaturesAPI.delete(id)
+      alert('Signature deleted successfully')
+      loadSignaturesData()
+    } catch (error) {
+      console.error('Error deleting signature:', error)
+      alert('Failed to delete signature')
+    }
+  }
+
+  const handleSetDefaultSignature = async (id: string) => {
+    try {
+      await emailSignaturesAPI.setDefault(id)
+      alert('Default signature updated')
+      loadSignaturesData()
+    } catch (error) {
+      console.error('Error setting default signature:', error)
+      alert('Failed to set default signature')
+    }
+  }
+
+  // Email Setup functions
+  const loadEmailSetupData = async () => {
+    try {
+      setLoading(true)
+      const [addresses, logos] = await Promise.all([
+        (async () => {
+          const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+          return emailAddressesAPI.getAdminAddresses()
+        })(),
+        businessLogosAPI.getAll(),
+      ])
+      setAdminEmailAddresses(addresses)
+      setBusinessLogos(logos)
+    } catch (error) {
+      console.error('Error loading email setup data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>, logoType: BusinessLogo['logo_type']) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file')
+      return
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB')
+      return
+    }
+
+    try {
+      setUploadingLogo(true)
+      await businessLogosAPI.upload(file, logoType, file.name)
+      alert('Logo uploaded successfully')
+      loadEmailSetupData()
+      setShowLogoUpload(false)
+    } catch (error) {
+      console.error('Error uploading logo:', error)
+      alert('Failed to upload logo')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const handleDeleteLogo = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this logo?')) return
+
+    try {
+      await businessLogosAPI.delete(id)
+      alert('Logo deleted successfully')
+      loadEmailSetupData()
+    } catch (error) {
+      console.error('Error deleting logo:', error)
+      alert('Failed to delete logo')
+    }
+  }
+
+  const handleSetDefaultLogo = async (id: string, logoType: BusinessLogo['logo_type']) => {
+    try {
+      await businessLogosAPI.setDefault(id, logoType)
+      alert('Default logo updated')
+      loadEmailSetupData()
+    } catch (error) {
+      console.error('Error setting default logo:', error)
+      alert('Failed to set default logo')
+    }
+  }
+
+  const toggleInboxSelection = (id: string) => {
+    const newSelection = new Set(selectedInboxIds)
+    if (newSelection.has(id)) {
+      newSelection.delete(id)
+    } else {
+      newSelection.add(id)
+    }
+    setSelectedInboxIds(newSelection)
+  }
+
+  const toggleSelectAllSent = () => {
+    if (selectedSentIds.size === emailLogs.length) {
+      setSelectedSentIds(new Set())
+    } else {
+      setSelectedSentIds(new Set(emailLogs.map(log => log.id)))
+    }
+  }
+
+  const toggleSelectAllInbox = () => {
+    if (selectedInboxIds.size === receivedEmails.length) {
+      setSelectedInboxIds(new Set())
+    } else {
+      setSelectedInboxIds(new Set(receivedEmails.map(email => email.id)))
     }
   }
 
@@ -1060,10 +1369,7 @@ export function AdminEmails() {
                 </p>
               </div>
               <button
-                onClick={() => {
-                  setComposing(true)
-                  setActiveTab('compose')
-                }}
+                onClick={() => setComposing(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
               >
                 <Plus className="h-5 w-5" />
@@ -1072,7 +1378,7 @@ export function AdminEmails() {
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats Cards - Email Management Analytics */}
           {stats && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -1132,40 +1438,28 @@ export function AdminEmails() {
             <div className="border-b border-gray-200 dark:border-gray-700">
               <nav className="flex -mb-px">
                 <button
-                  onClick={() => handleTabChange('history')}
+                  onClick={() => handleTabChange('inbox')}
                   className={cn(
                     'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
-                    activeTab === 'history'
+                    activeTab === 'inbox'
                       ? 'border-primary-600 text-primary-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   )}
                 >
-                  <Clock className="h-4 w-4 inline-block mr-2" />
-                  Email History
+                  <Mail className="h-4 w-4 inline-block mr-2" />
+                  Inbox
                 </button>
                 <button
-                  onClick={() => handleTabChange('analytics')}
+                  onClick={() => handleTabChange('sent')}
                   className={cn(
                     'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
-                    activeTab === 'analytics'
-                      ? 'border-primary-600 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  )}
-                >
-                  <BarChart3 className="h-4 w-4 inline-block mr-2" />
-                  Analytics
-                </button>
-                <button
-                  onClick={() => handleTabChange('compose')}
-                  className={cn(
-                    'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
-                    activeTab === 'compose'
+                    activeTab === 'sent'
                       ? 'border-primary-600 text-primary-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   )}
                 >
                   <Send className="h-4 w-4 inline-block mr-2" />
-                  Compose
+                  Sent Items
                 </button>
                 <button
                   onClick={() => handleTabChange('templates')}
@@ -1179,47 +1473,62 @@ export function AdminEmails() {
                   <FileText className="h-4 w-4 inline-block mr-2" />
                   Templates
                 </button>
+                <button
+                  onClick={() => handleTabChange('signatures')}
+                  className={cn(
+                    'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
+                    activeTab === 'signatures'
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  )}
+                >
+                  <PenTool className="h-4 w-4 inline-block mr-2" />
+                  Signatures
+                </button>
+                <button
+                  onClick={() => handleTabChange('email-setup')}
+                  className={cn(
+                    'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
+                    activeTab === 'email-setup'
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  )}
+                >
+                  <Settings className="h-4 w-4 inline-block mr-2" />
+                  Email Setup
+                </button>
               </nav>
             </div>
 
             {/* Tab Content */}
             <div className="p-6">
-              {/* Email History Tab */}
-              {activeTab === 'history' && (
-                <>
-                  {/* Mailbox Type Tabs */}
-                  <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-                    <nav className="flex gap-4">
-                      <button
-                        onClick={() => setMailboxType('inbox')}
-                        className={cn(
-                          'px-6 py-3 text-sm font-medium border-b-2 transition-colors',
-                          mailboxType === 'inbox'
-                            ? 'border-primary-600 text-primary-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        )}
-                      >
-                        <Mail className="h-4 w-4 inline-block mr-2" />
-                        Inbox
-                      </button>
-                      <button
-                        onClick={() => setMailboxType('sent')}
-                        className={cn(
-                          'px-6 py-3 text-sm font-medium border-b-2 transition-colors',
-                          mailboxType === 'sent'
-                            ? 'border-primary-600 text-primary-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        )}
-                      >
-                        <Send className="h-4 w-4 inline-block mr-2" />
-                        Sent Items
-                      </button>
-                    </nav>
-                  </div>
-
-                  {/* Sent Items Content */}
-                  {mailboxType === 'sent' && (
+              {/* Sent Items Tab */}
+              {activeTab === 'sent' && (
                     <>
+                      {/* Bulk Actions Toolbar */}
+                      {selectedSentIds.size > 0 && (
+                        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+                          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                            {selectedSentIds.size} email(s) selected
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedSentIds(new Set())}
+                              className="px-3 py-1.5 text-sm text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100"
+                            >
+                              Clear Selection
+                            </button>
+                            <button
+                              onClick={handleBulkDelete}
+                              className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete Selected
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Filters and Search */}
                       <div className="mb-6 space-y-4">
                         <div className="flex flex-wrap gap-4">
@@ -1333,100 +1642,144 @@ export function AdminEmails() {
                         </div>
                       ) : (
                         <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead className="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Date
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Recipient
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Subject
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Type
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Status
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Actions
-                              </th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {emailLogs.map((log) => (
-                                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                                  {format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
-                                </td>
-                                <td className="px-4 py-4">
-                                  <div>
-                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                      {log.recipient_name || log.recipient_email}
+                          {/* Gmail-style Compact Email List */}
+                          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+                            {/* Table Header */}
+                            <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
+                              <div className="flex items-center px-2 py-2">
+                                <div className="w-10 sm:w-12 flex items-center justify-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedSentIds.size === emailLogs.length && emailLogs.length > 0}
+                                    onChange={toggleSelectAllSent}
+                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                  />
+                                </div>
+                                <div className="flex-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                  {selectedSentIds.size > 0 ? `${selectedSentIds.size} selected` : 'Sent Items'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Email Rows */}
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                              {emailLogs.map((log) => (
+                                <div
+                                  key={log.id}
+                                  className="group relative flex flex-col sm:flex-row sm:items-center px-2 py-2 hover:shadow-sm transition-all cursor-pointer border-l-4 border-transparent hover:border-l-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                  onClick={(e) => {
+                                    if ((e.target as HTMLElement).closest('input[type="checkbox"]') || 
+                                        (e.target as HTMLElement).closest('button')) {
+                                      return
+                                    }
+                                    setSelectedEmail(log)
+                                  }}
+                                >
+                                  {/* Mobile/Tablet Layout */}
+                                  <div className="flex items-start sm:items-center flex-1 min-w-0">
+                                    {/* Checkbox */}
+                                    <div className="w-10 sm:w-12 flex items-center justify-center flex-shrink-0 pt-1 sm:pt-0" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedSentIds.has(log.id)}
+                                        onChange={() => toggleSentSelection(log.id)}
+                                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                      />
                                     </div>
-                                    {log.recipient_name && (
-                                      <div className="text-sm text-gray-500">{log.recipient_email}</div>
-                                    )}
+
+                                    {/* Content Area */}
+                                    <div className="flex-1 min-w-0 pr-2">
+                                      {/* Recipient & Status (Mobile: stacked, Desktop: inline) */}
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0 mb-1 sm:mb-0">
+                                        <div className="sm:w-40 flex-shrink-0 sm:px-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[160px] sm:max-w-none">
+                                              {(() => {
+                                                const recipient = log.recipient_name || log.recipient_email.split('@')[0];
+                                                return recipient.length > 20 ? recipient.substring(0, 20) + '...' : recipient;
+                                              })()}
+                                            </span>
+                                            {/* Status Icon (Mobile: inline with recipient) */}
+                                            <span className="sm:hidden">
+                                              {log.status === 'delivered' || log.status === 'sent' ? (
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                                              ) : log.status === 'pending' ? (
+                                                <Clock className="h-3.5 w-3.5 text-yellow-600" />
+                                              ) : (
+                                                <XCircle className="h-3.5 w-3.5 text-red-600" />
+                                              )}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Subject & Preview */}
+                                        <div className="flex-1 min-w-0 sm:px-2">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                              {(log.subject && log.subject.length > 40 ? log.subject.substring(0, 40) + '...' : log.subject) || '(no subject)'}
+                                            </span>
+                                            <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate">
+                                              - {log.body_text?.substring(0, 30) || ''}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Status & Indicators (Desktop only) */}
+                                        <div className="hidden sm:flex items-center gap-2 flex-shrink-0 px-2">
+                                          {log.status === 'delivered' || log.status === 'sent' ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                          ) : log.status === 'pending' ? (
+                                            <Clock className="h-4 w-4 text-yellow-600" />
+                                          ) : (
+                                            <XCircle className="h-4 w-4 text-red-600" />
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Mobile: Date Row */}
+                                      <div className="flex items-center justify-between sm:hidden text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        <span>
+                                          {format(new Date(log.created_at), 'MMM d, h:mm a')}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                </td>
-                                <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                  {log.subject}
-                                </td>
-                                <td className="px-4 py-4 whitespace-nowrap">
-                                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                    {log.email_type}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-4 whitespace-nowrap">
-                                  <span
-                                    className={cn(
-                                      'px-2 py-1 text-xs font-medium rounded-full',
-                                      {
-                                        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200':
-                                          log.status === 'delivered' || log.status === 'sent',
-                                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200':
-                                          log.status === 'pending',
-                                        'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200':
-                                          log.status === 'failed' || log.status === 'bounced',
-                                      }
-                                    )}
-                                  >
-                                    {log.status}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                  <button
-                                    onClick={() => setSelectedEmail(log)}
-                                    className="text-primary-600 hover:text-primary-900"
-                                    title="View Details"
-                                  >
-                                    <Eye className="h-4 w-4 inline" />
-                                  </button>
-                                  {log.status === 'failed' && log.retry_count < log.max_retries && (
+
+                                  {/* Desktop: Date & Actions */}
+                                  <div className="hidden sm:flex items-center gap-2">
+                                    <div className="w-28 text-right px-2 flex-shrink-0">
+                                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                                        {format(new Date(log.created_at), 'MMM d')}
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-500">
+                                        {format(new Date(log.created_at), 'h:mm a')}
+                                      </div>
+                                    </div>
+
+                                    <div className="w-10 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        onClick={() => handleDeleteSent(log.id, log.subject || '(no subject)')}
+                                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-opacity"
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Mobile: Delete Button (Always visible) */}
+                                  <div className="sm:hidden absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
                                     <button
-                                      onClick={() => handleRetry(log.id)}
-                                      className="text-blue-600 hover:text-blue-900"
-                                      title="Retry"
+                                      onClick={() => handleDeleteSent(log.id, log.subject || '(no subject)')}
+                                      className="p-1.5 text-gray-400 hover:text-red-600 active:text-red-700"
+                                      title="Delete"
                                     >
-                                      <RefreshCw className="h-4 w-4 inline" />
+                                      <Trash2 className="h-4 w-4" />
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleDelete(log.id)}
-                                    className="text-red-600 hover:text-red-900"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="h-4 w-4 inline" />
-                                  </button>
-                                </td>
-                              </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
 
                           {/* Pagination */}
@@ -1475,12 +1828,36 @@ export function AdminEmails() {
                           )}
                         </>
                       )}
-                    </>
-                  )}
+                </>
+              )}
 
-                  {/* Inbox Content */}
-                  {mailboxType === 'inbox' && (
+              {/* Inbox Tab */}
+              {activeTab === 'inbox' && (
                     <>
+                      {/* Bulk Actions Toolbar */}
+                      {selectedInboxIds.size > 0 && (
+                        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+                          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                            {selectedInboxIds.size} email(s) selected
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedInboxIds(new Set())}
+                              className="px-3 py-1.5 text-sm text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100"
+                            >
+                              Clear Selection
+                            </button>
+                            <button
+                              onClick={handleBulkDelete}
+                              className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete Selected
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Search and Filters */}
                       <div className="mb-6 space-y-4">
                         <div className="flex flex-wrap gap-4">
@@ -1497,6 +1874,37 @@ export function AdminEmails() {
                             </div>
                           </div>
                           <button
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            <Filter className="h-5 w-5" />
+                            Filters
+                          </button>
+                          <button
+                            onClick={() => {
+                              // Export inbox emails to CSV
+                              const headers = ['Date', 'From', 'To', 'Subject', 'Message ID']
+                              const rows = receivedEmails.map(email => [
+                                format(new Date(email.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                                email.from,
+                                email.to.join('; '),
+                                email.subject,
+                                email.message_id || '',
+                              ])
+                              const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+                              const blob = new Blob([csv], { type: 'text/csv' })
+                              const url = window.URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = `inbox-emails-${format(new Date(), 'yyyy-MM-dd')}.csv`
+                              a.click()
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            <Download className="h-5 w-5" />
+                            Export
+                          </button>
+                          <button
                             onClick={loadInboxEmails}
                             className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                           >
@@ -1504,6 +1912,46 @@ export function AdminEmails() {
                             Refresh
                           </button>
                         </div>
+
+                        {/* Advanced Filters */}
+                        {showFilters && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Sender</label>
+                              <input
+                                type="text"
+                                placeholder="Filter by sender..."
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Start Date</label>
+                              <input
+                                type="date"
+                                value={dateRange.start}
+                                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium mb-2">End Date</label>
+                              <input
+                                type="date"
+                                value={dateRange.end}
+                                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800"
+                              />
+                            </div>
+                            <div className="col-span-full flex justify-end">
+                              <button
+                                onClick={clearFilters}
+                                className="text-sm text-primary-600 hover:text-primary-700"
+                              >
+                                Clear all filters
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Email List */}
@@ -1556,81 +2004,146 @@ export function AdminEmails() {
                         </div>
                       ) : (
                         <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead className="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Date
-                                  </th>
-                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    From
-                                  </th>
-                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    To
-                                  </th>
-                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Subject
-                                  </th>
-                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Attachments
-                                  </th>
-                                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Actions
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {receivedEmails.map((email) => (
-                                  <tr key={email.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                                      {format(new Date(email.created_at), 'MMM d, yyyy HH:mm')}
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                        {email.from}
+                          {/* Gmail-style Compact Email List */}
+                          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+                            {/* Table Header */}
+                            <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
+                              <div className="flex items-center px-2 py-2">
+                                <div className="w-10 sm:w-12 flex items-center justify-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedInboxIds.size === receivedEmails.length && receivedEmails.length > 0}
+                                    onChange={toggleSelectAllInbox}
+                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                  />
+                                </div>
+                                <div className="flex-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                  {selectedInboxIds.size > 0 ? `${selectedInboxIds.size} selected` : 'Inbox'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Email Rows */}
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                              {receivedEmails.map((email) => (
+                                <div
+                                  key={email.id}
+                                  className="group relative flex flex-col sm:flex-row sm:items-center px-2 py-2 hover:shadow-sm transition-all cursor-pointer border-l-4 border-transparent hover:border-l-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                  onClick={(e) => {
+                                    if ((e.target as HTMLElement).closest('input[type="checkbox"]') || 
+                                        (e.target as HTMLElement).closest('button')) {
+                                      return
+                                    }
+                                    setSelectedReceivedEmail(email)
+                                  }}
+                                >
+                                  {/* Mobile/Tablet Layout */}
+                                  <div className="flex items-start sm:items-center flex-1 min-w-0">
+                                    {/* Checkbox */}
+                                    <div className="w-10 sm:w-12 flex items-center justify-center flex-shrink-0 pt-1 sm:pt-0" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedInboxIds.has(email.id)}
+                                        onChange={() => toggleInboxSelection(email.id)}
+                                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                      />
+                                    </div>
+
+                                    {/* Content Area */}
+                                    <div className="flex-1 min-w-0 pr-2">
+                                      {/* Sender & Attachment Icon (Mobile: stacked, Desktop: inline) */}
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0 mb-1 sm:mb-0">
+                                        <div className="sm:w-40 flex-shrink-0 sm:px-2">
+                                          <div className="flex items-center gap-2">
+                                            {email.attachments && email.attachments.length > 0 && (
+                                              <Download className="h-3.5 w-3.5 sm:hidden text-gray-400 flex-shrink-0" />
+                                            )}
+                                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate max-w-[160px] sm:max-w-none">
+                                              {(() => {
+                                                const sender = email.from.includes('<') ? email.from.split('<')[0].trim() : email.from.split('@')[0];
+                                                return sender.length > 20 ? sender.substring(0, 20) + '...' : sender;
+                                              })()}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Subject & Preview */}
+                                        <div className="flex-1 min-w-0 sm:px-2">
+                                          <div className="flex items-center gap-1">
+                                            {email.attachments && email.attachments.length > 0 && (
+                                              <Download className="hidden sm:block h-4 w-4 text-gray-400 flex-shrink-0" />
+                                            )}
+                                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                              {(email.subject && email.subject.length > 40 ? email.subject.substring(0, 40) + '...' : email.subject) || '(no subject)'}
+                                            </span>
+                                            <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate">
+                                              - {email.text?.substring(0, 30) || email.html?.replace(/<[^>]*>/g, '').substring(0, 30) || ''}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Attachment Indicator (Desktop only) */}
+                                        <div className="hidden sm:flex items-center gap-2 flex-shrink-0 px-2">
+                                          {email.attachments && email.attachments.length > 0 && (
+                                            <span className="text-xs text-gray-500" title={`${email.attachments.length} attachment(s)`}>
+                                              📎
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      {email.reply_to && email.reply_to.length > 0 && (
-                                        <div className="text-xs text-gray-500">Reply-To: {email.reply_to.join(', ')}</div>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                                        {email.to.join(', ')}
-                                      </div>
-                                      {email.cc && email.cc.length > 0 && (
-                                        <div className="text-xs text-gray-500">CC: {email.cc.join(', ')}</div>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                      {email.subject}
-                                    </td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                                      {email.attachments && email.attachments.length > 0 ? (
-                                        <span className="flex items-center gap-1">
-                                          <Download className="h-4 w-4" />
-                                          {email.attachments.length}
+
+                                      {/* Mobile: Date Row */}
+                                      <div className="flex items-center justify-between sm:hidden text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {email.attachments && email.attachments.length > 0 && (
+                                          <span className="text-xs text-gray-500">
+                                            {email.attachments.length} attachment{email.attachments.length > 1 ? 's' : ''}
+                                          </span>
+                                        )}
+                                        <span className={email.attachments && email.attachments.length > 0 ? '' : 'ml-auto'}>
+                                          {format(new Date(email.created_at), 'MMM d, h:mm a')}
                                         </span>
-                                      ) : (
-                                        '-'
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Desktop: Date & Actions */}
+                                  <div className="hidden sm:flex items-center gap-2">
+                                    <div className="w-28 text-right px-2 flex-shrink-0">
+                                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                                        {format(new Date(email.created_at), 'MMM d')}
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-500">
+                                        {format(new Date(email.created_at), 'h:mm a')}
+                                      </div>
+                                    </div>
+
+                                    <div className="w-10 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                       <button
-                                        onClick={() => setSelectedReceivedEmail(email)}
-                                        className="text-primary-600 hover:text-primary-900"
-                                        title="View Email"
+                                        onClick={() => handleDeleteInbox(email.id, email.subject || '(no subject)')}
+                                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-opacity"
+                                        title="Delete"
                                       >
-                                        <Eye className="h-4 w-4 inline" />
+                                        <Trash2 className="h-4 w-4" />
                                       </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                    </div>
+                                  </div>
+
+                                  {/* Mobile: Delete Button (Always visible) */}
+                                  <div className="sm:hidden absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => handleDeleteInbox(email.id, email.subject || '(no subject)')}
+                                      className="p-1.5 text-gray-400 hover:text-red-600 active:text-red-700"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
 
-                          {/* Pagination Info */}
+                          {/* Load More */}
                           {inboxHasMore && (
                             <div className="mt-6 flex justify-center">
                               <button
@@ -1643,29 +2156,375 @@ export function AdminEmails() {
                           )}
                         </>
                       )}
-                    </>
-                  )}
                 </>
               )}
 
-              {/* Analytics Tab */}
-              {activeTab === 'analytics' && (
-                <div className="space-y-6">
-                  <div className="text-center py-12">
-                    <BarChart3 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                      Email Analytics
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Advanced email analytics and reporting coming soon
-                    </p>
+              {/* Templates Tab */}
+              {activeTab === 'templates' && <EmailTemplatesManager />}
+
+              {/* Signatures Tab */}
+              {activeTab === 'signatures' && (
+                <div>
+                  {/* Header Actions */}
+                  <div className="mb-6 flex justify-between items-center">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Email Signatures</h2>
+                      <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        Create and manage professional email signatures
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleCreateSignature}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      <Plus className="h-5 w-5" />
+                      Create Signature
+                    </button>
                   </div>
+
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary-200 border-t-primary-600"></div>
+                      <p className="mt-4 text-gray-600 dark:text-gray-400">Loading signatures...</p>
+                    </div>
+                  ) : signatures.length === 0 ? (
+                    <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <PenTool className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No Email Signatures</h3>
+                      <p className="text-gray-500 dark:text-gray-400 mb-4">
+                        Create your first professional email signature
+                      </p>
+                      <button
+                        onClick={handleCreateSignature}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                      >
+                        Create Your First Signature
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {signatures.map((sig) => (
+                        <div
+                          key={sig.id}
+                          className={cn(
+                            'bg-white dark:bg-gray-800 rounded-lg shadow border transition-all hover:shadow-md',
+                            sig.is_default
+                              ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
+                              : 'border-gray-200 dark:border-gray-700'
+                          )}
+                        >
+                          {/* Header */}
+                          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{sig.name}</h3>
+                                  {sig.is_default && (
+                                    <span className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded-full flex items-center gap-1">
+                                      <Star className="h-3 w-3" fill="currentColor" />
+                                      Default
+                                    </span>
+                                  )}
+                                  {!sig.is_active && (
+                                    <span className="px-2 py-0.5 text-xs bg-gray-400 text-white rounded-full">
+                                      Inactive
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 capitalize">
+                                  {sig.signature_type}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Preview */}
+                          <div className="p-4 bg-gray-50 dark:bg-gray-900 max-h-40 overflow-auto">
+                            <div 
+                              dangerouslySetInnerHTML={{ __html: sig.signature_html }} 
+                              className="text-sm"
+                            />
+                          </div>
+
+                          {/* Actions */}
+                          <div className="p-4 flex gap-2">
+                            <button
+                              onClick={() => handleEditSignature(sig)}
+                              className="flex-1 px-3 py-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 font-medium flex items-center justify-center gap-1"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit
+                            </button>
+                            {!sig.is_default && (
+                              <button
+                                onClick={() => handleSetDefaultSignature(sig.id)}
+                                className="px-3 py-2 text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                                title="Set as default"
+                              >
+                                <Star className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteSignature(sig.id, sig.name)}
+                              className="px-3 py-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Compose Tab */}
-              {activeTab === 'compose' && (
-                <div className="max-w-3xl mx-auto space-y-6">
+              {/* Email Setup Tab */}
+              {activeTab === 'email-setup' && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Email Setup</h2>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
+                      Manage admin business emails and official logos
+                    </p>
+                  </div>
+
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary-200 border-t-primary-600"></div>
+                      <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      {/* Business Emails Section */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                            Admin Business Emails
+                          </h3>
+                          <button
+                            onClick={() => window.location.href = '/admin/email-addresses'}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add Email Address
+                          </button>
+                        </div>
+
+                        {adminEmailAddresses.length === 0 ? (
+                          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+                            <Mail className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">No Business Emails</h4>
+                            <p className="text-gray-500 dark:text-gray-400 mb-4">Add your first admin business email address</p>
+                            <button
+                              onClick={() => window.location.href = '/admin/email-addresses'}
+                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                            >
+                              Add Email Address
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {adminEmailAddresses.map((email) => (
+                              <div
+                                key={email.id}
+                                className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow"
+                              >
+                                <div className="flex items-start justify-between mb-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <Mail className="h-4 w-4 text-primary-600" />
+                                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                                        {email.email}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                      {email.name || email.display_name || 'No display name'}
+                                    </p>
+                                  </div>
+                                  {email.is_default && (
+                                    <span className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded-full flex items-center gap-1">
+                                      <Star className="h-3 w-3" fill="currentColor" />
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                                {email.is_verified && (
+                                  <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Verified
+                                  </div>
+                                )}
+                                {!email.is_active && (
+                                  <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                    <EyeOff className="h-3 w-3" />
+                                    Inactive
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Business Logos Section */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                            Official Business Logos
+                          </h3>
+                          <button
+                            onClick={() => setShowLogoUpload(true)}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+                          >
+                            <Upload className="h-4 w-4" />
+                            Upload Logo
+                          </button>
+                        </div>
+
+                        {businessLogos.length === 0 ? (
+                          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+                            <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">No Business Logos</h4>
+                            <p className="text-gray-500 dark:text-gray-400 mb-4">Upload your official business logo</p>
+                            <button
+                              onClick={() => setShowLogoUpload(true)}
+                              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                            >
+                              Upload Logo
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {businessLogos.map((logo) => (
+                              <div
+                                key={logo.id}
+                                className={cn(
+                                  'bg-white dark:bg-gray-800 rounded-lg border p-4 hover:shadow-md transition-all',
+                                  logo.is_default
+                                    ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
+                                    : 'border-gray-200 dark:border-gray-700'
+                                )}
+                              >
+                                <div className="aspect-square bg-gray-50 dark:bg-gray-900 rounded-lg mb-3 flex items-center justify-center p-3">
+                                  <img
+                                    src={logo.public_url}
+                                    alt={logo.alt_text || logo.file_name}
+                                    className="max-w-full max-h-full object-contain"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                    {logo.file_name}
+                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                                      {logo.logo_type.replace('_', ' ')}
+                                    </span>
+                                    {logo.is_default && (
+                                      <span className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded-full">
+                                        Default
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {(logo.file_size / 1024).toFixed(1)} KB • {logo.width}×{logo.height}
+                                  </p>
+                                  <div className="flex gap-2 pt-2">
+                                    {!logo.is_default && (
+                                      <button
+                                        onClick={() => handleSetDefaultLogo(logo.id, logo.logo_type)}
+                                        className="flex-1 px-2 py-1.5 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                                      >
+                                        <Star className="h-3 w-3 inline" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteLogo(logo.id)}
+                                      className="flex-1 px-2 py-1.5 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded hover:bg-red-100 dark:hover:bg-red-900/30"
+                                    >
+                                      <Trash2 className="h-3 w-3 inline" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Logo Upload Modal */}
+          {showLogoUpload && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Upload Business Logo</h3>
+                  <button
+                    onClick={() => setShowLogoUpload(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {['company_logo', 'email_header', 'email_signature', 'avatar'].map((type) => (
+                    <div key={type} className="relative">
+                      <label className="block w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary-500 dark:hover:border-primary-400 cursor-pointer transition-colors">
+                        <div className="flex items-center justify-center gap-2">
+                          <ImageIcon className="h-5 w-5 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
+                            Upload {type.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleLogoUpload(e, type as BusinessLogo['logo_type'])}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+
+                {uploadingLogo && (
+                  <div className="mt-4 text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary-200 border-t-primary-600"></div>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Uploading...</p>
+                  </div>
+                )}
+
+                <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+                  Maximum file size: 5MB • Supported formats: PNG, JPG, SVG
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Compose Email Modal */}
+          {composing && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Compose Email
+                  </h2>
+                  <button
+                    onClick={() => setComposing(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-160px)] space-y-6">
                   <div>
                     <label className="block text-sm font-medium mb-2">From Address *</label>
                     <select
@@ -1865,41 +2724,35 @@ export function AdminEmails() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-4">
-                    <button
-                      onClick={() => {
-                        setComposing(false)
-                        setActiveTab('history')
-                      }}
-                      className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSendEmail}
-                      disabled={sending}
-                      className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {sending ? (
-                        <>
-                          <RefreshCw className="h-5 w-5 animate-spin" />
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="h-5 w-5" />
-                          Send Email
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
-              )}
-
-              {/* Templates Tab */}
-              {activeTab === 'templates' && <EmailTemplatesManager />}
+                <div className="flex justify-end gap-4 p-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => setComposing(false)}
+                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={sending}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {sending ? (
+                      <>
+                        <RefreshCw className="h-5 w-5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-5 w-5" />
+                        Send Email
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Email Detail Modal */}
           {selectedEmail && (
@@ -1986,6 +2839,300 @@ export function AdminEmails() {
                         />
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Received Email Detail Modal */}
+          {selectedReceivedEmail && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Received Email
+                  </h2>
+                  <button
+                    onClick={() => setSelectedReceivedEmail(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">From</label>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          {selectedReceivedEmail.from}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">To</label>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          {selectedReceivedEmail.to.join(', ')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {selectedReceivedEmail.cc && selectedReceivedEmail.cc.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">CC</label>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          {selectedReceivedEmail.cc.join(', ')}
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedReceivedEmail.reply_to && selectedReceivedEmail.reply_to.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Reply-To</label>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          {selectedReceivedEmail.reply_to.join(', ')}
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Subject</label>
+                      <p className="text-gray-900 dark:text-gray-100">{selectedReceivedEmail.subject}</p>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Received At</label>
+                      <p className="text-gray-900 dark:text-gray-100">
+                        {format(new Date(selectedReceivedEmail.created_at), 'PPpp')}
+                      </p>
+                    </div>
+
+                    {selectedReceivedEmail.message_id && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Message ID</label>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
+                          {selectedReceivedEmail.message_id}
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedReceivedEmail.attachments && selectedReceivedEmail.attachments.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500 mb-2 block">
+                          Attachments ({selectedReceivedEmail.attachments.length})
+                        </label>
+                        <div className="space-y-2">
+                          {selectedReceivedEmail.attachments.map((attachment: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                              <Download className="h-4 w-4 text-gray-500" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {attachment.filename}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {attachment.content_type} • {(attachment.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-500 mb-2 block">Email Content</label>
+                      {selectedReceivedEmail.html ? (
+                        <div 
+                          className="prose dark:prose-invert max-w-none p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                          dangerouslySetInnerHTML={{ __html: selectedReceivedEmail.html }}
+                        />
+                      ) : selectedReceivedEmail.text ? (
+                        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
+                          {selectedReceivedEmail.text}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">No content available</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Signature Editor Modal */}
+          {showSignatureEditor && editingSignature && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    {editingSignature.id ? 'Edit Signature' : 'Create Signature'}
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setShowSignatureEditor(false)
+                      setEditingSignature(null)
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto flex-1">
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Left: Form */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Signature Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editingSignature.name || ''}
+                          onChange={(e) => setEditingSignature({ ...editingSignature, name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                          placeholder="e.g., Professional Signature"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                        <select
+                          value={editingSignature.signature_type || 'personal'}
+                          onChange={(e) => setEditingSignature({ ...editingSignature, signature_type: e.target.value as any })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                        >
+                          <option value="personal">Personal</option>
+                          <option value="company">Company</option>
+                          <option value="department">Department</option>
+                        </select>
+                      </div>
+
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editingSignature.is_active || false}
+                            onChange={(e) => setEditingSignature({ ...editingSignature, is_active: e.target.checked })}
+                            className="rounded border-gray-300 text-primary-600"
+                          />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Active</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editingSignature.is_default || false}
+                            onChange={(e) => setEditingSignature({ ...editingSignature, is_default: e.target.checked })}
+                            className="rounded border-gray-300 text-primary-600"
+                          />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Default</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          HTML Content <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={editingSignature.signature_html || ''}
+                          onChange={(e) => setEditingSignature({ ...editingSignature, signature_html: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-sm dark:bg-gray-700 dark:text-white"
+                          rows={12}
+                          placeholder="<div>Your signature HTML here...</div>"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Use HTML to create your signature</p>
+                      </div>
+                    </div>
+
+                    {/* Right: Preview */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preview</label>
+                      <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-900 min-h-[400px]">
+                        {editingSignature.signature_html ? (
+                          <div dangerouslySetInnerHTML={{ __html: editingSignature.signature_html }} />
+                        ) : (
+                          <p className="text-gray-400 text-sm">Preview will appear here...</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      setShowSignatureEditor(false)
+                      setEditingSignature(null)
+                    }}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveSignature}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Signature
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {deleteModal.isOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full">
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                      <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Delete Email
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        This action cannot be undone
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                      Are you sure you want to delete this email?
+                    </p>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {deleteModal.emailSubject}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {deleteModal.type === 'sent' ? 'From: Sent Items' : 'From: Inbox'}
+                      </p>
+                    </div>
+                    {deleteModal.type === 'inbox' && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 flex items-center gap-1">
+                        <span>⚠️</span>
+                        This will permanently delete the email from Resend servers
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setDeleteModal({ isOpen: false, type: 'sent', emailId: null, emailSubject: '' })}
+                      className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={confirmDelete}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+                    >
+                      Delete Email
+                    </button>
                   </div>
                 </div>
               </div>

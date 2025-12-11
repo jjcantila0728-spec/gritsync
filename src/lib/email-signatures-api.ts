@@ -68,6 +68,10 @@ export async function getAllSignatures(): Promise<EmailSignature[]> {
 
   if (error) {
     console.error('Error fetching signatures:', error);
+    // If the table doesn't exist yet (migration not applied), treat as no signatures
+    if ((error as any).code === 'PGRST205') {
+      return [];
+    }
     throw error;
   }
 
@@ -87,6 +91,10 @@ export async function getUserSignatures(userId?: string): Promise<EmailSignature
 
   if (error) {
     console.error('Error fetching user signatures:', error);
+    // If the table doesn't exist yet (migration not applied), treat as no signatures
+    if ((error as any).code === 'PGRST205') {
+      return [];
+    }
     throw error;
   }
 
@@ -106,6 +114,10 @@ export async function getDefaultSignature(userId?: string): Promise<EmailSignatu
 
   if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
     console.error('Error fetching default signature:', error);
+    // If table missing, just return null so the UI can continue
+    if ((error as any).code === 'PGRST205') {
+      return null;
+    }
   }
 
   return data;

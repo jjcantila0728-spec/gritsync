@@ -464,7 +464,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/emails/history"
+        path="/admin/emails/inbox"
         element={
           <AdminRoute>
             <AdminEmails />
@@ -472,15 +472,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/emails/analytics"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/compose"
+        path="/admin/emails/sent"
         element={
           <AdminRoute>
             <AdminEmails />
@@ -512,10 +504,18 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/email-signatures"
+        path="/admin/emails/signatures"
         element={
           <AdminRoute>
-            <AdminEmailSignatures />
+            <AdminEmails />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/emails/email-setup"
+        element={
+          <AdminRoute>
+            <AdminEmails />
           </AdminRoute>
         }
       />

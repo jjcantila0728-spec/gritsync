@@ -48,6 +48,7 @@ FUNCTIONS=(
     "create-payment-intent"
     "stripe-webhook"
     "send-email"
+    "resend-inbox"
 )
 
 for func in "${FUNCTIONS[@]}"; do
