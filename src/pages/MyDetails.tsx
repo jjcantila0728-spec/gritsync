@@ -180,6 +180,7 @@ export function MyDetails() {
   const [completionPercentage, setCompletionPercentage] = useState(0)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({})
+  const [clientEmail, setClientEmail] = useState<string | null>(null)
 
   // Validation functions
   const validateEmail = (email: string): string => {
@@ -639,8 +640,23 @@ export function MyDetails() {
     if (user) {
       fetchDetails()
       checkAndSendReminders()
+      fetchClientEmail()
     }
   }, [user])
+
+  async function fetchClientEmail() {
+    if (!user?.id) return
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      const addresses = await emailAddressesAPI.getUserAddresses(user.id)
+      const primaryAddress = addresses.find(addr => addr.is_primary && addr.address_type === 'client')
+      if (primaryAddress) {
+        setClientEmail(primaryAddress.email_address)
+      }
+    } catch (error) {
+      console.error('Error fetching client email:', error)
+    }
+  }
 
   async function fetchDetails() {
     try {
@@ -1117,6 +1133,37 @@ export function MyDetails() {
       
       await userDetailsAPI.save(mergedData)
       
+      // Auto-generate and save email address if names are provided
+      if (firstName && lastName && user?.id) {
+        try {
+          // Update middle_name in users table if needed
+          if (middleName) {
+            await supabase
+              .from('users')
+              .update({ middle_name: middleName.trim() })
+              .eq('id', user.id)
+          }
+          
+          // Generate or regenerate the client email address
+          const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+          
+          // Check if email exists, if not create it
+          const addresses = await emailAddressesAPI.getUserAddresses(user.id)
+          const clientAddress = addresses.find(addr => addr.address_type === 'client')
+          
+          if (!clientAddress) {
+            // Create new email address
+            await emailAddressesAPI.generateClientEmail(user.id)
+          }
+          
+          // Refresh client email display
+          await fetchClientEmail()
+        } catch (emailError) {
+          console.error('Error generating client email:', emailError)
+          // Don't fail the save if email generation fails
+        }
+      }
+      
       showToast('Details saved successfully! These will auto-fill your next application.', 'success')
       setEditing(false)
       
@@ -1478,7 +1525,7 @@ export function MyDetails() {
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
                     <Mail className="h-4 w-4 text-gray-400" />
                     <p className="text-gray-600 dark:text-gray-400">
-                      {user.email}
+                      {clientEmail || user.email}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
@@ -1613,15 +1660,11 @@ export function MyDetails() {
                       <Input
                         label="Email Address"
                         type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onBlur={() => handleFieldBlur('email')}
-                        placeholder="john.doe@example.com"
-                        error={touchedFields.email ? validationErrors.email : undefined}
-                        className={cn(
-                          getFieldStatus('email', email) === 'success' && 'border-green-500 focus:ring-green-500',
-                          getFieldStatus('email', email) === 'error' && 'border-red-500 focus:ring-red-500'
-                        )}
+                        value={clientEmail || email}
+                        disabled
+                        placeholder="Auto-generated from your name"
+                        className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
+                        hint="This email is auto-generated based on your first name, middle name, and last name"
                       />
                     </div>
                     <Select

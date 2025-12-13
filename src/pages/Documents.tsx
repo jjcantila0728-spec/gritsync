@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -6,10 +6,11 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
-import { userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
+import { applicationsAPI, serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
 import { getCachedSignedUrl } from '@/lib/image-cache'
-import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { cn } from '@/lib/utils'
+import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, GraduationCap, Briefcase } from 'lucide-react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
 
 interface DocumentStatus {
@@ -22,11 +23,143 @@ interface DocumentStatus {
   fileName?: string
   uploadedAt?: string
   id?: string
+  serviceType?: string
+  sortOrder?: number
 }
 
+interface ServiceDocumentRequirement {
+  id: string
+  service_type: string
+  document_type: string
+  name: string
+  accepted_formats: string[]
+  required: boolean
+  sort_order: number
+}
+
+const DEFAULT_ACCEPTED_FORMATS = ['.pdf', '.jpg', '.jpeg', '.png']
+
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  NCLEX: 'NCLEX',
+  EAD: 'EAD (I-765)',
+  Additional: 'Additional',
+}
+
+const FALLBACK_DOC_REQUIREMENTS: ServiceDocumentRequirement[] = [
+  {
+    id: 'fallback-nclex-picture',
+    service_type: 'NCLEX',
+    document_type: 'picture',
+    name: '2x2 Picture',
+    accepted_formats: ['image/*'],
+    required: true,
+    sort_order: 0,
+  },
+  {
+    id: 'fallback-nclex-diploma',
+    service_type: 'NCLEX',
+    document_type: 'diploma',
+    name: 'Nursing Diploma',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 1,
+  },
+  {
+    id: 'fallback-nclex-passport',
+    service_type: 'NCLEX',
+    document_type: 'passport',
+    name: 'Passport',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 2,
+  },
+  {
+    id: 'fallback-ead-photos',
+    service_type: 'EAD',
+    document_type: 'ead_photos',
+    name: 'Two passport-sized photographs (2x2 inches) meeting USCIS requirements (attached in a small envelope and labeled with your name)',
+    accepted_formats: ['image/*'],
+    required: true,
+    sort_order: 0,
+  },
+  {
+    id: 'fallback-ead-passport',
+    service_type: 'EAD',
+    document_type: 'ead_passport',
+    name: 'Clear Copy of your passport biographical page',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 1,
+  },
+  {
+    id: 'fallback-ead-h4',
+    service_type: 'EAD',
+    document_type: 'ead_h4_visa',
+    name: 'Copy of your H-4 visa stamp',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 2,
+  },
+  {
+    id: 'fallback-ead-i94',
+    service_type: 'EAD',
+    document_type: 'ead_i94',
+    name: 'Copy of your most recent I-94 Arrival/Departure Record',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 3,
+  },
+  {
+    id: 'fallback-ead-marriage',
+    service_type: 'EAD',
+    document_type: 'ead_marriage_certificate',
+    name: 'Copy of your marriage certificate to establish your relationship with the H-1B principal beneficiary',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 4,
+  },
+  {
+    id: 'fallback-ead-spouse-i797',
+    service_type: 'EAD',
+    document_type: 'ead_spouse_i797',
+    name: "Copy of your spouse's H-1B approval notice (Form I-797)",
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 5,
+  },
+  {
+    id: 'fallback-ead-spouse-i140',
+    service_type: 'EAD',
+    document_type: 'ead_spouse_i140',
+    name: "Copy of your spouse's approved Form I-140, Immigrant Petition for Alien Worker",
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 6,
+  },
+  {
+    id: 'fallback-ead-employer-letter',
+    service_type: 'EAD',
+    document_type: 'ead_employer_letter',
+    name: "Copy of your spouse's employer verification letter",
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 7,
+  },
+  {
+    id: 'fallback-ead-paystub',
+    service_type: 'EAD',
+    document_type: 'ead_paystub',
+    name: 'Recent paystub',
+    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
+    required: true,
+    sort_order: 8,
+  },
+]
 export function Documents() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const { serviceType: routeServiceType } = useParams<{ serviceType?: string }>()
+  const navigate = useNavigate()
   const [uploading, setUploading] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<DocumentStatus[]>([])
@@ -36,31 +169,11 @@ export function Documents() {
   const [userFirstName, setUserFirstName] = useState<string>('')
   const [userLastName, setUserLastName] = useState<string>('')
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
-
-  // Required documents list
-  const requiredDocuments: DocumentStatus[] = [
-    {
-      name: '2x2 Picture',
-      type: 'picture',
-      acceptedFormats: ['image/*'],
-      required: true,
-      uploaded: false,
-    },
-    {
-      name: 'Nursing Diploma',
-      type: 'diploma',
-      acceptedFormats: ['.pdf', '.jpg', '.jpeg', '.png'],
-      required: true,
-      uploaded: false,
-    },
-    {
-      name: 'Passport',
-      type: 'passport',
-      acceptedFormats: ['.pdf', '.jpg', '.jpeg', '.png'],
-      required: true,
-      uploaded: false,
-    },
-  ]
+  const [serviceDocRequirements, setServiceDocRequirements] = useState<ServiceDocumentRequirement[]>([])
+  const [serviceTypes, setServiceTypes] = useState<string[]>([])
+  const [serviceTypesLoaded, setServiceTypesLoaded] = useState(false)
+  const [docConfigLoading, setDocConfigLoading] = useState(true)
+  const [docConfigError, setDocConfigError] = useState<string | null>(null)
 
   // Helper function to get display name for document types
   const getDocumentDisplayName = (type: string): string => {
@@ -79,6 +192,24 @@ export function Documents() {
       ).join(' ') + ' Course'
     }
     
+    // Handle additional document types (EAD forms)
+    if (type === 'additional_g1145') {
+      return 'Form G-1145'
+    }
+    if (type === 'additional_i765') {
+      return 'Form I-765'
+    }
+    if (type === 'additional_cover_letter') {
+      return 'Cover Letter'
+    }
+    if (type === 'additional' || type.startsWith('additional_')) {
+      // For generic additional or other additional_ types, format them nicely
+      const docName = type.replace('additional_', '').replace(/_/g, ' ')
+      return docName.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ') || 'Additional Document'
+    }
+    
     // Handle regular document types
     switch (type) {
       case 'picture':
@@ -94,13 +225,130 @@ export function Documents() {
   }
 
   useEffect(() => {
-    if (user) {
-      fetchDocuments()
-      fetchUserDetails()
-    } else {
+    if (!user) {
       setLoading(false)
+      return
     }
+    fetchUserDetails()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  useEffect(() => {
+    if (!user) {
+      setServiceTypes([])
+      setServiceTypesLoaded(false)
+      return
+    }
+
+    let isMounted = true
+    setServiceTypesLoaded(false)
+
+    const loadServiceTypes = async () => {
+      try {
+        const types = await applicationsAPI.getServiceTypes()
+        if (!isMounted) return
+        setServiceTypes(types)
+      } catch (error: any) {
+        if (!isMounted) return
+        setServiceTypes([])
+        showToast('Failed to determine your services. Defaulting to NCLEX documents.', 'error')
+      } finally {
+        if (!isMounted) return
+        setServiceTypesLoaded(true)
+      }
+    }
+
+    loadServiceTypes()
+    return () => {
+      isMounted = false
+    }
+  }, [user, showToast])
+
+  const loadDocumentRequirements = useCallback(() => {
+    if (!user || !serviceTypesLoaded) {
+      return
+    }
+
+    setDocConfigLoading(true)
+    setDocConfigError(null)
+    const normalizedTypes = serviceTypes.length > 0 ? serviceTypes : ['NCLEX']
+
+    serviceRequiredDocumentsAPI.getByServiceTypes(normalizedTypes)
+      .then((docs) => {
+        // Filter out any error objects and ensure proper typing
+        const validDocs = (docs || []).filter((doc: any) => doc && typeof doc === 'object' && 'id' in doc) as unknown as ServiceDocumentRequirement[]
+        setServiceDocRequirements(validDocs)
+      })
+      .catch((error: any) => {
+        setServiceDocRequirements([])
+        setDocConfigError('Failed to load required documents. Showing defaults.')
+        console.error('Error loading document requirements:', error)
+      })
+      .finally(() => {
+        setDocConfigLoading(false)
+      })
+  }, [user, serviceTypesLoaded, serviceTypes])
+
+  useEffect(() => {
+    if (!user || !serviceTypesLoaded) {
+      return
+    }
+
+    loadDocumentRequirements()
+
+    // Listen for document requirements updates (e.g., when admin changes them)
+    const handleDocumentRequirementsUpdate = () => {
+      loadDocumentRequirements()
+    }
+
+    window.addEventListener('documentRequirementsUpdated', handleDocumentRequirementsUpdate)
+
+    // Refresh when window regains focus (in case changes were made in another tab)
+    const handleFocus = () => {
+      loadDocumentRequirements()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      window.removeEventListener('documentRequirementsUpdated', handleDocumentRequirementsUpdate)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [user, serviceTypesLoaded, loadDocumentRequirements])
+
+  const documentRequirementSource = useMemo(() => {
+    if (serviceDocRequirements.length > 0) {
+      return serviceDocRequirements
+    }
+    const fallbackServiceTypes = serviceTypes.length > 0 ? serviceTypes : ['NCLEX']
+    return FALLBACK_DOC_REQUIREMENTS.filter((doc) => fallbackServiceTypes.includes(doc.service_type))
+  }, [serviceDocRequirements, serviceTypes])
+
+  const requiredDocuments = useMemo(() => {
+    return documentRequirementSource
+      .map((doc) => ({
+        name: doc.name,
+        type: doc.document_type,
+        acceptedFormats: doc.accepted_formats.length > 0 ? doc.accepted_formats : DEFAULT_ACCEPTED_FORMATS,
+        required: doc.required,
+        uploaded: false,
+        serviceType: doc.service_type,
+        sortOrder: doc.sort_order ?? 0,
+      }))
+      .sort((a, b) => {
+        if (a.serviceType !== b.serviceType) {
+          return (a.serviceType || '').localeCompare(b.serviceType || '')
+        }
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+      })
+  }, [documentRequirementSource])
+
+  const requiredDocumentMap = useMemo(() => {
+    const map = new Map<string, DocumentStatus>()
+    requiredDocuments.forEach((doc) => {
+      map.set(doc.type, doc)
+    })
+    return map
+  }, [requiredDocuments])
 
   async function fetchUserDetails() {
     try {
@@ -121,7 +369,8 @@ export function Documents() {
     }
   }
 
-  async function fetchDocuments() {
+  const fetchDocuments = useCallback(async () => {
+    setLoading(true)
     try {
       const uploadedDocs = await userDocumentsAPI.getAll()
       
@@ -132,8 +381,7 @@ export function Documents() {
       
       const docsMap = new Map(uploadedDocs.map((doc: any) => [doc.document_type, doc]))
       
-      // Update required documents with uploaded status
-      const updatedRequiredDocs = requiredDocuments.map(doc => {
+      const updatedRequiredDocs = requiredDocuments.map((doc) => {
         const uploaded = docsMap.get(doc.type)
         const filePath = uploaded?.file_path
         return {
@@ -145,34 +393,85 @@ export function Documents() {
           id: uploaded?.id,
         }
       })
-      
-      // Get all uploaded documents that aren't in the required list
+
       const additionalDocs: DocumentStatus[] = uploadedDocs
-        .filter((doc: any) => !requiredDocuments.some(req => req.type === doc.document_type))
-        .map((doc: any) => {
-          const filePath = doc.file_path
-          return {
-            name: getDocumentDisplayName(doc.document_type),
-            type: doc.document_type,
-            acceptedFormats: ['.pdf', '.jpg', '.jpeg', '.png'],
-            required: false,
-            uploaded: true,
-            filePath: typeof filePath === 'string' ? filePath : undefined,
-            fileName: doc.file_name,
-            uploadedAt: doc.uploaded_at,
-            id: doc.id,
-          }
-        })
-      
-      // Combine required and additional documents
-      const allDocuments = [...updatedRequiredDocs, ...additionalDocs]
-      setDocuments(allDocuments)
-    } catch (error) {
+        .filter((doc: any) => !requiredDocuments.some((req) => req.type === doc.document_type))
+        .map((doc: any) => ({
+          name: getDocumentDisplayName(doc.document_type),
+          type: doc.document_type,
+          acceptedFormats: DEFAULT_ACCEPTED_FORMATS,
+          required: false,
+          uploaded: true,
+          filePath: doc.file_path,
+          fileName: doc.file_name,
+          uploadedAt: doc.uploaded_at,
+          id: doc.id,
+          serviceType: 'Additional',
+        }))
+
+      setDocuments([...updatedRequiredDocs, ...additionalDocs])
+    } catch (error: any) {
       setDocuments(requiredDocuments)
+      showToast(error.message || 'Failed to load documents', 'error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [requiredDocuments, showToast])
+
+  useEffect(() => {
+    if (!user || docConfigLoading) {
+      return
+    }
+    fetchDocuments()
+  }, [user, docConfigLoading, fetchDocuments])
+
+  // Handle route-based navigation and redirects
+  useEffect(() => {
+    if (!docConfigLoading && documents.length > 0) {
+      // Group documents to determine available service types
+      const documentsByService = documents.reduce((acc, doc) => {
+        const serviceType = doc.serviceType || 'Additional'
+        if (!acc[serviceType]) {
+          acc[serviceType] = []
+        }
+        acc[serviceType].push(doc)
+        return acc
+      }, {} as Record<string, DocumentStatus[]>)
+
+      const availableServiceTypes = Object.keys(documentsByService).sort()
+      
+      // Map route parameter to service type
+      const routeToServiceTypeMap: Record<string, string> = {
+        'nclex': 'NCLEX',
+        'ead': 'EAD',
+        'additional': 'Additional',
+      }
+      
+      const normalizedRouteServiceType = routeServiceType 
+        ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
+        : null
+
+      // If route parameter is invalid, redirect to base /documents
+      if (routeServiceType && (!normalizedRouteServiceType || !availableServiceTypes.includes(normalizedRouteServiceType))) {
+        navigate('/documents', { replace: true })
+        return
+      }
+
+      // If no route parameter and multiple service types exist, redirect to first tab
+      if (!routeServiceType && availableServiceTypes.length > 1) {
+        const firstServiceType = availableServiceTypes[0]
+        const serviceTypeToRouteMap: Record<string, string> = {
+          'NCLEX': '/documents/nclex',
+          'EAD': '/documents/ead',
+          'Additional': '/documents/additional',
+        }
+        const firstRoute = serviceTypeToRouteMap[firstServiceType]
+        if (firstRoute) {
+          navigate(firstRoute, { replace: true })
+        }
+      }
+    }
+  }, [docConfigLoading, documents, routeServiceType, navigate])
 
   // Removed unused _handleFileUpload function
 
@@ -188,19 +487,18 @@ export function Documents() {
       }
 
       // Validate file type
-      const doc = requiredDocuments.find(d => d.type === documentType)
-      if (doc) {
-        const isValidType = doc.acceptedFormats.some(format => {
-          if (format === 'image/*') {
-            return file.type.startsWith('image/')
-          }
-          return file.name.toLowerCase().endsWith(format.toLowerCase())
-        })
-        if (!isValidType) {
-          showToast(`Invalid file type. Accepted formats: ${doc.acceptedFormats.join(', ')}`, 'error')
-          e.target.value = ''
-          return
+      const doc = requiredDocumentMap.get(documentType)
+      const acceptedFormats = doc?.acceptedFormats.length ? doc.acceptedFormats : DEFAULT_ACCEPTED_FORMATS
+      const isValidType = acceptedFormats.some((format) => {
+        if (format === 'image/*') {
+          return file.type.startsWith('image/')
         }
+        return file.name.toLowerCase().endsWith(format.toLowerCase())
+      })
+      if (!isValidType) {
+        showToast(`Invalid file type. Accepted formats: ${acceptedFormats.join(', ')}`, 'error')
+        e.target.value = ''
+        return
       }
 
       // Create preview URL for images
@@ -224,34 +522,31 @@ export function Documents() {
     setUploading(documentType)
     
     try {
-      // Generate new filename: {document_type}_{firstname}_{lastname}.ext
-      const docTypeName = documentType === 'picture' ? '2x2picture' : 
-                         documentType === 'diploma' ? 'nursing_diploma' : 
-                         documentType === 'passport' ? 'passport' : documentType
-      
+      const docSlug = documentType
+        ?.replace(/[^a-z0-9]+/gi, '_')
+        .replace(/^_+|_+$/g, '')
+        .toLowerCase() || 'document'
+
       const firstName = userFirstName.toLowerCase().replace(/\s+/g, '')
       const lastName = userLastName.toLowerCase().replace(/\s+/g, '')
       const fileExt = file.name.split('.').pop() || ''
-      const newFileName = `${docTypeName}_${firstName}_${lastName}.${fileExt}`
-      
-      // Create a new File object with the new name
+      const newFileName = `${docSlug}_${firstName}_${lastName}.${fileExt}`
+
       const renamedFile = new File([file], newFileName, { type: file.type })
-      
-      await userDocumentsAPI.upload(documentType as 'picture' | 'diploma' | 'passport', renamedFile)
-      const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
+
+      await userDocumentsAPI.upload(documentType, renamedFile)
+      const docName = requiredDocumentMap.get(documentType)?.name || getDocumentDisplayName(documentType)
       showToast(`${docName} uploaded successfully!`, 'success')
-      
-      // Clean up preview URL
+
       if (uploadPreview.previewUrl) {
         URL.revokeObjectURL(uploadPreview.previewUrl)
       }
-      
+
       setUploadPreview(null)
-      await fetchDocuments() // Refresh the list
-      // Notify sidebar to update cache
+      await fetchDocuments()
       window.dispatchEvent(new Event('documentsUpdated'))
     } catch (error: any) {
-      const docName = requiredDocuments.find(d => d.type === documentType)?.name || documentType
+      const docName = requiredDocumentMap.get(documentType)?.name || getDocumentDisplayName(documentType)
       showToast(error.message || `Failed to upload ${docName}`, 'error')
     } finally {
       setUploading(null)
@@ -480,7 +775,7 @@ export function Documents() {
               Documents
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload and manage your required documents for NCLEX application
+              Upload and manage the documents required for the services you applied for (NCLEX, EAD, etc.).
             </p>
           </div>
 
@@ -500,17 +795,79 @@ export function Documents() {
               </div>
             </Card>
 
-            {/* Documents List */}
+            {docConfigError && (
+              <Card className="border-0 shadow-md bg-yellow-50 dark:bg-yellow-900/10">
+                <p className="text-xs text-yellow-700 dark:text-yellow-200">
+                  {docConfigError}
+                </p>
+              </Card>
+            )}
+
+            {/* Documents List with Tabs */}
             {loading ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <CardSkeleton />
                 <CardSkeleton />
                 <CardSkeleton />
               </div>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {documents.map((doc) => (
-                <Card key={doc.type} className={`border-0 shadow-md transition-all hover:shadow-lg ${
+            ) : (() => {
+              // Group documents by service type
+              const documentsByService = documents.reduce((acc, doc) => {
+                const serviceType = doc.serviceType || 'Additional'
+                if (!acc[serviceType]) {
+                  acc[serviceType] = []
+                }
+                acc[serviceType].push(doc)
+                return acc
+              }, {} as Record<string, typeof documents>)
+
+              // Create tabs based on available service types
+              const serviceTypesInDocuments = Object.keys(documentsByService).sort()
+              
+              // Map route parameter to service type ID (normalize case)
+              const routeToServiceTypeMap: Record<string, string> = {
+                'nclex': 'NCLEX',
+                'ead': 'EAD',
+                'additional': 'Additional',
+              }
+              
+              // Normalize route service type (if provided)
+              const normalizedRouteServiceType = routeServiceType 
+                ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
+                : null
+
+              // Determine which tabs to show based on what documents exist
+              const availableTabs: Array<{ id: string; label: string; icon?: React.ComponentType<{ className?: string }>, routePath: string }> = []
+              
+              if (serviceTypesInDocuments.includes('NCLEX')) {
+                availableTabs.push({ id: 'NCLEX', label: 'NCLEX', icon: GraduationCap, routePath: '/documents/nclex' })
+              }
+              if (serviceTypesInDocuments.includes('EAD')) {
+                availableTabs.push({ id: 'EAD', label: 'EAD (I-765)', icon: Briefcase, routePath: '/documents/ead' })
+              }
+              if (serviceTypesInDocuments.includes('Additional')) {
+                availableTabs.push({ id: 'Additional', label: 'Additional', icon: FileText, routePath: '/documents/additional' })
+              }
+
+              // Determine which service type to display based on route
+              // If route parameter is invalid or doesn't exist, show all or redirect to first tab
+              let activeServiceType: string | null = null
+              if (normalizedRouteServiceType && serviceTypesInDocuments.includes(normalizedRouteServiceType)) {
+                activeServiceType = normalizedRouteServiceType
+              } else if (routeServiceType) {
+                // Invalid route parameter - redirect to base documents page
+                setTimeout(() => navigate('/documents', { replace: true }), 0)
+                activeServiceType = null
+              } else {
+                // No route parameter - show all documents or first available tab
+                activeServiceType = null
+              }
+
+              // Helper function to render a document card (defined inline to capture closures)
+              const renderCard = (doc: DocumentStatus) => (
+                <Card
+                  key={doc.id || `${doc.serviceType || 'custom'}-${doc.type}`}
+                  className={`border-0 shadow-md transition-all hover:shadow-lg ${
                   doc.uploaded ? 'border-green-200 dark:border-green-800 border-2' : ''
                 }`}>
                   <div className="flex flex-col h-full">
@@ -541,6 +898,13 @@ export function Documents() {
 
                     {/* Document Info */}
                     <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        {doc.serviceType && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+                            {SERVICE_TYPE_LABELS[doc.serviceType] || doc.serviceType}
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 mb-2 break-words" title={doc.name}>
                         {doc.name}
                       </h3>
@@ -743,9 +1107,104 @@ export function Documents() {
                     )}
                   </div>
                 </Card>
-                ))}
-              </div>
-            )}
+              )
+
+              // If filtering by a specific service type from route
+              if (activeServiceType) {
+                const filteredDocs = documentsByService[activeServiceType] || []
+                // Still show tabs if multiple service types exist
+                if (availableTabs.length > 1) {
+                  return (
+                    <div>
+                      {/* Custom tab headers that navigate to routes */}
+                      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+                        <nav className="flex space-x-1" aria-label="Tabs">
+                          {availableTabs.map((tab) => {
+                            const Icon = tab.icon
+                            const isActive = activeServiceType === tab.id
+                            return (
+                              <Link
+                                key={tab.id}
+                                to={tab.routePath}
+                                className={cn(
+                                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                  isActive
+                                    ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
+                                )}
+                                aria-current={isActive ? 'page' : undefined}
+                              >
+                                {Icon && <Icon className="h-4 w-4" />}
+                                {tab.label}
+                              </Link>
+                            )
+                          })}
+                        </nav>
+                      </div>
+                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredDocs.map(renderCard)}
+                      </div>
+                    </div>
+                  )
+                } else {
+                  // Only one service type, no tabs needed
+                  return (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredDocs.map(renderCard)}
+                    </div>
+                  )
+                }
+              }
+
+              // No route parameter - redirect to first tab if multiple tabs exist
+              if (availableTabs.length > 1) {
+                // Redirect to first tab's route
+                setTimeout(() => navigate(availableTabs[0].routePath, { replace: true }), 0)
+                // Show first tab's content while redirecting
+                return (
+                  <div>
+                    <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+                      <nav className="flex space-x-1" aria-label="Tabs">
+                        {availableTabs.map((tab, index) => {
+                          const Icon = tab.icon
+                          const isActive = index === 0
+                          return (
+                            <Link
+                              key={tab.id}
+                              to={tab.routePath}
+                              className={cn(
+                                'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                isActive
+                                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
+                              )}
+                              aria-current={isActive ? 'page' : undefined}
+                            >
+                              {Icon && <Icon className="h-4 w-4" />}
+                              {tab.label}
+                            </Link>
+                          )
+                        })}
+                      </nav>
+                    </div>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {(documentsByService[availableTabs[0]?.id] || []).map(renderCard)}
+                    </div>
+                  </div>
+                )
+              }
+
+              // Single tab or no tabs - show documents normally
+              const docsToRender = availableTabs.length === 1 
+                ? documentsByService[availableTabs[0].id] || []
+                : documents
+              
+              return (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {docsToRender.map(renderCard)}
+                </div>
+              )
+            })()}
 
             {/* Quick Actions */}
             <Card className="border-0 shadow-md bg-primary-50/50 dark:bg-primary-900/10">
@@ -773,7 +1232,7 @@ export function Documents() {
       <Modal
         isOpen={!!uploadPreview}
         onClose={handleUploadCancel}
-        title={`Upload ${requiredDocuments.find(d => d.type === uploadPreview?.documentType)?.name || uploadPreview?.documentType}`}
+        title={`Upload ${requiredDocumentMap.get(uploadPreview?.documentType || '')?.name || getDocumentDisplayName(uploadPreview?.documentType || '')}`}
         size="lg"
       >
         {uploadPreview && (
@@ -898,8 +1357,7 @@ export function Documents() {
             )}
             <div className="flex justify-between items-center pt-4 px-4 border-t border-gray-200 dark:border-gray-700">
               <div>
-                {viewingFile.documentId && viewingFile.documentType && 
-                 ['picture', 'diploma', 'passport'].includes(viewingFile.documentType) && (
+              {viewingFile.documentId && (
                   <Button
                     variant="outline"
                     onClick={async () => {

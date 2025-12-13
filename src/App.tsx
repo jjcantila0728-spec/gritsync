@@ -15,7 +15,9 @@ const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login }
 const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })))
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const ApplicationServiceSelection = lazy(() => import('./pages/ApplicationServiceSelection').then(m => ({ default: m.ApplicationServiceSelection })))
 const NCLEXApplication = lazy(() => import('./pages/NCLEXApplication').then(m => ({ default: m.NCLEXApplication })))
+const EADApplication = lazy(() => import('./pages/EADApplication').then(m => ({ default: m.EADApplication })))
 const Tracking = lazy(() => import('./pages/Tracking').then(m => ({ default: m.Tracking })))
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })))
 const Quote = lazy(() => import('./pages/Quote').then(m => ({ default: m.Quote })))
@@ -35,6 +37,7 @@ const PaymentSettings = lazy(() => import('./pages/admin-settings/PaymentSetting
 const CurrencySettings = lazy(() => import('./pages/admin-settings/CurrencySettings').then(m => ({ default: m.CurrencySettings })))
 const SystemSettings = lazy(() => import('./pages/admin-settings/SystemSettings').then(m => ({ default: m.SystemSettings })))
 const PromoCodeSettings = lazy(() => import('./pages/admin-settings/PromoCodeSettings').then(m => ({ default: m.PromoCodeSettings })))
+const ServiceSettings = lazy(() => import('./pages/admin-settings/ServiceSettings').then(m => ({ default: m.ServiceSettings })))
 const NotificationManagement = lazy(() => import('./pages/admin-settings/NotificationManagement').then(m => ({ default: m.NotificationManagement })))
 const AdminQuoteManagement = lazy(() => import('./pages/AdminQuoteManagement').then(m => ({ default: m.AdminQuoteManagement })))
 const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m.MyDetails })))
@@ -226,7 +229,23 @@ function AppRoutes() {
         path="/application/new"
         element={
           <ProtectedRoute>
+            <ApplicationServiceSelection />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application/new/nclex"
+        element={
+          <ProtectedRoute>
             <NCLEXApplication />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application/new/ead"
+        element={
+          <ProtectedRoute>
+            <EADApplication />
           </ProtectedRoute>
         }
       />
@@ -331,7 +350,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/documents"
+        path="/documents/:serviceType?"
         element={
           <ProtectedRoute>
             <Documents />
@@ -415,6 +434,7 @@ function AppRoutes() {
         <Route path="promo-codes" element={<PromoCodeSettings />} />
         <Route path="currency" element={<CurrencySettings />} />
         <Route path="system" element={<SystemSettings />} />
+        <Route path="services" element={<ServiceSettings />} />
       </Route>
       <Route
         path="/admin/notifications"

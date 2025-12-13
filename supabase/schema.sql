@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS receipts (
 CREATE TABLE IF NOT EXISTS processing_accounts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-  account_type TEXT NOT NULL CHECK (account_type IN ('gmail', 'pearson_vue', 'custom')),
+  account_type TEXT NOT NULL CHECK (account_type IN ('gmail', 'gritsync', 'pearson_vue', 'custom')),
   name TEXT,
   link TEXT,
   email TEXT NOT NULL,
@@ -273,6 +273,21 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(service_name, state, payment_type)
 );
+
+-- Service document requirements table
+CREATE TABLE IF NOT EXISTS service_required_documents (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  service_type TEXT NOT NULL,
+  document_type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  accepted_formats TEXT[] NOT NULL DEFAULT ARRAY['.pdf', '.jpg', '.jpeg', '.png'],
+  required BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(service_type, document_type)
+);
+COMMENT ON TABLE service_required_documents IS 'Required documents configuration per service/application type';
 
 -- Password Reset Tokens table (Supabase handles this, but keeping for compatibility)
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -388,6 +403,7 @@ ALTER TABLE application_timeline_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_required_documents ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
 CREATE POLICY "Users can view their own profile"
@@ -743,6 +759,25 @@ USING (true);
 CREATE POLICY "Admins can manage services"
 ON services FOR ALL
 USING (
+  EXISTS (
+    SELECT 1 FROM users
+    WHERE users.id = auth.uid() AND users.role = 'admin'
+  )
+);
+
+CREATE POLICY "Everyone can view service document requirements"
+ON service_required_documents FOR SELECT
+USING (true);
+
+CREATE POLICY "Admins can manage service document requirements"
+ON service_required_documents FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM users
+    WHERE users.id = auth.uid() AND users.role = 'admin'
+  )
+)
+WITH CHECK (
   EXISTS (
     SELECT 1 FROM users
     WHERE users.id = auth.uid() AND users.role = 'admin'

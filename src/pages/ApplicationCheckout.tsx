@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { CardSkeleton } from '@/components/ui/Loading'
-import { applicationPaymentsAPI, applicationsAPI } from '@/lib/api'
+import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
@@ -23,9 +23,15 @@ export function ApplicationCheckout() {
   const [loading, setLoading] = useState(true)
   const [application, setApplication] = useState<any>(null)
   const [payment, setPayment] = useState<any>(null)
+  const [serviceDetails, setServiceDetails] = useState<any>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
   const [processingPayment, setProcessingPayment] = useState(false)
+  const estimatedTax = useMemo(() => {
+    if (!serviceDetails?.line_items) return 0
+    const TAX_RATE = 0.12
+    return serviceDetails.line_items.reduce((sum: number, item: any) => sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0), 0)
+  }, [serviceDetails])
 
   useEffect(() => {
     // Allow public access - no authentication required for checkout
@@ -56,6 +62,8 @@ export function ApplicationCheckout() {
       }
 
       setPayment(targetPayment)
+
+      await loadServiceDetails(appData, targetPayment)
 
       // Create payment intent using create-application-payment-intent
       const intentData = await applicationPaymentsAPI.createPaymentIntent(paymentId)
@@ -114,6 +122,22 @@ export function ApplicationCheckout() {
 
   function handlePaymentError(error: string) {
     showToast(error, 'error')
+  }
+
+  async function loadServiceDetails(appData: any, targetPayment: any) {
+    const applicationType = appData?.application_type || 'NCLEX'
+    const isEAD = applicationType === 'EAD'
+    const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
+    const serviceState = isEAD ? 'All States' : (appData?.state || appData?.province || 'New York')
+    const paymentType = isEAD ? 'full' : (targetPayment.payment_type === 'full' ? 'full' : 'staggered')
+
+    try {
+      const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, paymentType as 'full' | 'staggered')
+      setServiceDetails(service)
+    } catch (error) {
+      console.warn('Unable to load service details', error)
+      setServiceDetails(null)
+    }
   }
 
   if (loading) {
@@ -232,7 +256,7 @@ export function ApplicationCheckout() {
                       <div className="flex flex-col">
                         <span className="text-xs text-gray-500 dark:text-gray-400">Availed Service</span>
                         <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          NCLEX-RN Processing
+                          {serviceDetails?.service_name || (application.application_type === 'EAD' ? 'EAD Processing' : 'NCLEX Processing')}
                         </span>
                       </div>
                       <div className="flex flex-col">
@@ -247,11 +271,32 @@ export function ApplicationCheckout() {
                       <div className="flex flex-col">
                         <span className="text-xs text-gray-500 dark:text-gray-400">State</span>
                         <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          {/* TODO: Add nclex_state field to applications table for target US state */}
-                          New York
+                          {serviceDetails?.state || (application.application_type === 'EAD' ? 'All States' : 'New York')}
                         </span>
                       </div>
                     </div>
+                    {serviceDetails?.line_items && (
+                      <div className="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Line Items</h4>
+                        <div className="space-y-1">
+                          {serviceDetails.line_items.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
+                              <span>
+                                {item.description}
+                                {item.step ? ` (Step ${item.step})` : ''}
+                              </span>
+                              <span className="font-medium">{formatCurrency(item.amount || 0)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {estimatedTax > 0 && (
+                          <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-600">
+                            <span className="font-medium">Estimated Tax (12%)</span>
+                            <span className="font-semibold">{formatCurrency(estimatedTax)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -327,3 +372,4 @@ export function ApplicationCheckout() {
     </div>
   )
 }
+

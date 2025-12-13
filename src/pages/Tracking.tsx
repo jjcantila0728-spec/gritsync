@@ -9,6 +9,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationsAPI, trackingAPI, getSignedFileUrl, getFileUrl, applicationPaymentsAPI } from '@/lib/api'
@@ -22,6 +23,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 interface Application {
   id: string
   grit_app_id?: string
+  application_type?: 'NCLEX' | 'EAD'
   first_name: string
   last_name: string
   status: string
@@ -68,6 +70,7 @@ export function Tracking() {
   // Enhanced filtering and sorting
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [sortField, _setSortField] = useState<SortField>('date')
   const [sortDirection, _setSortDirection] = useState<SortDirection>('desc')
   const [refreshing, setRefreshing] = useState(false)
@@ -421,7 +424,7 @@ export function Tracking() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, statusFilter])
+  }, [searchQuery, statusFilter, typeFilter])
 
   const filteredAndSortedApplications = useMemo(() => {
     let filtered = [...applications]
@@ -456,6 +459,14 @@ export function Tracking() {
           return displayStatus === 'completed' || app.status === 'completed' || app.status === 'approved'
         }
         return displayStatus === statusFilter || app.status === statusFilter
+      })
+    }
+
+    // Apply type filter (NCLEX/EAD)
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter((app) => {
+        const appType = app.application_type || 'NCLEX' // Default to NCLEX for backward compatibility
+        return appType === typeFilter
       })
     }
 
@@ -1293,6 +1304,7 @@ export function Tracking() {
                   onClick={() => {
                     setSearchQuery('')
                     setStatusFilter('all')
+                    setTypeFilter('all')
                   }}
                 >
                   Clear Filters
@@ -1301,6 +1313,58 @@ export function Tracking() {
             </Card>
           ) : (
             <>
+              {/* Filters */}
+              <Card className="mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input
+                    label="Search Applications"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name, email, or ID..."
+                  />
+                  <Select
+                    label="Filter by Status"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    options={[
+                      { value: 'all', label: 'All Statuses' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'initiated', label: 'Initiated' },
+                      { value: 'in-progress', label: 'In Progress' },
+                      { value: 'approved', label: 'Approved' },
+                      { value: 'completed', label: 'Completed' },
+                      { value: 'rejected', label: 'Rejected' },
+                    ]}
+                  />
+                  <Select
+                    label="Filter by Type"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    options={[
+                      { value: 'all', label: 'All Types' },
+                      { value: 'NCLEX', label: 'NCLEX' },
+                      { value: 'EAD', label: 'EAD (I-765)' },
+                    ]}
+                  />
+                </div>
+                {(searchQuery || statusFilter !== 'all' || typeFilter !== 'all') && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery('')
+                        setStatusFilter('all')
+                        setTypeFilter('all')
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
               <div className="mb-4 flex items-center justify-between">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredAndSortedApplications.length)} of {filteredAndSortedApplications.length} application{filteredAndSortedApplications.length !== 1 ? 's' : ''}
@@ -1398,13 +1462,22 @@ export function Tracking() {
                                 </h3>
                                 <span className="text-base font-semibold text-gray-400 dark:text-gray-500">-</span>
                                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                  {app.service_type || 'NCLEX Processing'}
+                                  {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
                                 </h3>
                               </>
                             ) : (
                               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                {app.service_type || 'NCLEX Processing'}
+                                {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
                               </h3>
+                            )}
+                            {app.application_type && (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                app.application_type === 'EAD'
+                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              }`}>
+                                {app.application_type}
+                              </span>
                             )}
                             <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
                               Status:

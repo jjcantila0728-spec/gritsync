@@ -7,14 +7,24 @@ import { supabase } from './supabase'
 import { generalSettings } from './settings'
 import * as EmailTemplates from './email-templates'
 
+interface EmailAttachment {
+  filename: string
+  content: string // base64 encoded
+  type?: string
+}
+
 interface EmailOptions {
   to: string
   subject: string
   html: string
   text?: string
   from?: string
+  fromName?: string  // Sender display name
   fromEmailAddressId?: string  // Reference to email_addresses table
   replyTo?: string
+  cc?: string
+  bcc?: string
+  attachments?: File[] | EmailAttachment[] // Can be File objects or pre-encoded attachments
 }
 
 interface EmailTemplateData {
@@ -230,6 +240,7 @@ export async function sendEmail(options: EmailOptions & {
   sponsorshipId?: string
   metadata?: Record<string, any>
   tags?: string[]
+  fromName?: string  // Sender display name
   fromEmailAddressId?: string  // Reference to email_addresses table
 }): Promise<boolean> {
   let logId: string | null = null
@@ -262,13 +273,18 @@ export async function sendEmail(options: EmailOptions & {
         const { emailAddressesAPI } = await import('./email-addresses-api')
         const emailAddress = await emailAddressesAPI.getById(options.fromEmailAddressId)
         if (emailAddress && emailAddress.is_active && emailAddress.can_send) {
-          fromEmail = `${emailAddress.display_name || config.fromName} <${emailAddress.email_address}>`
+          // Use provided fromName, or email address display_name, or fall back to site name
+          const senderName = options.fromName || emailAddress.display_name || config.fromName
+          fromEmail = `${senderName} <${emailAddress.email_address}>`
           // Update last used timestamp
           await emailAddressesAPI.updateLastUsed(emailAddress.id)
         }
       } catch (err) {
         console.error('Error resolving from email address:', err)
       }
+    } else if (options.fromName) {
+      // If fromName provided but no fromEmailAddressId, use it with config email
+      fromEmail = `${options.fromName} <${config.fromEmail}>`
     }
     
     // Resolve recipient email address ID if it's a gritsync email
@@ -326,14 +342,55 @@ export async function sendEmail(options: EmailOptions & {
       // Continue with sending even if logging fails
     }
     
+    // Convert File attachments to base64 if needed
+    let attachments: Array<{ filename: string; content: string; type?: string }> | undefined
+    if (options.attachments && options.attachments.length > 0) {
+      attachments = await Promise.all(
+        options.attachments.map(async (att) => {
+          // If it's already an EmailAttachment (pre-encoded), use it directly
+          if ('content' in att && typeof att.content === 'string') {
+            return {
+              filename: att.filename,
+              content: att.content,
+              type: att.type || 'application/octet-stream'
+            }
+          }
+          // If it's a File object, convert to base64
+          if (att instanceof File) {
+            return new Promise<{ filename: string; content: string; type: string }>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => {
+                const base64 = (reader.result as string).split(',')[1] // Remove data:type;base64, prefix
+                resolve({
+                  filename: att.name,
+                  content: base64,
+                  type: att.type || 'application/octet-stream'
+                })
+              }
+              reader.onerror = reject
+              reader.readAsDataURL(att)
+            })
+          }
+          throw new Error('Invalid attachment format')
+        })
+      )
+    }
+
     // Prepare the email payload
-    const emailPayload = {
+    const emailPayload: any = {
       to: options.to.trim(),
       subject: options.subject.trim(),
       html: options.html,
       text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
       from: fromEmail,
       replyTo: options.replyTo || undefined,
+      cc: options.cc || undefined,
+      bcc: options.bcc || undefined,
+    }
+
+    // Add attachments if any
+    if (attachments && attachments.length > 0) {
+      emailPayload.attachments = attachments
     }
 
     console.log('Sending email with payload:', {

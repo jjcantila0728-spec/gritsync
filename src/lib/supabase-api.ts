@@ -88,6 +88,20 @@ async function isAdmin(): Promise<boolean> {
   }
 }
 
+function resolveServiceType(app: { service_type?: string; application_type?: string }) {
+  if (app.service_type) {
+    return app.service_type
+  }
+  return app.application_type === 'EAD' ? 'EAD (I-765)' : 'NCLEX Processing'
+}
+
+function resolveServiceState(app: { service_state?: string; application_type?: string }) {
+  if (app.service_state) {
+    return app.service_state
+  }
+  return app.application_type === 'EAD' ? 'USCIS' : 'New York'
+}
+
 // Applications API
 export const applicationsAPI = {
   getAll: async () => {
@@ -474,23 +488,23 @@ export const applicationsAPI = {
           // Ensure progress doesn't exceed 100%
           progressPercentage = Math.min(100, Math.max(0, progressPercentage))
           
-          // Get Gmail account email from processing accounts
+          // Get GritSync account email from processing accounts
           let displayEmail = app.email
           try {
-            const { data: gmailAccounts, error: gmailError } = await supabase
+            const { data: gritsyncAccounts, error: gritsyncError } = await supabase
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
-              .eq('account_type', 'gmail')
+              .eq('account_type', 'gritsync')
               .limit(1)
             
-            if (!gmailError && gmailAccounts && gmailAccounts.length > 0) {
-              const gmailAccount = gmailAccounts[0] as { email?: string } | null
-              if (gmailAccount?.email) {
-                displayEmail = gmailAccount.email
+            if (!gritsyncError && gritsyncAccounts && gritsyncAccounts.length > 0) {
+              const gritsyncAccount = gritsyncAccounts[0] as { email?: string } | null
+              if (gritsyncAccount?.email) {
+                displayEmail = gritsyncAccount.email
               }
             } else {
-              // If no Gmail account exists, generate the email address
+              // If no GritSync account exists, generate the email address
               const firstName = app.first_name || ''
               const middleName = app.middle_name || null
               const lastName = app.last_name || ''
@@ -508,6 +522,8 @@ export const applicationsAPI = {
             }
           }
           
+          const serviceType = resolveServiceType(app)
+          const serviceState = resolveServiceState(app)
           return {
             ...app,
             email: displayEmail, // Use generated Gmail instead of user email
@@ -516,8 +532,8 @@ export const applicationsAPI = {
             progress_percentage: progressPercentage,
             completed_steps: completedItems,
             total_steps: totalItems,
-            service_type: app.service_type || 'NCLEX Processing',
-            service_state: app.service_state || 'New York',
+            service_type: serviceType,
+            service_state: serviceState,
           }
         } catch (error) {
           // Try to get or generate Gmail email even in error case
@@ -527,7 +543,7 @@ export const applicationsAPI = {
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
-              .eq('account_type', 'gmail')
+              .eq('account_type', 'gritsync')
               .limit(1)
             
             if (gmailAccounts && gmailAccounts.length > 0) {
@@ -553,6 +569,8 @@ export const applicationsAPI = {
             }
           }
           
+          const serviceType = resolveServiceType(app)
+          const serviceState = resolveServiceState(app)
           return {
             ...app,
             email: displayEmail,
@@ -561,14 +579,39 @@ export const applicationsAPI = {
             progress_percentage: 0,
             completed_steps: 0,
             total_steps: 0,
-            service_type: app.service_type || 'NCLEX Processing',
-            service_state: app.service_state || 'New York',
+            service_type: serviceType,
+            service_state: serviceState,
           }
         }
       })
     )
     
     return applicationsWithTimeline
+  },
+
+  getServiceTypes: async () => {
+    const userId = await getCurrentUserId()
+    const admin = await isAdmin()
+
+    const query = supabase
+      .from('applications')
+      .select('application_type')
+      .order('created_at', { ascending: false })
+
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const types = Array.from(
+      new Set(
+        (data || []).map((app: any) => (app.application_type || 'NCLEX'))
+      )
+    )
+
+    return types
   },
 
   getById: async (id: string) => {
@@ -656,11 +699,15 @@ export const applicationsAPI = {
   create: async (applicationData: any, files?: { picture?: File; diploma?: File; passport?: File }) => {
     const userId = await getCurrentUserId()
     
-    let picturePath = applicationData.picture_path
-    let diplomaPath = applicationData.diploma_path
-    let passportPath = applicationData.passport_path
+    // Determine application type (default to NCLEX for backward compatibility)
+    const applicationType = applicationData.application_type || 'NCLEX'
+    const isEAD = applicationType === 'EAD'
     
-    // Upload files to Supabase Storage if provided
+    let picturePath = applicationData.picture_path || null
+    let diplomaPath = applicationData.diploma_path || null
+    let passportPath = applicationData.passport_path || null
+    
+    // Upload files to Supabase Storage if provided (required for NCLEX, optional for EAD)
     if (files) {
       if (files.picture) {
         picturePath = await uploadFile(userId, files.picture, 'picture')
@@ -698,21 +745,53 @@ export const applicationsAPI = {
       attempts++
     }
     
-    // Create application (grit_app_id will be generated by database default if not provided)
+    // Prepare insert data - include all fields from applicationData
+    const insertData: any = {
+      ...applicationData,
+      grit_app_id: gritAppId,
+      user_id: userId,
+      application_type: applicationType,
+    }
+    
+    // For NCLEX applications, include document paths (required)
+    // For EAD applications, document paths are optional
+    if (!isEAD) {
+      insertData.picture_path = picturePath
+      insertData.diploma_path = diplomaPath
+      insertData.passport_path = passportPath
+    } else {
+      // EAD applications don't require these documents, but include if provided
+      if (picturePath) insertData.picture_path = picturePath
+      if (diplomaPath) insertData.diploma_path = diplomaPath
+      if (passportPath) insertData.passport_path = passportPath
+    }
+    
+    // Create application
     const { data, error } = await supabase
       .from('applications')
-      .insert({
-        ...applicationData,
-        grit_app_id: gritAppId, // Set GRIT APP ID
-        user_id: userId,
-        picture_path: picturePath,
-        diploma_path: diplomaPath,
-        passport_path: passportPath,
-      })
+      .insert(insertData)
       .select('*')
       .single()
     
     if (error) throw new Error(error.message)
+    
+    // Create initial timeline step for the application
+    if (data) {
+      try {
+        const timelineStepsAPI = await import('./supabase-api').then(m => m.timelineStepsAPI)
+        if (isEAD) {
+          // EAD timeline: Application Submission
+          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
+        } else {
+          // NCLEX timeline: Application Submission
+          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
+        }
+      } catch (timelineError) {
+        // Log but don't fail the application creation if timeline step creation fails
+        console.error('Error creating initial timeline step:', timelineError)
+      }
+    }
+    
     return data as Tables<'processing_accounts'>
   },
 
@@ -1328,6 +1407,117 @@ export const servicesAPI = {
   },
 }
 
+export const serviceRequiredDocumentsAPI = {
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .select('*')
+      .order('service_type', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getByServiceTypes: async (serviceTypes: string[]) => {
+    const query = supabase
+      .from('service_required_documents')
+      .select('*')
+      .order('service_type', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (serviceTypes && serviceTypes.length > 0) {
+      query.in('service_type', serviceTypes)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  create: async (doc: {
+    service_type: string
+    document_type: string
+    name: string
+    accepted_formats?: string[]
+    required?: boolean
+    sort_order?: number
+  }) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const payload = {
+      service_type: doc.service_type,
+      document_type: doc.document_type,
+      name: doc.name,
+      accepted_formats: doc.accepted_formats && doc.accepted_formats.length > 0
+        ? doc.accepted_formats
+        : ['.pdf', '.jpg', '.jpeg', '.png'],
+      required: doc.required ?? true,
+      sort_order: doc.sort_order ?? 0,
+    }
+
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<{
+    service_type: string
+    document_type: string
+    name: string
+    accepted_formats: string[]
+    required: boolean
+    sort_order: number
+  }>) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const updatePayload: Record<string, any> = {}
+    if (updates.service_type !== undefined) updatePayload.service_type = updates.service_type
+    if (updates.document_type !== undefined) updatePayload.document_type = updates.document_type
+    if (updates.name !== undefined) updatePayload.name = updates.name
+    if (updates.accepted_formats !== undefined) updatePayload.accepted_formats = updates.accepted_formats
+    if (updates.required !== undefined) updatePayload.required = updates.required
+    if (updates.sort_order !== undefined) updatePayload.sort_order = updates.sort_order
+
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const { error } = await supabase
+      .from('service_required_documents')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw new Error(error.message)
+  },
+}
+
 // In-memory cache for notification counts (per user)
 // This reduces database queries for frequently accessed counts
 const notificationCountCache = new Map<string, { count: number; timestamp: number }>()
@@ -1750,7 +1940,7 @@ export const userDocumentsAPI = {
     return data || []
   },
 
-  upload: async (type: 'picture' | 'diploma' | 'passport', file: File) => {
+  upload: async (type: string, file: File) => {
     const userId = await getCurrentUserId()
     const filePath = await uploadFile(userId, file, type)
     
@@ -1970,6 +2160,7 @@ export const timelineStepsAPI = {
   update: async (applicationId: string, stepKey: string, status: 'pending' | 'completed', data?: any) => {
     // Map step keys to step names
     const stepNameMap: { [key: string]: string } = {
+      // NCLEX Steps
       'app_submission': 'Application Submission',
       'app_created': 'Application created',
       'documents_submitted': 'Required documents submitted',
@@ -1994,6 +2185,20 @@ export const timelineStepsAPI = {
       'quick_results': 'Quick Results',
       'quick_result_paid': 'Quick Result request has been paid',
       'exam_result': 'Exam Result',
+      // EAD Steps
+      'ead_app_submission': 'Application Submission',
+      'ead_form_review': 'Form Review',
+      'ead_uscis_submission': 'USCIS Submission',
+      'ead_receipt_received': 'Receipt Notice Received',
+      'ead_biometrics': 'Biometrics Appointment',
+      'ead_biometrics_completed': 'Biometrics Completed',
+      'ead_rfe': 'Request for Evidence (RFE)',
+      'ead_rfe_response': 'RFE Response Submitted',
+      'ead_approval': 'EAD Approval',
+      'ead_card_production': 'Card Production',
+      'ead_card_mailed': 'Card Mailed',
+      'ead_card_received': 'Card Received',
+      'ead_denial': 'EAD Denial',
     }
     
     // First, fetch existing step data to merge with new data
@@ -2085,36 +2290,28 @@ export const timelineStepsAPI = {
   },
 }
 
-// Helper function to generate Gmail address from name
-// Format: first letter of firstname + first letter of first part of lastname + last part of lastname + "usrn"@gmail.com
-// Example: joy jeric alburo cantila -> jacantilausrn@gmail.com
+// Helper function to generate GritSync email address from name
+// Format: first letter of firstname + first letter of middlename (if available) + lastname@gritsync.com
+// Example: John Michael Smith -> jmsmith@gritsync.com
 function generateGmailAddress(firstName: string, middleName: string | null, lastName: string): string {
   // Get first letter of first name (lowercase)
   const firstInitial = (firstName || '').trim().charAt(0).toLowerCase()
   
-  // Get last name parts
-  const lastNameParts = (lastName || '').trim().split(/\s+/).filter(part => part.trim())
+  // Get middle initial if available
+  const middleInitial = (middleName || '').trim().charAt(0).toLowerCase()
   
-  if (lastNameParts.length === 0) {
-    // Fallback if no last name
-    return `${firstInitial}usrn@gmail.com`
+  // Get full last name (remove spaces and special characters)
+  const lastNameClean = (lastName || '').trim().toLowerCase().replace(/[^a-z]/g, '')
+  
+  if (!firstInitial || !lastNameClean) {
+    // Fallback if missing required parts
+    return `user@gritsync.com`
   }
   
-  // Based on example "joy jeric alburo cantila" -> "jacantilausrn@gmail.com"
-  // It seems to use: j (joy) + a (first letter of "alburo", first part of last name) + cantila (last part)
-  let email: string
-  if (lastNameParts.length > 1) {
-    // Multiple parts in last name: use first letter of first part + last part
-    const firstPartInitial = lastNameParts[0].charAt(0).toLowerCase()
-    const lastPart = lastNameParts[lastNameParts.length - 1].toLowerCase()
-    email = `${firstInitial}${firstPartInitial}${lastPart}usrn@gmail.com`
-  } else {
-    // Single part last name: use first letter of middle name if available, otherwise first letter of last name
-    const middleInitial = (middleName || '').trim().charAt(0).toLowerCase()
-    const lastPart = lastNameParts[0].toLowerCase()
-    const fallbackInitial = lastPart.charAt(0).toLowerCase()
-    email = `${firstInitial}${middleInitial || fallbackInitial}${lastPart}usrn@gmail.com`
-  }
+  // Generate email: firstInitial + middleInitial + lastName@gritsync.com
+  const email = middleInitial 
+    ? `${firstInitial}${middleInitial}${lastNameClean}@gritsync.com`
+    : `${firstInitial}${lastNameClean}@gritsync.com`
   
   return email
 }
@@ -2219,7 +2416,7 @@ export const processingAccountsAPI = {
     
     // Check if Gmail and Pearson Vue accounts exist
     const typedAccounts = existingAccounts as Array<{ account_type?: string }>
-    const existingGmail = typedAccounts.find(acc => acc.account_type === 'gmail')
+    const existingGritsync = typedAccounts.find(acc => acc.account_type === 'gritsync')
     const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
     
     // Get user's grit_id for password
@@ -2240,22 +2437,22 @@ export const processingAccountsAPI = {
       password = `@GRiT${numericPart}`
     }
     
-    // Generate Gmail address from application name
+    // Generate GritSync email address from application name
     const firstName = typedApplication.first_name || ''
     const middleName = typedApplication.middle_name || null
     const lastName = typedApplication.last_name || ''
-    const gmailAddress = generateGmailAddress(firstName, middleName, lastName)
+    const gritsyncEmail = generateGmailAddress(firstName, middleName, lastName)
     
-    // Create Gmail account if it doesn't exist
-    if (!existingGmail) {
+    // Create GritSync account if it doesn't exist
+    if (!existingGritsync) {
       try {
         if (password && firstName && lastName) {
-          const { error: gmailError } = await supabase
+          const { error: gritsyncError } = await supabase
             .from('processing_accounts')
             .insert({
               application_id: actualApplicationId,
-              account_type: 'gmail',
-              email: gmailAddress,
+              account_type: 'gritsync',
+              email: gritsyncEmail,
               password: password,
               status: 'inactive', // Inactive by default, must be activated by admin
               created_by: typedApplication.user_id,
@@ -2264,7 +2461,7 @@ export const processingAccountsAPI = {
             .single()
           
           // Silently handle duplicate errors (account already exists)
-          if (gmailError && gmailError.code !== '23505' && !gmailError.message?.includes('duplicate') && !gmailError.message?.includes('unique')) {
+          if (gritsyncError && gritsyncError.code !== '23505' && !gritsyncError.message?.includes('duplicate') && !gritsyncError.message?.includes('unique')) {
             // Only log non-duplicate errors
           }
         }
@@ -2276,7 +2473,7 @@ export const processingAccountsAPI = {
       }
     }
     
-    // Create Pearson Vue account if it doesn't exist (same email and password as Gmail)
+    // Create Pearson Vue account if it doesn't exist (same email and password as GritSync)
     if (!existingPearson) {
       try {
         if (password && firstName && lastName) {
@@ -2293,7 +2490,7 @@ export const processingAccountsAPI = {
             .insert({
               application_id: actualApplicationId,
               account_type: 'pearson_vue',
-              email: gmailAddress,
+              email: gritsyncEmail,
               password: password,
               security_question_1: securityAnswers.question1,
               security_question_2: securityAnswers.question2,
@@ -2337,10 +2534,10 @@ export const processingAccountsAPI = {
       new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
     )
     
-    // Sort accounts: Gmail and Pearson Vue first, then custom accounts
+    // Sort accounts: GritSync and Pearson Vue first, then custom accounts
     const typedUniqueAccounts = uniqueAccounts as Array<{ account_type?: string; created_at?: string }>
     typedUniqueAccounts.sort((a, b) => {
-      const order: { [key: string]: number } = { 'gmail': 1, 'pearson_vue': 2, 'custom': 3 }
+      const order: { [key: string]: number } = { 'gritsync': 1, 'pearson_vue': 2, 'custom': 3 }
       const aOrder = order[a.account_type || ''] || 99
       const bOrder = order[b.account_type || ''] || 99
       if (aOrder !== bOrder) {
@@ -2353,7 +2550,7 @@ export const processingAccountsAPI = {
   },
 
   create: async (applicationId: string, accountData: {
-    account_type: 'gmail' | 'pearson_vue' | 'custom'
+    account_type: 'gritsync' | 'pearson_vue' | 'custom'
     name?: string
     link?: string
     email: string
@@ -2383,7 +2580,7 @@ export const processingAccountsAPI = {
   },
 
   update: async (id: string, updates: Partial<{
-    account_type: 'gmail' | 'pearson_vue' | 'custom'
+    account_type: 'gmail' | 'gritsync' | 'pearson_vue' | 'custom'
     name: string
     link: string
     email: string
@@ -2408,8 +2605,8 @@ export const processingAccountsAPI = {
     
     // Check if this is a Gmail or Pearson Vue account
     const accountData = account as { account_type?: string; application_id?: string }
-    const isSystemAccount = accountData.account_type === 'gmail' || accountData.account_type === 'pearson_vue'
-    const isGmailAccount = accountData.account_type === 'gmail'
+    const isSystemAccount = accountData.account_type === 'gritsync' || accountData.account_type === 'pearson_vue'
+    const isGritsyncAccount = accountData.account_type === 'gritsync'
     
     // For Gmail accounts:
     // - Clients can update status and password for their own applications
@@ -3652,8 +3849,8 @@ export const trackingAPI = {
     if (isGritAppId) {
       console.log('Tracking API: Querying by grit_app_id:', normalizedId)
       const { data, error } = await supabase
-        .from('applications')
-        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
+      .from('applications')
+      .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id, application_type')
         .eq('grit_app_id', normalizedId)
         .single()
       
@@ -3669,8 +3866,8 @@ export const trackingAPI = {
       // Query by UUID id
       console.log('Tracking API: Querying by UUID id:', normalizedId)
       const { data, error } = await supabase
-        .from('applications')
-        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
+      .from('applications')
+      .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id, application_type')
         .eq('id', normalizedId)
         .single()
       
@@ -3752,10 +3949,10 @@ export const trackingAPI = {
     const allProcessingAccounts = processingAccounts || []
     console.log('Tracking API: Found', allProcessingAccounts.length, 'processing accounts')
     
-    // Get Gmail from processing account
+    // Get GritSync email from processing account
     const typedProcessingAccounts = allProcessingAccounts as Array<{ account_type?: string; email?: string }>
-    const gmailAccounts = typedProcessingAccounts.filter(acc => acc.account_type === 'gmail')
-    const displayEmail = (gmailAccounts && gmailAccounts.length > 0) ? gmailAccounts[0].email : application.email
+    const gritsyncAccounts = typedProcessingAccounts.filter(acc => acc.account_type === 'gritsync')
+    const displayEmail = (gritsyncAccounts && gritsyncAccounts.length > 0) ? gritsyncAccounts[0].email : application.email
     
     // Create step status map
     const stepStatusMap: { [key: string]: any } = {}
@@ -3925,6 +4122,9 @@ export const trackingAPI = {
       }
     }
     
+    const serviceType = resolveServiceType(application)
+    const serviceState = resolveServiceState(application)
+
     const result = {
       ...application,
       email: displayEmail,
@@ -3932,8 +4132,8 @@ export const trackingAPI = {
       next_step: nextStepMessage,
       latest_update: latestUpdate,
       picture_url: picture_url,
-      service_type: 'NCLEX Processing', // Default value (not stored in DB)
-      service_state: 'New York', // Default value (not stored in DB)
+      service_type: serviceType,
+      service_state: serviceState,
       grit_app_id: typedApp.grit_app_id || null
     }
     

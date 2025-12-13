@@ -50,6 +50,7 @@ export function AccountSettings() {
   const [saving, setSaving] = useState(false)
   const [savingPreferences, setSavingPreferences] = useState(false)
   const [userDetails, setUserDetails] = useState<{ first_name?: string; middle_name?: string; last_name?: string } | null>(null)
+  const [clientEmail, setClientEmail] = useState<string | null>(null)
   
   // Password state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -83,6 +84,7 @@ export function AccountSettings() {
     if (user) {
       fetchUserDetails()
       fetchPreferences()
+      fetchClientEmail()
     } else {
       setLoading(false)
     }
@@ -102,6 +104,20 @@ export function AccountSettings() {
       console.error('Error fetching user details:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function fetchClientEmail() {
+    if (!user?.id) return
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      const addresses = await emailAddressesAPI.getUserAddresses(user.id)
+      const primaryAddress = addresses.find(addr => addr.is_primary && addr.address_type === 'client')
+      if (primaryAddress) {
+        setClientEmail(primaryAddress.email_address)
+      }
+    } catch (error) {
+      console.error('Error fetching client email:', error)
     }
   }
 
@@ -375,7 +391,7 @@ export function AccountSettings() {
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
                     <Mail className="h-4 w-4 text-gray-400" />
                     <p className="text-gray-600 dark:text-gray-400">
-                      {user?.email}
+                      {clientEmail || user?.email}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">

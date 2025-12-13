@@ -15,6 +15,7 @@ import {
   Briefcase,
   Building2,
   Mail,
+  FileText,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -27,8 +28,9 @@ interface NavItem {
 
 const clientNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'My Applications', path: '/applications', icon: ClipboardList },
+  { label: 'Applications', path: '/applications', icon: ClipboardList },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
+  { label: 'Emails', path: '/client/emails', icon: Mail },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -49,6 +51,7 @@ export function Sidebar() {
   const location = useLocation()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
+  const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {
@@ -292,6 +295,42 @@ export function Sidebar() {
     }
   }, [isAdmin, user])
 
+  // Load unread emails count from localStorage and listen for updates
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getUnreadEmailsCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadEmailsCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          // Check if cache is still valid (less than 2 minutes old)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+      return 0
+    }
+
+    // Load initial count
+    setUnreadEmailsCount(getUnreadEmailsCount())
+
+    // Listen for updates from email pages
+    const handleEmailsUpdate = () => {
+      setUnreadEmailsCount(getUnreadEmailsCount())
+    }
+    window.addEventListener('emailsUpdated', handleEmailsUpdate)
+    window.addEventListener('storage', handleEmailsUpdate)
+
+    return () => {
+      window.removeEventListener('emailsUpdated', handleEmailsUpdate)
+      window.removeEventListener('storage', handleEmailsUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="hidden md:block w-64 min-h-screen border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
       <nav className="space-y-2">
@@ -307,8 +346,11 @@ export function Sidebar() {
               location.pathname.startsWith('/application/')
           }
 
-          // Show counter for Quotations link
-          const showCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          // Show counter for Quotations link (admin only)
+          const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          
+          // Show counter for Emails link (both admin and client)
+          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
@@ -331,9 +373,14 @@ export function Sidebar() {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               <span className="flex-1 min-w-0">{item.label}</span>
-              {showCounter && (
+              {showQuotesCounter && (
                 <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
+                </span>
+              )}
+              {showEmailsCounter && (
+                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
                 </span>
               )}
               {showDocumentsStop && (
@@ -602,6 +649,42 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
     }
   }, [isAdmin, user])
 
+  // Load unread emails count from localStorage and listen for updates
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getUnreadEmailsCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadEmailsCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          // Check if cache is still valid (less than 2 minutes old)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+      return 0
+    }
+
+    // Load initial count
+    setUnreadEmailsCount(getUnreadEmailsCount())
+
+    // Listen for updates from email pages
+    const handleEmailsUpdate = () => {
+      setUnreadEmailsCount(getUnreadEmailsCount())
+    }
+    window.addEventListener('emailsUpdated', handleEmailsUpdate)
+    window.addEventListener('storage', handleEmailsUpdate)
+
+    return () => {
+      window.removeEventListener('emailsUpdated', handleEmailsUpdate)
+      window.removeEventListener('storage', handleEmailsUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="w-full h-full bg-white dark:bg-gray-900 p-4 overflow-visible">
       <nav className="space-y-2">
@@ -617,8 +700,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
               location.pathname.startsWith('/application/')
           }
 
-          // Show counter for Quotations link
-          const showCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          // Show counter for Quotations link (admin only)
+          const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          
+          // Show counter for Emails link (both admin and client)
+          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
@@ -643,9 +729,14 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               <span className="flex-1 min-w-0 block">{item.label}</span>
-              {showCounter && (
+              {showQuotesCounter && (
                 <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
+                </span>
+              )}
+              {showEmailsCounter && (
+                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
                 </span>
               )}
               {showDocumentsStop && (

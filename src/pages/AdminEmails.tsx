@@ -28,10 +28,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  TrendingUp,
-  Users,
   Activity,
-  BarChart3,
   Plus,
   X,
   FileText,
@@ -48,22 +45,34 @@ import {
   Settings,
   Upload,
   Image as ImageIcon,
-  ChevronDown,
+  File as FileIcon,
   MoreVertical,
   Paperclip,
   Minimize2,
+  Reply,
+  ReplyAll,
+  Forward,
+  Printer,
+  ExternalLink,
 } from 'lucide-react'
 import { emailLogsAPI, sendEmailWithLogging, EmailLog, EmailStats } from '@/lib/email-api'
 import { Loading } from '@/components/ui/Loading'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import AdminEmailTemplates from './AdminEmailTemplates'
 import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
+import { supabase } from '@/lib/supabase'
+import { getSignedFileUrl } from '@/lib/supabase-api'
 
 type Tab = 'inbox' | 'sent' | 'templates' | 'signatures' | 'email-setup'
+
+interface EnrichedReceivedEmail extends ReceivedEmail {
+  senderName?: string
+  senderAvatar?: string
+  isRead?: boolean
+}
 
 // Email Templates Manager Component
 function EmailTemplatesManager() {
@@ -673,7 +682,7 @@ function EmailTemplatesManager() {
 }
 
 export function AdminEmails() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { showToast } = useToast()
@@ -772,12 +781,14 @@ export function AdminEmails() {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
   const [showSignatureMenu, setShowSignatureMenu] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [attachments, setAttachments] = useState<File[]>([])
   const templateMenuRef = useRef<HTMLDivElement>(null)
   const signatureMenuRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Email addresses
   const [adminEmailAddresses, setAdminEmailAddresses] = useState<any[]>([])
-  const [loadingAddresses, setLoadingAddresses] = useState(false)
+  const [_loadingAddresses, setLoadingAddresses] = useState(false)
   
   // Email templates
   const [emailTemplates, setEmailTemplates] = useState<any[]>([])
@@ -786,17 +797,29 @@ export function AdminEmails() {
   
   // Email signatures
   const [emailSignatures, setEmailSignatures] = useState<any[]>([])
-  const [selectedSignatureId, setSelectedSignatureId] = useState<string>('')
+  const [_selectedSignatureId, setSelectedSignatureId] = useState<string>('')
 
   useEffect(() => {
     if (isAdmin()) {
       if (activeTab === 'sent') {
+        // Clear inbox emails when showing sent
+        setReceivedEmails([])
         loadData()
       } else if (activeTab === 'inbox') {
+        // Clear sent emails when showing inbox
+        setEmailLogs([])
+        setTotalCount(0)
+        setTotalPages(1)
         loadInboxEmails()
       } else if (activeTab === 'signatures') {
+        // Clear both email lists when showing signatures
+        setReceivedEmails([])
+        setEmailLogs([])
         loadSignaturesData()
       } else if (activeTab === 'email-setup') {
+        // Clear both email lists when showing email-setup
+        setReceivedEmails([])
+        setEmailLogs([])
         loadEmailSetupData()
       }
       loadAdminEmailAddresses()
@@ -1000,11 +1023,119 @@ export function AdminEmails() {
         limit: 50,
       })
       
-      setReceivedEmails(result.data)
+      console.log('Admin Inbox - API Result:', result)
+      console.log('Admin Inbox - Emails data:', result.data)
+      console.log('Admin Inbox - Number of emails:', result.data?.length)
+      
+      if (result.data && result.data.length > 0) {
+        console.log('Admin Inbox - Email TO addresses:', result.data.slice(0, 5).map(e => ({ 
+          id: e.id, 
+          to: e.to, 
+          subject: e.subject,
+          hasHtml: !!e.html,
+          hasText: !!e.text,
+          htmlLength: e.html?.length || 0,
+          textLength: e.text?.length || 0,
+        })))
+      }
+      
+      // Get read email IDs from localStorage
+      const getReadEmailIds = (): Set<string> => {
+        try {
+          const stored = localStorage.getItem('adminReadEmails')
+          return stored ? new Set(JSON.parse(stored)) : new Set()
+        } catch {
+          return new Set()
+        }
+      }
+      const readEmailIds = getReadEmailIds()
+      
+      // Enrich emails with sender details (name and avatar from DB)
+      const enrichedEmails = await Promise.all(
+        (result.data || []).map(async (email) => {
+          const enriched: EnrichedReceivedEmail = { ...email }
+          
+          // Extract sender email
+          const senderEmail = email.from.match(/<(.+?)>/)?.[1] || email.from
+          
+          // Try to get sender's full name and avatar from database
+          try {
+            const { data: userData, error } = await supabase
+              .from('users')
+              .select('id, first_name, middle_name, last_name, avatar_path')
+              .eq('email', senderEmail)
+              .maybeSingle()
+            
+            if (!error && userData) {
+              const user = userData as any
+              const nameParts = [
+                user.first_name,
+                user.middle_name,
+                user.last_name
+              ].filter(Boolean)
+              enriched.senderName = nameParts.join(' ')
+              
+              if (user.avatar_path) {
+                const avatarUrl = await getSignedFileUrl(String(user.avatar_path), 3600)
+                if (avatarUrl) {
+                  enriched.senderAvatar = avatarUrl
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching sender details:', error)
+          }
+          
+          // Fallback to email display name or email prefix if no DB match
+          if (!enriched.senderName) {
+            enriched.senderName = email.from.includes('<') 
+              ? email.from.split('<')[0].trim() 
+              : email.from.split('@')[0]
+          }
+          
+          // Check if email is read
+          enriched.isRead = readEmailIds.has(email.id)
+          
+          return enriched
+        })
+      )
+      
+      setReceivedEmails(enrichedEmails)
       setInboxHasMore(result.has_more)
-    } catch (error) {
+      
+      // Update unread count in localStorage for sidebar badge
+      // Count emails where isRead is false or undefined (treat undefined as unread)
+      const unreadCount = enrichedEmails.filter(e => !e.isRead).length
+      if (user?.id) {
+        try {
+          localStorage.setItem(`unreadEmailsCount_${user.id}`, JSON.stringify({
+            count: unreadCount,
+            timestamp: Date.now(),
+          }))
+          // Trigger event for sidebar to update
+          window.dispatchEvent(new CustomEvent('emailsUpdated'))
+        } catch (err) {
+          // Ignore localStorage errors
+          console.error('Error saving unread email count:', err)
+        }
+      }
+    } catch (error: any) {
       console.error('Error loading inbox emails:', error)
-      // If error is due to missing API key or configuration, set empty state
+      
+      // Show appropriate error message based on error type
+      let errorMessage = 'Failed to load inbox emails'
+      
+      if (error?.message?.includes('not configured') || error?.message?.includes('API key')) {
+        errorMessage = 'Resend API key not configured. Please configure it in Admin Settings → Notifications.'
+      } else if (error?.message?.includes('permission') || error?.message?.includes('denied')) {
+        errorMessage = 'Permission denied to access inbox.'
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
+      showToast(`❌ ${errorMessage}`, 'error')
+      
+      // Set empty state
       setReceivedEmails([])
       setInboxHasMore(false)
     } finally {
@@ -1012,17 +1143,108 @@ export function AdminEmails() {
     }
   }
 
-  const handleRetry = async (emailId: string) => {
+  const getEmailPreview = (html?: string, text?: string, maxLength: number = 80) => {
+    if (text && text.trim()) {
+      const cleaned = text.trim().replace(/\s+/g, ' ')
+      return cleaned.substring(0, maxLength) + (cleaned.length > maxLength ? '...' : '')
+    }
+    if (html && html.trim()) {
+      const stripped = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+      return stripped.substring(0, maxLength) + (stripped.length > maxLength ? '...' : '')
+    }
+    return ''
+  }
+
+  const markAdminEmailAsRead = (emailId: string) => {
     try {
-      const success = await emailLogsAPI.retry(emailId)
-      if (success) {
-        showToast('Email resent successfully!', 'success')
-        loadData()
-      } else {
-        showToast('Failed to resend email. Please check the logs.', 'error')
+      const stored = localStorage.getItem('adminReadEmails')
+      const readIds = stored ? new Set(JSON.parse(stored)) : new Set<string>()
+      readIds.add(emailId)
+      localStorage.setItem('adminReadEmails', JSON.stringify(Array.from(readIds)))
+      
+      // Update email in state to mark as read
+      setReceivedEmails(prev => prev.map(e => 
+        e.id === emailId ? { ...e, isRead: true } : e
+      ))
+      
+      // Update unread count
+      if (user?.id) {
+        const currentCount = receivedEmails.filter(e => e.id !== emailId && !e.isRead).length
+        localStorage.setItem(`unreadEmailsCount_${user.id}`, JSON.stringify({
+          count: currentCount,
+          timestamp: Date.now(),
+        }))
+        window.dispatchEvent(new CustomEvent('emailsUpdated'))
+      }
+    } catch (error) {
+      console.error('Error marking email as read:', error)
+    }
+  }
+
+  const handleViewReceivedEmail = async (email: EnrichedReceivedEmail | ReceivedEmail) => {
+    try {
+      // Mark email as read
+      markAdminEmailAsRead(email.id)
+      
+      // Check if email already has content (html/text)
+      const hasContent = email.html || email.text
+      
+      console.log('Admin Inbox - Opening email:', {
+        id: email.id,
+        hasHtml: !!email.html,
+        hasText: !!email.text,
+        htmlLength: email.html?.length || 0,
+        textLength: email.text?.length || 0,
+      })
+      
+      // If email already has content from LIST API, use it directly
+      if (hasContent) {
+        console.log('Admin Inbox - Using content from LIST API')
+        setSelectedReceivedEmail(email)
+        return
+      }
+      
+      // Otherwise, try to fetch full email content
+      console.log('Admin Inbox - No content in LIST API, fetching full email for:', email.id)
+      setLoading(true)
+      
+      try {
+        const fullEmail = await resendInboxAPI.getById(email.id)
+        
+        console.log('Admin Inbox - Full email fetched:', {
+          id: fullEmail.id,
+          hasHtml: !!fullEmail.html,
+          hasText: !!fullEmail.text,
+          htmlLength: fullEmail.html?.length || 0,
+          textLength: fullEmail.text?.length || 0,
+        })
+        
+        // Merge the enriched data (sender info) with full email data
+        const enrichedFullEmail: EnrichedReceivedEmail = {
+          ...fullEmail,
+          senderName: (email as EnrichedReceivedEmail).senderName,      // From list view
+          senderAvatar: (email as EnrichedReceivedEmail).senderAvatar,  // From list view
+        }
+        
+        setSelectedReceivedEmail(enrichedFullEmail)
+      } catch (fetchError: any) {
+        console.error('Error fetching full email:', fetchError)
+        // If fetch fails, still show the email (even without content)
+        // The user can see the metadata at least
+        setSelectedReceivedEmail(email)
+        
+        // Only show error if the email really has no content
+        if (!hasContent) {
+          showToast(`⚠️ Email content unavailable. This may be a limitation of the email service.`, 'warning')
+        }
+      } finally {
+        setLoading(false)
       }
     } catch (error: any) {
-      showToast(error.message || 'Failed to retry email', 'error')
+      console.error('Error loading email details:', error)
+      // Fallback: show email anyway
+      setSelectedReceivedEmail(email)
+      setLoading(false)
     }
   }
 
@@ -1036,12 +1258,30 @@ export function AdminEmails() {
   }
 
   const handleDeleteInbox = async (emailId: string, subject: string) => {
-    setDeleteModal({
-      isOpen: true,
-      type: 'inbox',
-      emailId,
-      emailSubject: subject
-    })
+    if (!confirm(`Hide "${subject || '(no subject)'}"?\n\nNote: This will hide the email from your view. Resend does not support permanent deletion of received emails.`)) {
+      return
+    }
+
+    try {
+      await resendInboxAPI.delete(emailId)
+      showToast('✅ Email hidden from inbox', 'success')
+      
+      // Remove from local state
+      setReceivedEmails(prev => prev.filter(e => e.id !== emailId))
+      
+      // Remove from selection
+      const newSelectedIds = new Set(selectedInboxIds)
+      newSelectedIds.delete(emailId)
+      setSelectedInboxIds(newSelectedIds)
+      
+      // Clear selection if viewing this email
+      if (selectedReceivedEmail?.id === emailId) {
+        setSelectedReceivedEmail(null)
+      }
+    } catch (error: any) {
+      console.error('Error hiding inbox email:', error)
+      showToast(`❌ Failed to hide email: ${error.message}`, 'error')
+    }
   }
 
   const confirmDelete = async () => {
@@ -1271,30 +1511,6 @@ export function AdminEmails() {
     }
   }
 
-  const handleDeleteLogo = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this logo?')) return
-
-    try {
-      await businessLogosAPI.delete(id)
-      showToast('Logo deleted successfully', 'success')
-      loadEmailSetupData()
-    } catch (error) {
-      console.error('Error deleting logo:', error)
-      showToast('Failed to delete logo', 'error')
-    }
-  }
-
-  const handleSetDefaultLogo = async (id: string, logoType: BusinessLogo['logo_type']) => {
-    try {
-      await businessLogosAPI.setDefault(id, logoType)
-      showToast('Default logo updated', 'success')
-      loadEmailSetupData()
-    } catch (error) {
-      console.error('Error setting default logo:', error)
-      showToast('Failed to set default logo', 'error')
-    }
-  }
-
   const handleEditEmail = (email: any) => {
     setEditingEmail(email)
     setShowEmailEditor(true)
@@ -1480,6 +1696,56 @@ export function AdminEmails() {
     }
   }
 
+  // Convert plain text to HTML, preserving formatting for business letters
+  const convertTextToHtml = (text: string): string => {
+    if (!text) return ''
+    
+    // Check if the text already contains HTML tags
+    if (/<[a-z][\s\S]*>/i.test(text)) {
+      // Already HTML, return as-is
+      return text
+    }
+    
+    // Escape HTML special characters
+    const escapeHtml = (str: string) => {
+      const map: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      }
+      return str.replace(/[&<>"']/g, (m) => map[m])
+    }
+    
+    // Split text into lines
+    const lines = text.split(/\n/)
+    const htmlLines: string[] = []
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const trimmedLine = line.trim()
+      
+      if (trimmedLine === '') {
+        // Empty line - add a paragraph break for spacing
+        htmlLines.push('<p>&nbsp;</p>')
+      } else {
+        // Non-empty line - escape and preserve
+        const escapedLine = escapeHtml(trimmedLine)
+        // Use paragraph tags for proper email formatting
+        htmlLines.push(`<p style="margin: 0 0 12px 0;">${escapedLine}</p>`)
+      }
+    }
+    
+    // Wrap in a proper email-friendly HTML structure with inline styles
+    // Inline styles are required for email clients like Gmail
+    return `
+      <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #333333; max-width: 600px;">
+        ${htmlLines.join('\n        ')}
+      </div>
+    `.trim()
+  }
+
   const handleSendEmail = async () => {
     if (!composeData.to || !composeData.subject || !composeData.body) {
       showToast('Please fill in all required fields', 'warning')
@@ -1488,21 +1754,26 @@ export function AdminEmails() {
 
     setSending(true)
     try {
+      // Convert plain text to HTML format for proper email formatting
+      const htmlBody = convertTextToHtml(composeData.body)
+      
       const success = await sendEmailWithLogging({
         to: composeData.to,
         toName: composeData.toName,
         subject: composeData.subject,
-        html: composeData.body,
+        html: htmlBody,
         emailType: composeData.emailType,
         emailCategory: composeData.category,
         tags: composeData.tags,
         fromEmailAddressId: composeData.fromEmailAddressId || undefined,
         replyTo: composeData.replyTo || undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       })
 
       if (success) {
         showToast('Email sent successfully!', 'success')
         setComposing(false)
+        setAttachments([])
         setComposeData({
           to: '',
           toName: '',
@@ -1524,6 +1795,15 @@ export function AdminEmails() {
     } finally {
       setSending(false)
     }
+  }
+
+  const handleFileAdd = (files: File[]) => {
+    const newFiles = Array.from(files)
+    setAttachments(prev => [...prev, ...newFiles])
+  }
+
+  const handleFileRemove = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
   const clearFilters = () => {
@@ -1959,8 +2239,8 @@ export function AdminEmails() {
                                             <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                               {(log.subject && log.subject.length > 40 ? log.subject.substring(0, 40) + '...' : log.subject) || '(no subject)'}
                                             </span>
-                                            <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate">
-                                              - {log.body_text?.substring(0, 30) || ''}
+                                            <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate ml-1">
+                                              - {getEmailPreview(log.body_html || undefined, log.body_text || undefined, 50)}
                                             </span>
                                           </div>
                                         </div>
@@ -2275,7 +2555,7 @@ export function AdminEmails() {
                                         (e.target as HTMLElement).closest('button')) {
                                       return
                                     }
-                                    setSelectedReceivedEmail(email)
+                                    handleViewReceivedEmail(email)
                                   }}
                                 >
                                   {/* Mobile/Tablet Layout */}
@@ -2290,21 +2570,53 @@ export function AdminEmails() {
                                       />
                                     </div>
 
-                                    {/* Avatar */}
+                                    {/* Avatar - Gmail Style */}
                                     <div className="w-10 h-10 flex-shrink-0 mr-2 sm:mr-3">
                                       {(() => {
-                                        const avatar = getAvatarForEmail(email.from);
-                                        return avatar ? (
-                                          <img
-                                            src={avatar.public_url}
-                                            alt={avatar.alt_text || 'Avatar'}
-                                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
-                                          />
-                                        ) : (
-                                          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center border-2 border-gray-200 dark:border-gray-700">
-                                            <Mail className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                                        const enrichedEmail = email as EnrichedReceivedEmail
+                                        // Use sender avatar if available
+                                        if (enrichedEmail.senderAvatar) {
+                                          return (
+                                            <img
+                                              src={enrichedEmail.senderAvatar}
+                                              alt={enrichedEmail.senderName || 'Avatar'}
+                                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                                            />
+                                          )
+                                        }
+                                        // Fallback to business logo if available
+                                        const avatar = getAvatarForEmail(email.from)
+                                        if (avatar) {
+                                          return (
+                                            <img
+                                              src={avatar.public_url}
+                                              alt={avatar.alt_text || 'Avatar'}
+                                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                                            />
+                                          )
+                                        }
+                                        // Show sender initial in colored circle
+                                        const senderName = enrichedEmail.senderName || (email.from.includes('<') 
+                                          ? email.from.split('<')[0].trim() 
+                                          : email.from.split('@')[0])
+                                        const initial = (senderName[0] || 'U').toUpperCase()
+                                        // Generate consistent color based on sender
+                                        const colors = [
+                                          'from-purple-500 to-pink-600',
+                                          'from-blue-500 to-cyan-600',
+                                          'from-green-500 to-emerald-600',
+                                          'from-orange-500 to-red-600',
+                                          'from-indigo-500 to-purple-600',
+                                          'from-pink-500 to-rose-600',
+                                          'from-teal-500 to-green-600',
+                                          'from-yellow-500 to-orange-600',
+                                        ]
+                                        const colorIndex = initial.charCodeAt(0) % colors.length
+                                        return (
+                                          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${colors[colorIndex]} flex items-center justify-center text-white font-semibold text-sm shadow-sm`}>
+                                            {initial}
                                           </div>
-                                        );
+                                        )
                                       })()}
                                     </div>
 
@@ -2314,13 +2626,11 @@ export function AdminEmails() {
                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0 mb-1 sm:mb-0">
                                         <div className="sm:w-40 flex-shrink-0 sm:px-2">
                                           <div className="flex items-center gap-2">
-                                            {email.attachments && email.attachments.length > 0 && (
-                                              <Download className="h-3.5 w-3.5 sm:hidden text-gray-400 flex-shrink-0" />
-                                            )}
-                                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate max-w-[160px] sm:max-w-none">
+                                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[160px] sm:max-w-none">
                                               {(() => {
-                                                const sender = email.from.includes('<') ? email.from.split('<')[0].trim() : email.from.split('@')[0];
-                                                return sender.length > 20 ? sender.substring(0, 20) + '...' : sender;
+                                                const enrichedEmail = email as EnrichedReceivedEmail
+                                                const sender = enrichedEmail.senderName || (email.from.includes('<') ? email.from.split('<')[0].trim() : email.from.split('@')[0])
+                                                return sender.length > 20 ? sender.substring(0, 20) + '...' : sender
                                               })()}
                                             </span>
                                           </div>
@@ -2330,24 +2640,20 @@ export function AdminEmails() {
                                         <div className="flex-1 min-w-0 sm:px-2">
                                           <div className="flex items-center gap-1">
                                             {email.attachments && email.attachments.length > 0 && (
-                                              <Download className="hidden sm:block h-4 w-4 text-gray-400 flex-shrink-0" />
+                                              <Paperclip className="h-4 w-4 text-gray-400 flex-shrink-0" />
                                             )}
                                             <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                               {(email.subject && email.subject.length > 40 ? email.subject.substring(0, 40) + '...' : email.subject) || '(no subject)'}
                                             </span>
-                                            <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate">
-                                              - {email.text?.substring(0, 30) || email.html?.replace(/<[^>]*>/g, '').substring(0, 30) || ''}
-                                            </span>
+                                            {(() => {
+                                              const preview = getEmailPreview(email.html, email.text, 50)
+                                              return preview ? (
+                                                <span className="hidden lg:inline text-sm text-gray-500 dark:text-gray-400 truncate ml-1">
+                                                  - {preview}
+                                                </span>
+                                              ) : null
+                                            })()}
                                           </div>
-                                        </div>
-
-                                        {/* Attachment Indicator (Desktop only) */}
-                                        <div className="hidden sm:flex items-center gap-2 flex-shrink-0 px-2">
-                                          {email.attachments && email.attachments.length > 0 && (
-                                            <span className="text-xs text-gray-500" title={`${email.attachments.length} attachment(s)`}>
-                                              📎
-                                            </span>
-                                          )}
                                         </div>
                                       </div>
 
@@ -3182,6 +3488,7 @@ export function AdminEmails() {
                         setComposing(false)
                         setIsMinimized(false)
                         setShowAdvancedOptions(false)
+                        setAttachments([])
                       }}
                       className="p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                     >
@@ -3286,6 +3593,33 @@ export function AdminEmails() {
                         style={{ minHeight: '300px' }}
                       />
                     </div>
+
+                    {/* Attachments List */}
+                    {attachments.length > 0 && (
+                      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex flex-wrap gap-2">
+                          {attachments.map((file, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm"
+                            >
+                              {file.type.startsWith('image/') ? (
+                                <ImageIcon className="h-4 w-4 text-blue-600" />
+                              ) : (
+                                <FileIcon className="h-4 w-4 text-gray-600" />
+                              )}
+                              <span className="max-w-[150px] truncate">{file.name}</span>
+                              <button
+                                onClick={() => handleFileRemove(index)}
+                                className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                              >
+                                <XCircle className="h-3.5 w-3.5 text-gray-500" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Footer Toolbar */}
                     <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -3426,12 +3760,32 @@ export function AdminEmails() {
                           )}
                         </div>
 
-                        <button
-                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                          title="Attach files"
-                        >
-                          <Paperclip className="h-4 w-4" />
-                        </button>
+                        <div className="relative">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files) {
+                                handleFileAdd(Array.from(e.target.files))
+                                e.target.value = '' // Reset input
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors relative"
+                            title="Attach files"
+                          >
+                            <Paperclip className="h-4 w-4" />
+                            {attachments.length > 0 && (
+                              <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                                {attachments.length}
+                              </span>
+                            )}
+                          </button>
+                        </div>
 
                         <button
                           className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -3476,204 +3830,418 @@ export function AdminEmails() {
 
           {/* Email Detail Modal */}
           {selectedEmail && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    Email Details
-                  </h2>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                {/* Gmail-Style Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                      <Mail className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {selectedEmail.subject || '(no subject)'}
+                      </h2>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={cn(
+                            'px-2 py-0.5 text-xs font-medium rounded-full',
+                            {
+                              'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400':
+                                selectedEmail.status === 'delivered' || selectedEmail.status === 'sent',
+                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400':
+                                selectedEmail.status === 'pending',
+                              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400':
+                                selectedEmail.status === 'failed' || selectedEmail.status === 'bounced',
+                            }
+                          )}
+                        >
+                          {selectedEmail.status}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {format(new Date(selectedEmail.created_at), 'MMM d, yyyy • h:mm a')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setSelectedEmail(null)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                   >
-                    <X className="h-6 w-6" />
+                    <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                   </button>
                 </div>
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Recipient</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {selectedEmail.recipient_name || selectedEmail.recipient_email}
-                        </p>
-                        <p className="text-sm text-gray-500">{selectedEmail.recipient_email}</p>
+
+                {/* Email Content */}
+                <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
+                  {/* Recipient Info - Gmail Style */}
+                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                        {(selectedEmail.recipient_name || selectedEmail.recipient_email)[0].toUpperCase()}
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Status</label>
-                        <p>
-                          <span
-                            className={cn(
-                              'px-2 py-1 text-xs font-medium rounded-full',
-                              {
-                                'bg-green-100 text-green-800':
-                                  selectedEmail.status === 'delivered' ||
-                                  selectedEmail.status === 'sent',
-                                'bg-yellow-100 text-yellow-800':
-                                  selectedEmail.status === 'pending',
-                                'bg-red-100 text-red-800':
-                                  selectedEmail.status === 'failed' ||
-                                  selectedEmail.status === 'bounced',
-                              }
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {selectedEmail.recipient_name || selectedEmail.recipient_email.split('@')[0]}
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              to {selectedEmail.recipient_email}
+                            </p>
+                          </div>
+                          <div className="text-right text-xs text-gray-500 dark:text-gray-400">
+                            {selectedEmail.sent_at && (
+                              <p>{format(new Date(selectedEmail.sent_at), 'h:mm a')}</p>
                             )}
-                          >
-                            {selectedEmail.status}
-                          </span>
-                        </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Subject</label>
-                      <p className="text-gray-900 dark:text-gray-100">{selectedEmail.subject}</p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Created At</label>
-                      <p className="text-gray-900 dark:text-gray-100">
-                        {format(new Date(selectedEmail.created_at), 'PPpp')}
-                      </p>
-                    </div>
-
-                    {selectedEmail.sent_at && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Sent At</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {format(new Date(selectedEmail.sent_at), 'PPpp')}
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedEmail.error_message && (
-                      <div>
-                        <label className="text-sm font-medium text-red-500">Error Message</label>
-                        <p className="text-red-600">{selectedEmail.error_message}</p>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Email Body</label>
-                      <div className="mt-2 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto">
-                        <div
-                          dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || '' }}
-                        />
+                  {/* Error Message (if any) */}
+                  {selectedEmail.error_message && (
+                    <div className="mx-6 mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-red-900 dark:text-red-100">Delivery Error</p>
+                          <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                            {selectedEmail.error_message}
+                          </p>
+                        </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* Email Body - Gmail Style */}
+                  <div className="px-6 py-6">
+                    <div 
+                      className="prose prose-sm dark:prose-invert max-w-none"
+                      style={{
+                        fontSize: '14px',
+                        lineHeight: '1.6',
+                        color: 'inherit'
+                      }}
+                      dangerouslySetInnerHTML={{ 
+                        __html: selectedEmail.body_html || selectedEmail.body_text || '<p class="text-gray-500 italic">No content</p>' 
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Action Footer - Gmail Style */}
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setComposeData({
+                          ...composeData,
+                          to: selectedEmail.recipient_email,
+                          toName: selectedEmail.recipient_name || '',
+                          subject: `Re: ${selectedEmail.subject || ''}`,
+                          body: `\n\n---\nOn ${format(new Date(selectedEmail.created_at), 'PPpp')}, you wrote:\n${selectedEmail.body_text || ''}`
+                        })
+                        setComposing(true)
+                        setSelectedEmail(null)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                    >
+                      <Reply className="h-4 w-4" />
+                      Reply
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Forward logic
+                        setComposeData({
+                          ...composeData,
+                          to: '',
+                          toName: '',
+                          subject: `Fwd: ${selectedEmail.subject || ''}`,
+                          body: `\n\n---\nForwarded message from ${selectedEmail.recipient_email}:\n${selectedEmail.body_text || ''}`
+                        })
+                        setComposing(true)
+                        setSelectedEmail(null)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                    >
+                      <Forward className="h-4 w-4" />
+                      Forward
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Print"
+                    >
+                      <Printer className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSent(selectedEmail.id, selectedEmail.subject || '(no subject)')}
+                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Received Email Detail Modal */}
+          {/* Received Email Detail Modal - Gmail Style */}
           {selectedReceivedEmail && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    Received Email
-                  </h2>
-                  <button
-                    onClick={() => setSelectedReceivedEmail(null)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">From</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {selectedReceivedEmail.from}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">To</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {selectedReceivedEmail.to.join(', ')}
-                        </p>
-                      </div>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                {/* Gmail-Style Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-white dark:from-gray-800 dark:to-gray-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-
-                    {selectedReceivedEmail.cc && selectedReceivedEmail.cc.length > 0 && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">CC</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {selectedReceivedEmail.cc.join(', ')}
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedReceivedEmail.reply_to && selectedReceivedEmail.reply_to.length > 0 && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Reply-To</label>
-                        <p className="text-gray-900 dark:text-gray-100">
-                          {selectedReceivedEmail.reply_to.join(', ')}
-                        </p>
-                      </div>
-                    )}
-
                     <div>
-                      <label className="text-sm font-medium text-gray-500">Subject</label>
-                      <p className="text-gray-900 dark:text-gray-100">{selectedReceivedEmail.subject}</p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Received At</label>
-                      <p className="text-gray-900 dark:text-gray-100">
-                        {format(new Date(selectedReceivedEmail.created_at), 'PPpp')}
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {selectedReceivedEmail.subject || '(no subject)'}
+                      </h2>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Inbox • {format(new Date(selectedReceivedEmail.created_at), 'MMM d, yyyy • h:mm a')}
                       </p>
                     </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedReceivedEmail(null)}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                  </button>
+                </div>
 
-                    {selectedReceivedEmail.message_id && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Message ID</label>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
-                          {selectedReceivedEmail.message_id}
+                {/* Email Content */}
+                <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
+                  {/* Sender Info - Gmail Style with Avatar */}
+                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                    <div className="flex items-start gap-3">
+                      {/* Sender Avatar */}
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+                        {(() => {
+                          const fromEmail = selectedReceivedEmail.from || '';
+                          const name = fromEmail.match(/^(.*?)</) ? fromEmail.match(/^(.*?)</)[1].trim() : fromEmail.split('@')[0];
+                          return (name[0] || 'U').toUpperCase();
+                        })()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {(() => {
+                                const fromEmail = selectedReceivedEmail.from || '';
+                                const name = fromEmail.match(/^(.*?)</) ? fromEmail.match(/^(.*?)</)[1].trim() : fromEmail;
+                                return name;
+                              })()}
+                            </p>
+                            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-1">
+                              <p>
+                                <span className="text-gray-500">to</span> {Array.isArray(selectedReceivedEmail.to) ? selectedReceivedEmail.to.join(', ') : selectedReceivedEmail.to}
+                              </p>
+                              {selectedReceivedEmail.cc && selectedReceivedEmail.cc.length > 0 && (
+                                <p>
+                                  <span className="text-gray-500">cc</span> {selectedReceivedEmail.cc.join(', ')}
+                                </p>
+                              )}
+                              {selectedReceivedEmail.reply_to && selectedReceivedEmail.reply_to.length > 0 && (
+                                <p>
+                                  <span className="text-gray-500">reply-to</span> {selectedReceivedEmail.reply_to.join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                            <p>{format(new Date(selectedReceivedEmail.created_at), 'h:mm a')}</p>
+                            {selectedReceivedEmail.message_id && (
+                              <p className="font-mono text-[10px] max-w-[120px] truncate" title={selectedReceivedEmail.message_id}>
+                                ID: {selectedReceivedEmail.message_id.substring(0, 8)}...
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Attachments (if any) */}
+                  {selectedReceivedEmail.attachments && selectedReceivedEmail.attachments.length > 0 && (
+                    <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700/50">
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        {selectedReceivedEmail.attachments.length} Attachment{selectedReceivedEmail.attachments.length > 1 ? 's' : ''}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedReceivedEmail.attachments.map((attachment: any, idx: number) => (
+                          <div 
+                            key={idx} 
+                            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:shadow-sm transition-shadow"
+                          >
+                            <div className="w-8 h-8 rounded bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {attachment.filename}
+                              </p>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                                {(attachment.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                if (attachment.download_url) {
+                                  window.open(attachment.download_url, '_blank')
+                                } else {
+                                  showToast('Download URL not available for this attachment', 'warning')
+                                }
+                              }}
+                              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded"
+                              title="Download attachment"
+                            >
+                              <Download className="h-3.5 w-3.5 text-gray-500" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Email Body - Gmail Style with proper HTML handling */}
+                  <div className="px-6 py-6">
+                    {selectedReceivedEmail.html ? (
+                      <div 
+                        className="prose prose-sm dark:prose-invert max-w-none"
+                        style={{
+                          fontSize: '14px',
+                          lineHeight: '1.6',
+                          color: 'inherit',
+                          wordWrap: 'break-word',
+                          overflowWrap: 'break-word'
+                        }}
+                        dangerouslySetInnerHTML={{ __html: selectedReceivedEmail.html }}
+                      />
+                    ) : selectedReceivedEmail.text ? (
+                      <div 
+                        className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100"
+                        style={{
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          lineHeight: '1.6'
+                        }}
+                      >
+                        {selectedReceivedEmail.text}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 mb-3">
+                          <AlertCircle className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500 dark:text-gray-400 italic">No content available</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                          This email may have been sent without any body content
                         </p>
                       </div>
                     )}
+                  </div>
+                </div>
 
-                    {selectedReceivedEmail.attachments && selectedReceivedEmail.attachments.length > 0 && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-500 mb-2 block">
-                          Attachments ({selectedReceivedEmail.attachments.length})
-                        </label>
-                        <div className="space-y-2">
-                          {selectedReceivedEmail.attachments.map((attachment: any, idx: number) => (
-                            <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                              <Download className="h-4 w-4 text-gray-500" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {attachment.filename}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {attachment.content_type} • {(attachment.size / 1024).toFixed(1)} KB
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="text-sm font-medium text-gray-500 mb-2 block">Email Content</label>
-                      {selectedReceivedEmail.html ? (
-                        <div 
-                          className="prose dark:prose-invert max-w-none p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
-                          dangerouslySetInnerHTML={{ __html: selectedReceivedEmail.html }}
-                        />
-                      ) : selectedReceivedEmail.text ? (
-                        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
-                          {selectedReceivedEmail.text}
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 italic">No content available</p>
-                      )}
-                    </div>
+                {/* Action Footer - Gmail Style */}
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const senderEmail = selectedReceivedEmail.from.match(/<(.+?)>/) 
+                          ? selectedReceivedEmail.from.match(/<(.+?)>/)[1] 
+                          : selectedReceivedEmail.from;
+                        setComposeData({
+                          ...composeData,
+                          to: senderEmail,
+                          toName: selectedReceivedEmail.from.match(/^(.*?)</) 
+                            ? selectedReceivedEmail.from.match(/^(.*?)</)[1].trim() 
+                            : '',
+                          subject: selectedReceivedEmail.subject?.startsWith('Re:') 
+                            ? selectedReceivedEmail.subject 
+                            : `Re: ${selectedReceivedEmail.subject || ''}`,
+                          body: `\n\n---\nOn ${format(new Date(selectedReceivedEmail.created_at), 'PPpp')}, ${selectedReceivedEmail.from} wrote:\n${selectedReceivedEmail.text || selectedReceivedEmail.html || ''}`
+                        })
+                        setComposing(true)
+                        setSelectedReceivedEmail(null)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium shadow-sm"
+                    >
+                      <Reply className="h-4 w-4" />
+                      Reply
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Reply All logic
+                        const senderEmail = selectedReceivedEmail.from.match(/<(.+?)>/) 
+                          ? selectedReceivedEmail.from.match(/<(.+?)>/)[1] 
+                          : selectedReceivedEmail.from;
+                        setComposeData({
+                          ...composeData,
+                          to: senderEmail,
+                          toName: '',
+                          subject: `Re: ${selectedReceivedEmail.subject || ''}`,
+                          body: `\n\n---\nOn ${format(new Date(selectedReceivedEmail.created_at), 'PPpp')}, ${selectedReceivedEmail.from} wrote:\n${selectedReceivedEmail.text || selectedReceivedEmail.html || ''}`
+                        })
+                        setComposing(true)
+                        setSelectedReceivedEmail(null)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                    >
+                      <ReplyAll className="h-4 w-4" />
+                      Reply All
+                    </button>
+                    <button
+                      onClick={() => {
+                        setComposeData({
+                          ...composeData,
+                          to: '',
+                          toName: '',
+                          subject: `Fwd: ${selectedReceivedEmail.subject || ''}`,
+                          body: `\n\n---\nForwarded message from ${selectedReceivedEmail.from}:\nDate: ${format(new Date(selectedReceivedEmail.created_at), 'PPpp')}\nSubject: ${selectedReceivedEmail.subject || ''}\n\n${selectedReceivedEmail.text || selectedReceivedEmail.html || ''}`
+                        })
+                        setComposing(true)
+                        setSelectedReceivedEmail(null)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                    >
+                      <Forward className="h-4 w-4" />
+                      Forward
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Print"
+                    >
+                      <Printer className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const url = `mailto:${selectedReceivedEmail.from}?subject=${encodeURIComponent(selectedReceivedEmail.subject || '')}`;
+                        window.open(url, '_blank');
+                      }}
+                      className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Open in mail client"
+                    >
+                      <ExternalLink className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteInbox(selectedReceivedEmail.id, selectedReceivedEmail.subject || '(no subject)')}
+                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    </button>
                   </div>
                 </div>
               </div>

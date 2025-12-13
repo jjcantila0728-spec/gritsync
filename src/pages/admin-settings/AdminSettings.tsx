@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
-import { Shield, Settings, Bell, Lock, DollarSign, Calculator, Server, Tag, Mail } from 'lucide-react'
+import { Shield, Settings, Bell, Lock, DollarSign, Calculator, Server, Tag, Mail, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Tab {
@@ -21,6 +21,7 @@ const tabs: Tab[] = [
   { id: 'payment', label: 'Payment', icon: DollarSign, path: '/admin/settings/payment' },
   { id: 'promo-codes', label: 'Promo Codes', icon: Tag, path: '/admin/settings/promo-codes' },
   { id: 'currency', label: 'Currency', icon: Calculator, path: '/admin/settings/currency' },
+  { id: 'services', label: 'Services', icon: Package, path: '/admin/settings/services' },
   { id: 'system', label: 'System', icon: Server, path: '/admin/settings/system' },
 ]
 
@@ -58,23 +59,23 @@ export function AdminSettings() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
-      <div className="flex">
+      <div className="flex flex-col lg:flex-row">
         <Sidebar />
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+        <main className="flex-1 w-full p-3 sm:p-4 md:p-5 lg:p-6 xl:p-8">
+          <div className="mb-4 sm:mb-5 md:mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
               Admin Settings
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
               Manage system configuration and preferences
             </p>
           </div>
 
           {/* Tabs */}
-          <div className="mb-6">
-            <div className="border-b border-gray-200 dark:border-gray-700">
+          <div className="mb-4 sm:mb-5 md:mb-6 -mx-3 sm:-mx-4 md:mx-0">
+            <div className="border-b border-gray-200 dark:border-gray-700 overflow-hidden">
               <nav 
-                className="-mb-px flex space-x-1 overflow-x-auto" 
+                className="-mb-px flex space-x-0.5 sm:space-x-1 overflow-x-auto scrollbar-hide px-3 sm:px-4 md:px-0" 
                 aria-label="Tabs"
                 onKeyDown={(e) => {
                   // Keyboard navigation: Arrow keys to switch tabs
@@ -102,7 +103,7 @@ export function AdminSettings() {
                       key={tab.id}
                       onClick={() => navigate(tab.path)}
                       className={cn(
-                        'group inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
+                        'group inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 md:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all whitespace-nowrap flex-shrink-0',
                         'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-t-lg',
                         isActive
                           ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-900/20'
@@ -112,7 +113,7 @@ export function AdminSettings() {
                       tabIndex={isActive ? 0 : -1}
                     >
                       <Icon className={cn(
-                        'h-4 w-4 transition-colors',
+                        'h-3.5 w-3.5 sm:h-4 sm:w-4 transition-colors flex-shrink-0',
                         isActive
                           ? 'text-primary-600 dark:text-primary-400'
                           : 'text-gray-400 group-hover:text-gray-500 dark:text-gray-500'
@@ -126,7 +127,7 @@ export function AdminSettings() {
           </div>
 
           {/* Tab Content */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <Outlet />
           </div>
         </main>

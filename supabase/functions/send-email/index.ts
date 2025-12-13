@@ -1,5 +1,20 @@
+// Declare Deno global for TypeScript
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined
+  }
+}
+
+// @ts-ignore - Deno URL imports
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// @ts-ignore - Deno URL imports
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+interface EmailAttachment {
+  filename: string
+  content: string // base64 encoded
+  type?: string
+}
 
 interface EmailRequest {
   to: string
@@ -7,6 +22,7 @@ interface EmailRequest {
   html: string
   text?: string
   from?: string
+  attachments?: EmailAttachment[]
 }
 
 /**
@@ -44,7 +60,7 @@ async function getEmailConfig(supabaseClient: any) {
     smtpPort: settingsMap.smtpPort || '587',
     smtpUser: settingsMap.smtpUser || '',
     smtpPassword: settingsMap.smtpPassword || '',
-    smtpSecure: settingsMap.smtpSecure === 'true' || settingsMap.smtpSecure === true,
+    smtpSecure: settingsMap.smtpSecure === 'true',
   }
 }
 
@@ -127,7 +143,7 @@ serve(async (req) => {
       )
     }
 
-    const { to, subject, html, text, from } = requestData
+    const { to, subject, html, text, from, attachments } = requestData
 
     // Check for missing or empty required fields
     if (!to || to.trim() === '') {
@@ -183,12 +199,41 @@ serve(async (req) => {
 
     // Use Resend if configured
     if (config.serviceProvider === 'resend' && config.resendApiKey) {
-      const emailPayload = {
+      // Build email payload with anti-spam headers
+      const emailPayload: any = {
         from: from || `${config.fromName} <${config.fromEmail}>`,
         to: [to],
         subject,
         html,
         text: text || html.replace(/<[^>]*>/g, ''),
+        // Anti-spam headers to improve deliverability
+        headers: {
+          'X-Entity-Ref-ID': `gritsync-${Date.now()}`,
+          'X-Mailer': 'GritSync Email Service',
+          'List-Unsubscribe': `<mailto:unsubscribe@gritsync.com>`,
+          'Precedence': 'bulk'
+        },
+        // Add tags for better tracking
+        tags: [
+          {
+            name: 'environment',
+            value: Deno.env.get('ENVIRONMENT') || 'production'
+          },
+          {
+            name: 'source',
+            value: 'gritsync-app'
+          }
+        ]
+      }
+
+      // Add attachments if provided
+      if (requestData.attachments && Array.isArray(requestData.attachments) && requestData.attachments.length > 0) {
+        emailPayload.attachments = requestData.attachments.map((att: EmailAttachment) => ({
+          filename: att.filename,
+          content: att.content, // base64 encoded content
+          type: att.type || 'application/octet-stream'
+        }))
+        console.log('Adding attachments:', requestData.attachments.length)
       }
       
       console.log('Sending email via Resend:', {
@@ -196,7 +241,8 @@ serve(async (req) => {
         from: emailPayload.from,
         subject: emailPayload.subject,
         hasApiKey: !!config.resendApiKey,
-        apiKeyPrefix: config.resendApiKey ? config.resendApiKey.substring(0, 7) + '...' : 'none'
+        apiKeyPrefix: config.resendApiKey ? config.resendApiKey.substring(0, 7) + '...' : 'none',
+        headers: emailPayload.headers
       })
       
       const resendResponse = await fetch('https://api.resend.com/emails', {

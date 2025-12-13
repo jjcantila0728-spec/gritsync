@@ -79,7 +79,11 @@ export interface SendEmailOptions {
   metadata?: Record<string, any>
   tags?: string[]
   fromEmailAddressId?: string  // ID from email_addresses table
+  fromName?: string  // Sender display name
   replyTo?: string
+  cc?: string
+  bcc?: string
+  attachments?: File[]  // File attachments
 }
 
 /**
@@ -92,6 +96,7 @@ export const emailLogsAPI = {
   getAll: async (options?: {
     page?: number
     pageSize?: number
+    limit?: number
     status?: string
     emailType?: string
     emailCategory?: string
@@ -99,10 +104,12 @@ export const emailLogsAPI = {
     startDate?: string
     endDate?: string
     recipientUserId?: string
+    fromEmailAddressId?: string
   }) => {
     const {
       page = 1,
-      pageSize = 50,
+      pageSize,
+      limit,
       status,
       emailType,
       emailCategory,
@@ -110,7 +117,10 @@ export const emailLogsAPI = {
       startDate,
       endDate,
       recipientUserId,
+      fromEmailAddressId,
     } = options || {}
+
+    const effectivePageSize = limit || pageSize || 50
 
     let query = supabase
       .from('email_logs')
@@ -130,6 +140,9 @@ export const emailLogsAPI = {
     if (recipientUserId) {
       query = query.eq('recipient_user_id', recipientUserId)
     }
+    if (fromEmailAddressId) {
+      query = query.eq('from_email_address_id', fromEmailAddressId)
+    }
     if (search) {
       query = query.or(
         `recipient_email.ilike.%${search}%,subject.ilike.%${search}%,recipient_name.ilike.%${search}%`
@@ -143,8 +156,8 @@ export const emailLogsAPI = {
     }
 
     // Apply pagination
-    const start = (page - 1) * pageSize
-    const end = start + pageSize - 1
+    const start = (page - 1) * effectivePageSize
+    const end = start + effectivePageSize - 1
     query = query.range(start, end)
 
     const { data, error, count } = await query
@@ -156,10 +169,11 @@ export const emailLogsAPI = {
 
     return {
       data: data as EmailLog[],
+      emails: data as EmailLog[],  // Alias for compatibility
       count: count || 0,
       page,
-      pageSize,
-      totalPages: count ? Math.ceil(count / pageSize) : 0,
+      pageSize: effectivePageSize,
+      totalPages: count ? Math.ceil(count / effectivePageSize) : 0,
     }
   },
 
@@ -537,7 +551,6 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
       text,
       emailType,
       emailCategory,
-      recipientUserId: recipientUserId,
       recipientName: toName,
       applicationId,
       quotationId,
@@ -546,21 +559,37 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
       metadata,
       tags,
       fromEmailAddressId: options.fromEmailAddressId,
+      fromName: options.fromName,
       replyTo: options.replyTo,
+      cc: options.cc,
+      bcc: options.bcc,
+      attachments: options.attachments,
     })
 
     // Update log based on result
-    if (success) {
-      await emailLogsAPI.update(emailLog.id, {
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-      })
-    } else {
-      await emailLogsAPI.update(emailLog.id, {
-        status: 'failed',
-        failed_at: new Date().toISOString(),
-        error_message: 'Failed to send email',
-      })
+    try {
+      if (success) {
+        await emailLogsAPI.update(emailLog.id, {
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        })
+      } else {
+        await emailLogsAPI.update(emailLog.id, {
+          status: 'failed',
+          failed_at: new Date().toISOString(),
+          error_message: 'Failed to send email',
+        })
+      }
+    } catch (updateError: any) {
+      // Log the error but don't fail if email was sent successfully
+      console.error('Error updating email log status:', updateError)
+      console.error('Note: Email was still sent successfully, only the status update failed')
+      
+      // If the email was sent successfully, still return true
+      // The update failure is likely due to RLS policies
+      if (success) {
+        console.warn('Returning success=true despite log update failure since email was sent')
+      }
     }
 
     return success

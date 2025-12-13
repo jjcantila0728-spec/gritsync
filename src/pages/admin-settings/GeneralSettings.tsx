@@ -70,22 +70,22 @@ export function GeneralSettings() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-5 md:p-6">
         <Loading text="Loading settings..." />
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-2 mb-6">
-        <Settings className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+    <div className="p-4 sm:p-5 md:p-6">
+      <div className="flex items-center gap-2 mb-4 sm:mb-5 md:mb-6">
+        <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
           General Settings
         </h2>
       </div>
 
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-3 sm:space-y-4 max-w-2xl">
         <div>
           <Input
             label="Site Name"
@@ -99,7 +99,7 @@ export function GeneralSettings() {
             placeholder="GritSync"
           />
           {validationErrors.siteName && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.siteName}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{validationErrors.siteName}</p>
           )}
         </div>
 
@@ -117,7 +117,7 @@ export function GeneralSettings() {
             placeholder="admin@gritsync.com"
           />
           {validationErrors.siteEmail && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.siteEmail}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{validationErrors.siteEmail}</p>
           )}
         </div>
 
@@ -135,7 +135,7 @@ export function GeneralSettings() {
             placeholder="support@gritsync.com"
           />
           {validationErrors.supportEmail && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.supportEmail}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{validationErrors.supportEmail}</p>
           )}
         </div>
 
@@ -153,23 +153,23 @@ export function GeneralSettings() {
             placeholder="+1 (509) 270-3437"
           />
           {validationErrors.phoneNumber && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.phoneNumber}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{validationErrors.phoneNumber}</p>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
             This phone number will be displayed across all pages (Footer, Contact, Terms, Privacy, etc.)
           </p>
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="flex-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
               Maintenance Mode
             </label>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               Temporarily disable public access to the site
             </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
             <input
               type="checkbox"
               checked={settings.maintenanceMode}
@@ -181,17 +181,18 @@ export function GeneralSettings() {
         </div>
 
         {settings.maintenanceMode && (
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
+          <div className="p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <p className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-300">
               ⚠ Maintenance mode is active. Users will see a maintenance message.
             </p>
           </div>
         )}
 
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <Button
             onClick={handleSave}
             disabled={saving}
+            className="w-full sm:w-auto"
           >
             {saving ? (
               <>

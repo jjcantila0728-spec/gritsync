@@ -14,6 +14,7 @@ import { CardSkeleton } from '@/components/ui/Loading'
 import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 // Helper function to format MM/YYYY input
 const formatMMYYYY = (value: string): string => {
@@ -436,6 +437,73 @@ export function NCLEXApplication() {
     return 'default'
   }
 
+  // Fetch GritSync email whenever component mounts or user changes
+  useEffect(() => {
+    const fetchGritSyncEmail = async () => {
+      if (user?.id) {
+        console.log('🔍 Fetching GritSync email for user ID:', user.id)
+        console.log('🔍 User auth email:', user.email)
+        
+        try {
+          // Try fetching from email_addresses table first
+          const { data: emailData, error: emailError } = await supabase
+            .from('email_addresses')
+            .select('email_address, address_type, is_primary, is_active')
+            .eq('user_id', user.id)
+            .eq('address_type', 'client')
+            .eq('is_primary', true)
+            .single()
+          
+          console.log('📊 Query result:', { data: emailData, error: emailError })
+          
+          if (emailError) {
+            console.error('❌ Error fetching GritSync email in useEffect:', emailError)
+            console.error('❌ Error details:', JSON.stringify(emailError, null, 2))
+            
+            // Try using active_email_addresses view instead
+            console.log('🔄 Trying active_email_addresses view...')
+            const { data: viewData, error: viewError } = await supabase
+              .from('active_email_addresses')
+              .select('email_address')
+              .eq('user_id', user.id)
+              .eq('address_type', 'client')
+              .single()
+            
+            console.log('📊 View result:', { data: viewData, error: viewError })
+            
+            if (viewData?.email_address) {
+              console.log('✅ GritSync email found in VIEW:', viewData.email_address)
+              setEmail(viewData.email_address)
+              return
+            }
+            
+            // Try without .single() to see all results
+            const { data: allEmails, error: allError } = await supabase
+              .from('email_addresses')
+              .select('*')
+              .eq('user_id', user.id)
+            
+            console.log('📊 All emails for user:', allEmails)
+            console.log('📊 All emails error:', allError)
+          }
+          
+          if (emailData?.email_address) {
+            console.log('✅ GritSync email found in useEffect:', emailData.email_address)
+            setEmail(emailData.email_address)
+          } else {
+            console.log('⚠️ No GritSync email found, using auth email:', user.email)
+            setEmail(user.email || '')
+          }
+        } catch (error) {
+          console.error('❌ Exception in useEffect fetching GritSync email:', error)
+          setEmail(user.email || '')
+        }
+      }
+    }
+
+    fetchGritSyncEmail()
+  }, [user])
+
   // Load saved details and documents on mount
   useEffect(() => {
     if (user) {
@@ -594,13 +662,49 @@ export function NCLEXApplication() {
         nursing_school_major?: string
         nursing_school_diploma_date?: string
       } | null
+      
+      // Fetch GritSync email from email_addresses table
+      let gritsyncEmail = ''
+      if (user?.id) {
+        try {
+          const { data: emailData, error: emailError } = await supabase
+            .from('email_addresses')
+            .select('email_address')
+            .eq('user_id', user.id)
+            .eq('address_type', 'client')
+            .eq('is_primary', true)
+            .single()
+          
+          if (emailError) {
+            console.error('❌ Error fetching GritSync email:', emailError)
+          }
+          
+          if (emailData?.email_address) {
+            gritsyncEmail = emailData.email_address
+            console.log('✅ GritSync email found:', gritsyncEmail)
+          } else {
+            console.log('⚠️ No GritSync email found in database')
+          }
+        } catch (error) {
+          // Fallback to user email if GritSync email not found
+          console.error('❌ Exception fetching GritSync email:', error)
+        }
+      }
+      
       if (typedDetails) {
         // Auto-populate all fields from saved details
         setFirstName(typedDetails.first_name || '')
         setMiddleName(typedDetails.middle_name || '')
         setLastName(typedDetails.last_name || '')
         setMobileNumber(typedDetails.mobile_number || '')
-        setEmail(typedDetails.email || user?.email || '')
+        // Always prioritize GritSync email over user_details.email
+        // NEVER use typedDetails.email to avoid old Gmail addresses
+        const finalEmail = gritsyncEmail || user?.email || ''
+        console.log('📧 Setting email to:', finalEmail)
+        console.log('   - GritSync email:', gritsyncEmail || '(not found)')
+        console.log('   - Auth email:', user?.email || '(not found)')
+        console.log('   - user_details.email (IGNORED):', typedDetails.email || '(none)')
+        setEmail(finalEmail)
         setGender(typedDetails.gender || '')
         setMaritalStatus(typedDetails.marital_status || '')
         setSingleFullName(typedDetails.single_full_name || '')
@@ -1385,14 +1489,9 @@ export function NCLEXApplication() {
                     label="Email Address *"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onBlur={() => handleFieldBlur('email')}
-                    required
-                    error={touchedFields.email ? validationErrors.email : undefined}
-                    className={cn(
-                      getFieldStatus('email', email) === 'success' && 'border-green-500 focus:ring-green-500',
-                      getFieldStatus('email', email) === 'error' && 'border-red-500 focus:ring-red-500'
-                    )}
+                    disabled
+                    className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
+                    hint="Auto-generated from your My Details profile"
                   />
                 </div>
                 <Select

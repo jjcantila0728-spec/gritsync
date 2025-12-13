@@ -60,6 +60,7 @@ export function Header() {
     return null
   })
   const [fullName, setFullName] = useState<string | null>(null)
+  const [gritsyncEmail, setGritsyncEmail] = useState<string | null>(null)
 
   // Helper to set firstName and cache it
   const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
@@ -439,10 +440,28 @@ export function Header() {
         .catch(() => {
           // Keep the current name if fetch fails
         })
+      
+      // Fetch GritSync email address
+      supabase
+        .from('email_addresses')
+        .select('email_address')
+        .eq('user_id', user.id)
+        .eq('address_type', 'client')
+        .eq('is_primary', true)
+        .maybeSingle() // Use maybeSingle() instead of single() to avoid 406 error
+        .then(({ data, error }) => {
+          if (!error && data?.email_address) {
+            setGritsyncEmail(data.email_address)
+          }
+        })
+        .catch(() => {
+          // Keep the current email if fetch fails
+        })
     } else {
       // Only reset if user is actually null (logged out)
       setFirstName(null)
       setFullName(null)
+      setGritsyncEmail(null)
       setAvatarUrl(null)
       avatarPathRef.current = null
       currentUserIdRef.current = null
@@ -881,10 +900,10 @@ export function Header() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                              {displayFullName || user.email}
+                              {displayFullName || gritsyncEmail || user.email}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                              {user.email}
+                              {gritsyncEmail || user.email}
                             </p>
                           </div>
                         </div>

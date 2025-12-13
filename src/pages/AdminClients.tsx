@@ -153,7 +153,7 @@ export function AdminClients() {
                 .from('processing_accounts')
                 .select('email')
                 .eq('application_id', typedApp.id || '')
-                .eq('account_type', 'gmail')
+                .eq('account_type', 'gritsync')
                 .limit(1)
               
               const typedGmailAccounts = gmailAccounts as Array<{ email?: string }> | null
