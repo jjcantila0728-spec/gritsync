@@ -1,58 +1,75 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+export { 
+  apiClient,
+  authAPI,
+  applicationsAPI,
+  paymentsAPI,
+  notificationsAPI,
+  quotationsAPI,
+  donationsAPI,
+  careersAPI,
+  testimonialsAPI,
+  settingsAPI,
+  dashboardAPI,
+  usersAPI,
+} from './api-client';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.'
-  )
+export class AppError extends Error {
+  type: string;
+  severity: string;
+  
+  constructor(message: string, type = 'UNKNOWN', severity = 'MEDIUM') {
+    super(message);
+    this.type = type;
+    this.severity = severity;
+    this.name = 'AppError';
+  }
 }
 
-// Create Supabase client - 100% Supabase, no fallback
-// SINGLETON: Only create one instance to prevent connection pool exhaustion
-// Note: Using SupabaseClient<any> temporarily due to outdated database.types.ts
-// TODO: Regenerate database.types.ts with `supabase gen types typescript` to restore strict typing
-// Note: If you see "Multiple GoTrueClient instances detected" warning in development,
-// this is likely due to React Strict Mode mounting components twice. This is harmless
-// and only occurs in development. The singleton pattern ensures only one instance exists.
-export const supabase: SupabaseClient<any> = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true, // Automatically refresh expired tokens
-    persistSession: true, // Persist session in localStorage
-    detectSessionInUrl: true, // Detect auth session from URL (OAuth redirects)
-    // Refresh token before it expires (default is 3600s, refresh at 3300s)
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'gritsync-web',
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-    },
-  },
-  // Realtime configuration
-  realtime: {
-    // Maximum number of channels per connection (default: 100)
-    // Reducing this prevents connection overload
-    params: {
-      eventsPerSecond: 10, // Limit events per second to prevent overload
-    },
-  },
-  // Database configuration
-  db: {
-    schema: 'public',
-  },
-})
+export const ErrorType = {
+  NETWORK: 'NETWORK',
+  AUTH: 'AUTH',
+  VALIDATION: 'VALIDATION',
+  NOT_FOUND: 'NOT_FOUND',
+  SERVER: 'SERVER',
+  UNKNOWN: 'UNKNOWN',
+} as const;
 
-// Re-export error handling utilities
-export { 
-  handleSupabaseError, 
-  normalizeError, 
-  getUserFriendlyMessage,
-  classifyError,
-  type AppError,
-  ErrorType,
-  ErrorSeverity
-} from './error-handler'
+export const ErrorSeverity = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+} as const;
 
+export function handleSupabaseError(error: any): never {
+  throw new AppError(error?.message || 'An error occurred');
+}
+
+export function normalizeError(error: any, _context?: any): AppError {
+  if (error instanceof AppError) {
+    return error;
+  }
+  return new AppError(error?.message || 'An error occurred');
+}
+
+export function getUserFriendlyMessage(error: any): string {
+  if (error instanceof AppError) {
+    return error.message;
+  }
+  return error?.message || 'An unexpected error occurred';
+}
+
+export function classifyError(error: any): { type: string; severity: string } {
+  if (error?.status === 401 || error?.message?.includes('auth')) {
+    return { type: ErrorType.AUTH, severity: ErrorSeverity.MEDIUM };
+  }
+  if (error?.status === 404) {
+    return { type: ErrorType.NOT_FOUND, severity: ErrorSeverity.LOW };
+  }
+  if (error?.status >= 500) {
+    return { type: ErrorType.SERVER, severity: ErrorSeverity.HIGH };
+  }
+  return { type: ErrorType.UNKNOWN, severity: ErrorSeverity.MEDIUM };
+}
+
+export const supabase = null;

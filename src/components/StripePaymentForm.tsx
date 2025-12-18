@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
-import { adminAPI } from '@/lib/api'
 import { paymentSettings } from '@/lib/settings'
 import { useToast } from '@/components/ui/Toast'
-import { supabase } from '@/lib/supabase'
+import { promoCodesAPI, adminAPI, PromoCodeValidationResponse } from '@/lib/api-client'
 import { CreditCard, Loader2, Building2, Upload, X, Tag, Image as ImageIcon, FileText, CheckCircle } from 'lucide-react'
 
 type PaymentMethod = 'card' | 'mobile_banking'
@@ -170,7 +169,6 @@ export function StripePaymentForm({
   // Calculate final amount after discount
   const finalAmount = amount - discountAmount
   
-  // Validate promo code
   const validatePromoCode = async () => {
     if (!promoCode.trim()) {
       showToast?.('Please enter a promo code', 'error')
@@ -179,17 +177,14 @@ export function StripePaymentForm({
     
     setValidatingPromo(true)
     try {
-      // Pass service fee amount and application type to ensure discount only applies to GritSync service fee
-      const { data, error } = await supabase.rpc('validate_promo_code', {
-        p_code: promoCode.toUpperCase(),
-        p_amount: amount,
-        p_service_fee_amount: serviceFeeAmount || null,
-        p_application_type: applicationType || null
-      })
+      const data = await promoCodesAPI.validate(
+        promoCode.toUpperCase(),
+        amount,
+        serviceFeeAmount || null,
+        applicationType || null
+      )
       
-      if (error) throw error
-      
-      if (data?.valid) {
+      if (data?.valid && data.discount_amount) {
         setAppliedPromo(data)
         setDiscountAmount(data.discount_amount)
         showToast?.(`Promo code applied! You save ${formatCurrency(data.discount_amount)} on service fee`, 'success')

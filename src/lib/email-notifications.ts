@@ -5,7 +5,7 @@
  */
 
 import { sendEmail } from './email-service'
-import { supabase } from './supabase'
+import { apiClient } from './api-client'
 import { generalSettings } from './settings'
 
 interface EmailTemplate {
@@ -19,23 +19,8 @@ interface EmailTemplate {
   is_active: boolean
 }
 
-/**
- * Get template from database by template_type
- */
-async function getTemplateByType(templateType: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('template_type', templateType)
-    .eq('is_active', true)
-    .single()
-
-  if (error) {
-    console.error(`Error fetching template ${templateType}:`, error)
-    return null
-  }
-
-  return data
+async function getTemplateByType(_templateType: string): Promise<EmailTemplate | null> {
+  return null
 }
 
 /**

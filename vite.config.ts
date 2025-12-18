@@ -20,9 +20,15 @@ export default defineConfig({
   server: {
     port: 5000,
     host: '0.0.0.0',
-    strictPort: false, // Allow Vite to use next available port if 5000 is busy
+    strictPort: false,
     allowedHosts: true,
     cors: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     // Production build optimizations
@@ -44,7 +50,7 @@ export default defineConfig({
             '@stripe/react-stripe-js',
           ],
           'pdf-vendor': ['jspdf', 'html2canvas', 'pdf-lib'],
-          'supabase-vendor': ['@supabase/supabase-js'],
+          'utils-vendor': ['date-fns', 'clsx', 'tailwind-merge'],
         },
         // Add content hash to filenames for better caching
         entryFileNames: 'assets/[name]-[hash].js',
