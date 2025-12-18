@@ -88,7 +88,7 @@ export const supabase = {
     onAuthStateChange: (..._args: any[]) => ({ data: { subscription: { unsubscribe: () => {} } } }),
   },
   functions: {
-    invoke: async (..._args: any[]) => ({ data: null, error: null }),
+    invoke: async (..._args: any[]): Promise<{ data: any; error: any }> => ({ data: null, error: null }),
   },
   channel: (_name: string) => ({
     on: (..._args: any[]) => ({ subscribe: () => {} }),
@@ -405,9 +405,9 @@ export const processingAccountsAPI = {
       return [] as any[];
     }
   },
-  async create(data: any) {
+  async create(applicationId: string, data: any) {
     const { apiClient } = await import('./api-client');
-    return apiClient.post<any>('/processing-accounts', data);
+    return apiClient.post<any>('/processing-accounts', { applicationId, ...data });
   },
   async update(id: string, data: any) {
     const { apiClient } = await import('./api-client');
@@ -502,13 +502,18 @@ export const partnerAgenciesAPI = {
   }
 };
 
-export function getSignedFileUrl(documentId: string, _expiresIn?: number, _silent?: boolean): string {
+export async function getSignedFileUrl(documentId: string, _expiresIn?: number, _silent?: boolean): Promise<string> {
   const token = localStorage.getItem('auth_token');
   return `/api/documents/${documentId}/download?token=${encodeURIComponent(token || '')}`;
 }
 
 export function getFileUrl(documentId: string, _expiresIn?: number): string {
   return `/api/documents/${documentId}/download`;
+}
+
+export function getSignedFileUrlSync(documentId: string, _expiresIn?: number, _silent?: boolean): string {
+  const token = localStorage.getItem('auth_token');
+  return `/api/documents/${documentId}/download?token=${encodeURIComponent(token || '')}`;
 }
 
 // documentsAPI is now exported from api-client.ts
