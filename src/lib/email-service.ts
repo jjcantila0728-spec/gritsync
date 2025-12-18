@@ -618,27 +618,15 @@ export async function sendEmailVerification(
 
 /**
  * Send forgot password email
+ * NOTE: This is now handled by Supabase Auth. Customize in Supabase Dashboard -> Authentication -> Email Templates
  */
 export async function sendForgotPasswordEmail(
   email: string,
   userName: string,
   resetUrl: string
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createForgotPasswordEmail({
-    userName,
-    resetLink: resetUrl,
-    expiryTime: '1 hour'
-  })
-
-  return sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'transactional',
-    emailCategory: 'password_reset',
-    recipientName: userName,
-    tags: ['authentication', 'password-reset'],
-  })
+  console.log('Forgot password email is handled by Supabase Auth templates')
+  return true
 }
 
 /**
