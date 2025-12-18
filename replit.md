@@ -294,5 +294,13 @@ For issues specific to:
 - **Home page footer** now uses shared Footer component instead of inline footer
 - Added to Header.tsx Explore menu navigation
 
+## Visa Bulletin Update & Banner Images Fix (December 18, 2025)
+- **Real Visa Bulletin Data**: Updated to December 2025 U.S. State Department data
+  - Philippines EB3 Final Action Date: **April 15, 2023**
+  - Philippines EB3 Dates for Filing: **October 01, 2024**
+- **Banner Images Fixed**: Moved images from attached_assets to public folder
+  - Fixed image paths across 7 pages: AboutUs, USCISTracker, CareerListing, Donate, SponsorshipLanding, Quote, Tracking
+  - Images now properly served as static assets
+
 ## Last Updated
-December 18, 2025 - Success Stories page with 20 Filipino testimonials, testimonial submission form
+December 18, 2025 - Updated visa bulletin with real State Department data, fixed banner images on public pages
