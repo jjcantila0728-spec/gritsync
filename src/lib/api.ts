@@ -156,6 +156,14 @@ export const servicesAPI = {
     const { apiClient } = await import('./api-client');
     return apiClient.get<any>(`/services/${id}`);
   },
+  async getAllByServiceAndState(serviceName: string, state: string) {
+    const { apiClient } = await import('./api-client');
+    try {
+      return await apiClient.get<any[]>(`/services/by-service-state?service_name=${encodeURIComponent(serviceName)}&state=${encodeURIComponent(state)}`);
+    } catch {
+      return [];
+    }
+  },
   async getByServiceStateAndPaymentType(serviceType: string, serviceState: string, paymentType: string) {
     const { apiClient } = await import('./api-client');
     try {
@@ -167,6 +175,10 @@ export const servicesAPI = {
   async create(data: any) {
     const { apiClient } = await import('./api-client');
     return apiClient.post<any>('/services', data);
+  },
+  async createOrUpdate(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/services/create-or-update', data);
   },
   async update(id: string, data: any) {
     const { apiClient } = await import('./api-client');
