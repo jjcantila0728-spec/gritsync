@@ -12,42 +12,48 @@ Do not make changes to files within the `docs/` folder.
 Do not make changes to files within the `supabase/functions/` folder.
 
 ## System Architecture
-GritSync employs a 100% serverless architecture leveraging Supabase as its core backend. The frontend is built with React 18, TypeScript, and Vite, using Tailwind CSS and Lucide Icons for UI.
+GritSync uses a full-stack architecture with React frontend and Express.js backend, powered by Replit's built-in PostgreSQL database.
 
 **UI/UX Decisions:**
-- **Design System:** Utilizes Tailwind CSS for utility-first styling and Lucide Icons for iconography.
-- **Theming:** Supports light/dark themes.
-- **Responsiveness:** Fully responsive design across all pages.
-- **Branding:** Consistent visual branding with AI-generated imagery for authentication pages, banners, and homepage sliders, focusing on the "Achieve Your American Dream" theme for Filipino nurses.
-- **User Onboarding:** Features an animated, 9-step dashboard onboarding tutorial with spotlight effects for first-time users.
-- **Accessibility:** Enhanced meta titles/descriptions and Open Graph/Twitter Card tags for SEO.
+- **Design System:** Tailwind CSS for utility-first styling and Lucide Icons for iconography
+- **Theming:** Light/dark theme support
+- **Responsiveness:** Fully responsive design across all pages
+- **Branding:** "Achieve Your American Dream" theme for Filipino nurses
 
-**Technical Implementations & Feature Specifications:**
-- **Authentication:** Supabase Auth with role-based access control (e.g., admin role).
-- **NCLEX Application:** Comprehensive form with validation, real-time tracking, quotation generation, and management.
-- **Payment Processing:** Integrated Stripe client SDK for secure payments.
-- **Document Management:** Secure file uploads and storage using Supabase Storage with RLS.
-- **Admin Dashboard:** Centralized management for clients, settings, and content (e.g., testimonials).
-- **Notifications:** Real-time notification system.
-- **Search & Filter:** Functionality for various data points.
-- **USCIS Tracking:** USCIS Case Status Tracker with receipt number validation and a Philippines EB3 Visa Bulletin tracker (Final Action Date and Dates for Filing).
-- **Newsletter & Visa Bulletin Subscriptions:** Supabase-backed subscription management with email integration via Resend.
-- **Success Stories:** Dedicated page showcasing testimonials with AI-generated profile pictures and a submission form (moderated by admins).
-- **Terms of Service & Privacy Policy:** Dedicated pages with professional hero banners and navigation.
+**Technical Implementations:**
+- **Authentication:** JWT-based auth with bcrypt password hashing (server/routes/auth.ts)
+- **Database:** Replit PostgreSQL with Drizzle ORM (shared/schema.ts)
+- **API Layer:** Express.js REST API (server/index.ts, server/routes/)
+- **Frontend:** React 18 + TypeScript + Vite (src/)
+- **API Client:** Typed fetch wrapper (src/lib/api-client.ts)
+- **Payment Processing:** Stripe client SDK with promo code validation
 
-**System Design Choices:**
-- **Serverless Backend:** Supabase handles authentication, PostgreSQL database with Row Level Security (RLS), file storage, and real-time functionalities.
-- **Edge Functions:** Supabase Edge Functions are used for server-side operations like email sending and PDF generation, integrating with services like Resend.
-- **Frontend Hosting:** Static site deployment (Replit or Vercel).
-- **State Management:** React Context combined with Supabase real-time subscriptions.
-- **Data Flow:** All data operations are managed through the Supabase client SDK, with RLS enforcing security at the database level.
+**System Design:**
+- **Backend:** Express.js server running on port 3001
+- **Frontend:** Vite dev server on port 5000 with proxy to backend
+- **Database:** Replit PostgreSQL (DATABASE_URL environment variable)
+- **State Management:** React Context with API client
+- **Sessions:** express-session with connect-pg-simple store
+
+## Project Structure
+- `/server` - Express.js backend (routes, middleware, db connection)
+- `/shared` - Shared types and Drizzle schema
+- `/src` - React frontend application
+- `/src/lib` - API clients, utilities, settings
 
 ## External Dependencies
-- **Supabase:**
-    - Supabase Auth (Authentication)
-    - PostgreSQL (Database)
-    - Supabase Storage (File Storage)
-    - Supabase Realtime (Real-time updates)
-    - Supabase Edge Functions (Serverless functions)
-- **Stripe:** Client SDK for payment processing.
-- **Resend:** Email service integrated via Supabase Edge Functions for sending transactional and marketing emails.
+- **Replit PostgreSQL:** Built-in database with Drizzle ORM
+- **Stripe:** Client SDK for payment processing
+- **Resend:** Email service (pending implementation)
+
+## Migration Status (Dec 2024)
+Migrated from Supabase to Replit PostgreSQL. Core functionality working:
+- Authentication (signup, login, JWT sessions)
+- Applications, Payments, Notifications, Quotations, Donations, Careers, Testimonials
+- Settings management
+- Promo code validation
+
+Features pending full implementation:
+- File storage/document uploads (needs alternative to Supabase Storage)
+- Email notifications (needs Resend integration)
+- Timeline steps, Services, Partner agencies APIs
