@@ -12,8 +12,8 @@ interface EmailTemplate {
   id: string
   name: string
   subject: string
-  body_html: string
-  body_text: string | null
+  html_content: string
+  text_content: string | null
   template_type: string
   variables: string[]
   is_active: boolean
@@ -46,8 +46,8 @@ function renderTemplate(
   variables: Record<string, string>
 ): { subject: string; html: string; text?: string } {
   let subject = template.subject
-  let html = template.body_html
-  let text = template.body_text || ''
+  let html = template.html_content
+  let text = template.text_content || ''
 
   Object.entries(variables).forEach(([key, value]) => {
     const placeholder = `{{${key}}}`

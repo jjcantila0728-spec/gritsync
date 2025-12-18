@@ -1,15 +1,18 @@
 -- Email Templates Seed Data
 -- Run this in Supabase SQL Editor to populate email_templates table
 -- These templates will be managed via /admin/emails/templates
+-- Updated to match production schema with html_content, text_content columns
 
 -- Clear existing templates (optional - comment out if you want to keep existing)
 -- DELETE FROM email_templates;
 
 -- Payment Receipt Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Payment Receipt',
+  'Sent to users after successful payment',
+  'payment-receipt',
   'Payment Receipt - {{amount}} - GritSync',
   '<div class="email-content">
     <h1>Payment Received</h1>
@@ -77,16 +80,21 @@ Download your receipt: {{receiptUrl}}
 This payment confirmation has been sent to your email for your records.
 
 Need help? If you have any questions about this payment, please contact our support team.',
+  'transactional',
   'payment_receipt',
   '["userName", "amount", "transactionId", "paymentDate", "description", "itemsTable", "receiptUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Timeline Update Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Timeline Update',
+  'Sent when application status changes',
+  'timeline-update',
   'Application Update: {{updateTitle}} - GritSync',
   '<div class="email-content">
     <h1>Application Update</h1>
@@ -116,25 +124,30 @@ There has been an update to your NCLEX application.
 View your application: {{actionUrl}}
 
 Log in to your dashboard to view the full details and any required actions.',
+  'transactional',
   'timeline_update',
   '["userName", "updateTitle", "updateMessage", "actionUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Missing Document Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Missing Document Reminder',
-  'Action Required: Missing Documents for Your Application - GritSync',
+  'Reminder for users to upload missing documents',
+  'missing-document',
+  'Action Required: Missing Documents - GritSync',
   '<div class="email-content">
     <h1>Missing Documents</h1>
     <p>Hi {{userName}},</p>
-    <p>We noticed that some documents are still missing from your NCLEX application. Please upload the following documents to continue your application process:</p>
+    <p>We noticed that some required documents are missing from your NCLEX application. Please upload the following documents to continue with your application:</p>
     
     <div class="warning-box" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 6px;">
-      <h3 style="margin-top: 0;">Required Documents:</h3>
-      <p>{{documentList}}</p>
+      <h3 style="margin-top: 0; color: #92400e;">Required Documents:</h3>
+      <p style="margin: 0;">{{documentList}}</p>
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
@@ -147,33 +160,38 @@ VALUES (
 
 Hi {{userName}},
 
-We noticed that some documents are still missing from your NCLEX application. Please upload the following documents to continue your application process:
+We noticed that some required documents are missing from your NCLEX application. Please upload the following documents to continue with your application:
 
 Required Documents:
 {{documentList}}
 
-Upload your documents: {{uploadUrl}}
+Upload documents: {{uploadUrl}}
 
 If you have any questions about the required documents, please contact our support team.',
+  'transactional',
   'missing_document',
   '["userName", "documentList", "uploadUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Missing Details Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Missing Details Reminder',
+  'Reminder for users to complete profile details',
+  'missing-details',
   'Action Required: Complete Your Profile - GritSync',
   '<div class="email-content">
     <h1>Complete Your Profile</h1>
     <p>Hi {{userName}},</p>
-    <p>To continue with your NCLEX application, we need some additional information from you:</p>
+    <p>We noticed that some information is missing from your profile. Please update the following details to continue with your NCLEX application:</p>
     
     <div class="warning-box" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 6px;">
-      <h3 style="margin-top: 0;">Missing Information:</h3>
-      <p>{{fieldList}}</p>
+      <h3 style="margin-top: 0; color: #92400e;">Missing Information:</h3>
+      <p style="margin: 0;">{{fieldList}}</p>
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
@@ -186,7 +204,7 @@ VALUES (
 
 Hi {{userName}},
 
-To continue with your NCLEX application, we need some additional information from you:
+We noticed that some information is missing from your profile. Please update the following details to continue with your NCLEX application:
 
 Missing Information:
 {{fieldList}}
@@ -194,16 +212,21 @@ Missing Information:
 Update your profile: {{profileUrl}}
 
 Completing your profile helps us process your application faster.',
+  'transactional',
   'missing_details',
   '["userName", "fieldList", "profileUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Application Approved Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Application Approved',
+  'Congratulations email when application is approved',
+  'application-approved',
   'Congratulations! Your {{serviceType}} Has Been Approved - GritSync',
   '<div class="email-content">
     <h1>Application Approved!</h1>
@@ -239,16 +262,21 @@ Next Steps:
 View your application: {{applicationUrl}}
 
 If you have any questions, our team is here to help you every step of the way.',
+  'transactional',
   'application_approved',
   '["userName", "applicationId", "serviceType", "approvalDate", "nextSteps", "applicationUrl", "certificateUrl", "dashboardUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Application Rejected Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Application Rejected',
+  'Notification when application needs attention',
+  'application-rejected',
   'Application Update: {{serviceType}} Action Required - GritSync',
   '<div class="email-content">
     <h1>Application Update</h1>
@@ -284,142 +312,163 @@ What You Can Do:
 View your application: {{applicationUrl}}
 
 Please contact our support team at {{supportContact}} if you need assistance.',
+  'transactional',
   'application_rejected',
   '["userName", "applicationId", "serviceType", "rejectionDate", "rejectionReason", "actionItems", "applicationUrl", "supportContact", "dashboardUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Document Approved Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Document Approved',
+  'Notification when document is approved',
+  'document-approved',
   'Document Approved: {{documentName}} - GritSync',
   '<div class="email-content">
     <h1>Document Approved</h1>
     <p>Hi {{userName}},</p>
-    <p>Your document has been reviewed and approved.</p>
+    <p>Great news! Your document has been reviewed and approved.</p>
     
     <div class="info-box" style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 6px;">
-      <h3 style="margin-top: 0; color: #065f46;">Approved Document:</h3>
-      <p style="margin: 0; font-size: 18px; font-weight: 600;">{{documentName}}</p>
+      <h3 style="margin-top: 0; color: #065f46;">{{documentName}}</h3>
+      <p style="margin: 0;">This document has been verified and accepted for your application.</p>
     </div>
-    
-    <p>This document has been successfully verified and added to your application file.</p>
     
     <div style="text-align: center; margin: 30px 0;">
       <a href="{{dashboardUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Dashboard</a>
     </div>
+    
+    <p>Continue with your application to complete the remaining steps.</p>
   </div>',
   'Document Approved
 
 Hi {{userName}},
 
-Your document has been reviewed and approved.
+Great news! Your document has been reviewed and approved.
 
-Approved Document: {{documentName}}
+Document: {{documentName}}
+This document has been verified and accepted for your application.
 
-This document has been successfully verified and added to your application file.
+View your dashboard: {{dashboardUrl}}
 
-View your dashboard: {{dashboardUrl}}',
+Continue with your application to complete the remaining steps.',
+  'transactional',
   'document_approved',
   '["userName", "documentName", "dashboardUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Document Rejected Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Document Rejected',
-  'Document Review: Action Required - GritSync',
+  'Notification when document needs resubmission',
+  'document-rejected',
+  'Document Requires Attention: {{documentName}} - GritSync',
   '<div class="email-content">
-    <h1>Document Review Required</h1>
+    <h1>Document Requires Attention</h1>
     <p>Hi {{userName}},</p>
-    <p>We have reviewed your document and unfortunately, it could not be approved.</p>
+    <p>We have reviewed your submitted document and unfortunately, it could not be approved.</p>
     
     <div class="warning-box" style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 20px; margin: 25px 0; border-radius: 6px;">
-      <h3 style="margin-top: 0; color: #991b1b;">Document: {{documentName}}</h3>
+      <h3 style="margin-top: 0; color: #991b1b;">{{documentName}}</h3>
       <p style="margin: 0;"><strong>Reason:</strong> {{rejectionReason}}</p>
     </div>
-    
-    <p>Please upload a new version of this document that addresses the issues mentioned above.</p>
     
     <div style="text-align: center; margin: 30px 0;">
       <a href="{{uploadUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Upload New Document</a>
     </div>
+    
+    <p>Please upload a new version of this document that addresses the issue mentioned above.</p>
   </div>',
-  'Document Review Required
+  'Document Requires Attention
 
 Hi {{userName}},
 
-We have reviewed your document and unfortunately, it could not be approved.
+We have reviewed your submitted document and unfortunately, it could not be approved.
 
 Document: {{documentName}}
 Reason: {{rejectionReason}}
 
-Please upload a new version of this document that addresses the issues mentioned above.
+Upload a new document: {{uploadUrl}}
 
-Upload new document: {{uploadUrl}}',
+Please upload a new version of this document that addresses the issue mentioned above.',
+  'transactional',
   'document_rejected',
   '["userName", "documentName", "rejectionReason", "uploadUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Visa Bulletin Update Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Visa Bulletin Update',
-  'Visa Bulletin Update for {{month}} {{year}} - GritSync',
+  'Monthly visa bulletin notification for subscribers',
+  'visa-bulletin-update',
+  'New Visa Bulletin Available: {{month}} {{year}} - GritSync',
   '<div class="email-content">
     <h1>Visa Bulletin Update</h1>
     <p>Hi {{userName}},</p>
-    <p>The new visa bulletin for <strong>{{month}} {{year}}</strong> has been released. Here are the updates for EB-3 Philippines:</p>
+    <p>The new Visa Bulletin for {{month}} {{year}} has been released by USCIS.</p>
     
-    <div class="info-box" style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 20px; margin: 25px 0; border-radius: 6px;">
-      <h3 style="margin-top: 0;">EB-3 Philippines Dates:</h3>
-      <table style="margin: 10px 0; width: 100%;">
+    <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 6px;">
+      <h2 style="margin-top: 0;">Philippines EB3 Category</h2>
+      <table style="width: 100%; margin-top: 15px;">
         <tr>
           <td style="border: none; padding: 8px 0;"><strong>Final Action Date:</strong></td>
-          <td style="border: none; text-align: right; font-weight: 600;">{{finalActionDate}}</td>
+          <td style="border: none; text-align: right; font-weight: bold; color: #10b981;">{{finalActionDate}}</td>
         </tr>
         <tr>
           <td style="border: none; padding: 8px 0;"><strong>Dates for Filing:</strong></td>
-          <td style="border: none; text-align: right; font-weight: 600;">{{datesForFiling}}</td>
+          <td style="border: none; text-align: right; font-weight: bold; color: #3b82f6;">{{datesForFiling}}</td>
         </tr>
       </table>
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="{{bulletinUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Full Bulletin</a>
+      <a href="{{bulletinUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Full Bulletin</a>
     </div>
     
-    <p>Stay updated on your visa journey with GritSync!</p>
+    <p>Stay updated with the latest immigration news and track your priority date progress.</p>
   </div>',
   'Visa Bulletin Update
 
 Hi {{userName}},
 
-The new visa bulletin for {{month}} {{year}} has been released.
+The new Visa Bulletin for {{month}} {{year}} has been released by USCIS.
 
-EB-3 Philippines Dates:
+Philippines EB3 Category:
 - Final Action Date: {{finalActionDate}}
 - Dates for Filing: {{datesForFiling}}
 
-View the full bulletin: {{bulletinUrl}}
+View full bulletin: {{bulletinUrl}}
 
-Stay updated on your visa journey with GritSync!',
+Stay updated with the latest immigration news and track your priority date progress.',
+  'marketing',
   'visa_bulletin_update',
   '["userName", "month", "year", "finalActionDate", "datesForFiling", "bulletinUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- School Letter Request Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'School Letter Request',
+  'Request sent to schools for verification documents',
+  'school-letter',
   'Document Request: {{schoolName}} Verification Letter - GritSync',
   '<div class="email-content">
     <h1>School Letter Request</h1>
@@ -463,23 +512,29 @@ View Letter: {{letterUrl}}
 Please send the documents to our processing center or contact us if you have any questions.
 
 Thank you for your assistance in supporting our applicants nursing career journey.',
+  'transactional',
   'school_letter',
   '["applicantName", "applicationId", "schoolName", "letterUrl", "documentRequirements"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
 
 -- Full Instructions Template
-INSERT INTO email_templates (id, name, subject, body_html, body_text, template_type, variables, is_active)
+INSERT INTO email_templates (id, name, description, slug, subject, html_content, text_content, category, template_type, variables, is_active, is_default, version)
 VALUES (
   gen_random_uuid(),
   'Full Instructions',
+  'Detailed instructions for completing application steps',
+  'full-instructions',
   'Your NCLEX Application Instructions - GritSync',
   '<div class="email-content">
-    <h1>NCLEX Application Instructions</h1>
+    <h1>Application Instructions</h1>
     <p>Hi {{userName}},</p>
-    <p>Thank you for starting your NCLEX application with GritSync. Below are the complete instructions to guide you through the process.</p>
+    <p>Thank you for starting your NCLEX application with GritSync. Below are the detailed instructions to complete your application process.</p>
     
-    <div class="card" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 6px;">
+      <h2 style="margin-top: 0;">Step-by-Step Instructions</h2>
       {{instructions}}
     </div>
     
@@ -487,20 +542,23 @@ VALUES (
       <a href="{{dashboardUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
     </div>
     
-    <p>If you have any questions, our support team is ready to assist you.</p>
+    <p>If you have any questions or need assistance, our support team is here to help you achieve your American Dream.</p>
   </div>',
-  'NCLEX Application Instructions
+  'Application Instructions
 
 Hi {{userName}},
 
-Thank you for starting your NCLEX application with GritSync. Below are the complete instructions to guide you through the process.
+Thank you for starting your NCLEX application with GritSync. Below are the detailed instructions to complete your application process.
 
 {{instructions}}
 
 Go to your dashboard: {{dashboardUrl}}
 
-If you have any questions, our support team is ready to assist you.',
+If you have any questions or need assistance, our support team is here to help you achieve your American Dream.',
+  'transactional',
   'full_instructions',
   '["userName", "instructions", "dashboardUrl"]'::jsonb,
-  true
+  true,
+  true,
+  1
 );
