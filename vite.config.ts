@@ -31,32 +31,19 @@ export default defineConfig({
     cssMinify: true, // Minify CSS
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // Optimize chunk splitting for better caching
-          if (id.includes('node_modules')) {
-            // React and core dependencies
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'react-vendor'
-            }
-            // UI libraries
-            if (id.includes('lucide-react')) {
-              return 'ui-vendor'
-            }
-            // PDF generation
-            if (id.includes('jspdf') || id.includes('html2canvas')) {
-              return 'pdf-vendor'
-            }
-            // Stripe
-            if (id.includes('stripe')) {
-              return 'stripe-vendor'
-            }
-            // Supabase
-            if (id.includes('supabase')) {
-              return 'supabase-vendor'
-            }
-            // Other vendor code
-            return 'vendor'
-          }
+        manualChunks: {
+          'react-vendor': [
+            'react',
+            'react-dom',
+            'react-router-dom',
+            'react-router',
+            'react-hook-form',
+            'recharts',
+            'lucide-react',
+            '@stripe/react-stripe-js',
+          ],
+          'pdf-vendor': ['jspdf', 'html2canvas', 'pdf-lib'],
+          'supabase-vendor': ['@supabase/supabase-js'],
         },
         // Add content hash to filenames for better caching
         entryFileNames: 'assets/[name]-[hash].js',
