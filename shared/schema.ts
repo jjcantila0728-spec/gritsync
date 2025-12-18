@@ -434,6 +434,21 @@ export const promoCodes = pgTable('promo_codes', {
   updated_at: timestamp('updated_at').defaultNow(),
 });
 
+export const userDocuments = pgTable('user_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  user_id: uuid('user_id').references(() => users.id).notNull(),
+  application_id: uuid('application_id').references(() => applications.id),
+  filename: varchar('filename', { length: 500 }).notNull(),
+  file_type: varchar('file_type', { length: 100 }),
+  document_type: varchar('document_type', { length: 100 }).notNull(),
+  storage_path: text('storage_path'),
+  file_size: integer('file_size'),
+  status: varchar('status', { length: 50 }).default('uploaded'),
+  notes: text('notes'),
+  created_at: timestamp('created_at').defaultNow(),
+  updated_at: timestamp('updated_at').defaultNow(),
+});
+
 export const usersRelations = relations(users, ({ many, one }) => ({
   applications: many(applications),
   notifications: many(notifications),
@@ -494,3 +509,5 @@ export type CareerApplication = typeof careerApplications.$inferSelect;
 export type InsertCareerApplication = typeof careerApplications.$inferInsert;
 export type Testimonial = typeof testimonials.$inferSelect;
 export type InsertTestimonial = typeof testimonials.$inferInsert;
+export type UserDocument = typeof userDocuments.$inferSelect;
+export type InsertUserDocument = typeof userDocuments.$inferInsert;

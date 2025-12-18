@@ -57,8 +57,6 @@ Migrated from Supabase to Replit PostgreSQL. Core functionality working:
 - Partner agencies API
 - NCLEX sponsorships API
 
-Features pending full implementation:
-- File storage/document uploads (needs cloud storage integration: Box, Google Drive, or Dropbox - user declined Google Drive integration)
-
 Recently implemented:
 - Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)
+- File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)

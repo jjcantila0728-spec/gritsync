@@ -21,6 +21,7 @@ import timelineStepsRoutes from './routes/timeline-steps';
 import partnerAgenciesRoutes from './routes/partner-agencies';
 import sponsorshipsRoutes from './routes/sponsorships';
 import emailsRoutes from './routes/emails';
+import documentsRoutes from './routes/documents';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -70,6 +71,7 @@ app.use('/api/timeline-steps', timelineStepsRoutes);
 app.use('/api/partner-agencies', partnerAgenciesRoutes);
 app.use('/api/sponsorships', sponsorshipsRoutes);
 app.use('/api/emails', emailsRoutes);
+app.use('/api/documents', documentsRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -245,12 +245,33 @@ export const partnerAgenciesAPI = {
   }
 };
 
-export function getSignedFileUrl(_path: string): string {
-  console.warn('getSignedFileUrl not implemented - file storage not available');
-  return '';
+export function getSignedFileUrl(documentId: string): string {
+  const token = localStorage.getItem('auth_token');
+  return `/api/documents/${documentId}/download?token=${encodeURIComponent(token || '')}`;
 }
 
-export function getFileUrl(_path: string): string {
-  console.warn('getFileUrl not implemented - file storage not available');
-  return '';
+export function getFileUrl(documentId: string): string {
+  return `/api/documents/${documentId}/download`;
 }
+
+export const documentsAPI = {
+  async getAll() {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/documents');
+  },
+  async getById(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any>(`/documents/${id}`);
+  },
+  async upload(filename: string, mimeType: string, fileData: string, documentType?: string, applicationId?: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/documents/upload', { filename, mimeType, fileData, documentType, applicationId });
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/documents/${id}`);
+  },
+  getDownloadUrl(id: string): string {
+    return `/api/documents/${id}/download`;
+  }
+};
