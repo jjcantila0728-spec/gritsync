@@ -15,8 +15,6 @@ import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
 import jsPDF from 'jspdf'
-import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -93,7 +91,6 @@ export function ApplicationPayments() {
   const [viewingProof, setViewingProof] = useState<{ url: string; fileName: string } | null>(null)
   const [showProofModal, setShowProofModal] = useState(false)
   const [processingPaymentType, setProcessingPaymentType] = useState<'step1' | 'step2' | 'full' | 'retake' | null>(null)
-  const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -108,72 +105,6 @@ export function ApplicationPayments() {
       loadPayments()
     }
   }, [id, user, authLoading, navigate])
-
-  // Set up real-time subscription for payment updates
-  useEffect(() => {
-    if (!id) return
-
-    const paymentsChannel = subscribeToApplicationPayments(id, (payload) => {
-      handlePaymentRealtimeUpdate(payload)
-    })
-    paymentsChannelRef.current = paymentsChannel
-
-    // Cleanup on unmount
-    return () => {
-      if (paymentsChannelRef.current) {
-        unsubscribe(paymentsChannelRef.current)
-        paymentsChannelRef.current = null
-      }
-    }
-  }, [id])
-
-  // Handle real-time payment updates
-  function handlePaymentRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New payment added - refresh payments
-        loadPayments()
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Payment updated - update in place or refresh
-        setPayments((prev) => {
-          const index = prev.findIndex((p) => p.id === newRecord.id)
-          if (index >= 0) {
-            const updated = [...prev]
-            updated[index] = { ...updated[index], ...newRecord }
-            return updated
-          } else {
-            // Payment not in list, might be new - refresh to be safe
-            loadPayments()
-            return prev
-          }
-        })
-
-        // Show notification for status changes
-        if (oldRecord && oldRecord.status !== newRecord.status) {
-          if (newRecord.status === 'paid') {
-            showToast('Payment has been approved! ✅', 'success')
-            // Refresh payments to get receipt
-            loadPayments()
-          } else if (newRecord.status === 'failed') {
-            showToast('Payment has been rejected', 'error')
-          } else if (newRecord.status === 'pending_approval') {
-            showToast('Payment submitted for approval', 'info')
-          }
-        }
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Payment deleted - remove from list
-        setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id))
-      }
-    } catch (error) {
-      console.error('Error handling real-time payment update:', error)
-      // Fallback to full refresh on error
-      loadPayments()
-    }
-  }
 
   // Load services after application is loaded and payments are loaded
   useEffect(() => {

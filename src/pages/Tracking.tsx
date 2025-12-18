@@ -17,8 +17,6 @@ import { formatDate, paginate } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { useDebounce } from '@/hooks/useDebounce'
 
 interface Application {
@@ -78,7 +76,6 @@ export function Tracking() {
   const [refreshing, setRefreshing] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
-  const channelsRef = useRef<RealtimeChannel[]>([])
   const [applicationsNeedingPayment, setApplicationsNeedingPayment] = useState<Set<string>>(new Set())
   const [deletingAppId, setDeletingAppId] = useState<string | null>(null)
   const [deleteConfirmApp, setDeleteConfirmApp] = useState<Application | null>(null)
@@ -205,37 +202,6 @@ export function Tracking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingResult, trackingId])
 
-  // Set up real-time subscriptions for application status changes
-  useEffect(() => {
-    if (!user || trackingResult) return // Don't subscribe if tracking by ID or no user
-
-    const channels: RealtimeChannel[] = []
-
-    // Subscribe to applications based on user role
-    if (isAdminView) {
-      // Admin: subscribe to all applications
-      const appsChannel = subscribeToAllApplications((payload) => {
-        handleApplicationUpdate(payload)
-      })
-      channels.push(appsChannel)
-    } else {
-      // Client: subscribe to user's applications
-      const appsChannel = subscribeToUserApplications(user.id, (payload) => {
-        handleApplicationUpdate(payload)
-      })
-      channels.push(appsChannel)
-    }
-
-    channelsRef.current = channels
-
-    // Cleanup on unmount
-    return () => {
-      channels.forEach(channel => unsubscribe(channel))
-      channelsRef.current = []
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isAdminView, trackingResult])
-
   async function fetchApplications() {
     try {
       if (user) {
@@ -278,42 +244,6 @@ export function Tracking() {
     )
     
     setApplicationsNeedingPayment(needingPayment)
-  }
-
-  // Handle real-time application updates
-  function handleApplicationUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New application added - refresh list
-        fetchApplications()
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Application updated - update in place or refresh
-        setApplications((prevApps) => {
-          const index = prevApps.findIndex((app) => app.id === newRecord.id)
-          if (index >= 0) {
-            // Update existing application
-            const updated = [...prevApps]
-            updated[index] = { ...updated[index], ...newRecord }
-            return updated
-          } else {
-            // Application not in list, might be new - refresh to be safe
-            fetchApplications()
-            return prevApps
-          }
-        })
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Application deleted - remove from list
-        setApplications((prevApps) => prevApps.filter((app) => app.id !== oldRecord.id))
-      }
-    } catch (error) {
-      console.error('Error handling application update:', error)
-      // Fallback to full refresh on error
-      fetchApplications()
-    }
   }
 
   const handleRefresh = async () => {

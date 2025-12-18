@@ -11,7 +11,6 @@ import { Select } from '@/components/ui/Select'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Link } from 'react-router-dom'
 import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI } from '@/lib/api'
-import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
 import jsPDF from 'jspdf'
@@ -19,8 +18,6 @@ import html2canvas from 'html2canvas'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { coverLetterTemplate } from '@/templates/cover-letter-template'
 import { stripePromise } from '@/lib/stripe'
-import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { 
   ArrowLeft, 
   Clock, 
@@ -114,9 +111,6 @@ export function ApplicationDetail() {
   const [showPdfModal, setShowPdfModal] = useState(false)
   const [viewingPdfUrl, setViewingPdfUrl] = useState<string | null>(null)
   const [viewingPdfName, setViewingPdfName] = useState<string>('')
-  const channelRef = useRef<RealtimeChannel | null>(null)
-  const timelineChannelRef = useRef<RealtimeChannel | null>(null)
-  const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
   const isOurUpdateRef = useRef(false)
 
   // Payment pricing will be loaded from admin quote service config
@@ -165,45 +159,6 @@ export function ApplicationDetail() {
     loadPhoneNumber()
   }, [])
 
-  // Set up real-time subscriptions for application updates
-  useEffect(() => {
-    if (!id || !application) return
-
-    // Subscribe to this specific application's updates
-    const appChannel = subscribeToApplicationUpdates(id, (payload) => {
-      handleApplicationRealtimeUpdate(payload)
-    })
-    channelRef.current = appChannel
-
-    // Subscribe to timeline steps updates
-    const timelineChannel = subscribeToApplicationTimelineSteps(id, (payload) => {
-      handleTimelineStepRealtimeUpdate(payload)
-    })
-    timelineChannelRef.current = timelineChannel
-
-    // Subscribe to payments updates
-    const paymentsChannel = subscribeToApplicationPayments(id, (payload) => {
-      handlePaymentRealtimeUpdate(payload)
-    })
-    paymentsChannelRef.current = paymentsChannel
-
-    // Cleanup on unmount or when id changes
-    return () => {
-      if (channelRef.current) {
-        unsubscribe(channelRef.current)
-        channelRef.current = null
-      }
-      if (timelineChannelRef.current) {
-        unsubscribe(timelineChannelRef.current)
-        timelineChannelRef.current = null
-      }
-      if (paymentsChannelRef.current) {
-        unsubscribe(paymentsChannelRef.current)
-        paymentsChannelRef.current = null
-      }
-    }
-  }, [id, application?.id])
-
   // Check if all required EAD documents are uploaded and auto-update timeline
   useEffect(() => {
     const checkEADDocuments = async () => {
@@ -244,153 +199,6 @@ export function ApplicationDetail() {
       checkEADDocuments()
     }
   }, [application, timelineSteps])
-
-  // Handle real-time application updates
-  function handleApplicationRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'UPDATE' && newRecord && newRecord.id === id) {
-        // Update application state with new data
-        setApplication((prev) => {
-          if (!prev) return prev
-          return { ...prev, ...newRecord }
-        })
-
-        // Update status if it changed
-        if (oldRecord && oldRecord.status !== newRecord.status) {
-          // Skip if this is our own update to prevent infinite loops
-          if (isOurUpdateRef.current) {
-            setStatus(newRecord.status)
-            return
-          }
-          
-          setStatus(newRecord.status)
-          
-          // Show notification for status changes (only if not updating status ourselves)
-          if (!isUpdatingStatus) {
-            const statusMessages: Record<string, string> = {
-              'approved': 'Application has been approved! ðŸŽ‰',
-              'rejected': 'Application has been rejected',
-              'pending': 'Application is now pending review',
-              'in_progress': 'Application is now in progress',
-              'completed': 'Application has been completed'
-            }
-            
-            const message = statusMessages[newRecord.status] || `Application status changed to ${newRecord.status}`
-            showToast(message, newRecord.status === 'approved' || newRecord.status === 'completed' ? 'success' : 'info')
-          }
-          
-          // Refresh timeline if status changed (but not if we're already updating status to prevent loops)
-          if (application?.id && !isUpdatingStatus && !loadingTimeline) {
-            fetchTimelineSteps()
-          }
-        }
-
-        // Refresh payments if payment-related fields changed
-        if (oldRecord && (
-          oldRecord.payment_type !== newRecord.payment_type ||
-          oldRecord.status !== newRecord.status
-        )) {
-          if (application?.id) {
-            fetchPayments()
-          }
-        }
-      }
-    } catch (error) {
-      handleErrorSilently(error, { operation: 'realtimeApplicationUpdate', applicationId: id })
-    }
-  }
-
-  // Handle real-time timeline step updates
-  function handleTimelineStepRealtimeUpdate(payload: any) {
-    // Prevent infinite loops by checking if we're already loading or updating
-    if (loadingTimeline || isUpdatingStatus) return
-    
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New timeline step added - refresh timeline only if not already loading
-        if (!loadingTimeline) {
-          fetchTimelineSteps()
-        }
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Timeline step updated - update in place
-        setTimelineSteps((prev) => {
-          const index = prev.findIndex((s) => s.id === newRecord.id)
-          if (index >= 0) {
-            const updated = [...prev]
-            updated[index] = { ...updated[index], ...newRecord }
-            return updated
-          } else {
-            // Step not in list, might be new - refresh to be safe (only if not loading)
-            if (!loadingTimeline) {
-              fetchTimelineSteps()
-            }
-            return prev
-          }
-        })
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Timeline step deleted - remove from list
-        setTimelineSteps((prev) => prev.filter((s) => s.id !== oldRecord.id))
-      }
-    } catch (error) {
-      handleErrorSilently(error, { operation: 'realtimeTimelineStepUpdate', applicationId: id })
-      // Fallback to full refresh on error (only if not already loading)
-      if (!loadingTimeline) {
-        fetchTimelineSteps()
-      }
-    }
-  }
-
-  // Handle real-time payment updates
-  function handlePaymentRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New payment added - refresh payments
-        fetchPayments()
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Payment updated - update in place or refresh
-        setPayments((prev) => {
-          const index = prev.findIndex((p) => p.id === newRecord.id)
-          if (index >= 0) {
-            const updated = [...prev]
-            updated[index] = { ...updated[index], ...newRecord }
-            return updated
-          } else {
-            // Payment not in list, might be new - refresh to be safe
-            fetchPayments()
-            return prev
-          }
-        })
-
-        // Show notification for status changes
-        if (oldRecord && oldRecord.status !== newRecord.status) {
-          if (newRecord.status === 'paid') {
-            showToast('Payment has been approved! âœ…', 'success')
-          } else if (newRecord.status === 'failed') {
-            showToast('Payment has been rejected', 'error')
-          }
-        }
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Payment deleted - remove from list
-        setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id))
-      }
-    } catch (error) {
-      handleErrorSilently(error, { operation: 'realtimePaymentUpdate', applicationId: id })
-      // Fallback to full refresh on error
-      fetchPayments()
-    }
-  }
 
   // Load services from admin quote service config
   async function loadServices() {

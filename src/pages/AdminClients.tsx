@@ -9,14 +9,11 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
 import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
 import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
-import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, userDocumentsAPI, getSignedFileUrl } from '@/lib/api'
 
@@ -42,7 +39,6 @@ export function AdminClients() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
   const [exporting, setExporting] = useState(false)
-  const channelRef = useRef<RealtimeChannel | null>(null)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [clientDetails, setClientDetails] = useState<any>(null)
   const [clientDocuments, setClientDocuments] = useState<any[]>([])
@@ -56,56 +52,6 @@ export function AdminClients() {
     }
   }, [isAdmin])
 
-  // Set up real-time subscription for new client registrations
-  useEffect(() => {
-    if (!isAdmin()) return
-
-    const clientsChannel = subscribeToAllClients((payload) => {
-      handleClientRealtimeUpdate(payload)
-    })
-    channelRef.current = clientsChannel
-
-    // Cleanup on unmount
-    return () => {
-      if (channelRef.current) {
-        unsubscribe(channelRef.current)
-        channelRef.current = null
-      }
-    }
-  }, [isAdmin])
-
-  // Handle real-time client updates
-  function handleClientRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord && newRecord.role === 'client') {
-        // New client registered - add to list
-        setClients((prev) => [newRecord, ...prev])
-        showToast('New client registered', 'info')
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Client updated - update in place
-        setClients((prev) => {
-          const index = prev.findIndex((c) => c.id === newRecord.id)
-          if (index >= 0) {
-            const updated = [...prev]
-            updated[index] = { ...updated[index], ...newRecord }
-            return updated
-          }
-          return prev
-        })
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Client deleted - remove from list
-        setClients((prev) => prev.filter((c) => c.id !== oldRecord.id))
-      }
-    } catch (error) {
-      console.error('Error handling real-time client update:', error)
-      // Fallback to full refresh on error
-      fetchClients()
-    }
-  }
 
   async function fetchClients() {
     try {

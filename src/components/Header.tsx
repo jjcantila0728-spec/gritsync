@@ -498,65 +498,8 @@ export function Header() {
   useEffect(() => {
     if (user) {
       fetchNotifications()
-      
-      // Set up real-time subscription for notifications
-      const notificationChannel = subscribeToNotifications(user.id, (payload) => {
-        handleNotificationRealtimeUpdate(payload)
-      })
-      notificationChannelRef.current = notificationChannel
-
-      // Cleanup on unmount
-      return () => {
-        if (notificationChannelRef.current) {
-          unsubscribe(notificationChannelRef.current)
-          notificationChannelRef.current = null
-        }
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
-
-  // Handle real-time notification updates
-  function handleNotificationRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New notification received - add to list and update count
-        setNotifications((prev) => [newRecord, ...prev])
-        if (!newRecord.read) {
-          setUnreadCount((prev) => prev + 1)
-        }
-        
-        // Show browser notification if permission granted
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(newRecord.title || 'New Notification', {
-            body: newRecord.message || '',
-            icon: '/favicon.ico',
-          })
-        }
-      } else if (eventType === 'UPDATE' && newRecord && oldRecord) {
-        // Notification was updated (e.g., marked as read)
-        setNotifications((prev) => 
-          prev.map(n => n.id === newRecord.id ? newRecord : n)
-        )
-        // Update count if read status changed
-        if (oldRecord.read !== newRecord.read) {
-          if (newRecord.read) {
-            setUnreadCount((prev) => Math.max(0, prev - 1))
-          } else {
-            setUnreadCount((prev) => prev + 1)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error handling real-time notification update:', error)
-      // Fallback to fetching notifications
-      fetchNotifications()
-    }
-  }
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {

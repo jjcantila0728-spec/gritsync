@@ -10,8 +10,6 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, adminAPI, servicesAPI } from '@/lib/api'
-import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/supabase-api'
 import { 
@@ -74,7 +72,6 @@ export function AdminApplicationPayments() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
   const [showCreatePaymentModal, setShowCreatePaymentModal] = useState(false)
   const [creatingPayment, setCreatingPayment] = useState(false)
   const [newPaymentType, setNewPaymentType] = useState<'step1' | 'step2' | 'full' | 'custom'>('step1')
@@ -298,77 +295,6 @@ export function AdminApplicationPayments() {
       analyzeMissingPayments()
     }
   }, [application, staggeredService, fullService, retakeService, payments])
-
-  // Set up real-time subscription for payment updates
-  useEffect(() => {
-    if (!id) return
-
-    const paymentsChannel = subscribeToApplicationPayments(id, (payload) => {
-      handlePaymentRealtimeUpdate(payload)
-    })
-    paymentsChannelRef.current = paymentsChannel
-
-    // Cleanup on unmount
-    return () => {
-      if (paymentsChannelRef.current) {
-        unsubscribe(paymentsChannelRef.current)
-        paymentsChannelRef.current = null
-      }
-    }
-  }, [id])
-
-  // Handle real-time payment updates
-  function handlePaymentRealtimeUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord) {
-        // New payment added - refresh payments
-        loadPayments()
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Payment updated - update in place or refresh
-        setPayments((prev) => {
-          const index = prev.findIndex((p) => p.id === newRecord.id)
-          if (index >= 0) {
-            const updated = [...prev]
-            // Update payment with new data, preserving existing rate if not provided
-            const existingPayment = prev[index]
-            updated[index] = {
-              ...existingPayment,
-              ...newRecord,
-              // Preserve usd_to_php_rate if not in new record
-              usd_to_php_rate: newRecord.usd_to_php_rate || existingPayment.usd_to_php_rate
-            }
-            return updated
-          } else {
-            // Payment not in list, might be new - refresh to be safe
-            loadPayments()
-            return prev
-          }
-        })
-
-        // Show notification for status changes
-        if (oldRecord && oldRecord.status !== newRecord.status) {
-          if (newRecord.status === 'paid') {
-            showToast('Payment has been approved! ✅', 'success')
-          } else if (newRecord.status === 'failed') {
-            showToast('Payment has been rejected', 'error')
-          } else if (newRecord.status === 'pending_approval') {
-            showToast('New payment awaiting approval', 'info')
-          }
-        }
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Payment deleted - remove from list
-        setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id))
-      }
-    } catch (error) {
-      console.error('Error handling real-time payment update:', error)
-      // Fallback to full refresh on error
-      loadPayments()
-    }
-  }
 
   async function fetchApplication() {
     if (!id) return
