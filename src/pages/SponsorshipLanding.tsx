@@ -61,10 +61,10 @@ export function SponsorshipLanding() {
                 <Heart className="h-4 w-4" />
                 <span>Financial Support Program</span>
               </div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
                 NCLEX Sponsorship Program
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
+              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
                 Get financial support for your NCLEX exam fees and take the next step toward becoming a USRN. 
                 We're here to help you overcome financial barriers and achieve your nursing career goals.
               </p>

@@ -61,8 +61,8 @@ export function AboutUs() {
               <Users className="h-4 w-4" />
               <span>Meet Our Team</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">About GritSync</h1>
-            <p className="text-xl md:text-2xl text-white/90 max-w-2xl mx-auto">
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-6" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>About GritSync</h1>
+            <p className="text-xl md:text-2xl text-white/90 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
               Your trusted partner in navigating the NCLEX journey to becoming a licensed nurse in the United States.
             </p>
           </div>

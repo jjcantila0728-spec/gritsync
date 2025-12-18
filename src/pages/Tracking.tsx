@@ -914,10 +914,10 @@ export function Tracking() {
                     <FileText className="h-4 w-4" />
                     <span>Real-Time Tracking</span>
                   </div>
-                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
+                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
                     Application Tracking
                   </h1>
-                  <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
+                  <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
                     Track your NCLEX application status in real-time. Enter your application ID to view progress and updates.
                   </p>
                 </div>

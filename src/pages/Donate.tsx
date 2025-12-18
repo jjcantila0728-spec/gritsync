@@ -268,11 +268,11 @@ export function Donate() {
                 <Sparkles className="h-4 w-4" />
                 <span>Transform Lives Today</span>
               </div>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
                 Help Nurses Achieve Their
                 <span className="block text-yellow-300 mt-2">USRN Dreams</span>
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed">
+              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
                 Your donation removes financial barriers and opens doors for aspiring nurses. 
                 <span className="block mt-2 font-semibold">Every dollar brings someone closer to their dream career.</span>
               </p>

@@ -389,10 +389,10 @@ export function SuccessStories() {
               <Heart className="h-5 w-5 text-white" />
               <span className="text-white font-medium">Real Stories, Real Dreams</span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
               Success Stories
             </h1>
-            <p className="text-xl text-white/90 mb-8">
+            <p className="text-xl text-white/90 mb-8" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
               Mga kwento ng tagumpay mula sa ating mga kababayan na natupad ang kanilang American Dream. 
               Be inspired by their journeys!
             </p>

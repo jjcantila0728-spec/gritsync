@@ -278,10 +278,10 @@ export function USCISTracker() {
             <Globe className="h-4 w-4" />
             <span>Immigration Status Tracking</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
             USCIS Case Status & <span className="text-red-200">Visa Bulletin</span> Tracker
           </h1>
-          <p className="text-xl text-white/90 max-w-2xl mx-auto">
+          <p className="text-xl text-white/90 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
             Track your immigration case status and stay updated on the Visa Bulletin for Philippines EB3 category.
           </p>
         </div>

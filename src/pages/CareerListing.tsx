@@ -127,10 +127,10 @@ export function CareerListing() {
               <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full mb-6">
                 <Briefcase className="h-8 w-8 text-white" />
               </div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
                 Career Opportunities
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
+              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
                 Join our team and help nurses achieve their USRN dreams. Explore available positions and find your next career opportunity.
               </p>
             </div>
