@@ -644,11 +644,11 @@ export function Header() {
   ]
 
   const exploreMenuItems = [
-    { label: 'Success Stories', path: '/success-stories', hash: '' },
     { label: 'USCIS Tracker', path: '/uscis-tracker', hash: '' },
     { label: 'Sponsorship', path: '/sponsorship', hash: '' },
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },
+    { label: 'Success Stories', path: '/success-stories', hash: '' },
     { label: 'About Us', path: '/about-us', hash: '' },
   ]
 
