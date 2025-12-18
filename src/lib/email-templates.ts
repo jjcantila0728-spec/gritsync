@@ -152,17 +152,56 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
   if (socialMedia.linkedin) socialLinks.push(`<a href="${socialMedia.linkedin}" class="social-link" style="color: ${colors.primary};">LinkedIn</a>`)
   if (socialMedia.instagram) socialLinks.push(`<a href="${socialMedia.instagram}" class="social-link" style="color: ${colors.primary};">Instagram</a>`)
 
-  // Logo HTML
+  // Logo HTML - use text-based logo for better email client compatibility
+  // Many email clients block images by default, so we use a text fallback with styled appearance
   const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="${siteName}" style="max-height: 60px; max-width: 200px; margin-bottom: 10px;" />`
-    : `<a href="${siteUrl}" class="email-logo" style="font-size: 32px; font-weight: bold; color: #ffffff; text-decoration: none; letter-spacing: 1px;">${siteName}</a>`
+    ? `<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+        <tr>
+          <td style="padding: 0;">
+            <a href="${siteUrl}" style="display: inline-block; text-decoration: none;">
+              <img src="${logoUrl}" alt="${siteName}" width="180" height="50" style="display: block; max-width: 180px; height: auto; border: 0; outline: none;" />
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top: 8px; text-align: center;">
+            <span style="font-size: 14px; color: rgba(255,255,255,0.9); font-weight: 500;">Your NCLEX Journey Partner</span>
+          </td>
+        </tr>
+      </table>`
+    : `<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+        <tr>
+          <td style="padding: 0;">
+            <a href="${siteUrl}" style="font-size: 32px; font-weight: bold; color: #ffffff; text-decoration: none; letter-spacing: 2px;">GRIT<span style="color: rgba(255,255,255,0.85);">SYNC</span></a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top: 8px; text-align: center;">
+            <span style="font-size: 14px; color: rgba(255,255,255,0.9); font-weight: 500;">Your NCLEX Journey Partner</span>
+          </td>
+        </tr>
+      </table>`
 
   return `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+  <meta name="x-apple-disable-message-reformatting">
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:AllowPNG/>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
   <title>${siteName}</title>
   <style>
     * {
@@ -387,8 +426,8 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
       ${companyAddress ? `<p class="footer-text" style="margin-bottom: 10px;">${companyAddress.replace(/\n/g, '<br>')}</p>` : ''}
       <p class="footer-text">
         <strong>Contact Us:</strong><br>
-        📧 <a href="mailto:${supportEmail}" style="color: ${colors.primary}; text-decoration: none;">${supportEmail}</a>
-        ${phoneNumber ? `<br>📞 <a href="tel:${phoneNumber.replace(/[^\d+]/g, '')}" style="color: ${colors.primary}; text-decoration: none;">${phoneNumber}</a>` : ''}
+        Email: <a href="mailto:${supportEmail}" style="color: ${colors.primary}; text-decoration: none;">${supportEmail}</a>
+        ${phoneNumber ? `<br>Phone: <a href="tel:${phoneNumber.replace(/[^\d+]/g, '')}" style="color: ${colors.primary}; text-decoration: none;">${phoneNumber}</a>` : ''}
       </p>
       ${socialLinks.length > 0 ? `
         <div class="social-links">
@@ -404,6 +443,11 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
       <p class="footer-text" style="margin-top: 20px; color: ${colors.gray}; font-size: 12px;">
         © ${new Date().getFullYear()} ${siteName}. All rights reserved.<br>
         This email was sent by ${siteName}. If you have any questions, please contact us at ${supportEmail}.
+      </p>
+      <p style="margin-top: 15px; font-size: 11px; color: #999999; text-align: center;">
+        You received this email because you have an account with ${siteName} or subscribed to our services.<br>
+        <a href="${siteUrl}/unsubscribe" style="color: ${colors.primary}; text-decoration: underline;">Unsubscribe</a> | 
+        <a href="${siteUrl}/email-preferences" style="color: ${colors.primary}; text-decoration: underline;">Update Preferences</a>
       </p>
     </div>
   </div>
@@ -431,7 +475,7 @@ export async function createForgotPasswordEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>🔐 Password Reset Request</h1>
+      <h1>Password Reset Request</h1>
       <p>Hi ${userName},</p>
       <p>We received a request to reset your password. Click the button below to create a new password:</p>
       
@@ -440,7 +484,7 @@ export async function createForgotPasswordEmail(data: {
       </div>
 
       <div class="warning-box">
-        <p style="margin: 0;"><strong>⏰ Important:</strong> This link will expire in ${expiryTime} for security reasons.</p>
+        <p style="margin: 0;"><strong>Important:</strong> This link will expire in ${expiryTime} for security reasons.</p>
       </div>
 
       <p><strong>If you didn't request this password reset,</strong> please ignore this email. Your password will remain unchanged.</p>
@@ -465,7 +509,7 @@ export async function createForgotPasswordEmail(data: {
   `
 
   return {
-    subject: '🔐 Reset Your Password',
+    subject: 'Reset Your Password - GritSync',
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -520,7 +564,7 @@ export async function createPaymentReceiptEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>✅ Payment Received</h1>
+      <h1>Payment Received</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for your payment! Your transaction has been completed successfully.</p>
 
@@ -565,7 +609,7 @@ export async function createPaymentReceiptEmail(data: {
   `
 
   return {
-    subject: `✅ Payment Receipt - ${formatCurrency(amount)}`,
+    subject: `Payment Receipt - ${formatCurrency(amount)} - GritSync`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -670,7 +714,7 @@ export async function createMissingDocumentEmail(data: {
 
       ${deadline ? `
         <div class="warning-box">
-          <p style="margin: 0;"><strong>⏰ Deadline:</strong> Please upload the required documents by <strong>${deadline}</strong> to avoid delays in processing your application.</p>
+          <p style="margin: 0;"><strong>Deadline:</strong> Please upload the required documents by <strong>${deadline}</strong> to avoid delays in processing your application.</p>
         </div>
       ` : ''}
 
@@ -739,7 +783,7 @@ export async function createMissingDetailsEmail(data: {
 
       <div class="${boxClass}">
         <p style="margin: 0;">
-          <strong>${isUrgent ? '🚨 Urgent:' : '⚠️ Action Required:'}</strong> 
+          <strong>${isUrgent ? 'URGENT:' : 'Action Required:'}</strong> 
           Please update the following information in your profile.
         </p>
       </div>
@@ -828,7 +872,7 @@ export async function createSchoolLetterEmail(data: {
       `}
 
       <div class="warning-box">
-        <p style="margin: 0;"><strong>⚠️ Important:</strong> This letter is valid for 90 days from the date of issue. Please ensure you submit it within this timeframe.</p>
+        <p style="margin: 0;"><strong>Important:</strong> This letter is valid for 90 days from the date of issue. Please ensure you submit it within this timeframe.</p>
       </div>
 
       <p>If you need any changes or have questions about the letter, please contact our support team.</p>
@@ -910,10 +954,10 @@ export async function createFullInstructionsEmail(data: {
         <h3 style="margin-top: 0;">Need Help?</h3>
         <p>Our support team is ready to assist you:</p>
         <ul style="margin: 10px 0 0;">
-          <li>📧 Email: support@gritsync.com</li>
-          <li>📞 Phone: Available in your dashboard</li>
-          <li>💬 Live Chat: Available on our website</li>
-          <li>📖 Help Center: Comprehensive guides and FAQs</li>
+          <li>Email: support@gritsync.com</li>
+          <li>Phone: Available in your dashboard</li>
+          <li>Live Chat: Available on our website</li>
+          <li>Help Center: Comprehensive guides and FAQs</li>
         </ul>
       </div>
 
@@ -946,7 +990,7 @@ export async function createWelcomeEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>🎉 Welcome to GritSync!</h1>
+      <h1>Welcome to GritSync!</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for joining GritSync! We're thrilled to have you on board.</p>
 
@@ -984,7 +1028,7 @@ export async function createWelcomeEmail(data: {
   `
 
   return {
-    subject: '🎉 Welcome to GritSync!',
+    subject: 'Welcome to GritSync - Get Started Today',
     html: await createBaseTemplate(content, { userName, userEmail })
   }
 }
@@ -1009,7 +1053,7 @@ export async function createEmailVerificationEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>✉️ Verify Your Email Address</h1>
+      <h1>Verify Your Email Address</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for signing up! Please verify your email address to complete your account setup.</p>
       
@@ -1018,7 +1062,7 @@ export async function createEmailVerificationEmail(data: {
       </div>
 
       <div class="info-box">
-        <p style="margin: 0;"><strong>⏰ Important:</strong> This verification link will expire in ${expiryTime}.</p>
+        <p style="margin: 0;"><strong>Important:</strong> This verification link will expire in ${expiryTime}.</p>
       </div>
 
       <p><strong>If you didn't create an account,</strong> please ignore this email.</p>
@@ -1080,7 +1124,7 @@ export async function createApplicationApprovedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>🎉 Congratulations! Your Application Has Been Approved</h1>
+      <h1>Congratulations! Your Application Has Been Approved</h1>
       <p>Hi ${userName},</p>
       <p>We're thrilled to inform you that your <strong>${serviceType}</strong> application has been <strong>approved</strong>!</p>
 
@@ -1102,7 +1146,7 @@ export async function createApplicationApprovedEmail(data: {
           <tr>
             <td style="border: none; padding: 8px 0;"><strong>Status:</strong></td>
             <td style="border: none; padding: 8px 0; text-align: right;">
-              <span class="badge badge-success">Approved ✅</span>
+              <span class="badge badge-success">Approved</span>
             </td>
           </tr>
         </table>
@@ -1121,7 +1165,7 @@ export async function createApplicationApprovedEmail(data: {
       </div>
 
       <div class="card" style="background-color: #f0fdf4;">
-        <p style="margin: 0;"><strong>🎊 What's Next?</strong></p>
+        <p style="margin: 0;"><strong>What's Next?</strong></p>
         <p style="margin: 10px 0 0;">Your application has been successfully processed. You can now proceed with the next steps in your journey. If you have any questions, our support team is here to help!</p>
       </div>
 
@@ -1130,7 +1174,7 @@ export async function createApplicationApprovedEmail(data: {
   `
 
   return {
-    subject: `🎉 Application Approved - ${serviceType}`,
+    subject: `Application Approved - ${serviceType} - GritSync`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1211,7 +1255,7 @@ export async function createApplicationRejectedEmail(data: {
         ${supportContact ? `
           <p style="margin: 10px 0 0;">
             <strong>Contact Support:</strong><br>
-            📧 <a href="mailto:${supportContact}" style="color: ${colors.primary}; text-decoration: none;">${supportContact}</a>
+            Email: <a href="mailto:${supportContact}" style="color: ${colors.primary}; text-decoration: none;">${supportContact}</a>
           </p>
         ` : ''}
       </div>
@@ -1249,7 +1293,7 @@ export async function createDocumentApprovedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>✅ Document Approved</h1>
+      <h1>Document Approved</h1>
       <p>Hi ${userName},</p>
       <p>Great news! Your document has been reviewed and <strong>approved</strong>.</p>
 
@@ -1277,7 +1321,7 @@ export async function createDocumentApprovedEmail(data: {
           <tr>
             <td style="border: none; padding: 8px 0;"><strong>Status:</strong></td>
             <td style="border: none; padding: 8px 0; text-align: right;">
-              <span class="badge badge-success">Approved ✅</span>
+              <span class="badge badge-success">Approved</span>
             </td>
           </tr>
         </table>
@@ -1299,7 +1343,7 @@ export async function createDocumentApprovedEmail(data: {
   `
 
   return {
-    subject: `✅ Document Approved: ${documentName}`,
+    subject: `Document Approved: ${documentName} - GritSync`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1337,7 +1381,7 @@ export async function createDocumentRejectedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>⚠️ Document Needs Revision</h1>
+      <h1>Document Needs Revision</h1>
       <p>Hi ${userName},</p>
       <p>We've reviewed your document, but it needs some revisions before it can be approved.</p>
 
@@ -1398,7 +1442,7 @@ export async function createDocumentRejectedEmail(data: {
   `
 
   return {
-    subject: `⚠️ Action Required: Revise ${documentName}`,
+    subject: `Action Required: Revise ${documentName} - GritSync`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1466,7 +1510,7 @@ export async function createVisaBulletinUpdateEmail(data: {
 
       <div style="background-color: #fef2f2; padding: 24px; border-radius: 12px; margin: 32px 0;">
         <h3 style="color: ${branding.primaryColor}; margin: 0 0 16px; text-align: center;">
-          ✨ GritSync Services for Filipino Nurses
+          GritSync Services for Filipino Nurses
         </h3>
         
         <div style="display: flex; flex-direction: column; gap: 12px;">
