@@ -1,14 +1,16 @@
 /**
  * Email Service
  * Handles sending emails with templates and proper formatting
+ * NOTE: This feature uses the server-side email routes
  */
 
 import { generalSettings } from './settings'
 import * as EmailTemplates from './email-templates'
+import { apiClient } from './api-client'
 
 interface EmailAttachment {
   filename: string
-  content: string // base64 encoded
+  content: string
   type?: string
 }
 
@@ -18,12 +20,12 @@ export interface EmailOptions {
   html: string
   text?: string
   from?: string
-  fromName?: string  // Sender display name
-  fromEmailAddressId?: string  // Reference to email_addresses table
+  fromName?: string
+  fromEmailAddressId?: string
   replyTo?: string
   cc?: string
   bcc?: string
-  attachments?: File[] | EmailAttachment[] // Can be File objects or pre-encoded attachments
+  attachments?: File[] | EmailAttachment[]
 }
 
 interface EmailTemplateData {
@@ -36,7 +38,12 @@ interface EmailTemplateData {
   [key: string]: any
 }
 
-// Re-export templates for easy access
+export interface SendEmailResult {
+  success: boolean
+  messageId?: string
+  error?: string
+}
+
 export {
   EmailTemplates
 }
@@ -49,31 +56,11 @@ async function getEmailConfig() {
   const adminEmail = await generalSettings.getAdminEmail()
   const supportEmail = await generalSettings.getSupportEmail()
   
-  // Get email settings from database
-  const { data: emailSettings, error } = await supabase
-    .from('settings')
-    .select('key, value')
-    .in('key', ['emailFrom', 'emailFromName', 'emailServiceProvider', 'resendApiKey'])
-  
-  if (error) {
-    console.error('Error fetching email settings:', error)
-  }
-  
-  const settingsMap: Record<string, string> = {}
-  if (emailSettings && Array.isArray(emailSettings) && !('error' in emailSettings)) {
-    emailSettings.forEach((setting: any) => {
-      if (setting && typeof setting === 'object' && 'key' in setting && 'value' in setting) {
-        settingsMap[setting.key] = setting.value
-      }
-    })
-  }
-  
   return {
-    fromName: settingsMap.emailFromName || siteName || 'GritSync',
-    fromEmail: settingsMap.emailFrom || adminEmail || 'noreply@gritsync.com',
+    fromName: siteName || 'GritSync',
+    fromEmail: adminEmail || 'noreply@gritsync.com',
     supportEmail: supportEmail || 'support@gritsync.com',
-    serviceProvider: settingsMap.emailServiceProvider || 'resend',
-    resendApiKey: settingsMap.resendApiKey || '',
+    serviceProvider: 'resend',
   }
 }
 
@@ -91,7 +78,6 @@ function generateEmailTemplate(data: EmailTemplateData & { customHtml?: string }
     customHtml,
   } = data
 
-  // If custom HTML is provided, use it instead of message
   const messageContent = customHtml || message.split('\n').map(p => `<p>${p}</p>`).join('')
 
   return `
@@ -109,928 +95,171 @@ function generateEmailTemplate(data: EmailTemplateData & { customHtml?: string }
       max-width: 600px;
       margin: 0 auto;
       padding: 20px;
-      background-color: #f5f5f5;
     }
-    .email-container {
-      background-color: #ffffff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .email-header {
-      background: linear-gradient(135deg, #dc2626 0%, #991b1b 50%, #7f1d1d 100%);
+    .header {
+      background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
       color: white;
-      padding: 30px 20px;
+      padding: 30px;
       text-align: center;
+      border-radius: 8px 8px 0 0;
     }
-    .email-header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: bold;
+    .content {
+      background: #ffffff;
+      padding: 30px;
+      border: 1px solid #e5e7eb;
     }
-    .email-body {
-      padding: 30px 20px;
-    }
-    .email-greeting {
-      font-size: 16px;
-      margin-bottom: 20px;
-      color: #333;
-    }
-    .email-content {
-      font-size: 15px;
-      color: #555;
-      margin-bottom: 30px;
-      line-height: 1.8;
-    }
-    .email-button {
+    .button {
       display: inline-block;
-      padding: 12px 24px;
-      background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+      background: #DC2626;
       color: white;
+      padding: 12px 24px;
       text-decoration: none;
       border-radius: 6px;
-      font-weight: 500;
       margin: 20px 0;
     }
-    .email-footer {
-      background-color: #f9f9f9;
+    .footer {
+      background: #f9fafb;
       padding: 20px;
       text-align: center;
-      font-size: 12px;
-      color: #666;
-      border-top: 1px solid #eee;
-    }
-    .email-footer a {
-      color: #dc2626;
-      text-decoration: none;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 8px 8px;
     }
   </style>
 </head>
 <body>
-  <div class="email-container">
-    <div class="email-header">
-      <h1>GRITSYNC</h1>
-    </div>
-    <div class="email-body">
-      <div class="email-greeting">
-        Hello ${userName},
-      </div>
-      <div class="email-content">
-        ${messageContent}
-      </div>
-      ${actionUrl ? `
-        <div style="text-align: center;">
-          <a href="${actionUrl}" class="email-button">${actionText}</a>
-        </div>
-      ` : ''}
-    </div>
-    <div class="email-footer">
-      <p>${footerText}</p>
-      <p style="margin-top: 10px;">
-        <a href="${actionUrl || '#'}">View in Dashboard</a> | 
-        <a href="mailto:support@gritsync.com">Contact Support</a>
-      </p>
-      <p style="margin-top: 10px; font-size: 11px; color: #999;">
-        This is an automated message. Please do not reply to this email.
-      </p>
-    </div>
+  <div class="header">
+    <h1>${title}</h1>
+  </div>
+  <div class="content">
+    <p>Hello ${userName},</p>
+    ${messageContent}
+    ${actionUrl ? `<a href="${actionUrl}" class="button">${actionText}</a>` : ''}
+  </div>
+  <div class="footer">
+    <p>${footerText}</p>
+    <p>GritSync - Your NCLEX Processing Partner</p>
   </div>
 </body>
-</html>
-  `.trim()
+</html>`
 }
 
 /**
- * Generate plain text email
+ * Send an email via the server API
  */
-function generatePlainTextEmail(data: EmailTemplateData): string {
-  const {
-    userName = 'User',
-    message = '',
-    actionUrl,
-    actionText = 'View Details',
-  } = data
-
-  let text = `Hello ${userName},\n\n${message}\n\n`
-  
-  if (actionUrl) {
-    text += `${actionText}: ${actionUrl}\n\n`
-  }
-  
-  text += `Thank you for using GritSync.\n\n`
-  text += `This is an automated message. Please do not reply to this email.`
-  
-  return text
-}
-
-/**
- * Send email via Supabase Edge Function or API
- * This will call a Supabase Edge Function that handles actual email sending
- * Now includes automatic logging to email_logs table
- */
-export async function sendEmail(options: EmailOptions & {
-  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated'
-  emailCategory?: string
-  recipientUserId?: string
-  recipientName?: string
-  applicationId?: string
-  quotationId?: string
-  donationId?: string
-  sponsorshipId?: string
-  metadata?: Record<string, any>
-  tags?: string[]
-  fromName?: string  // Sender display name
-  fromEmailAddressId?: string  // Reference to email_addresses table
-}): Promise<boolean> {
-  let logId: string | null = null
-  
+export async function sendEmail(options: EmailOptions): Promise<SendEmailResult> {
   try {
-    // Validate required fields before calling the function
-    if (!options.to || !options.subject || !options.html) {
-      console.error('Missing required email fields:', {
-        hasTo: !!options.to,
-        hasSubject: !!options.subject,
-        hasHtml: !!options.html,
-        to: options.to,
-        subject: options.subject,
-        htmlLength: options.html?.length || 0
-      })
-      return false
-    }
-
     const config = await getEmailConfig()
     
-    // Get current user info (using cached helper to minimize auth calls)
-    // For password reset emails, user won't be logged in, so make this optional
-    let user: any = null
-    try {
-      await getCurrentUserId() // Just to check if session exists
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      user = currentUser
-    } catch (error) {
-      // No session - this is OK for password reset emails
-      console.log('No user session - sending email without user context')
-    }
-    
-    // Resolve from email address if ID provided
-    let fromEmailAddressId = options.fromEmailAddressId || null
-    let fromEmail = options.from || `${config.fromName} <${config.fromEmail}>`
-    
-    if (options.fromEmailAddressId) {
-      try {
-        const { emailAddressesAPI } = await import('./email-addresses-api')
-        const emailAddress = await emailAddressesAPI.getById(options.fromEmailAddressId)
-        if (emailAddress && emailAddress.is_active && emailAddress.can_send) {
-          // Use provided fromName, or email address display_name, or fall back to site name
-          const senderName = options.fromName || emailAddress.display_name || config.fromName
-          fromEmail = `${senderName} <${emailAddress.email_address}>`
-          // Update last used timestamp
-          await emailAddressesAPI.updateLastUsed(emailAddress.id)
-        }
-      } catch (err) {
-        console.error('Error resolving from email address:', err)
-      }
-    } else if (options.fromName) {
-      // If fromName provided but no fromEmailAddressId, use it with config email
-      fromEmail = `${options.fromName} <${config.fromEmail}>`
-    }
-    
-    // Resolve recipient email address ID if it's a gritsync email
-    let toEmailAddressId: string | null = null
-    if (options.to.toLowerCase().endsWith('@gritsync.com')) {
-      try {
-        const { emailAddressesAPI } = await import('./email-addresses-api')
-        const recipientAddress = await emailAddressesAPI.getByEmail(options.to)
-        if (recipientAddress) {
-          toEmailAddressId = recipientAddress.id
-        }
-      } catch (err) {
-        // Not found or error, continue without ID
-      }
-    }
-    
-    // Create email log entry before sending (skip if no user session and no recipient user ID)
-    if (user || options.recipientUserId) {
-      // Only log if we have a user session or recipient user ID (for system emails)
-      try {
-        const { data: logData, error: logError } = await supabase
-          .from('email_logs')
-          .insert({
-            recipient_email: options.to.trim(),
-            recipient_name: options.recipientName || null,
-            recipient_user_id: options.recipientUserId || null,
-            subject: options.subject.trim(),
-            body_html: options.html,
-            body_text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
-            sender_email: config.fromEmail,
-            sender_name: config.fromName,
-            sent_by_user_id: user?.id || null,
-            email_type: options.emailType || 'transactional',
-            email_category: options.emailCategory || null,
-            status: 'pending',
-            email_provider: config.serviceProvider,
-            application_id: options.applicationId || null,
-            quotation_id: options.quotationId || null,
-            donation_id: options.donationId || null,
-            sponsorship_id: options.sponsorshipId || null,
-            metadata: options.metadata || {},
-            tags: options.tags || [],
-            from_email_address_id: fromEmailAddressId,
-            to_email_address_id: toEmailAddressId,
-          })
-          .select()
-          .single()
-        
-        if (logError) {
-          console.error('Error creating email log:', logError)
-          // Continue with sending even if logging fails
-        } else if (logData) {
-          logId = (logData as any).id
-        }
-      } catch (logErr) {
-        console.error('Error creating email log:', logErr)
-        // Continue with sending even if logging fails
-      }
-    } else {
-      console.log('Skipping email log - no user session and no recipient user ID (system email)')
-    }
-    
-    // Convert File attachments to base64 if needed
-    let attachments: Array<{ filename: string; content: string; type?: string }> | undefined
-    if (options.attachments && options.attachments.length > 0) {
-      attachments = await Promise.all(
-        options.attachments.map(async (att) => {
-          // If it's already an EmailAttachment (pre-encoded), use it directly
-          if ('content' in att && typeof att.content === 'string') {
-            return {
-              filename: att.filename,
-              content: att.content,
-              type: att.type || 'application/octet-stream'
-            }
-          }
-          // If it's a File object, convert to base64
-          if (att instanceof File) {
-            return new Promise<{ filename: string; content: string; type: string }>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onload = () => {
-                const base64 = (reader.result as string).split(',')[1] // Remove data:type;base64, prefix
-                resolve({
-                  filename: att.name,
-                  content: base64,
-                  type: att.type || 'application/octet-stream'
-                })
-              }
-              reader.onerror = reject
-              reader.readAsDataURL(att)
-            })
-          }
-          throw new Error('Invalid attachment format')
-        })
-      )
-    }
-
-    // Get site URL for unsubscribe links
-    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const unsubscribeUrl = `${siteUrl}/unsubscribe?email=${encodeURIComponent(options.to.trim())}`
-    
-    // Prepare the email payload with spam prevention headers
-    const emailPayload: any = {
-      to: options.to.trim(),
-      subject: options.subject.trim(),
+    const emailData = {
+      to: options.to,
+      subject: options.subject,
       html: options.html,
-      text: options.text || generatePlainTextEmail({ message: options.html.replace(/<[^>]*>/g, '') }),
-      from: fromEmail,
-      replyTo: options.replyTo || undefined,
-      cc: options.cc || undefined,
-      bcc: options.bcc || undefined,
-      headers: {
-        'List-Unsubscribe': `<${unsubscribeUrl}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        'X-Auto-Response-Suppress': 'OOF, AutoReply',
-        'Precedence': 'bulk',
-      },
+      text: options.text,
+      from: options.from || config.fromEmail,
+      fromName: options.fromName || config.fromName,
+      replyTo: options.replyTo,
+      cc: options.cc,
+      bcc: options.bcc,
     }
 
-    // Add attachments if any
-    if (attachments && attachments.length > 0) {
-      emailPayload.attachments = attachments
-    }
-
-    console.log('Sending email with payload:', {
-      to: emailPayload.to,
-      subject: emailPayload.subject,
-      htmlLength: emailPayload.html.length,
-      hasText: !!emailPayload.text,
-      from: emailPayload.from,
-      logId
-    })
+    const result = await apiClient.post<{ success: boolean; messageId?: string; error?: string }>('/emails/send', emailData)
     
-    // Call Supabase Edge Function to send email
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: emailPayload,
-    })
-
-    if (error) {
-      console.error('Error sending email:', error)
-      
-      // Update log with error
-      if (logId) {
-        await supabase
-          .from('email_logs')
-          .update({
-            status: 'failed',
-            failed_at: new Date().toISOString(),
-            error_message: error.message || 'Failed to send email',
-            error_code: error.code || null,
-          })
-          .eq('id', logId)
-      }
-      
-      // Check if it's a CORS error
-      if (error.message?.includes('CORS') || error.message?.includes('Failed to send a request')) {
-        console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
-        console.error('To fix this, run: supabase functions deploy send-email')
-      }
-      
-      return false
-    }
-
-    // Log the full response for debugging
-    console.log('Email service response:', data)
-
-    // Check if the response indicates failure
-    if (data && typeof data === 'object' && 'error' in data) {
-      console.error('Email service returned error:', data.error)
-      if ('details' in data) {
-        console.error('Error details:', data.details)
-      }
-      
-      // Update log with error
-      if (logId) {
-        await supabase
-          .from('email_logs')
-          .update({
-            status: 'failed',
-            failed_at: new Date().toISOString(),
-            error_message: data.error || 'Email service error',
-            provider_response: data,
-          })
-          .eq('id', logId)
-      }
-      
-      return false
-    }
-
-    // Check if the response indicates success
-    if (data && typeof data === 'object' && 'success' in data) {
-      const success = data.success === true
-      
-      // Update log with success/failure
-      if (logId) {
-        await supabase
-          .from('email_logs')
-          .update({
-            status: success ? 'sent' : 'failed',
-            sent_at: success ? new Date().toISOString() : null,
-            failed_at: success ? null : new Date().toISOString(),
-            provider_message_id: data.messageId || null,
-            provider_response: data,
-            error_message: success ? null : 'Email service reported failure',
-          })
-          .eq('id', logId)
-      }
-      
-      if (success) {
-        console.log('Email sent successfully:', data)
-        return true
-      }
-      return false
-    }
-
-    // Default to success if no explicit success/error indicator
-    if (logId) {
-      await supabase
-        .from('email_logs')
-        .update({
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-          provider_response: data,
-        })
-        .eq('id', logId)
-    }
-    
-    return true
+    return result
   } catch (error: any) {
     console.error('Error sending email:', error)
-    
-    // Update log with error
-    if (logId) {
-      await supabase
-        .from('email_logs')
-        .update({
-          status: 'failed',
-          failed_at: new Date().toISOString(),
-          error_message: error.message || 'Unknown error',
-        })
-        .eq('id', logId)
+    return {
+      success: false,
+      error: error.message || 'Failed to send email',
     }
-    
-    // Check if it's a CORS error
-    if (error?.message?.includes('CORS') || error?.message?.includes('Failed to send')) {
-      console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
-      console.error('To fix this, run: supabase functions deploy send-email')
-    }
-    
-    return false
   }
 }
 
 /**
- * Send notification email
+ * Send a templated notification email
  */
 export async function sendNotificationEmail(
   to: string,
-  type: 'timeline_update' | 'status_change' | 'payment' | 'general',
-  data: {
-    userName?: string
-    title: string
-    message: string
-    actionUrl?: string
-    applicationId?: string
-    recipientUserId?: string
-  }
-): Promise<boolean> {
-  const config = await getEmailConfig()
+  subject: string,
+  templateData: EmailTemplateData
+): Promise<SendEmailResult> {
+  const html = generateEmailTemplate(templateData)
   
-  // Determine action URL based on type
-  let actionUrl = data.actionUrl
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-  if (!actionUrl && data.applicationId) {
-    actionUrl = `${baseUrl}/applications/${data.applicationId}`
-  } else if (!actionUrl) {
-    actionUrl = `${baseUrl}/dashboard`
-  }
-
-  const emailHtml = generateEmailTemplate({
-    userName: data.userName || 'User',
-    title: data.title,
-    message: data.message,
-    actionUrl,
-    actionText: type === 'payment' ? 'View Payment' : type === 'status_change' ? 'View Application' : 'View Details',
-    footerText: 'Thank you for using GritSync',
-  })
-
   return sendEmail({
     to,
-    subject: `${data.title} - ${config.fromName}`,
-    html: emailHtml,
-    emailType: 'notification',
-    emailCategory: type,
-    recipientName: data.userName,
-    recipientUserId: data.recipientUserId,
-    applicationId: data.applicationId,
-    tags: ['notification', type],
+    subject,
+    html,
   })
 }
 
 /**
- * Send email verification
+ * Send a welcome email to new users
  */
-export async function sendEmailVerification(
-  email: string,
+export async function sendWelcomeEmail(
+  to: string,
   userName: string,
-  verificationUrl: string
-): Promise<boolean> {
-  const template = await emailTemplates.emailVerification({
+  loginUrl: string
+): Promise<SendEmailResult> {
+  return sendNotificationEmail(to, 'Welcome to GritSync!', {
     userName,
-    email,
-    verificationUrl,
-  })
-
-  return sendEmail({
-    to: email,
-    subject: 'Verify Your Email Address - GritSync',
-    html: template,
+    title: 'Welcome to GritSync!',
+    message: 'Thank you for registering with GritSync. We are excited to help you achieve your NCLEX goals.',
+    actionUrl: loginUrl,
+    actionText: 'Login to Your Account',
   })
 }
 
 /**
- * Send forgot password email
- * NOTE: This is now handled by Supabase Auth. Customize in Supabase Dashboard -> Authentication -> Email Templates
+ * Send a password reset email
  */
-export async function sendForgotPasswordEmail(
-  email: string,
+export async function sendPasswordResetEmail(
+  to: string,
   userName: string,
   resetUrl: string
-): Promise<boolean> {
-  console.log('Forgot password email is handled by Supabase Auth templates')
-  return true
-}
-
-/**
- * Send payment receipt email
- */
-export async function sendPaymentReceipt(
-  email: string,
-  data: {
-    userName: string
-    receiptNumber: string
-    amount: number
-    paymentType: string
-    items: Array<{ name: string; amount: number }>
-    paymentDate: string
-    applicationId?: string
-    userId?: string
-  }
-): Promise<boolean> {
-  const template = await emailTemplates.paymentReceipt(data)
-
-  return sendEmail({
-    to: email,
-    subject: `Payment Receipt ${data.receiptNumber} - GritSync`,
-    html: template,
-    emailType: 'transactional',
-    emailCategory: 'payment_receipt',
-    recipientName: data.userName,
-    recipientUserId: data.userId,
-    applicationId: data.applicationId,
-    metadata: {
-      receiptNumber: data.receiptNumber,
-      amount: data.amount,
-      paymentType: data.paymentType,
-    },
-    tags: ['payment', 'receipt'],
-  })
-}
-
-/**
- * Send donation receipt email
- */
-export async function sendDonationReceipt(
-  email: string,
-  data: {
-    donorName?: string | null
-    donationId: string
-    amount: number
-    donationDate: string
-    isAnonymous?: boolean
-    message?: string | null
-  }
-): Promise<boolean> {
-  const template = await emailTemplates.donationReceipt(data)
-
-  return sendEmail({
-    to: email,
-    subject: `Donation Receipt - Thank You for Your Generosity!`,
-    html: template,
-  })
-}
-
-/**
- * Send birthday greeting
- */
-export async function sendBirthdayGreeting(
-  email: string,
-  userName: string,
-  greeting: string
-): Promise<boolean> {
-  const template = await emailTemplates.birthdayGreeting({
+): Promise<SendEmailResult> {
+  return sendNotificationEmail(to, 'Reset Your Password', {
     userName,
-    greeting,
-  })
-
-  return sendEmail({
-    to: email,
-    subject: 'Happy Birthday! - GritSync',
-    html: template,
+    title: 'Password Reset Request',
+    message: 'We received a request to reset your password. Click the button below to create a new password. This link will expire in 1 hour.',
+    actionUrl: resetUrl,
+    actionText: 'Reset Password',
   })
 }
 
 /**
- * Send reminder email
+ * Send an application status update email
  */
-export async function sendReminderEmail(
-  email: string,
-  data: {
-    userName: string
-    reminderType: string
-    message: string
-    actionUrl?: string
-  }
-): Promise<boolean> {
-  const template = await emailTemplates.reminder(data)
-
-  return sendEmail({
-    to: email,
-    subject: `Reminder: ${data.reminderType} - GritSync`,
-    html: template,
+export async function sendApplicationStatusEmail(
+  to: string,
+  userName: string,
+  applicationId: string,
+  status: string,
+  detailsUrl: string
+): Promise<SendEmailResult> {
+  return sendNotificationEmail(to, `Application Status Update: ${status}`, {
+    userName,
+    title: 'Application Status Update',
+    message: `Your application (ID: ${applicationId}) status has been updated to: ${status}`,
+    actionUrl: detailsUrl,
+    actionText: 'View Application',
   })
 }
 
 /**
- * Send test email
+ * Send a payment confirmation email
  */
-export async function sendTestEmail(email: string): Promise<boolean> {
-  const template = generateEmailTemplate({
-    userName: 'Test User',
-    title: 'Test Email',
-    message: 'This is a test email from GritSync. If you received this, your email configuration is working correctly!',
-    actionUrl: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard',
-    actionText: 'Visit Dashboard',
-    footerText: 'This is a test email. Your email service is configured correctly.',
-  })
-
-  return sendEmail({
-    to: email,
-    subject: 'Test Email - GritSync Email Configuration',
-    html: template,
-    emailType: 'manual',
-    emailCategory: 'custom',
-    recipientName: 'Test User',
-    tags: ['test', 'configuration'],
+export async function sendPaymentConfirmationEmail(
+  to: string,
+  userName: string,
+  amount: number,
+  paymentId: string,
+  receiptUrl?: string
+): Promise<SendEmailResult> {
+  return sendNotificationEmail(to, 'Payment Confirmation', {
+    userName,
+    title: 'Payment Received',
+    message: `Thank you for your payment of $${amount.toFixed(2)}. Your payment ID is: ${paymentId}`,
+    actionUrl: receiptUrl,
+    actionText: receiptUrl ? 'View Receipt' : undefined,
   })
 }
-
-/**
- * Email templates for different notification types
- */
-export const emailTemplates = {
-  timelineUpdate: async (data: {
-    userName: string
-    applicationId: string
-    stepName: string
-    message: string
-  }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const actionUrl = `${baseUrl}/applications/${data.applicationId}`
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Timeline Update',
-      message: `Your application timeline has been updated.\n\n${data.message}\n\nStep: ${data.stepName}`,
-      actionUrl,
-      actionText: 'View Application',
-    })
-  },
-
-  statusChange: async (data: {
-    userName: string
-    applicationId: string
-    oldStatus: string
-    newStatus: string
-    message?: string
-  }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const actionUrl = `${baseUrl}/applications/${data.applicationId}`
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Application Status Changed',
-      message: data.message || `Your application status has been updated from "${data.oldStatus}" to "${data.newStatus}".`,
-      actionUrl,
-      actionText: 'View Application',
-    })
-  },
-
-  payment: async (data: {
-    userName: string
-    applicationId: string
-    amount: number
-    paymentType: string
-    message?: string
-  }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const actionUrl = `${baseUrl}/applications/${data.applicationId}`
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Payment Update',
-      message: data.message || `Your payment of $${data.amount} for ${data.paymentType} has been processed successfully.`,
-      actionUrl,
-      actionText: 'View Payment',
-    })
-  },
-
-  general: async (data: {
-    userName: string
-    title: string
-    message: string
-    actionUrl?: string
-  }) => {
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: data.title,
-      message: data.message,
-      actionUrl: data.actionUrl || (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard'),
-      actionText: 'View Dashboard',
-    })
-  },
-
-  emailVerification: async (data: {
-    userName: string
-    email: string
-    verificationUrl: string
-  }) => {
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Verify Your Email Address',
-      message: `Thank you for registering with GritSync!\n\nPlease verify your email address by clicking the button below. This helps us ensure the security of your account.\n\nIf you did not create an account, please ignore this email.`,
-      actionUrl: data.verificationUrl,
-      actionText: 'Verify Email Address',
-      footerText: 'This verification link will expire in 24 hours.',
-    })
-  },
-
-  forgotPassword: async (data: {
-    userName: string
-    resetUrl: string
-  }) => {
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Reset Your Password',
-      message: `We received a request to reset your password. Click the button below to create a new password.\n\nIf you did not request a password reset, please ignore this email. Your password will remain unchanged.`,
-      actionUrl: data.resetUrl,
-      actionText: 'Reset Password',
-      footerText: 'This password reset link will expire in 1 hour.',
-    })
-  },
-
-  paymentReceipt: async (data: {
-    userName: string
-    receiptNumber: string
-    amount: number
-    paymentType: string
-    items: Array<{ name: string; amount: number }>
-    paymentDate: string
-    applicationId?: string
-  }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const actionUrl = data.applicationId 
-      ? `${baseUrl}/applications/${data.applicationId}/payment`
-      : `${baseUrl}/dashboard`
-    
-    const itemsHtml = data.items.map(item => 
-      `<tr>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${item.amount.toFixed(2)}</td>
-      </tr>`
-    ).join('')
-
-    const receiptHtml = `
-      <p>Thank you for your payment!</p>
-      <p>Your payment has been processed successfully. Please find your receipt details below.</p>
-      <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3 style="margin-top: 0; color: #dc2626;">Payment Receipt</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 8px; font-weight: bold;">Receipt Number:</td>
-            <td style="padding: 8px;">${data.receiptNumber}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; font-weight: bold;">Payment Type:</td>
-            <td style="padding: 8px;">${data.paymentType}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; font-weight: bold;">Date:</td>
-            <td style="padding: 8px;">${new Date(data.paymentDate).toLocaleDateString()}</td>
-          </tr>
-        </table>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-          <thead>
-            <tr style="background: #dc2626; color: white;">
-              <th style="padding: 10px; text-align: left;">Item</th>
-              <th style="padding: 10px; text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-            <tr>
-              <td style="padding: 8px; font-weight: bold; border-top: 2px solid #dc2626;">Total</td>
-              <td style="padding: 8px; font-weight: bold; text-align: right; border-top: 2px solid #dc2626;">$${data.amount.toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    `
-
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Payment Receipt',
-      customHtml: receiptHtml,
-      actionUrl,
-      actionText: 'View Payment Details',
-      footerText: 'Keep this receipt for your records.',
-    })
-  },
-
-  birthdayGreeting: async (data: {
-    userName: string
-    greeting: string
-  }) => {
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: 'Happy Birthday!',
-      message: `${data.greeting}\n\nWe hope you have a wonderful day filled with joy and success!\n\nThank you for being part of the GritSync family.`,
-      actionUrl: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard',
-      actionText: 'Visit Dashboard',
-      footerText: 'Wishing you all the best on your special day!',
-    })
-  },
-
-  reminder: async (data: {
-    userName: string
-    reminderType: string
-    message: string
-    actionUrl?: string
-  }) => {
-    return generateEmailTemplate({
-      userName: data.userName,
-      title: `Reminder: ${data.reminderType}`,
-      message: data.message,
-      actionUrl: data.actionUrl || (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://gritsync.com/dashboard'),
-      actionText: 'Take Action',
-      footerText: 'This is an automated reminder from GritSync.',
-    })
-  },
-
-  donationReceipt: async (data: {
-    donorName?: string | null
-    donationId: string
-    amount: number
-    donationDate: string
-    isAnonymous?: boolean
-    message?: string | null
-  }) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-    const donorName = data.donorName || (data.isAnonymous ? 'Generous Donor' : 'Valued Supporter')
-    
-    const receiptHtml = `
-      <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; border-radius: 12px; margin: 20px 0; text-align: center;">
-        <h2 style="margin: 0 0 10px 0; font-size: 28px;">Thank You for Your Donation!</h2>
-        <p style="margin: 0; font-size: 18px; opacity: 0.95;">Your generosity is making a real difference</p>
-      </div>
-      
-      <p style="font-size: 16px; line-height: 1.6; color: #333;">
-        Dear ${donorName},
-      </p>
-      
-      <p style="font-size: 16px; line-height: 1.6; color: #333;">
-        We are incredibly grateful for your generous donation of <strong style="color: #2563eb; font-size: 18px;">$${data.amount.toFixed(2)}</strong>. 
-        Your contribution directly supports aspiring nurses in achieving their USRN dreams.
-      </p>
-      
-      ${data.message ? `
-      <div style="background: #f0f9ff; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; border-radius: 4px;">
-        <p style="margin: 0; font-style: italic; color: #1e40af;">
-          "${data.message}"
-        </p>
-      </div>
-      ` : ''}
-      
-      <div style="background: #f9fafb; padding: 25px; border-radius: 8px; margin: 25px 0; border: 2px solid #e5e7eb;">
-        <h3 style="margin-top: 0; color: #1f2937; font-size: 20px;">Donation Details</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 10px 0; font-weight: 600; color: #4b5563; width: 40%;">Donation ID:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-family: monospace;">${data.donationId.substring(0, 8)}...</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Amount:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-size: 18px; font-weight: bold; color: #2563eb;">$${data.amount.toFixed(2)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Date:</td>
-            <td style="padding: 10px 0; color: #1f2937;">${new Date(data.donationDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 0; font-weight: 600; color: #4b5563;">Status:</td>
-            <td style="padding: 10px 0; color: #059669; font-weight: 600;">✓ Completed</td>
-          </tr>
-        </table>
-      </div>
-      
-      <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 4px;">
-        <h4 style="margin-top: 0; color: #065f46; font-size: 18px;">Your Impact</h4>
-        <p style="margin: 0; color: #047857; line-height: 1.6;">
-          Your donation helps remove financial barriers for nurses pursuing their USRN certification. 
-          Every contribution directly funds NCLEX exam fees and processing costs, making dreams achievable.
-        </p>
-      </div>
-      
-      <p style="font-size: 16px; line-height: 1.6; color: #333;">
-        This email serves as your receipt for tax purposes. Please keep it for your records.
-      </p>
-      
-      <p style="font-size: 16px; line-height: 1.6; color: #333;">
-        Thank you again for your generosity and for being part of our mission to support nurses worldwide.
-      </p>
-    `
-    
-    return generateEmailTemplate({
-      userName: donorName,
-      title: 'Donation Receipt',
-      customHtml: receiptHtml,
-      actionUrl: `${baseUrl}/donate`,
-      actionText: 'Make Another Donation',
-      footerText: 'This is your official donation receipt. Your donation may be tax-deductible.',
-    })
-  },
-}
-

@@ -29,7 +29,7 @@ export function Donate() {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [message, setMessage] = useState('')
   const [sponsorshipId, setSponsorshipId] = useState<string | null>(null)
-  const [publicStats, setPublicStats] = useState<{ total: number; count: number } | null>(null)
+  const [publicStats, setPublicStats] = useState<{ totalDonated: number; totalDonors: number; goal: number } | null>(null)
 
   // Predefined amounts
   const presetAmounts = [25, 50, 100, 250, 500, 1000]
@@ -62,24 +62,9 @@ export function Donate() {
   useEffect(() => {
     if (user) {
       setDonorEmail(user.email || '')
-      // Try to load user details
-      const loadUserDetails = async () => {
-        try {
-          const { data } = await (await import('@/lib/supabase')).supabase
-            .from('users')
-            .select('first_name, last_name')
-            .eq('id', user.id)
-            .single()
-          
-          if (data) {
-            const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
-            if (fullName) setDonorName(fullName)
-          }
-        } catch (error) {
-          // Ignore errors
-        }
-      }
-      loadUserDetails()
+      // Set name from user object if available
+      const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ')
+      if (fullName) setDonorName(fullName)
     }
   }, [user])
 
@@ -279,18 +264,18 @@ export function Donate() {
               
               {/* Impact Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12 max-w-3xl mx-auto">
-                {publicStats && publicStats.total > 0 && (
+                {publicStats && publicStats.totalDonated > 0 && (
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                     <div className="text-2xl md:text-3xl font-bold text-yellow-300 mb-1">
-                      {formatCurrency(publicStats.total)}
+                      {formatCurrency(publicStats.totalDonated)}
                     </div>
                     <div className="text-xs md:text-sm text-white/80">Total Raised</div>
                   </div>
                 )}
-                {publicStats && publicStats.count > 0 && (
+                {publicStats && publicStats.totalDonors > 0 && (
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                     <div className="text-2xl md:text-3xl font-bold text-yellow-300 mb-1">
-                      {publicStats.count.toLocaleString()}
+                      {publicStats.totalDonors.toLocaleString()}
                     </div>
                     <div className="text-xs md:text-sm text-white/80">Donations</div>
                   </div>

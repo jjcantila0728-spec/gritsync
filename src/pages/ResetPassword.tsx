@@ -22,26 +22,20 @@ export function ResetPassword() {
   const { resetPassword } = useAuth()
   const { showToast } = useToast()
 
-  // Supabase uses hash fragments for auth callbacks (access_token, type, etc.)
-  // When user clicks reset link, Supabase automatically authenticates them
-  // We just need to check if we're in a password reset flow
+  // Check if we're in a password reset flow via URL params
   const isPasswordResetFlow = window.location.hash.includes('type=recovery') || 
                                searchParams.get('type') === 'recovery' ||
-                               window.location.hash.includes('access_token')
+                               searchParams.get('token') !== null
 
   useEffect(() => {
-    // Check if Supabase has authenticated the user via the reset link
+    // Check if user has a valid reset token
     // If not, show error after a short delay
-    const checkSession = async () => {
-      const { supabase } = await import('@/lib/supabase')
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session && !isPasswordResetFlow) {
-        showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
-        setTimeout(() => navigate('/forgot-password'), 3000)
-      }
+    const token = searchParams.get('token')
+    if (!token && !isPasswordResetFlow) {
+      showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
+      setTimeout(() => navigate('/forgot-password'), 3000)
     }
-    checkSession()
-  }, [isPasswordResetFlow, navigate, showToast])
+  }, [isPasswordResetFlow, navigate, showToast, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,9 +57,9 @@ export function ResetPassword() {
 
     setLoading(true)
     try {
-      // Supabase automatically authenticates the user when they click the reset link
-      // So we can directly update the password using updateUser
-      await resetPassword('', password)
+      // Reset password using the token from the URL
+      const token = searchParams.get('token') || ''
+      await resetPassword(token, password)
       setSuccess(true)
       showToast('Password reset successfully!', 'success')
       setTimeout(() => navigate('/login'), 3000)

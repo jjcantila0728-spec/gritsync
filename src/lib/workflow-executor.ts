@@ -6,6 +6,7 @@
 import { workflowsAPI, Workflow, WorkflowAction } from './workflows-api'
 import { sendEmail } from './email-service'
 import { sendApplicationStatusEmail } from './email-notifications'
+import { notificationsAPI, usersAPI, applicationsAPI, apiClient } from './api-client'
 
 export interface WorkflowEvent {
   triggerType: string
@@ -276,14 +277,12 @@ async function executeSendEmailAction(
     }
   }
 
-  return await sendEmail({
+  const result = await sendEmail({
     to: resolvedTo,
     subject: resolvedSubject,
     html: resolvedBody,
-    emailType: 'automated',
-    emailCategory: 'workflow',
-    metadata: { workflow_action: 'send_email', event_data: eventData },
   })
+  return result.success
 }
 
 /**
@@ -302,12 +301,14 @@ async function executeUpdateRecordAction(
     resolvedUpdates[key] = resolveVariables(value as any, eventData)
   }
 
-  const { error } = await supabase
-    .from(table)
-    .update(resolvedUpdates)
-    .eq('id', resolvedRecordId)
+  // Use appropriate API based on table
+  if (table === 'applications') {
+    await applicationsAPI.update(resolvedRecordId, resolvedUpdates)
+  } else {
+    // Generic update via API endpoint
+    await apiClient.patch(`/${table}/${resolvedRecordId}`, resolvedUpdates)
+  }
 
-  if (error) throw new Error(error.message)
   return true
 }
 
@@ -320,16 +321,14 @@ async function executeCreateTaskAction(
 ): Promise<boolean> {
   // This would create a task in a tasks table
   // For now, we'll create a notification instead
-  const { title, description, assigned_to, priority } = config
+  const { title, description, assigned_to } = config
 
-  const { notificationsAPI } = await import('./supabase-api')
-  
-  await notificationsAPI.create(
-    resolveVariables(assigned_to, eventData),
-    resolveVariables(title, eventData),
-    resolveVariables(description, eventData),
-    'general'
-  )
+  await notificationsAPI.create({
+    user_id: resolveVariables(assigned_to, eventData),
+    title: resolveVariables(title, eventData),
+    message: resolveVariables(description, eventData),
+    type: 'general'
+  })
 
   return true
 }
@@ -343,26 +342,22 @@ async function executeNotifyAdminAction(
 ): Promise<boolean> {
   const { message, title } = config
 
-  // Get all admins
-  const { data: admins } = await supabase
-    .from('users')
-    .select('id')
-    .eq('role', 'admin')
+  // Get all admins via API
+  const admins = await usersAPI.getAdmins()
 
-  if (!admins) return true
+  if (!admins || admins.length === 0) return true
 
-  const { notificationsAPI } = await import('./supabase-api')
   const resolvedTitle = resolveVariables(title || 'Workflow Notification', eventData)
   const resolvedMessage = resolveVariables(message, eventData)
 
   // Notify all admins
   for (const admin of admins) {
-    await notificationsAPI.create(
-      admin.id,
-      resolvedTitle,
-      resolvedMessage,
-      'general'
-    )
+    await notificationsAPI.create({
+      user_id: admin.id,
+      title: resolvedTitle,
+      message: resolvedMessage,
+      type: 'general'
+    })
   }
 
   return true
@@ -380,12 +375,13 @@ async function executeAssignToUserAction(
   const resolvedRecordId = resolveVariables(record_id, eventData)
   const resolvedUserId = resolveVariables(user_id || user_id_field, eventData)
 
-  const { error } = await supabase
-    .from(table)
-    .update({ assigned_to: resolvedUserId })
-    .eq('id', resolvedRecordId)
+  // Use appropriate API based on table
+  if (table === 'applications') {
+    await applicationsAPI.update(resolvedRecordId, { assigned_to: resolvedUserId })
+  } else {
+    await apiClient.patch(`/${table}/${resolvedRecordId}`, { assigned_to: resolvedUserId })
+  }
 
-  if (error) throw new Error(error.message)
   return true
 }
 
@@ -401,12 +397,13 @@ async function executeUpdateStatusAction(
   const resolvedRecordId = resolveVariables(record_id, eventData)
   const resolvedStatus = resolveVariables(status, eventData)
 
-  const { error } = await supabase
-    .from(table)
-    .update({ status: resolvedStatus })
-    .eq('id', resolvedRecordId)
+  // Use appropriate API based on table
+  if (table === 'applications') {
+    await applicationsAPI.update(resolvedRecordId, { status: resolvedStatus })
+  } else {
+    await apiClient.patch(`/${table}/${resolvedRecordId}`, { status: resolvedStatus })
+  }
 
-  if (error) throw new Error(error.message)
   return true
 }
 
@@ -501,15 +498,19 @@ async function logWorkflowRun(
   workflowId: string,
   event: WorkflowEvent
 ): Promise<string> {
-  const { data, error } = await supabase.rpc('log_workflow_run', {
-    p_workflow_id: workflowId,
-    p_trigger_type: event.triggerType,
-    p_trigger_event_id: event.eventId,
-    p_trigger_data: event.data,
-  })
-
-  if (error) throw new Error(error.message)
-  return data as string
+  try {
+    const result = await apiClient.post<{ id: string }>('/workflows/runs', {
+      workflow_id: workflowId,
+      trigger_type: event.triggerType,
+      trigger_event_id: event.eventId,
+      trigger_data: event.data,
+    })
+    return result.id
+  } catch (error: any) {
+    console.error('Error logging workflow run:', error)
+    // Return a temporary ID if API fails
+    return `temp-${Date.now()}`
+  }
 }
 
 /**
@@ -527,12 +528,12 @@ async function updateWorkflowRun(
     execution_log: any[]
   }>
 ): Promise<void> {
-  const { error } = await supabase
-    .from('workflow_runs')
-    .update(updates)
-    .eq('id', runId)
-
-  if (error) throw new Error(error.message)
+  try {
+    await apiClient.patch(`/workflows/runs/${runId}`, updates)
+  } catch (error: any) {
+    console.error('Error updating workflow run:', error)
+    // Don't throw - run update failure shouldn't break workflow
+  }
 }
 
 /**
@@ -542,12 +543,9 @@ async function updateWorkflowStats(
   workflowId: string,
   success: boolean
 ): Promise<void> {
-  const { error } = await supabase.rpc('update_workflow_stats', {
-    p_workflow_id: workflowId,
-    p_success: success,
-  })
-
-  if (error) {
+  try {
+    await apiClient.post(`/workflows/${workflowId}/stats`, { success })
+  } catch (error: any) {
     console.error('Error updating workflow stats:', error)
     // Don't throw - stats update failure shouldn't break workflow
   }

@@ -164,6 +164,133 @@ export const applicationsAPI = {
   async updateTimelineStep(applicationId: string, stepId: string, data: any) {
     return apiClient.patch<any>(`/applications/${applicationId}/timeline/${stepId}`, data);
   },
+
+  async updateStatus(id: string, status: string) {
+    return apiClient.patch<any>(`/applications/${id}/status`, { status });
+  },
+};
+
+export const applicationPaymentsAPI = {
+  async getAll() {
+    return apiClient.get<any[]>('/application-payments');
+  },
+
+  async getByApplicationId(applicationId: string) {
+    return apiClient.get<any[]>(`/application-payments/application/${applicationId}`);
+  },
+
+  async getByApplication(applicationId: string) {
+    return apiClient.get<any[]>(`/application-payments/application/${applicationId}`);
+  },
+
+  async getPendingApproval() {
+    return apiClient.get<any[]>('/application-payments/pending-approval');
+  },
+
+  async create(applicationId: string, paymentType?: string, amount?: number) {
+    return apiClient.post<any>('/application-payments', { applicationId, paymentType, amount });
+  },
+
+  async update(id: string, data: any) {
+    return apiClient.patch<any>(`/application-payments/${id}`, data);
+  },
+
+  async delete(id: string) {
+    return apiClient.delete(`/application-payments/${id}`);
+  },
+
+  async approvePayment(id: string) {
+    return apiClient.post<any>(`/application-payments/${id}/approve`);
+  },
+
+  async rejectPayment(id: string, reason?: string) {
+    return apiClient.post<any>(`/application-payments/${id}/reject`, { reason });
+  },
+
+  async getReceipt(id: string) {
+    return apiClient.get<any>(`/application-payments/${id}/receipt`);
+  },
+
+  async createPaymentIntent(paymentId: string) {
+    return apiClient.post<any>(`/application-payments/${paymentId}/create-intent`);
+  },
+
+  async complete(id: string, _unused?: any, paymentIntentId?: string, paymentMethod?: string, gcashDetails?: any, proofOfPaymentFile?: File) {
+    const data: any = { paymentIntentId, paymentMethod, gcashDetails };
+    if (proofOfPaymentFile) {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(proofOfPaymentFile);
+      });
+      data.proofOfPayment = { filename: proofOfPaymentFile.name, data: base64, mimeType: proofOfPaymentFile.type };
+    }
+    return apiClient.post<any>(`/application-payments/${id}/complete`, data);
+  },
+};
+
+export const timelineStepsAPI = {
+  async getByApplicationId(applicationId: string) {
+    return apiClient.get<any[]>(`/timeline-steps/application/${applicationId}`);
+  },
+
+  async getByApplication(applicationId: string) {
+    return apiClient.get<any[]>(`/timeline-steps/application/${applicationId}`);
+  },
+
+  async create(data: any) {
+    return apiClient.post<any>('/timeline-steps', data);
+  },
+
+  async update(applicationId: string, stepKey: string, status?: string, data?: any) {
+    return apiClient.patch<any>(`/timeline-steps/application/${applicationId}/${stepKey}`, { status, data });
+  },
+
+  async delete(id: string) {
+    return apiClient.delete(`/timeline-steps/${id}`);
+  },
+};
+
+export const documentsAPI = {
+  async getAll() {
+    return [] as any[];
+  },
+
+  async getById(_id: string) {
+    return null;
+  },
+
+  async getByApplication(applicationId: string) {
+    return apiClient.get<any[]>(`/documents/application/${applicationId}`);
+  },
+
+  async getByApplicationId(applicationId: string) {
+    return apiClient.get<any[]>(`/documents/application/${applicationId}`);
+  },
+
+  async create(data: any) {
+    return apiClient.post<any>('/documents', data);
+  },
+
+  async update(id: string, data: any) {
+    return apiClient.patch<any>(`/documents/${id}`, data);
+  },
+
+  async delete(id: string) {
+    return apiClient.delete(`/documents/${id}`);
+  },
+
+  async upload(file: File, metadata?: any) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (metadata) formData.append('metadata', JSON.stringify(metadata));
+    return apiClient.post<any>('/documents/upload', formData);
+  },
+
+  async download(id: string) {
+    return apiClient.get<Blob>(`/documents/${id}/download`);
+  },
 };
 
 export const paymentsAPI = {
@@ -189,12 +316,17 @@ export const paymentsAPI = {
 };
 
 export const notificationsAPI = {
-  async getAll() {
+  async getAll(_unreadOnly?: boolean, _limit?: number) {
     return apiClient.get<any[]>('/notifications');
   },
 
   async getUnread() {
     return apiClient.get<any[]>('/notifications/unread');
+  },
+
+  async getUnreadCount() {
+    const unread = await apiClient.get<any[]>('/notifications/unread');
+    return unread?.length || 0;
   },
 
   async create(data: any) {
@@ -249,12 +381,32 @@ export const donationsAPI = {
     return apiClient.get<{ totalDonated: number; totalDonors: number; goal: number }>('/donations/public-stats');
   },
 
+  async getStats() {
+    // Admin stats - stubbed for now
+    return { totalDonated: 0, totalDonors: 0, goal: 50000, monthlyDonations: [], recentDonations: [] };
+  },
+
   async create(data: any) {
     return apiClient.post<any>('/donations', data);
   },
 
   async update(id: string, data: any) {
     return apiClient.patch<any>(`/donations/${id}`, data);
+  },
+};
+
+export const clientsAPI = {
+  async getAll() {
+    return apiClient.get<User[]>('/admin/clients');
+  },
+
+  async getById(id: string) {
+    return apiClient.get<User>(`/admin/clients/${id}`);
+  },
+
+  async getAllWithGmailAccounts() {
+    // Stubbed - returns clients with their gmail connection status
+    return [] as any[];
   },
 };
 
@@ -289,6 +441,28 @@ export const careersAPI = {
 
   async getApplications(careerId: string) {
     return apiClient.get<any[]>(`/careers/${careerId}/applications`);
+  },
+};
+
+export const careersApplicationsAPI = {
+  async getAll() {
+    return apiClient.get<any[]>('/careers/applications');
+  },
+
+  async getByUserId(_userId: string) {
+    return [] as any[];
+  },
+
+  async create(careerId: string, data: any) {
+    return apiClient.post<any>(`/careers/${careerId}/apply`, data);
+  },
+
+  async updateStatus(applicationId: string, status: string, notes?: string) {
+    return apiClient.patch<any>(`/careers/applications/${applicationId}/status`, { status, notes });
+  },
+
+  async forwardToAgency(applicationId: string, agencyId: string, notes?: string) {
+    return apiClient.post<any>(`/careers/applications/${applicationId}/forward`, { agencyId, notes });
   },
 };
 
@@ -361,6 +535,10 @@ export const usersAPI = {
 
   async getByEmail(email: string) {
     return apiClient.get<User>(`/users/email/${encodeURIComponent(email)}`);
+  },
+
+  async getAdmins() {
+    return apiClient.get<User[]>('/users/admins');
   },
 
   async update(id: string, data: any) {

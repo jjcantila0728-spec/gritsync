@@ -1,3 +1,8 @@
+/**
+ * Email Templates API
+ * Handles email template management
+ * NOTE: This feature is currently stubbed pending full migration
+ */
 
 export interface EmailTemplate {
   id: string;
@@ -41,288 +46,53 @@ export interface RenderTemplateResult {
   text?: string;
 }
 
-// Get all active templates
-export async function getAllActiveTemplates(): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('is_active', true)
-    .order('category', { ascending: true })
-    .order('name', { ascending: true });
+export function renderTemplate(
+  template: EmailTemplate,
+  variables: Record<string, string>
+): RenderTemplateResult {
+  let subject = template.subject
+  let html = template.html_content
+  let text = template.text_content || ''
 
-  if (error) {
-    console.error('Error fetching templates:', error);
-    throw error;
-  }
-
-  return data || [];
-}
-
-// Get all templates (admin only)
-export async function getAllTemplates(): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching all templates:', error);
-    throw error;
-  }
-
-  return data || [];
-}
-
-// Get templates by category
-export async function getTemplatesByCategory(category: EmailTemplate['category']): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('category', category)
-    .eq('is_active', true)
-    .order('name', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching templates by category:', error);
-    throw error;
-  }
-
-  return data || [];
-}
-
-// Get template by ID
-export async function getTemplateById(templateId: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('id', templateId)
-    .single();
-
-  if (error) {
-    console.error('Error fetching template:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Get template by slug
-export async function getTemplateBySlug(slug: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('*')
-    .eq('slug', slug)
-    .single();
-
-  if (error) {
-    console.error('Error fetching template by slug:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Create new template
-export async function createTemplate(template: Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at' | 'usage_count' | 'last_used_at'>): Promise<EmailTemplate> {
-  const userId = await getCurrentUserId();
-  
-  const { data, error } = await supabase
-    .from('email_templates')
-    .insert({
-      ...template,
-      created_by: userId,
-      updated_by: userId,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating template:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Update template
-export async function updateTemplate(templateId: string, updates: Partial<EmailTemplate>): Promise<EmailTemplate> {
-  const userId = await getCurrentUserId();
-  
-  const { data, error } = await supabase
-    .from('email_templates')
-    .update({
-      ...updates,
-      updated_by: userId,
-    })
-    .eq('id', templateId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating template:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Delete template (soft delete by deactivating)
-export async function deactivateTemplate(templateId: string): Promise<void> {
-  const { error } = await supabase
-    .from('email_templates')
-    .update({ is_active: false })
-    .eq('id', templateId);
-
-  if (error) {
-    console.error('Error deactivating template:', error);
-    throw error;
-  }
-}
-
-// Hard delete template (admin only, for user-created templates)
-export async function deleteTemplate(templateId: string): Promise<void> {
-  const { error } = await supabase
-    .from('email_templates')
-    .delete()
-    .eq('id', templateId);
-
-  if (error) {
-    console.error('Error deleting template:', error);
-    throw error;
-  }
-}
-
-// Render template with variables (client-side)
-export function renderTemplate(template: EmailTemplate, variables: Record<string, string>): RenderTemplateResult {
-  if (!template.html_content) {
-    console.warn('Template has no HTML content:', template.id, template.name)
-    return {
-      subject: template.subject,
-      html: '',
-      text: template.text_content || undefined,
-    }
-  }
-
-  let renderedSubject = template.subject;
-  let renderedHtml = template.html_content;
-  let renderedText = template.text_content || '';
-
-  // Replace all variables (empty values will replace placeholders with empty string)
   Object.entries(variables).forEach(([key, value]) => {
-    const placeholder = `{{${key}}}`;
-    const safeValue = value || ''; // Ensure value is never undefined/null
-    // Escape special regex characters in placeholder
-    const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    renderedSubject = renderedSubject.replace(new RegExp(escapedPlaceholder, 'g'), safeValue);
-    renderedHtml = renderedHtml.replace(new RegExp(escapedPlaceholder, 'g'), safeValue);
-    renderedText = renderedText.replace(new RegExp(escapedPlaceholder, 'g'), safeValue);
-  });
+    const placeholder = `{{${key}}}`
+    const safeValue = value || ''
+    const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    subject = subject.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
+    html = html.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
+    text = text.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
+  })
 
-  return {
-    subject: renderedSubject,
-    html: renderedHtml,
-    text: renderedText || undefined,
-  };
+  return { subject, html, text: text || undefined }
 }
 
-// Render template with variables (server-side via database function)
-export async function renderTemplateOnServer(params: RenderTemplateParams): Promise<RenderTemplateResult> {
-  const { data, error } = await supabase.rpc('render_email_template', {
-    p_template_id: params.templateId,
-    p_variables: params.variables,
-  });
-
-  if (error) {
-    console.error('Error rendering template on server:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Increment template usage
-export async function incrementTemplateUsage(templateId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_template_usage', {
-    p_template_id: templateId,
-  });
-
-  if (error) {
-    console.error('Error incrementing template usage:', error);
-    // Don't throw, as this is not critical
-  }
-}
-
-// Clone template (create a new version)
-export async function cloneTemplate(templateId: string, newName?: string): Promise<EmailTemplate> {
-  const template = await getTemplateById(templateId);
-  if (!template) {
-    throw new Error('Template not found');
-  }
-
-  const userId = await getCurrentUserId();
-
-  const clonedTemplate = {
-    ...template,
-    name: newName || `${template.name} (Copy)`,
-    slug: `${template.slug}-copy-${Date.now()}`,
-    parent_template_id: templateId,
-    version: 1,
-    usage_count: 0,
-    template_type: 'user_created' as const,
-    created_by: userId,
-    updated_by: userId,
-  };
-
-  // Remove fields that shouldn't be copied
-  delete (clonedTemplate as any).id;
-  delete (clonedTemplate as any).created_at;
-  delete (clonedTemplate as any).updated_at;
-  delete (clonedTemplate as any).last_used_at;
-
-  return createTemplate(clonedTemplate);
-}
-
-// Get template statistics
-export async function getTemplateStats() {
-  const { data, error } = await supabase
-    .from('email_templates')
-    .select('category, template_type, is_active, usage_count');
-
-  if (error) {
-    console.error('Error fetching template stats:', error);
-    throw error;
-  }
-
-  const stats = {
-    total: data.length,
-    active: data.filter(t => t.is_active).length,
-    inactive: data.filter(t => !t.is_active).length,
-    byCategory: {} as Record<string, number>,
-    byType: {} as Record<string, number>,
-    totalUsage: data.reduce((sum, t) => sum + (t.usage_count || 0), 0),
-  };
-
-  data.forEach(template => {
-    stats.byCategory[template.category] = (stats.byCategory[template.category] || 0) + 1;
-    stats.byType[template.template_type] = (stats.byType[template.template_type] || 0) + 1;
-  });
-
-  return stats;
-}
-
+// Stubbed API - feature pending migration
 export const emailTemplatesAPI = {
-  getAllActive: getAllActiveTemplates,
-  getAll: getAllTemplates,
-  getByCategory: getTemplatesByCategory,
-  getById: getTemplateById,
-  getBySlug: getTemplateBySlug,
-  create: createTemplate,
-  update: updateTemplate,
-  deactivate: deactivateTemplate,
-  delete: deleteTemplate,
-  render: renderTemplate,
-  renderOnServer: renderTemplateOnServer,
-  incrementUsage: incrementTemplateUsage,
-  clone: cloneTemplate,
-  getStats: getTemplateStats,
-};
+  getAll: async (): Promise<EmailTemplate[]> => [],
+  getAllActive: async (): Promise<EmailTemplate[]> => [],
+  getById: async (_id: string): Promise<EmailTemplate | null> => null,
+  getBySlug: async (_slug: string): Promise<EmailTemplate | null> => null,
+  getByCategory: async (_category: EmailTemplate['category']): Promise<EmailTemplate[]> => [],
+  create: async (_data: Partial<EmailTemplate>): Promise<EmailTemplate | null> => null,
+  update: async (_id: string, _data: Partial<EmailTemplate>): Promise<EmailTemplate | null> => null,
+  delete: async (_id: string): Promise<boolean> => false,
+  incrementUsage: async (_id: string): Promise<void> => {},
+  duplicate: async (_id: string): Promise<EmailTemplate | null> => null,
+  getStats: async (): Promise<any> => ({}),
+  render: (template: EmailTemplate, variables: Record<string, string>): RenderTemplateResult => {
+    return renderTemplate(template, variables)
+  },
+}
+
+// Aliases for compatibility
+export const getAllActiveTemplates = emailTemplatesAPI.getAllActive
+export const getAllTemplates = emailTemplatesAPI.getAll
+export const getTemplatesByCategory = emailTemplatesAPI.getByCategory
+export const getTemplateById = emailTemplatesAPI.getById
+export const getTemplateBySlug = emailTemplatesAPI.getBySlug
+export const createTemplate = emailTemplatesAPI.create
+export const updateTemplate = emailTemplatesAPI.update
+export const deleteTemplate = emailTemplatesAPI.delete
+export const duplicateTemplate = emailTemplatesAPI.duplicate
+export const incrementTemplateUsage = emailTemplatesAPI.incrementUsage
+export const getTemplateStats = emailTemplatesAPI.getStats

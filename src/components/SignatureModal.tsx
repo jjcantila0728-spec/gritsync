@@ -84,43 +84,6 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
 
       // Function to check for signature and handle completion
       const checkForSignature = async () => {
-        // First, check Supabase for cross-device signatures
-        try {
-          const { data: supabaseSignature, error } = await supabase
-            .from('temporary_signatures')
-            .select('*')
-            .eq('session_id', signatureSessionId)
-            .eq('is_consumed', false)
-            .gt('expires_at', new Date().toISOString())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          
-          if (!error && supabaseSignature) {
-            console.log('Signature found in Supabase:', signatureSessionId)
-            const sig = supabaseSignature as any
-            // Mark as consumed
-            const { error: updateError } = await supabase
-              .from('temporary_signatures')
-              .update({ 
-                is_consumed: true,
-                consumed_at: new Date().toISOString()
-              })
-              .eq('id', sig.id)
-            
-            if (updateError) {
-              console.error('Error marking signature as consumed:', updateError)
-              // Continue anyway - signature is still valid
-            }
-            
-            onSignatureComplete(sig.signature_data_url)
-            onClose()
-            return true
-          }
-        } catch (error) {
-          console.warn('Error checking Supabase:', error)
-        }
-        
         // Check sessionStorage first (primary) - exact match
         const storedSignature = sessionStorage.getItem(`signature_${signatureSessionId}`)
         if (storedSignature) {

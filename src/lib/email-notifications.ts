@@ -137,16 +137,13 @@ async function sendTemplateEmail(
   const rendered = renderTemplate(template, variables)
   const wrappedHtml = await wrapInBaseTemplate(rendered.html)
 
-  return sendEmail({
+  const result = await sendEmail({
     to,
     subject: rendered.subject,
     html: wrappedHtml,
     text: rendered.text,
-    recipientUserId: options?.recipientUserId,
-    emailType: options?.emailType || 'transactional',
-    emailCategory: templateType,
-    tags: options?.tags || [templateType],
   })
+  return result.success
 }
 
 // ============================================

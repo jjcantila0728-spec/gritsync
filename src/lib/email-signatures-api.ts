@@ -1,3 +1,8 @@
+/**
+ * Email Signatures API
+ * Handles email signatures and business logos
+ * NOTE: This feature is currently stubbed pending full migration
+ */
 
 export interface EmailSignature {
   id: string;
@@ -58,427 +63,93 @@ export interface BusinessLogo {
   associated_email?: string;
 }
 
-// ============ Email Signatures API ============
-
+// Stubbed API - feature pending migration
 export async function getAllSignatures(): Promise<EmailSignature[]> {
-  const { data, error } = await supabase
-    .from('email_signatures')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching signatures:', error);
-    // If the table doesn't exist yet (migration not applied), treat as no signatures
-    if ((error as any).code === 'PGRST205') {
-      return [];
-    }
-    throw error;
-  }
-
-  return data || [];
+  return [];
 }
 
-export async function getUserSignatures(userId?: string): Promise<EmailSignature[]> {
-  const uid = userId || await getCurrentUserId();
-  
-  const { data, error } = await supabase
-    .from('email_signatures')
-    .select('*')
-    .or(`user_id.eq.${uid},signature_type.eq.company`)
-    .eq('is_active', true)
-    .order('is_default', { ascending: false })
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching user signatures:', error);
-    // If the table doesn't exist yet (migration not applied), treat as no signatures
-    if ((error as any).code === 'PGRST205') {
-      return [];
-    }
-    throw error;
-  }
-
-  return data || [];
+export async function getSignatureById(_id: string): Promise<EmailSignature | null> {
+  return null;
 }
 
-export async function getDefaultSignature(userId?: string): Promise<EmailSignature | null> {
-  const uid = userId || await getCurrentUserId();
-  
-  const { data, error } = await supabase
-    .from('email_signatures')
-    .select('*')
-    .or(`user_id.eq.${uid},signature_type.eq.company`)
-    .eq('is_default', true)
-    .eq('is_active', true)
-    .single();
-
-  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-    console.error('Error fetching default signature:', error);
-    // If table missing, just return null so the UI can continue
-    if ((error as any).code === 'PGRST205') {
-      return null;
-    }
-  }
-
-  return data;
+export async function getDefaultSignature(): Promise<EmailSignature | null> {
+  return null;
 }
 
-export async function getSignatureById(id: string): Promise<EmailSignature | null> {
-  const { data, error } = await supabase
-    .from('email_signatures')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) {
-    console.error('Error fetching signature:', error);
-    throw error;
-  }
-
-  return data;
+export async function createSignature(_data: Partial<EmailSignature>): Promise<EmailSignature | null> {
+  console.warn('Email signatures feature is not yet migrated');
+  return null;
 }
 
-export async function createSignature(signature: Partial<EmailSignature>): Promise<EmailSignature> {
-  const userId = signature.user_id || await getCurrentUserId();
-  
-  const { data, error} = await supabase
-    .from('email_signatures')
-    .insert({
-      ...signature,
-      user_id: userId,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating signature:', error);
-    throw error;
-  }
-
-  return data;
+export async function updateSignature(_id: string, _data: Partial<EmailSignature>): Promise<EmailSignature | null> {
+  console.warn('Email signatures feature is not yet migrated');
+  return null;
 }
 
-export async function updateSignature(id: string, updates: Partial<EmailSignature>): Promise<EmailSignature> {
-  const { data, error } = await supabase
-    .from('email_signatures')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating signature:', error);
-    throw error;
-  }
-
-  return data;
+export async function deleteSignature(_id: string): Promise<boolean> {
+  console.warn('Email signatures feature is not yet migrated');
+  return false;
 }
 
-export async function deleteSignature(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('email_signatures')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting signature:', error);
-    throw error;
-  }
+export async function setDefaultSignature(_id: string): Promise<boolean> {
+  console.warn('Email signatures feature is not yet migrated');
+  return false;
 }
 
-export async function setDefaultSignature(id: string): Promise<void> {
-  const userId = await getCurrentUserId();
-
-  // First, unset all default signatures for this user
-  await supabase
-    .from('email_signatures')
-    .update({ is_default: false })
-    .eq('user_id', userId);
-
-  // Then set the new default
-  const { error } = await supabase
-    .from('email_signatures')
-    .update({ is_default: true })
-    .eq('id', id)
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('Error setting default signature:', error);
-    throw error;
-  }
+export async function renderSignatureHtml(_signature: EmailSignature): Promise<string> {
+  return '';
 }
-
-export async function generateSignatureHtml(params: {
-  full_name?: string;
-  job_title?: string;
-  company_name?: string;
-  email?: string;
-  phone?: string;
-  website?: string;
-  logo_url?: string;
-  text_color?: string;
-  link_color?: string;
-}): Promise<string> {
-  const { data, error } = await supabase.rpc('generate_signature_html', {
-    p_full_name: params.full_name,
-    p_job_title: params.job_title,
-    p_company_name: params.company_name,
-    p_email: params.email,
-    p_phone: params.phone,
-    p_website: params.website,
-    p_logo_url: params.logo_url,
-    p_text_color: params.text_color || '#333333',
-    p_link_color: params.link_color || '#dc2626',
-  });
-
-  if (error) {
-    console.error('Error generating signature HTML:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// ============ Business Logos API ============
 
 export async function getAllLogos(): Promise<BusinessLogo[]> {
-  const { data, error } = await supabase
-    .from('business_logos')
-    .select('*')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching logos:', error);
-    // If the table doesn't exist yet (migration not applied), treat as no logos
-    if ((error as any).code === 'PGRST205') {
-      return [];
-    }
-    throw error;
-  }
-
-  return data || [];
+  return [];
 }
 
-export async function getLogosByType(logoType: BusinessLogo['logo_type']): Promise<BusinessLogo[]> {
-  const { data, error } = await supabase
-    .from('business_logos')
-    .select('*')
-    .eq('logo_type', logoType)
-    .eq('is_active', true)
-    .order('is_default', { ascending: false })
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching logos by type:', error);
-    // If the table doesn't exist yet (migration not applied), treat as no logos
-    if ((error as any).code === 'PGRST205') {
-      return [];
-    }
-    throw error;
-  }
-
-  return data || [];
+export async function getLogoById(_id: string): Promise<BusinessLogo | null> {
+  return null;
 }
 
-export async function getDefaultLogo(logoType: BusinessLogo['logo_type']): Promise<BusinessLogo | null> {
-  const { data, error } = await supabase
-    .from('business_logos')
-    .select('*')
-    .eq('logo_type', logoType)
-    .eq('is_default', true)
-    .eq('is_active', true)
-    .single();
-
-  if (error && error.code !== 'PGRST116') {
-    console.error('Error fetching default logo:', error);
-  }
-
-  return data;
+export async function getDefaultLogo(): Promise<BusinessLogo | null> {
+  return null;
 }
 
-export async function uploadLogo(
-  file: File,
-  logoType: BusinessLogo['logo_type'],
-  altText?: string
-): Promise<BusinessLogo> {
-  const userId = await getCurrentUserId();
-
-  // Generate unique file name
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-  const filePath = `${logoType}/${fileName}`;
-
-  // Upload file to storage
-  const { error: uploadError } = await supabase.storage
-    .from('email-logos')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (uploadError) {
-    console.error('Error uploading logo:', uploadError);
-    // Provide a more helpful error message for missing bucket
-    if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('bucket')) {
-      throw new Error('Storage bucket "email-logos" not found. Please run database migrations to create the bucket.');
-    }
-    throw uploadError;
-  }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from('email-logos')
-    .getPublicUrl(filePath);
-
-  // Get image dimensions with validation
-  let width: number | null = null;
-  let height: number | null = null;
-  
-  try {
-    const dimensions = await getImageDimensions(file);
-    // Validate dimensions according to constraint:
-    // Either both are NULL, or both are > 0 AND <= 2000
-    if (
-      dimensions.width &&
-      dimensions.height &&
-      dimensions.width > 0 &&
-      dimensions.width <= 2000 &&
-      dimensions.height > 0 &&
-      dimensions.height <= 2000
-    ) {
-      width = dimensions.width;
-      height = dimensions.height;
-    }
-    // If dimensions are invalid, leave them as NULL
-  } catch (error) {
-    console.warn('Could not get image dimensions, storing without dimensions:', error);
-    // Leave width and height as NULL if dimension extraction fails
-  }
-
-  // Insert logo record
-  const { data, error } = await supabase
-    .from('business_logos')
-    .insert({
-      file_name: file.name,
-      file_size: file.size,
-      file_type: file.type,
-      storage_path: filePath,
-      public_url: urlData.publicUrl,
-      width: width,
-      height: height,
-      logo_type: logoType,
-      uploaded_by: userId,
-      alt_text: altText || file.name,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating logo record:', error);
-    throw error;
-  }
-
-  return data;
+export async function uploadLogo(_file: File, _options?: any): Promise<BusinessLogo | null> {
+  console.warn('Business logos feature is not yet migrated');
+  return null;
 }
 
-export async function deleteLogo(id: string): Promise<void> {
-  // Get logo details
-  const { data: logo } = await supabase
-    .from('business_logos')
-    .select('storage_path')
-    .eq('id', id)
-    .single();
-
-  if (logo?.storage_path) {
-    // Delete from storage
-    await supabase.storage
-      .from('email-logos')
-      .remove([logo.storage_path]);
-  }
-
-  // Delete record
-  const { error } = await supabase
-    .from('business_logos')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting logo:', error);
-    throw error;
-  }
+export async function deleteLogo(_id: string): Promise<boolean> {
+  console.warn('Business logos feature is not yet migrated');
+  return false;
 }
 
-export async function setDefaultLogo(id: string, logoType: BusinessLogo['logo_type']): Promise<void> {
-  // First, unset all default logos for this type
-  await supabase
-    .from('business_logos')
-    .update({ is_default: false })
-    .eq('logo_type', logoType);
-
-  // Then set the new default
-  const { error } = await supabase
-    .from('business_logos')
-    .update({ is_default: true })
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error setting default logo:', error);
-    throw error;
-  }
+export async function setDefaultLogo(_id: string): Promise<boolean> {
+  console.warn('Business logos feature is not yet migrated');
+  return false;
 }
 
-export async function incrementLogoUsage(id: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_logo_usage', {
-    p_logo_id: id,
-  });
-
-  if (error) {
-    console.error('Error incrementing logo usage:', error);
-    // Don't throw, as this is not critical
-  }
+export async function updateLogoMetadata(_id: string, _metadata: Record<string, any>): Promise<BusinessLogo | null> {
+  console.warn('Business logos feature is not yet migrated');
+  return null;
 }
 
-// Helper function to get image dimensions
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: img.width, height: img.height });
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
-
-    img.src = url;
-  });
-}
-
-// Export all as a single API object
+// API objects for compatibility
 export const emailSignaturesAPI = {
   getAll: getAllSignatures,
-  getUserSignatures,
-  getDefault: getDefaultSignature,
   getById: getSignatureById,
+  getDefault: getDefaultSignature,
   create: createSignature,
   update: updateSignature,
   delete: deleteSignature,
   setDefault: setDefaultSignature,
-  generateHtml: generateSignatureHtml,
-};
+  render: renderSignatureHtml,
+}
 
 export const businessLogosAPI = {
   getAll: getAllLogos,
-  getByType: getLogosByType,
+  getById: getLogoById,
   getDefault: getDefaultLogo,
   upload: uploadLogo,
   delete: deleteLogo,
   setDefault: setDefaultLogo,
-  incrementUsage: incrementLogoUsage,
-};
-
+  updateMetadata: updateLogoMetadata,
+}

@@ -1,6 +1,7 @@
 /**
  * Payment Email Service
  * Sends payment receipt emails with PDF attachments
+ * NOTE: This feature is currently stubbed pending full migration
  */
 
 import { sendEmail } from './email-service'
@@ -50,7 +51,6 @@ interface PaymentReceiptData {
  */
 export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceiptData): Promise<boolean> {
   try {
-    // Get user email and name
     let userEmail: string | undefined
     let userName: string = 'Valued Customer'
     
@@ -65,291 +65,81 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
       userName = data.application.first_name && data.application.last_name
         ? `${data.application.first_name} ${data.application.last_name}`
         : data.application.first_name || userName
-    } else if (data.receipt.user_id) {
-      // Fetch user from database
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('email, full_name, first_name, last_name')
-        .eq('id', data.receipt.user_id)
-        .single()
-      
-      if (!userError && userData) {
-        const user = userData as { email?: string; full_name?: string; first_name?: string; last_name?: string }
-        if (user.email) {
-          userEmail = user.email
-          userName = user.full_name || 
-                     (user.first_name && user.last_name 
-                       ? `${user.first_name} ${user.last_name}` 
-                       : user.first_name || userName)
-        }
-      }
     }
     
     if (!userEmail) {
-      console.error('No email found for payment receipt')
+      console.error('No email address found for payment receipt')
       return false
     }
-
-    // Calculate invoice totals
-    const subtotal = data.receipt.items.reduce((sum, item) => sum + item.amount, 0)
-    const tax = data.receipt.amount - subtotal // Assuming tax is included in total
-    const total = data.receipt.amount
-
-    // Generate PDFs using edge function
-    console.log('Generating PDFs via edge function...')
-    const { data: pdfData, error: pdfError } = await supabase.functions.invoke('generate-payment-pdfs', {
-      body: {
-        receipt: {
-          receipt_number: data.receipt.receipt_number,
-          amount: data.receipt.amount,
-          payment_type: data.receipt.payment_type,
-          items: data.receipt.items,
-          created_at: data.receipt.created_at,
-          application_id: data.receipt.application_id,
-          user_name: userName,
-          user_email: userEmail,
-        },
-        invoice: {
-          invoice_number: `INV-${data.receipt.receipt_number.replace('RCP-', '')}`,
-          amount: data.receipt.amount,
-          payment_type: data.receipt.payment_type,
-          items: data.receipt.items.map(item => ({ ...item, taxable: true })),
-          subtotal,
-          tax,
-          total,
-          created_at: data.receipt.created_at,
-          application_id: data.receipt.application_id,
-          user_name: userName,
-          user_email: userEmail,
-          billing_address: data.application ? {
-            name: data.application.first_name && data.application.last_name
-              ? `${data.application.first_name} ${data.application.last_name}`
-              : data.application.first_name || undefined,
-            email: data.application.email,
-            address: undefined, // Could be added if available
-            city: data.application.city,
-            state: data.application.province,
-            zip: data.application.zipcode,
-            country: data.application.country,
-          } : undefined,
-        },
-      },
-    })
-
-    if (pdfError || !pdfData?.success) {
-      console.error('Error generating PDFs:', pdfError || pdfData)
-      // Fallback: try to send email without PDFs
-      console.warn('Attempting to send email without PDF attachments...')
-    }
-
-    const receiptBase64 = pdfData?.receipt
-    const invoiceBase64 = pdfData?.invoice
-
-    if (!receiptBase64 || !invoiceBase64) {
-      console.error('Failed to generate PDFs. Email will be sent without attachments.')
-      // Continue with email sending but without attachments
-    }
-
-    // Payment type label
-    const paymentTypeLabel = data.receipt.payment_type === 'step1' ? 'Step 1 Payment' : 
-                             data.receipt.payment_type === 'step2' ? 'Step 2 Payment' : 
-                             'Full Payment'
-
-    // Create email HTML
+    
+    const formattedAmount = formatCurrency(data.receipt.amount)
+    const receiptNumber = data.receipt.receipt_number
+    
+    const itemsHtml = data.receipt.items.map(item => 
+      `<tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatCurrency(item.amount)}</td>
+      </tr>`
+    ).join('')
+    
     const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-          }
-          .email-container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .email-header {
-            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-          }
-          .email-header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: bold;
-          }
-          .email-body {
-            padding: 30px 20px;
-          }
-          .success-box {
-            background: #d1fae5;
-            border: 2px solid #10b981;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-          }
-          .success-box h2 {
-            margin: 0 0 10px 0;
-            color: #065f46;
-            font-size: 20px;
-          }
-          .amount {
-            font-size: 32px;
-            font-weight: bold;
-            color: #dc2626;
-            margin: 15px 0;
-          }
-          .receipt-details {
-            background: #f9fafb;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-          }
-          .receipt-details table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          .receipt-details td {
-            padding: 8px 0;
-            border-bottom: 1px solid #e5e7eb;
-          }
-          .receipt-details td:first-child {
-            font-weight: 600;
-            color: #6b7280;
-          }
-          .attachments-note {
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-          }
-          .footer {
-            text-align: center;
-            padding: 20px;
-            color: #6b7280;
-            font-size: 14px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="email-container">
-          <div class="email-header">
-            <h1>GRITSYNC</h1>
-          </div>
-          <div class="email-body">
-            <p>Hello ${userName},</p>
-            
-            <div class="success-box">
-              <h2>✅ Payment Successful!</h2>
-              <div class="amount">${formatCurrency(data.receipt.amount)}</div>
-              <p style="margin: 0; color: #065f46;">Your payment has been processed successfully.</p>
-            </div>
-
-            <div class="receipt-details">
-              <h3 style="margin-top: 0;">Payment Details</h3>
-              <table>
-                <tr>
-                  <td>Receipt Number:</td>
-                  <td><strong>#${data.receipt.receipt_number}</strong></td>
-                </tr>
-                <tr>
-                  <td>Payment Type:</td>
-                  <td>${paymentTypeLabel}</td>
-                </tr>
-                <tr>
-                  <td>Payment Method:</td>
-                  <td>${data.payment.payment_method ? data.payment.payment_method.charAt(0).toUpperCase() + data.payment.payment_method.slice(1) : 'Credit Card'}</td>
-                </tr>
-                <tr>
-                  <td>Date:</td>
-                  <td>${new Date(data.receipt.created_at).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}</td>
-                </tr>
-                <tr>
-                  <td>Amount:</td>
-                  <td><strong>${formatCurrency(data.receipt.amount)}</strong></td>
-                </tr>
-              </table>
-            </div>
-
-            <div class="attachments-note">
-              <p style="margin: 0;"><strong>📎 Attachments:</strong></p>
-              <p style="margin: 5px 0 0 0;">Please find attached:</p>
-              <ul style="margin: 10px 0 0 20px; padding: 0;">
-                <li>Official Receipt PDF</li>
-                <li>Invoice PDF</li>
-              </ul>
-            </div>
-
-            <p>Thank you for your payment! These documents serve as your official receipt and invoice for tax purposes. Please keep them for your records.</p>
-
-            <p>If you have any questions about your payment, please don't hesitate to contact our support team.</p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} GritSync. All rights reserved.</p>
-            <p>This is an automated email. Please do not reply to this message.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `
-
-    // Prepare attachments (only if PDFs were generated successfully)
-    const attachments = []
-    if (receiptBase64) {
-      attachments.push({
-        filename: `Official_Receipt_${data.receipt.receipt_number}.pdf`,
-        content: receiptBase64,
-        type: 'application/pdf',
-      })
-    }
-    if (invoiceBase64) {
-      attachments.push({
-        filename: `Invoice_${`INV-${data.receipt.receipt_number.replace('RCP-', '')}`}.pdf`,
-        content: invoiceBase64,
-        type: 'application/pdf',
-      })
-    }
-
-    // Send email with attachments (if available)
-    return await sendEmail({
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Receipt</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1>Payment Received</h1>
+  </div>
+  <div style="background: #fff; padding: 30px; border: 1px solid #e5e7eb;">
+    <p>Hello ${userName},</p>
+    <p>Thank you for your payment! Here are the details:</p>
+    
+    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <p><strong>Receipt Number:</strong> ${receiptNumber}</p>
+      <p><strong>Amount:</strong> ${formattedAmount}</p>
+      <p><strong>Date:</strong> ${new Date(data.receipt.created_at).toLocaleDateString()}</p>
+    </div>
+    
+    <h3>Payment Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Item</th>
+          <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="padding: 8px; font-weight: bold;">Total</td>
+          <td style="padding: 8px; text-align: right; font-weight: bold;">${formattedAmount}</td>
+        </tr>
+      </tfoot>
+    </table>
+    
+    <p style="margin-top: 30px;">If you have any questions, please don't hesitate to contact us.</p>
+  </div>
+  <div style="background: #f9fafb; padding: 20px; text-align: center; font-size: 14px; color: #6b7280; border-radius: 0 0 8px 8px;">
+    <p>GritSync - Your NCLEX Processing Partner</p>
+  </div>
+</body>
+</html>`
+    
+    const result = await sendEmail({
       to: userEmail,
-      subject: `Payment Receipt ${data.receipt.receipt_number} - GritSync`,
+      subject: `Payment Receipt - ${receiptNumber}`,
       html: emailHtml,
-      emailType: 'transactional',
-      emailCategory: 'payment_receipt',
-      recipientName: userName,
-      recipientUserId: data.user?.id || data.receipt.user_id,
-      applicationId: data.application?.id || data.receipt.application_id,
-      attachments: attachments.length > 0 ? attachments : undefined,
-      metadata: {
-        receiptNumber: data.receipt.receipt_number,
-        amount: data.receipt.amount,
-        paymentType: data.receipt.payment_type,
-        paymentId: data.payment.id,
-        applicationId: data.application?.id || data.receipt.application_id,
-        pdfsGenerated: !!receiptBase64 && !!invoiceBase64,
-      },
-      tags: ['payment', 'receipt', 'invoice'],
     })
+    
+    return result.success
   } catch (error) {
-    console.error('Error sending payment receipt email with attachments:', error)
+    console.error('Error sending payment receipt email:', error)
     return false
   }
 }
-
