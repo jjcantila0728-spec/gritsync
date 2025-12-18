@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase', () => {
   }
 })
 
-import * as supabaseModule from '@/lib/supabase'
+import * as supabaseModule from '@/lib/api'
 
 // Mock toast
 vi.mock('@/components/ui/Toast', () => ({

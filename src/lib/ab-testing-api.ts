@@ -3,7 +3,6 @@
  * Manages A/B tests for email campaigns
  */
 
-import { supabase } from './supabase'
 
 export interface ABTestVariant {
   name: string

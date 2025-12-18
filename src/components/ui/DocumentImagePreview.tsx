@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
-import { getSignedFileUrl, getFileUrl } from '../../lib/supabase-api'
+import { getSignedFileUrl, getFileUrl } from '../../lib/api'
 import { getCachedSignedUrl } from '../../lib/image-cache'
 
 interface DocumentImagePreviewProps {

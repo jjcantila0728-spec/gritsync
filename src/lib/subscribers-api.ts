@@ -3,7 +3,6 @@
  * Manages email subscribers for newsletters and marketing campaigns
  */
 
-import { supabase } from './supabase'
 
 export interface EmailSubscriber {
   id?: string

@@ -3,7 +3,6 @@
  * Handles email campaigns, newsletters, and subscriber management
  */
 
-import { supabase } from './supabase'
 
 export type CampaignType = 'newsletter' | 'broadcast' | 'announcement' | 'promotional' | 'transactional'
 export type RecipientType = 'subscribers' | 'users' | 'custom' | 'segment'

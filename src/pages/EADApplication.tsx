@@ -10,7 +10,6 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import { applicationsAPI, userDetailsAPI, servicesAPI, applicationPaymentsAPI } from '@/lib/api'
-import { supabase } from '@/lib/supabase'
 
 // Helper function to format MM/DD/YYYY input
 const formatMMDDYYYY = (value: string): string => {

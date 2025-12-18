@@ -3,7 +3,6 @@
  * Handles scheduling and queuing emails for future delivery
  */
 
-import { supabase } from './supabase'
 
 export interface EmailQueueItem {
   id?: string

@@ -3,10 +3,8 @@
  * Handles sending emails with templates and proper formatting
  */
 
-import { supabase } from './supabase'
 import { generalSettings } from './settings'
 import * as EmailTemplates from './email-templates'
-import { getCurrentUserId } from './supabase-api'
 
 interface EmailAttachment {
   filename: string

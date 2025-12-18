@@ -4,7 +4,6 @@
  */
 
 import { workflowsAPI, Workflow, WorkflowAction } from './workflows-api'
-import { supabase } from './supabase'
 import { sendEmail } from './email-service'
 import { sendApplicationStatusEmail } from './email-notifications'
 

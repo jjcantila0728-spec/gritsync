@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { SignaturePad } from '@/components/SignaturePad'
 import { SignatureSuccessAnimation } from '@/components/SignatureSuccessAnimation'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
 
 export function SignaturePage() {
   const [searchParams] = useSearchParams()

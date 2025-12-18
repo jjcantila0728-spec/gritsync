@@ -9,7 +9,6 @@ I value an iterative development approach.
 Please ask for confirmation before implementing significant changes.
 I expect detailed explanations for complex solutions or architectural decisions.
 Do not make changes to files within the `docs/` folder.
-Do not make changes to files within the `supabase/functions/` folder.
 
 ## System Architecture
 GritSync uses a full-stack architecture with React frontend and Express.js backend, powered by Replit's built-in PostgreSQL database.
@@ -47,16 +46,18 @@ GritSync uses a full-stack architecture with React frontend and Express.js backe
 - **Resend:** Email service (pending implementation)
 
 ## Migration Status (Dec 2024)
-Migrated from Supabase to Replit PostgreSQL. Core functionality working:
+**Migration from Supabase to Replit PostgreSQL completed.** All Supabase dependencies have been removed.
+
+Core functionality working:
 - Authentication (signup, login, JWT sessions)
 - Applications, Payments, Notifications, Quotations, Donations, Careers, Testimonials
 - Settings management
 - Promo code validation
-- Services catalog API
+- Services catalog API with admin configuration
 - Timeline steps API (application tracking with proper authorization)
 - Partner agencies API
 - NCLEX sponsorships API
 
-Recently implemented:
+Integrations:
 - Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)
 - File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)

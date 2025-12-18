@@ -15,7 +15,6 @@ import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
 import {
   formatMMDDYYYY,
   formatMMYYYY,

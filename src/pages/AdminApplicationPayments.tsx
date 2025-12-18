@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, adminAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getSignedFileUrl } from '@/lib/supabase-api'
+import { getSignedFileUrl } from '@/lib/api'
 import { 
   ArrowLeft, 
   CheckCircle, 

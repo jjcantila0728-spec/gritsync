@@ -3,7 +3,6 @@
  * Manages received emails stored in our database (from Resend webhook)
  */
 
-import { supabase } from './supabase'
 
 export interface ReceivedEmailAttachment {
   id: string

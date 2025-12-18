@@ -11,7 +11,7 @@ import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 import { userDetailsAPI, notificationsAPI, usersAPI } from '@/lib/api'
-import { getSignedFileUrl } from '@/lib/supabase-api'
+import { getSignedFileUrl } from '@/lib/api'
 
 export function Header() {
   const { user, signOut, isAdmin } = useAuth()

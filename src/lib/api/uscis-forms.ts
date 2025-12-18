@@ -1,4 +1,3 @@
-import { supabase } from '../supabase'
 
 export interface USCISFormData {
   // Personal Information

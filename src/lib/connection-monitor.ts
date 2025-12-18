@@ -3,7 +3,6 @@
  * Tracks connection health and provides diagnostics
  */
 
-import { supabase } from './supabase'
 
 export interface ConnectionHealth {
   status: 'healthy' | 'degraded' | 'unhealthy'

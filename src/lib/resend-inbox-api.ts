@@ -5,7 +5,6 @@
  * Reference: https://resend.com/docs/dashboard/receiving/attachments
  */
 
-import { supabase } from './supabase'
 
 export interface ReceivedEmailAttachment {
   id: string

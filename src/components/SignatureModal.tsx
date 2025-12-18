@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/Button'
 import { X, QrCode, Smartphone } from 'lucide-react'
 import { SignaturePad } from './SignaturePad'
 import { SignatureSuccessAnimation } from './SignatureSuccessAnimation'
-import { supabase } from '@/lib/supabase'
 
 interface SignatureModalProps {
   isOpen: boolean

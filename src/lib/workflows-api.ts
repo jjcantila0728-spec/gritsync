@@ -3,7 +3,6 @@
  * Handles automated workflow management and execution
  */
 
-import { supabase } from './supabase'
 
 export type WorkflowTriggerType = 
   | 'application_status_change'

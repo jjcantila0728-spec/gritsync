@@ -3,7 +3,6 @@
  * Handles analytics data retrieval and reporting
  */
 
-import { supabase } from './supabase'
 
 export interface AnalyticsDateRange {
   startDate: string

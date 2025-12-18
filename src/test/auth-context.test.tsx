@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase', () => {
   }
 })
 
-import * as supabaseModule from '@/lib/supabase'
+import * as supabaseModule from '@/lib/api'
 
 // Test component that uses auth
 function TestComponent() {
