@@ -7,17 +7,13 @@ import { Button } from '@/components/ui/Button'
 import { SEO } from '@/components/SEO'
 import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocumentsAPI, applicationPaymentsAPI, timelineStepsAPI } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import { getSignedFileUrl } from '@/lib/supabase-api'
-import { formatDate, formatCurrency, cn, debounce } from '@/lib/utils'
+import { formatDate, formatCurrency, cn } from '@/lib/utils'
 import { QuickActionsPanel } from '@/components/QuickActionsPanel'
 import { ActivityFeed, ActivityItem } from '@/components/ActivityFeed'
 import { PersonalizedRecommendations } from '@/components/PersonalizedRecommendations'
-import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuotations, subscribeToAllQuotations, subscribeToPendingApprovalPayments, unsubscribe } from '@/lib/realtime'
-import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { greetingSettings } from '@/lib/settings'
 import { DashboardOnboarding } from '@/components/DashboardOnboarding'
 
@@ -92,7 +88,6 @@ export function Dashboard() {
     passport: false,
   })
   const { showToast } = useToast()
-  const channelsRef = useRef<RealtimeChannel[]>([])
 
   // Helper to set firstName and cache it
   const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
@@ -281,163 +276,6 @@ export function Dashboard() {
       setLoading(false)
     }
   }, [user])
-
-  // Set up real-time subscriptions for application status changes (optimized)
-  useEffect(() => {
-    if (!user) return
-
-    const channels: RealtimeChannel[] = []
-
-    // Use optimized combined subscriptions (reduces connection overhead)
-    if (isAdmin()) {
-      // Admin: single channel for applications, quotations, and payments
-      const dashboardChannel = subscribeToAdminDashboard({
-        onApplicationUpdate: handleApplicationUpdate,
-        onQuotationUpdate: handleQuotationUpdate,
-        onPaymentUpdate: handlePaymentUpdate,
-      })
-      channels.push(dashboardChannel)
-    } else {
-      // Client: single channel for applications and quotations
-      const dashboardChannel = subscribeToClientDashboard(user.id, {
-        onApplicationUpdate: handleApplicationUpdate,
-        onQuotationUpdate: handleQuotationUpdate,
-      })
-      channels.push(dashboardChannel)
-    }
-
-    channelsRef.current = channels
-
-    // Cleanup on unmount
-    return () => {
-      channels.forEach(channel => unsubscribeOptimized(channel))
-      channelsRef.current = []
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isAdmin()])
-
-  // Handle real-time application updates
-  function handleApplicationUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-      
-      // Only show notifications for status changes on UPDATE events
-      if (eventType === 'UPDATE' && oldRecord && newRecord && oldRecord.status !== newRecord.status) {
-        const appName = isAdmin() 
-          ? `${newRecord.first_name || ''} ${newRecord.last_name || ''}`.trim() || 'An application'
-          : 'Your application'
-        
-        // Show toast notification
-        const statusMessages: Record<string, string> = {
-          'approved': 'has been approved! 🎉',
-          'rejected': 'has been rejected',
-          'pending': 'is now pending review',
-          'in_progress': 'is now in progress',
-          'completed': 'has been completed'
-        }
-        
-        const message = statusMessages[newRecord.status] || `status changed to ${newRecord.status}`
-        showToast(`${appName} ${message}`, newRecord.status === 'approved' ? 'success' : 'info')
-      }
-
-      // Refresh dashboard data for any change
-      fetchData()
-    } catch (error) {
-      console.error('Error handling application update:', error)
-      // Still refresh data even if notification fails
-      fetchData()
-    }
-  }
-
-  // Handle real-time quotation updates
-  function handleQuotationUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-      
-      // Only show notifications for status changes on UPDATE events
-      if (eventType === 'UPDATE' && oldRecord && newRecord && oldRecord.status !== newRecord.status) {
-        const quoteText = isAdmin() 
-          ? `Quotation #${(newRecord.id || '').substring(0, 8)}`
-          : 'Your quotation'
-        
-        // Show toast notification
-        const statusMessages: Record<string, string> = {
-          'paid': 'has been paid! ✅',
-          'pending': 'is now pending',
-          'approved': 'has been approved',
-          'rejected': 'has been rejected'
-        }
-        
-        const message = statusMessages[newRecord.status] || `status changed to ${newRecord.status}`
-        showToast(`${quoteText} ${message}`, newRecord.status === 'paid' ? 'success' : 'info')
-      }
-
-      // Refresh dashboard data for any change
-      fetchData()
-    } catch (error) {
-      console.error('Error handling quotation update:', error)
-      // Still refresh data even if notification fails
-      fetchData()
-    }
-  }
-
-  // Handle real-time payment updates
-  function handlePaymentUpdate(payload: any) {
-    try {
-      const eventType = payload.eventType || payload.event
-      const newRecord = payload.new
-      const oldRecord = payload.old
-
-      if (eventType === 'INSERT' && newRecord && newRecord.status === 'pending_approval') {
-        // New payment awaiting approval - refresh pending payments
-        if (isAdmin()) {
-          applicationPaymentsAPI.getPendingApproval()
-            .then((data) => {
-              setPendingPayments((data || []).slice(0, 10))
-            })
-            .catch(() => {
-              // Ignore errors
-            })
-        }
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Payment status changed
-        if (oldRecord && oldRecord.status === 'pending_approval' && newRecord.status !== 'pending_approval') {
-          // Payment was approved or rejected - remove from pending list
-          setPendingPayments((prev) => prev.filter((p: any) => p.id !== newRecord.id))
-        } else if (newRecord.status === 'pending_approval') {
-          // Payment moved to pending approval - refresh list
-          if (isAdmin()) {
-            applicationPaymentsAPI.getPendingApproval()
-              .then((data) => {
-                setPendingPayments((data || []).slice(0, 10))
-              })
-              .catch(() => {
-                // Ignore errors
-              })
-          }
-        }
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Payment deleted - remove from list
-        setPendingPayments((prev) => prev.filter((p: any) => p.id !== oldRecord.id))
-      }
-
-      // Refresh dashboard stats (debounced to prevent excessive calls)
-      debouncedFetchData()
-    } catch (error) {
-      console.error('Error handling payment update:', error)
-      // Still refresh data even if update fails
-      debouncedFetchData()
-    }
-  }
-
-  // Debounced version of fetchData to prevent excessive API calls
-  const debouncedFetchData = debounce(() => {
-    fetchData()
-  }, 500) // Wait 500ms before calling fetchData
 
   async function fetchData() {
     if (!user) return
