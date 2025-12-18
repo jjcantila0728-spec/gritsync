@@ -105,28 +105,30 @@ router.post('/create-or-update', authenticateToken, requireAdmin, async (req: Au
   try {
     const { id, service_name, state, payment_type, line_items, total_full, total_step1, total_step2, tax_amount, tax_step1, tax_step2 } = req.body;
     
-    if (id && !id.startsWith('svc_')) {
-      const existingResult = await db.execute(sql`SELECT id FROM services WHERE id = ${id}`);
-      if (existingResult.rows.length > 0) {
-        const result = await db.execute(sql`
-          UPDATE services SET
-            service_name = ${service_name},
-            name = ${service_name + ' - ' + state},
-            state = ${state},
-            payment_type = ${payment_type},
-            line_items = ${JSON.stringify(line_items || [])}::jsonb,
-            total_full = ${total_full || 0},
-            total_step1 = ${total_step1 || 0},
-            total_step2 = ${total_step2 || 0},
-            tax_amount = ${tax_amount || 0},
-            tax_step1 = ${tax_step1 || 0},
-            tax_step2 = ${tax_step2 || 0},
-            updated_at = NOW()
-          WHERE id = ${id}
-          RETURNING *
-        `);
-        return res.json(result.rows[0]);
-      }
+    const existingResult = await db.execute(sql`
+      SELECT id FROM services 
+      WHERE service_name = ${service_name} 
+      AND state = ${state} 
+      AND payment_type = ${payment_type}
+    `);
+    
+    if (existingResult.rows.length > 0) {
+      const existingId = (existingResult.rows[0] as any).id;
+      const result = await db.execute(sql`
+        UPDATE services SET
+          name = ${service_name + ' - ' + state},
+          line_items = ${JSON.stringify(line_items || [])}::jsonb,
+          total_full = ${total_full || 0},
+          total_step1 = ${total_step1 || 0},
+          total_step2 = ${total_step2 || 0},
+          tax_amount = ${tax_amount || 0},
+          tax_step1 = ${tax_step1 || 0},
+          tax_step2 = ${tax_step2 || 0},
+          updated_at = NOW()
+        WHERE id = ${existingId}
+        RETURNING *
+      `);
+      return res.json(result.rows[0]);
     }
     
     const result = await db.execute(sql`
@@ -146,24 +148,24 @@ router.patch('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedR
     const { id } = req.params;
     const { name, service_name, state, payment_type, line_items, total_full, total_step1, total_step2, tax_amount, tax_step1, tax_step2, is_active } = req.body;
     
-    const updates: string[] = ['updated_at = NOW()'];
-    
-    if (name !== undefined) updates.push(`name = '${name}'`);
-    if (service_name !== undefined) updates.push(`service_name = '${service_name}'`);
-    if (state !== undefined) updates.push(`state = '${state}'`);
-    if (payment_type !== undefined) updates.push(`payment_type = '${payment_type}'`);
-    if (line_items !== undefined) updates.push(`line_items = '${JSON.stringify(line_items)}'::jsonb`);
-    if (total_full !== undefined) updates.push(`total_full = ${total_full}`);
-    if (total_step1 !== undefined) updates.push(`total_step1 = ${total_step1}`);
-    if (total_step2 !== undefined) updates.push(`total_step2 = ${total_step2}`);
-    if (tax_amount !== undefined) updates.push(`tax_amount = ${tax_amount}`);
-    if (tax_step1 !== undefined) updates.push(`tax_step1 = ${tax_step1}`);
-    if (tax_step2 !== undefined) updates.push(`tax_step2 = ${tax_step2}`);
-    if (is_active !== undefined) updates.push(`is_active = ${is_active}`);
-    
-    const result = await db.execute(sql.raw(`
-      UPDATE services SET ${updates.join(', ')} WHERE id = '${id}' RETURNING *
-    `));
+    const result = await db.execute(sql`
+      UPDATE services SET
+        name = COALESCE(${name ?? null}, name),
+        service_name = COALESCE(${service_name ?? null}, service_name),
+        state = COALESCE(${state ?? null}, state),
+        payment_type = COALESCE(${payment_type ?? null}, payment_type),
+        line_items = COALESCE(${line_items ? JSON.stringify(line_items) : null}::jsonb, line_items),
+        total_full = COALESCE(${total_full ?? null}, total_full),
+        total_step1 = COALESCE(${total_step1 ?? null}, total_step1),
+        total_step2 = COALESCE(${total_step2 ?? null}, total_step2),
+        tax_amount = COALESCE(${tax_amount ?? null}, tax_amount),
+        tax_step1 = COALESCE(${tax_step1 ?? null}, tax_step1),
+        tax_step2 = COALESCE(${tax_step2 ?? null}, tax_step2),
+        is_active = COALESCE(${is_active ?? null}, is_active),
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Service not found' });
