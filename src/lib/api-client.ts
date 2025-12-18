@@ -404,3 +404,33 @@ export const adminAPI = {
     }
   }
 };
+
+export const emailsAPI = {
+  async send(to: string | string[], subject: string, html?: string, text?: string) {
+    return apiClient.post<{ success: boolean; data?: any; error?: string }>('/emails/send', {
+      to, subject, html, text
+    });
+  },
+  
+  async sendWelcome(email: string, name: string) {
+    return apiClient.post<{ success: boolean; error?: string }>('/emails/welcome', { email, name });
+  },
+  
+  async sendApplicationStatus(email: string, name: string, status: string, applicationId: string) {
+    return apiClient.post<{ success: boolean; error?: string }>('/emails/application-status', {
+      email, name, status, applicationId
+    });
+  },
+  
+  async sendPaymentConfirmation(email: string, name: string, amount: string, description: string) {
+    return apiClient.post<{ success: boolean; error?: string }>('/emails/payment-confirmation', {
+      email, name, amount, description
+    });
+  },
+  
+  async sendQuotation(email: string, name: string, quotationDetails: any) {
+    return apiClient.post<{ success: boolean; error?: string }>('/emails/quotation', {
+      email, name, quotationDetails
+    });
+  }
+};

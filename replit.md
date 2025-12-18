@@ -58,5 +58,7 @@ Migrated from Supabase to Replit PostgreSQL. Core functionality working:
 - NCLEX sponsorships API
 
 Features pending full implementation:
-- File storage/document uploads (needs cloud storage integration: Box, Google Drive, or Dropbox)
-- Email notifications (needs Resend integration)
+- File storage/document uploads (needs cloud storage integration: Box, Google Drive, or Dropbox - user declined Google Drive integration)
+
+Recently implemented:
+- Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)

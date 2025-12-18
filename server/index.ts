@@ -20,6 +20,7 @@ import servicesRoutes from './routes/services';
 import timelineStepsRoutes from './routes/timeline-steps';
 import partnerAgenciesRoutes from './routes/partner-agencies';
 import sponsorshipsRoutes from './routes/sponsorships';
+import emailsRoutes from './routes/emails';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -68,6 +69,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/timeline-steps', timelineStepsRoutes);
 app.use('/api/partner-agencies', partnerAgenciesRoutes);
 app.use('/api/sponsorships', sponsorshipsRoutes);
+app.use('/api/emails', emailsRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
