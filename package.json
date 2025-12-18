@@ -20,7 +20,6 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "verify": "node scripts/verify-deployment.js",
-    "verify:optimizations": "node scripts/verify-supabase-optimizations.js",
     "analyze:bundle": "node scripts/analyze-bundle.js",
     "worker:local": "tsx scripts/local-worker.ts",
     "check:compilation": "tsx scripts/check-compilation-status.ts"
