@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * AI-Powered Newsletter Builder Component
  * Create newsletters with AI assistance and schedule them

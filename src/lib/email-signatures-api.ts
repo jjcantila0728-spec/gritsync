@@ -132,6 +132,15 @@ export async function updateLogoMetadata(_id: string, _metadata: Record<string, 
   return null;
 }
 
+// Additional helper methods
+export async function getUserSignatures(_userId: string): Promise<EmailSignature[]> {
+  return [];
+}
+
+export async function generateHtml(_signature: EmailSignature): Promise<string> {
+  return renderSignatureHtml(_signature);
+}
+
 // API objects for compatibility
 export const emailSignaturesAPI = {
   getAll: getAllSignatures,
@@ -142,6 +151,8 @@ export const emailSignaturesAPI = {
   delete: deleteSignature,
   setDefault: setDefaultSignature,
   render: renderSignatureHtml,
+  getUserSignatures: getUserSignatures,
+  generateHtml: generateHtml,
 }
 
 export const businessLogosAPI = {

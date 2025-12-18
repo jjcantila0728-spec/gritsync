@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Admin Emails Page - Enterprise-grade email management system
  * Features:

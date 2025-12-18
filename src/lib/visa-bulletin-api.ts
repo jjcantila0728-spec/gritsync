@@ -67,3 +67,11 @@ export async function getVisaBulletinFromCache(): Promise<VisaBulletinData | nul
 export async function refreshVisaBulletinCache(): Promise<VisaBulletinData | null> {
   return FALLBACK_DATA
 }
+
+export function getBulletinReleaseSchedule(): { nextRelease: Date; formattedDate: string } {
+  const nextRelease = getNextBulletinReleaseDate()
+  return {
+    nextRelease,
+    formattedDate: getNextBulletinReleaseDateFormatted()
+  }
+}

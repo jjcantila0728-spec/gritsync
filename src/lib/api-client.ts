@@ -228,6 +228,10 @@ export const applicationPaymentsAPI = {
     }
     return apiClient.post<any>(`/application-payments/${id}/complete`, data);
   },
+
+  async checkRetaker(applicationId: string) {
+    return apiClient.get<{ isRetaker: boolean }>(`/application-payments/${applicationId}/check-retaker`);
+  },
 };
 
 export const timelineStepsAPI = {
@@ -298,6 +302,10 @@ export const paymentsAPI = {
     return apiClient.get<any[]>('/payments');
   },
 
+  async getById(id: string) {
+    return apiClient.get<any>(`/payments/${id}`);
+  },
+
   async getByApplication(applicationId: string) {
     return apiClient.get<any[]>(`/payments/application/${applicationId}`);
   },
@@ -312,6 +320,14 @@ export const paymentsAPI = {
 
   async delete(id: string) {
     return apiClient.delete(`/payments/${id}`);
+  },
+
+  async createPaymentIntent(data: any) {
+    return apiClient.post<any>('/payments/create-intent', data);
+  },
+
+  async updateStatus(id: string, status: string, data?: any) {
+    return apiClient.patch<any>(`/payments/${id}/status`, { status, ...data });
   },
 };
 
@@ -355,8 +371,16 @@ export const quotationsAPI = {
     return apiClient.get<any>(`/quotations/${id}`);
   },
 
+  async getByIdPublic(id: string) {
+    return apiClient.get<any>(`/quotations/${id}/public`);
+  },
+
   async create(data: any) {
     return apiClient.post<any>('/quotations', data);
+  },
+
+  async createPublic(data: any) {
+    return apiClient.post<any>('/quotations/public', data);
   },
 
   async update(id: string, data: any) {
@@ -365,6 +389,10 @@ export const quotationsAPI = {
 
   async delete(id: string) {
     return apiClient.delete(`/quotations/${id}`);
+  },
+
+  async generateGQId() {
+    return apiClient.get<{ gqId: string }>('/quotations/generate-id');
   },
 };
 

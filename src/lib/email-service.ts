@@ -263,3 +263,44 @@ export async function sendPaymentConfirmationEmail(
     actionText: receiptUrl ? 'View Receipt' : undefined,
   })
 }
+
+/**
+ * Send a test email (for admin notifications settings)
+ */
+export async function sendTestEmail(
+  to: string,
+  subject?: string
+): Promise<SendEmailResult> {
+  const config = await getEmailConfig()
+  return sendEmail({
+    to,
+    subject: subject || 'Test Email from GritSync',
+    html: generateEmailTemplate({
+      userName: 'Admin',
+      title: 'Test Email',
+      message: 'This is a test email to verify your email settings are working correctly.',
+      footerText: 'Sent from GritSync admin panel',
+    }),
+    from: config.fromEmail,
+    fromName: config.fromName,
+  })
+}
+
+/**
+ * Send a donation receipt email
+ */
+export async function sendDonationReceipt(
+  to: string,
+  userName: string,
+  amount: number,
+  donationId: string,
+  receiptUrl?: string
+): Promise<SendEmailResult> {
+  return sendNotificationEmail(to, 'Thank You for Your Donation', {
+    userName,
+    title: 'Donation Receipt',
+    message: `Thank you for your generous donation of $${amount.toFixed(2)}. Your donation ID is: ${donationId}. Your support helps us continue our mission.`,
+    actionUrl: receiptUrl,
+    actionText: receiptUrl ? 'View Receipt' : undefined,
+  })
+}

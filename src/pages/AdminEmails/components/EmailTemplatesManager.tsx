@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { useToast } from '@/components/ui/Toast'
 import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'

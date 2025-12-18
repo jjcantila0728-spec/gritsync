@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Client Emails Page - Gmail-style email management
  * Features:

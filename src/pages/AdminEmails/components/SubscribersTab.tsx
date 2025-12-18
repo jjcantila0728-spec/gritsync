@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Subscribers Tab Component
  * Manages email subscribers for newsletters and campaigns

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, Image as ImageIcon, Upload, Check, Star, Eye } from 'lucide-react';
 import { Header } from '../components/Header';

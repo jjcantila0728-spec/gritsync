@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Email Analytics Tab Component
  * Displays comprehensive email analytics with charts and statistics

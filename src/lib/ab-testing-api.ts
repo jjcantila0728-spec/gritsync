@@ -75,6 +75,19 @@ export interface ABTestRecipient {
 
 // Stubbed API - feature pending migration
 export const abTestingAPI = {
+  // New/Alternate method names for compatibility
+  getAll: async (): Promise<ABTest[]> => [],
+  getStats: async (): Promise<{ total: number; running: number; completed: number }> => ({ total: 0, running: 0, completed: 0 }),
+  create: async (_test: Partial<ABTest>): Promise<ABTest | null> => null,
+  update: async (_id: string, _test: Partial<ABTest>): Promise<ABTest | null> => null,
+  delete: async (_id: string): Promise<boolean> => false,
+  start: async (_id: string): Promise<boolean> => false,
+  stop: async (_id: string): Promise<boolean> => false,
+  validate: async (_test: Partial<ABTest>): Promise<{ valid: boolean; errors?: string[] }> => ({ valid: true }),
+  determineWinner: async (_testId: string): Promise<ABTestVariant | null> => null,
+  calculateMetrics: async (_testId: string): Promise<any> => ({}),
+  
+  // Existing method names
   getTests: async (): Promise<ABTest[]> => [],
   getTest: async (_id: string): Promise<ABTest | null> => null,
   createTest: async (_test: Partial<ABTest>): Promise<ABTest | null> => null,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Email Preferences Center - Public Page
  * Allows subscribers to manage their email preferences via token

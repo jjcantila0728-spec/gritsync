@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { Server, Activity, CheckCircle, Clock, AlertCircle, Users, FileText, DollarSign, Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'

@@ -48,3 +48,9 @@ export async function getSubscribersByType(
 ): Promise<NewsletterSubscription[]> {
   return []
 }
+
+export async function isEmailSubscribed(
+  _email: string
+): Promise<boolean> {
+  return false
+}

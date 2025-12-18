@@ -164,3 +164,43 @@ export async function sendEmailWithLogging(
   console.warn('Email sending is not yet migrated')
   return { success: false, error: 'Email feature not available' }
 }
+
+// Received emails types
+export interface ReceivedEmail {
+  id: string
+  from: string
+  to: string
+  subject: string
+  body_html?: string
+  body_text?: string
+  received_at: string
+  read: boolean
+  starred: boolean
+  archived: boolean
+  labels?: string[]
+  attachments?: any[]
+}
+
+export interface ListReceivedEmailsResponse {
+  data: ReceivedEmail[]
+  has_more: boolean
+  count: number
+}
+
+// Stubbed received emails API
+export const receivedEmailsAPI = {
+  list: async (_options?: { limit?: number; after?: string; before?: string; to?: string }): Promise<ListReceivedEmailsResponse> => ({
+    data: [],
+    has_more: false,
+    count: 0,
+  }),
+  getById: async (_id: string): Promise<ReceivedEmail | null> => null,
+  markRead: async (_id: string): Promise<boolean> => false,
+  markUnread: async (_id: string): Promise<boolean> => false,
+  star: async (_id: string): Promise<boolean> => false,
+  unstar: async (_id: string): Promise<boolean> => false,
+  archive: async (_id: string): Promise<boolean> => false,
+  delete: async (_id: string): Promise<boolean> => false,
+  bulkDelete: async (_ids: string[]): Promise<{ deleted: number }> => ({ deleted: 0 }),
+  sync: async (): Promise<{ synced: number }> => ({ synced: 0 }),
+}

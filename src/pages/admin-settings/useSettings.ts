@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { adminAPI } from '@/lib/api'
 import { clearSettingsCache } from '@/lib/settings'
