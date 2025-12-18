@@ -188,5 +188,10 @@ For issues specific to:
 - **Supabase**: Check [Supabase documentation](https://supabase.com/docs)
 - **Stripe**: Check [Stripe documentation](https://stripe.com/docs)
 
+## Technical Debt Notes
+- database.types.ts needs regeneration from Supabase when access is available
+- Some API methods use temporary `as any` type assertions pending type regeneration
+- Run `npx supabase gen types typescript --project-id <project-id>` to regenerate types
+
 ## Last Updated
-December 5, 2025 - Initial Replit setup completed
+December 18, 2025 - All TypeScript errors fixed, production build verified (0 errors)
