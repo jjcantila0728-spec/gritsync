@@ -52,8 +52,11 @@ Migrated from Supabase to Replit PostgreSQL. Core functionality working:
 - Applications, Payments, Notifications, Quotations, Donations, Careers, Testimonials
 - Settings management
 - Promo code validation
+- Services catalog API
+- Timeline steps API (application tracking with proper authorization)
+- Partner agencies API
+- NCLEX sponsorships API
 
 Features pending full implementation:
-- File storage/document uploads (needs alternative to Supabase Storage)
+- File storage/document uploads (needs cloud storage integration: Box, Google Drive, or Dropbox)
 - Email notifications (needs Resend integration)
-- Timeline steps, Services, Partner agencies APIs
