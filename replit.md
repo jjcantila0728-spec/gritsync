@@ -193,5 +193,15 @@ For issues specific to:
 - Some API methods use temporary `as any` type assertions pending type regeneration
 - Run `npx supabase gen types typescript --project-id <project-id>` to regenerate types
 
+## Homepage Enhancement (December 18, 2025)
+- Added HeroSlider component with 4 AI-generated Filipino nurse images
+- Slider features auto-play (5 second intervals), navigation arrows, and dot indicators
+- Theme: "Achieve Your American Dream" - helping Filipino nurses pursue US nursing careers
+- Added NCLEX Processing (primary) and EAD Applications (secondary) focus sections
+- GritSync Perks section: Personalized Business Mail, Full Client Database, Dedicated Document Cloud Storage
+- OnboardingModal for first-time users with platform walkthrough
+- New @assets alias for image imports from attached_assets folder
+- SPA routing fixed with public/_redirects file for static deployment
+
 ## Last Updated
-December 18, 2025 - All TypeScript errors fixed, production build verified (0 errors)
+December 18, 2025 - Homepage enhanced with hero slider, onboarding flow, and service sections
