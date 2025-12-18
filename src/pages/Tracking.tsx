@@ -903,7 +903,7 @@ export function Tracking() {
             <section 
               className="relative overflow-hidden py-16 md:py-20"
               style={{
-                backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.85), rgba(153, 27, 27, 0.9)), url('/tracking_page_banner_image.png')`,
+                backgroundImage: `linear-gradient(to bottom right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.5)), url('/tracking_page_banner_image.png')`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center'
               }}

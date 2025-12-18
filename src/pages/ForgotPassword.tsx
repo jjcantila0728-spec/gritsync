@@ -52,12 +52,14 @@ export function ForgotPassword() {
 
   return (
     <div 
-      className="min-h-screen"
+      className="min-h-screen relative"
       style={{
-        backgroundImage: `linear-gradient(to bottom right, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92)), url('/forgot_password_page_background.png')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed'
+        background: `
+          radial-gradient(circle at 30% 70%, rgba(185, 28, 28, 0.15) 0%, transparent 50%),
+          radial-gradient(circle at 70% 30%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
+          linear-gradient(135deg, #fef2f2 0%, #fee2e2 25%, #fecaca 50%, #fca5a5 75%, #f87171 100%)
+        `
       }}
     >
       <SEO

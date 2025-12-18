@@ -238,6 +238,7 @@ export function AdminTestimonials() {
   const pendingCount = testimonials.filter(t => t.status === 'pending').length
   const approvedCount = testimonials.filter(t => t.status === 'approved').length
   const rejectedCount = testimonials.filter(t => t.status === 'rejected').length
+  const featuredCount = testimonials.filter(t => t.status === 'approved' && t.featured).length
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -269,7 +270,7 @@ export function AdminTestimonials() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
               <Card className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -299,7 +300,18 @@ export function AdminTestimonials() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-green-600 dark:text-green-400">{approvedCount}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Approved</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Published</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                    <Award className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{featuredCount}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Featured</p>
                   </div>
                 </div>
               </Card>
