@@ -18,7 +18,7 @@ export function GeneralSettings() {
       maintenanceMode: false,
       // Branding & Theme
       websiteUrl: 'https://gritsync.com',
-      logoUrl: typeof window !== 'undefined' ? `${window.location.origin}/gritsync_logo.png` : '/gritsync_logo.png',
+      logoUrl: 'https://gritsync.com/gritsync_logo.png',
       primaryColor: '#dc2626', // Red from logo "SYNC" text
       secondaryColor: '#1f2937', // Dark gray/black from logo "GRIT" text
       companyAddress: '123 Main Street, City, State, ZIP Code',
@@ -37,7 +37,7 @@ export function GeneralSettings() {
       maintenanceMode: String(data.maintenanceMode) === 'true',
       // Branding & Theme
       websiteUrl: data.websiteUrl || 'https://gritsync.com',
-      logoUrl: data.logoUrl || (typeof window !== 'undefined' ? `${window.location.origin}/gritsync_logo.png` : '/gritsync_logo.png'),
+      logoUrl: data.logoUrl || 'https://gritsync.com/gritsync_logo.png',
       primaryColor: data.primaryColor || '#dc2626', // Red from logo "SYNC" text
       secondaryColor: data.secondaryColor || '#1f2937', // Dark gray/black from logo "GRIT" text
       companyAddress: data.companyAddress || '123 Main Street, City, State, ZIP Code',
@@ -269,10 +269,7 @@ export function GeneralSettings() {
               </p>
               <button
                 onClick={() => {
-                  const defaultLogo = typeof window !== 'undefined' 
-                    ? `${window.location.origin}/gritsync_logo.png` 
-                    : '/gritsync_logo.png'
-                  setSettings({ ...settings, logoUrl: defaultLogo })
+                  setSettings({ ...settings, logoUrl: 'https://gritsync.com/gritsync_logo.png' })
                 }}
                 className="mt-2 text-xs text-primary-600 dark:text-primary-400 hover:underline"
               >

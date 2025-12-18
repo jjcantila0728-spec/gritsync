@@ -127,7 +127,7 @@ export function ProcessingAccountsTab({
                                         <a
                                           href={
                                             account.account_type === 'gritsync'
-                                              ? 'http://localhost:5000/client/emails'
+                                              ? '/client/emails'
                                               : 'https://wsr.pearsonvue.com/testtaker/signin/SignInPage.htm?clientCode=NCLEXTESTING'
                                           }
                                           target="_blank"
