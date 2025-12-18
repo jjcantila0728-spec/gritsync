@@ -19,6 +19,7 @@ import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuo
 import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { greetingSettings } from '@/lib/settings'
+import { DashboardOnboarding } from '@/components/DashboardOnboarding'
 
 interface RecentActivity {
   id: string
@@ -1369,6 +1370,7 @@ export function Dashboard() {
           </div>
         </main>
       </div>
+      <DashboardOnboarding />
     </div>
   )
 }

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { HeroSlider } from '@/components/HeroSlider'
-import { OnboardingModal } from '@/components/OnboardingModal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
@@ -182,7 +181,6 @@ export function Home() {
         ]}
       />
       <Header />
-      <OnboardingModal />
       
       <HeroSlider />
 
