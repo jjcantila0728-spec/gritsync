@@ -57,6 +57,7 @@ export interface BusinessLogo {
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
+  associated_email?: string;
 }
 
 // ============ Email Signatures API ============

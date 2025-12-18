@@ -560,7 +560,6 @@ export function EADApplication() {
       physical_city: physicalAddressSame === 'No' ? physicalCity : null,
       physical_state: physicalAddressSame === 'No' ? physicalState : null,
       physical_zip_code: physicalAddressSame === 'No' ? physicalZipCode : null,
-      country: country,
       // Personal Information
       sex: sex,
       birth_city: birthCity,
@@ -601,7 +600,6 @@ export function EADApplication() {
       has_criminal_history: hasCriminalHistory === 'Yes',
       // Contact
       phone_number: phoneNumber,
-      mobile_number: mobileNumber || null,
       email_address: emailAddress || null,
       // Declaration
       can_read_english: canReadEnglish === 'Yes',

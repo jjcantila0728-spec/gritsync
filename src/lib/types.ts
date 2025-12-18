@@ -7,7 +7,14 @@ export interface User {
   first_name?: string
   last_name?: string
   grit_id?: string  // Optional - may not exist immediately after registration
-  created_at: string
+  created_at?: string
+  user_metadata?: {
+    full_name?: string
+    first_name?: string
+    last_name?: string
+    role?: string
+    grit_id?: string
+  }
 }
 
 export interface Application {

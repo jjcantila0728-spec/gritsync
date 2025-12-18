@@ -3515,7 +3515,7 @@ export function AdminEmails() {
                 setSelectedInboxEmail(null)
                 setSelectedSentEmail(null)
               }}
-              email={selectedInboxEmail || selectedSentEmail!}
+              email={(selectedInboxEmail || selectedSentEmail!) as any}
               type={activeTab === 'inbox' ? 'inbox' : 'sent'}
               onReply={selectedInboxEmail ? () => {
                 const senderEmail = selectedInboxEmail.from.match(/<(.+?)>/)?.[1] || selectedInboxEmail.from
@@ -3539,7 +3539,7 @@ export function AdminEmails() {
                 setComposing(true)
               } : undefined}
               onDelete={selectedInboxEmail ? () => {
-                handleDeleteInboxEmail(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
+                handleDeleteInbox(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
                 setShowEmailDetail(false)
               } : undefined}
               getAvatarInitial={getInitials}

@@ -60,7 +60,7 @@ export function AdminDonations() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const [donations, setDonations] = useState<Donation[]>([])
-  const [stats, setStats] = useState({ total: 0, count: 0, pending: 0, failed: 0 })
+  const [stats, setStats] = useState({ total: 0, count: 0, pending: 0, completed: 0, failed: 0, donations: [] as { amount: any; status: any; created_at: any }[] })
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -98,7 +98,7 @@ export function AdminDonations() {
   async function fetchStats() {
     try {
       const statsData = await donationsAPI.getStats()
-      setStats(statsData)
+      setStats({ ...statsData, count: statsData.completed + statsData.pending + statsData.failed })
     } catch (error: any) {
       console.error('Error fetching stats:', error)
     }

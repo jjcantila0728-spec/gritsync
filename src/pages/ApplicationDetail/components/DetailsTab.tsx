@@ -429,7 +429,7 @@ export function DetailsTab({
                   <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.elementary_school || 'N/A'}</span>
                   {application.elementary_school && (
                     <button
-                      onClick={() => copyToClipboard(application.elementary_school, 'Elementary school', showToast)}
+                      onClick={() => copyToClipboard(application.elementary_school || '', 'Elementary school', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy School Name"
                     >

@@ -403,7 +403,7 @@ export function ApplicationPayments() {
         throw new Error('Payment intent creation failed: No client secret returned')
       }
 
-      setSelectedPayment(payment)
+      setSelectedPayment(payment as Payment)
       setClientSecret(intentData.clientSecret)
       setPaymentIntentId(intentData.paymentIntentId)
       setShowPaymentModal(true)

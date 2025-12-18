@@ -35,13 +35,13 @@ export function subscribeToMultipleEvents(
   // This reduces connection overhead by using one WebSocket connection
   subscriptions.forEach(({ event, schema, table, filter, callback }) => {
     channel.on(
-      'postgres_changes',
+      'postgres_changes' as any,
       {
         event,
         schema,
         table,
         ...(filter && { filter }),
-      },
+      } as any,
       callback
     )
   })

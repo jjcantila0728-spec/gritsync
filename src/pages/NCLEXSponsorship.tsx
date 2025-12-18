@@ -185,21 +185,21 @@ export function NCLEXSponsorship() {
         last_name: lastName.trim(),
         email: email.trim(),
         mobile_number: mobileNumber.trim(),
-        date_of_birth: dateOfBirth.trim() || null,
-        country: country.trim() || null,
-        nursing_school: nursingSchool.trim() || null,
-        graduation_date: graduationDate.trim() || null,
-        current_employment_status: currentEmploymentStatus.trim() || null,
-        years_of_experience: yearsOfExperience.trim() || null,
+        date_of_birth: dateOfBirth.trim() || undefined,
+        country: country.trim() || undefined,
+        nursing_school: nursingSchool.trim() || undefined,
+        graduation_date: graduationDate.trim() || undefined,
+        current_employment_status: currentEmploymentStatus.trim() || undefined,
+        years_of_experience: yearsOfExperience.trim() || undefined,
         financial_need_description: financialNeedDescription.trim(),
         motivation_statement: motivationStatement.trim(),
-        how_will_this_help: howWillThisHelp.trim() || null,
+        how_will_this_help: howWillThisHelp.trim() || undefined,
         resume_path: resumePath,
         transcript_path: transcriptPath,
-        recommendation_letter_path: recommendationLetterPath,
+        recommendation_letter_path: recommendationLetterPath || undefined,
       }
 
-      await sponsorshipsAPI.create(sponsorshipData)
+      await sponsorshipsAPI.create(sponsorshipData as any)
 
       showToast('Sponsorship application submitted successfully! We will review your application and get back to you soon.', 'success')
       

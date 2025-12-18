@@ -1592,7 +1592,7 @@ export function MyDetails() {
                         disabled
                         placeholder="Auto-generated from your name"
                         className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
-                        hint="This email is auto-generated based on your first name, middle name, and last name"
+                        help="This email is auto-generated based on your first name, middle name, and last name"
                       />
                     </div>
                     <Select

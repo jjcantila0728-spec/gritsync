@@ -262,7 +262,7 @@ export function AdminQuoteManagement() {
       // Verify deletion by fetching again after a short delay
       setTimeout(async () => {
         try {
-          const { data: verify } = await quotationsAPI.getById(id)
+          const verify = await quotationsAPI.getById(id)
           if (verify) {
             console.error('WARNING: Quotation still exists after deletion!', id)
             showToast('Warning: Quotation may not have been fully deleted. Please refresh the page.', 'warning')

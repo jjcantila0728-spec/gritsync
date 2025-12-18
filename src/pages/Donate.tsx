@@ -118,15 +118,14 @@ export function Donate() {
     try {
       // Create donation record
       const donationData = {
-        donor_name: isAnonymous ? null : donorName.trim(),
-        donor_email: isAnonymous ? null : donorEmail.trim(),
-        donor_phone: isAnonymous ? null : donorPhone.trim() || null,
+        donor_name: isAnonymous ? undefined : donorName.trim(),
+        donor_email: isAnonymous ? undefined : donorEmail.trim(),
+        donor_phone: isAnonymous ? undefined : donorPhone.trim() || undefined,
         is_anonymous: isAnonymous,
         amount: parseFloat(amount),
         currency: 'USD',
         status: 'pending' as const,
-        message: message.trim() || null,
-        sponsorship_id: sponsorshipId || null,
+        message: message.trim() || undefined,
       }
 
       const donation = await donationsAPI.create(donationData)

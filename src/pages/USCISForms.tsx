@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useState, useEffect, ChangeEvent } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from '../components/Button'
-import { Card } from '../components/Card'
-import { Input } from '../components/Input'
-import { Select } from '../components/Select'
-import { Loading } from '../components/Loading'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Loading } from '@/components/ui/Loading'
 import { FileText, Download, Upload, AlertCircle, CheckCircle } from 'lucide-react'
 import { 
   generateG1145, 
@@ -14,11 +14,12 @@ import {
   uploadGeneratedForm,
   getFormDataFromApplication,
   type USCISFormData 
-} from '../lib/api/uscis-forms'
-import { showToast } from '../lib/toast'
+} from '@/lib/api/uscis-forms'
+import { useToast } from '@/components/ui/Toast'
 
 export function USCISForms() {
   const { user, isAdmin } = useAuth()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const applicationId = searchParams.get('applicationId')
@@ -368,7 +369,7 @@ export function USCISForms() {
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
                 onClick={handleDownload}
-                variant="primary"
+                variant="default"
                 className="flex-1"
               >
                 <Download className="h-4 w-4 mr-2" />

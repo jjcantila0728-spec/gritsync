@@ -497,15 +497,16 @@ export async function processEmailAttachments(emailId: string): Promise<{
   attachments: AttachmentDetails[]
 }> {
   try {
-    const { data: attachments } = await listReceivedEmailAttachments(emailId)
+    const attachmentsResponse = await listReceivedEmailAttachments(emailId)
+    const attachmentsList = attachmentsResponse.data || []
     
     const results = {
       processed: 0,
       failed: 0,
-      attachments: attachments.data,
+      attachments: attachmentsList,
     }
 
-    for (const attachment of attachments.data) {
+    for (const attachment of attachmentsList) {
       try {
         // Download attachment using download_url
         const response = await fetch(attachment.download_url)

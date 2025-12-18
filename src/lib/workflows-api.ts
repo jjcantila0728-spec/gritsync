@@ -128,7 +128,7 @@ export const workflowsAPI = {
     
     const workflowData: Partial<Workflow> = {
       ...workflow,
-      created_by_user_id: user?.id || null,
+      created_by_user_id: user?.id ?? undefined,
       execution_count: 0,
       success_count: 0,
       failure_count: 0,

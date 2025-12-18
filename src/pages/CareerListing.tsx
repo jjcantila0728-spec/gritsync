@@ -161,7 +161,7 @@ export function CareerListing() {
                   onChange={(e) => setFilterDepartment(e.target.value)}
                   options={[
                     { value: 'all', label: 'All Departments' },
-                    ...departments.map(dept => ({ value: dept, label: dept }))
+                    ...departments.filter(dept => dept !== null).map(dept => ({ value: dept as string, label: dept as string }))
                   ]}
                 />
               </div>
@@ -232,7 +232,7 @@ interface CareerCardProps {
 
 function CareerCard({ career, featured = false }: CareerCardProps) {
   const navigate = useNavigate()
-  const isDeadlinePassed = career.application_deadline && new Date(career.application_deadline) < new Date()
+  const isDeadlinePassed = !!(career.application_deadline && new Date(career.application_deadline) < new Date())
 
   return (
     <Card className={`p-6 hover:shadow-lg transition-shadow h-full flex flex-col ${featured ? 'border-2 border-primary-300 dark:border-primary-700' : ''}`}>

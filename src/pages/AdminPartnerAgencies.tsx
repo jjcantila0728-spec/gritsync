@@ -162,18 +162,18 @@ export function AdminPartnerAgencies() {
       const agencyData = {
         name: name.trim(),
         email: email.trim(),
-        phone: phone.trim() || null,
-        website: website.trim() || null,
-        address: address.trim() || null,
-        city: city.trim() || null,
-        state: state.trim() || null,
+        phone: phone.trim() || undefined,
+        website: website.trim() || undefined,
+        address: address.trim() || undefined,
+        city: city.trim() || undefined,
+        state: state.trim() || undefined,
         country: country.trim() || 'USA',
-        zipcode: zipcode.trim() || null,
-        contact_person_name: contactPersonName.trim() || null,
-        contact_person_email: contactPersonEmail.trim() || null,
-        contact_person_phone: contactPersonPhone.trim() || null,
+        zipcode: zipcode.trim() || undefined,
+        contact_person_name: contactPersonName.trim() || undefined,
+        contact_person_email: contactPersonEmail.trim() || undefined,
+        contact_person_phone: contactPersonPhone.trim() || undefined,
         is_active: isActive,
-        notes: notes.trim() || null,
+        notes: notes.trim() || undefined,
       }
 
       if (editingAgency) {

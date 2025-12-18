@@ -33,8 +33,8 @@ export function DocumentsTab({
   const [pictureError, setPictureError] = useState(false)
   const [uploadingCourseFile, setUploadingCourseFile] = useState(false)
   const [mandatoryCourseFiles, setMandatoryCourseFiles] = useState<any[]>([])
-  const [viewingFile, setViewingFile] = useState<{url: string; name: string} | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [viewingFile, setViewingFile] = useState<{url: string; name: string; isImage?: boolean; fileName?: string} | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{type: string; id: string; name: string} | null>(null)
   
   useEffect(() => {
     const loadPictureUrl = async () => {
@@ -278,7 +278,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Infection Control and Barrier Precautions
                               </p>
-                              {isAdmin() && (
+                              {isAdmin && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -364,6 +364,7 @@ export function DocumentsTab({
                                         const isImageFile = fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || false
                                         setViewingFile({
                                           url: signedUrl,
+                                          name: fileName,
                                           fileName: fileName,
                                           isImage: !!isImageFile
                                         })
@@ -392,7 +393,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin() && (
+                                    {isAdmin && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
@@ -428,7 +429,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Child Abuse: New York Mandated Reporter Training
                               </p>
-                              {isAdmin() && (
+                              {isAdmin && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -514,6 +515,7 @@ export function DocumentsTab({
                                         const isImageFile = fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || false
                                         setViewingFile({
                                           url: signedUrl,
+                                          name: fileName,
                                           fileName: fileName,
                                           isImage: !!isImageFile
                                         })
@@ -542,7 +544,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin() && (
+                                    {isAdmin && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()

@@ -22,6 +22,7 @@ import {
   convertFromDatabaseFormat,
   convertToDatabaseFormat,
   convertMMYYYYToDatabase,
+  convertToMMYYYY,
   isValidMMDDYYYY
 } from '@/lib/utils/dateFormatters'
 
@@ -1386,7 +1387,7 @@ export function NCLEXApplication() {
                     value={email}
                     disabled
                     className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
-                    hint="Auto-generated from your My Details profile"
+                    help="Auto-generated from your My Details profile"
                   />
                 </div>
                 <Select

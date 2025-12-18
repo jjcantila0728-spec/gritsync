@@ -621,10 +621,11 @@ export function ClientEmails() {
         body: '',
         emailType: 'manual',
         category: 'custom',
-        tags: [],
+        tags: [] as string[],
         fromEmailAddressId: clientEmailAddress.id,
         cc: '',
         bcc: '',
+        replyTo: '',
       })
       setSelectedTemplateId('')
       setTemplateVariables({})
@@ -1368,7 +1369,7 @@ export function ClientEmails() {
                 setSelectedReceivedEmail(null)
                 setSelectedEmail(null)
               }}
-              email={selectedReceivedEmail || selectedEmail!}
+              email={(selectedReceivedEmail || selectedEmail!) as any}
               type={activeTab}
               onReply={selectedReceivedEmail ? () => {
                 const senderEmail = selectedReceivedEmail.from.match(/<(.+?)>/)?.[1] || selectedReceivedEmail.from
@@ -1413,10 +1414,11 @@ export function ClientEmails() {
                 body: '',
                 emailType: 'manual',
                 category: 'custom',
-                tags: [],
+                tags: [] as string[],
                 fromEmailAddressId: clientEmailAddress?.id || '',
                 cc: '',
                 bcc: '',
+                replyTo: '',
               })
               setSelectedTemplateId('')
               setTemplateVariables({})

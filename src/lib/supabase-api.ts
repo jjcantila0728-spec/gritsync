@@ -2565,7 +2565,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
     
     if (error) {
       // For silent mode, immediately cache as negative and return null without trying alternatives
-      if (shouldBeSilent && (error.message?.includes('not found') || error.message?.includes('Object not found') || error.statusCode === 400)) {
+      if (shouldBeSilent && (error.message?.includes('not found') || error.message?.includes('Object not found') || (error as any).statusCode === 400)) {
         negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
         return null as any
       }
@@ -5070,6 +5070,30 @@ export const applicationPaymentsAPI = {
       // Cache module might not be available, continue anyway
     }
   },
+
+  getPendingApproval: async () => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await supabase
+      .from('application_payments')
+      .select(`
+        *,
+        applications!inner (
+          id,
+          grit_app_id,
+          application_type,
+          status,
+          user_id
+        )
+      `)
+      .eq('status', 'pending_approval')
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+    return data || []
+  },
 }
 
 // Tracking API
@@ -5084,17 +5108,32 @@ export const trackingAPI = {
     if (error) throw new Error(error.message)
     return data
   },
+
+  track: async (trackingId: string) => {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*, application_timelines(*)')
+      .eq('grit_app_id', trackingId.toUpperCase())
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
 }
 
 // Careers API
 export const careersAPI = {
-  getAll: async () => {
-    const { data, error } = await supabase
+  getAll: async (includeInactive = false) => {
+    let query = supabase
       .from('careers')
       .select('*')
-      .eq('is_active', true)
       .order('created_at', { ascending: false })
     
+    if (!includeInactive) {
+      query = query.eq('is_active', true)
+    }
+    
+    const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
@@ -5113,13 +5152,17 @@ export const careersAPI = {
   create: async (career: {
     title: string
     description: string
-    requirements?: string
-    responsibilities?: string
-    location?: string
-    employment_type?: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship'
-    salary_range?: string
-    department?: string
+    requirements?: string | null
+    responsibilities?: string | null
+    location?: string | null
+    employment_type?: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship' | string | null
+    salary_range?: string | null
+    department?: string | null
     is_active?: boolean
+    is_featured?: boolean
+    application_deadline?: string | null
+    application_instructions?: string | null
+    partner_agency_id?: string | null
   }) => {
     if (!(await isAdmin())) {
       throw new Error('Unauthorized - Admin only')
@@ -5138,13 +5181,17 @@ export const careersAPI = {
   update: async (id: string, updates: Partial<{
     title: string
     description: string
-    requirements: string
-    responsibilities: string
-    location: string
-    employment_type: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship'
-    salary_range: string
-    department: string
+    requirements: string | null
+    responsibilities: string | null
+    location: string | null
+    employment_type: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship' | string | null
+    salary_range: string | null
+    department: string | null
     is_active: boolean
+    is_featured: boolean
+    application_deadline: string | null
+    application_instructions: string | null
+    partner_agency_id: string | null
   }>) => {
     if (!(await isAdmin())) {
       throw new Error('Unauthorized - Admin only')
@@ -5241,6 +5288,63 @@ export const donationsAPI = {
       .single()
     
     if (error) throw new Error(error.message)
+    return data
+  },
+
+  getStats: async () => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data: donations, error } = await supabase
+      .from('donations')
+      .select('amount, status, created_at')
+
+    if (error) throw new Error(error.message)
+
+    const total = donations?.reduce((sum, d) => sum + (d.status === 'completed' ? d.amount : 0), 0) || 0
+    const pending = donations?.filter(d => d.status === 'pending').length || 0
+    const completed = donations?.filter(d => d.status === 'completed').length || 0
+    const failed = donations?.filter(d => d.status === 'failed').length || 0
+
+    return { total, pending, completed, failed, donations: donations || [] }
+  },
+
+  getPublicStats: async () => {
+    const { data: donations, error } = await supabase
+      .from('donations')
+      .select('amount, status')
+      .eq('status', 'completed')
+
+    if (error) throw new Error(error.message)
+
+    const total = donations?.reduce((sum, d) => sum + (d.amount || 0), 0) || 0
+    const count = donations?.length || 0
+
+    return { total, count }
+  },
+
+  updateStatus: async (id: string, status: 'pending' | 'completed' | 'failed') => {
+    const { data, error } = await supabase
+      .from('donations')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  createPaymentIntent: async (donationId: string, amount: number) => {
+    const { data, error } = await supabase.functions.invoke('create-donation-payment-intent', {
+      body: { donation_id: donationId, amount },
+    })
+
+    if (error) {
+      throw new Error(error.message || 'Failed to create payment intent')
+    }
+
     return data
   },
 }
@@ -5464,6 +5568,42 @@ export const careerApplicationsAPI = {
     
     if (error) throw new Error(error.message)
   },
+
+  updateStatus: async (id: string, status: string, adminNotes?: string, partnerAgencyId?: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const updates: Record<string, any> = { status }
+    if (adminNotes !== undefined) updates.admin_notes = adminNotes
+    if (partnerAgencyId !== undefined) updates.partner_agency_id = partnerAgencyId
+
+    const { data, error } = await supabase
+      .from('career_applications')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  forwardToAgency: async (id: string, partnerAgencyId: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await supabase
+      .from('career_applications')
+      .update({ partner_agency_id: partnerAgencyId, status: 'forwarded' })
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
 }
 
 // Sponsorships API (NCLEX Sponsorships)
@@ -5561,5 +5701,24 @@ export const sponsorshipsAPI = {
       .eq('id', id)
     
     if (error) throw new Error(error.message)
+  },
+
+  updateStatus: async (id: string, status: string, adminNotes?: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const updates: Record<string, any> = { status }
+    if (adminNotes !== undefined) updates.admin_notes = adminNotes
+
+    const { data, error } = await supabase
+      .from('nclex_sponsorships')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
   },
 }

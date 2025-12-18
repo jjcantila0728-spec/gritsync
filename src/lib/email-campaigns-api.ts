@@ -147,7 +147,7 @@ export const emailCampaignsAPI = {
 
     const campaignData: Partial<EmailCampaign> = {
       ...campaign,
-      created_by_user_id: user?.id || null,
+      created_by_user_id: user?.id ?? undefined,
       status: campaign.status || 'draft',
       recipient_count: 0,
       sent_count: 0,
