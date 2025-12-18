@@ -40,7 +40,15 @@ export const authAPI = {
 }
 
 export const userDetailsAPI = {
-  async get(userId: string) {
+  async get(userId?: string) {
+    const { apiClient, usersAPI } = await import('./api-client');
+    if (userId) {
+      return usersAPI.getById(userId);
+    }
+    // Get current user's details
+    return apiClient.get<any>('/users/me');
+  },
+  async getByUserId(userId: string) {
     const { usersAPI } = await import('./api-client');
     return usersAPI.getById(userId);
   },
@@ -78,12 +86,26 @@ export const userDocumentsAPI = {
     const { apiClient } = await import('./api-client');
     return apiClient.get<{ url: string }>(`/documents/${id}/url`);
   },
-  async upload(filename: string, fileData: string, mimeType: string, documentType: string, applicationId?: string) {
+  async upload(documentType: string, file: File, applicationId?: string) {
     const { apiClient } = await import('./api-client');
+    
+    // Convert file to base64
+    const reader = new FileReader();
+    const fileData = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = result.split(',')[1] || result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    
     return apiClient.post<any>('/documents/upload', {
-      filename,
+      filename: file.name,
       fileData,
-      mimeType,
+      mimeType: file.type,
       documentType,
       applicationId,
     });

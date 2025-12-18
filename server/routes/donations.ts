@@ -6,6 +6,22 @@ import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middle
 
 const router = Router();
 
+router.get('/public-stats', async (_req: Request, res: Response) => {
+  try {
+    const allDonations = await db.select().from(donations);
+    const totalDonated = allDonations.reduce((sum, d) => sum + parseFloat(d.amount?.toString() || '0'), 0);
+    const totalDonors = allDonations.length;
+    
+    res.json({
+      totalDonated,
+      totalDonors,
+      goal: 50000,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const allDonations = await db.select().from(donations).orderBy(desc(donations.created_at));

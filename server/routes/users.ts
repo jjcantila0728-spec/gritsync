@@ -25,6 +25,29 @@ router.get('/', authenticateToken, requireAdmin, async (_req: AuthenticatedReque
   }
 });
 
+router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const [user] = await db.select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      first_name: users.first_name,
+      last_name: users.last_name,
+      grit_id: users.grit_id,
+      avatar_path: users.avatar_path,
+      created_at: users.created_at,
+    }).from(users).where(eq(users.id, req.user!.id));
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/email/:email', async (req, res: Response) => {
   try {
     const { email } = req.params;

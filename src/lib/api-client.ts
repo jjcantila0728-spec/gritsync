@@ -141,6 +141,10 @@ export const applicationsAPI = {
     return apiClient.get<any>(`/applications/${id}`);
   },
 
+  async getServiceTypes() {
+    return apiClient.get<string[]>('/applications/service-types');
+  },
+
   async create(data: any) {
     return apiClient.post<any>('/applications', data);
   },
@@ -239,6 +243,10 @@ export const donationsAPI = {
 
   async getById(id: string) {
     return apiClient.get<any>(`/donations/${id}`);
+  },
+
+  async getPublicStats() {
+    return apiClient.get<{ totalDonated: number; totalDonors: number; goal: number }>('/donations/public-stats');
   },
 
   async create(data: any) {

@@ -15,6 +15,19 @@ function generateGritAppId(): string {
   return result;
 }
 
+router.get('/service-types', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const apps = await db.select({ service_type: applications.service_type })
+      .from(applications)
+      .where(eq(applications.user_id, req.user!.id));
+    
+    const serviceTypes = [...new Set(apps.map(a => a.service_type).filter(Boolean))] as string[];
+    res.json(serviceTypes);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const isAdmin = req.user?.role === 'admin';
