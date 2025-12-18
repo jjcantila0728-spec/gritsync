@@ -10,11 +10,8 @@ import { Button } from './ui/Button'
 import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
-import { userDetailsAPI, notificationsAPI } from '@/lib/api'
+import { userDetailsAPI, notificationsAPI, usersAPI } from '@/lib/api'
 import { getSignedFileUrl } from '@/lib/supabase-api'
-import { supabase } from '@/lib/supabase'
-import { subscribeToNotifications, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export function Header() {
   const { user, signOut, isAdmin } = useAuth()
@@ -29,7 +26,6 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
   const exploreMenuRef = useRef<HTMLDivElement>(null)
-  const notificationChannelRef = useRef<RealtimeChannel | null>(null)
   const avatarPathRef = useRef<string | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const avatarImageRef = useRef<HTMLImageElement | null>(null)
@@ -314,18 +310,13 @@ export function Header() {
       
       ;(async () => {
         try {
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('avatar_path, default_avatar_design')
-            .eq('id', user.id)
-            .single()
+          const userData = await usersAPI.getById(user.id)
           
-          if (error || !userData) {
+          if (!userData) {
             // Only reset if user changed
             if (userIdChanged) {
               setAvatarUrl(null)
               clearAvatarCache(user.id)
-              // Design will be computed from cache via useMemo
             }
             avatarPathRef.current = null
             isFetchingAvatarRef.current = false
@@ -450,21 +441,6 @@ export function Header() {
         })
         .catch(() => {
           // Keep the current name if fetch fails
-        })
-      
-      // Fetch GritSync email address
-      supabase
-        .from('email_addresses')
-        .select('email_address')
-        .eq('user_id', user.id)
-        .eq('address_type', 'client')
-        .eq('is_primary', true)
-        .maybeSingle() // Use maybeSingle() instead of single() to avoid 406 error
-        .then(({ data, error }) => {
-          const emailData = data as any
-          if (!error && emailData?.email_address) {
-            setGritsyncEmail(emailData.email_address)
-          }
         })
     } else {
       // Only reset if user is actually null (logged out)

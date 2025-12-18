@@ -1,228 +1,79 @@
-import { supabase } from './supabase'
-import type { RealtimeChannel } from '@supabase/supabase-js'
-
-// Realtime subscription helpers
 export function subscribeToNotifications(
-  userId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`notifications:${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _userId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
 export function subscribeToApplicationUpdates(
-  applicationId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`application:${applicationId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'applications',
-        filter: `id=eq.${applicationId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _applicationId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
 export function subscribeToUserApplications(
-  userId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`user_applications:${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'applications',
-        filter: `user_id=eq.${userId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _userId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
 export function subscribeToQuotations(
-  userId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`quotations:${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'quotations',
-        filter: `user_id=eq.${userId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _userId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to all applications (for admin dashboard)
 export function subscribeToAllApplications(
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel('all_applications')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'applications',
-      },
-      callback
-    )
-    .subscribe()
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to all quotations (for admin dashboard)
 export function subscribeToAllQuotations(
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel('all_quotations')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'quotations',
-      },
-      callback
-    )
-    .subscribe()
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to pending approval payments (for admin dashboard)
 export function subscribeToPendingApprovalPayments(
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel('pending_approval_payments')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'application_payments',
-        filter: 'status=eq.pending_approval',
-      },
-      callback
-    )
-    .subscribe()
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to all clients (for admin clients page)
 export function subscribeToAllClients(
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel('all_clients')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'users',
-        filter: 'role=eq.client',
-      },
-      callback
-    )
-    .subscribe()
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to compilation job status changes
 export function subscribeToCompilationJob(
-  jobId: string,
-  callback: (payload: {
+  _jobId: string,
+  _callback: (payload: {
     eventType: 'INSERT' | 'UPDATE' | 'DELETE'
     new?: any
     old?: any
   }) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`compilation_job:${jobId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'document_compilation_jobs',
-        filter: `id=eq.${jobId}`,
-      },
-      (payload) => {
-        callback({
-          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-          new: payload.new,
-          old: payload.old,
-        })
-      }
-    )
-    .subscribe()
+): null {
+  return null
 }
 
-// Subscribe to timeline steps for a specific application
 export function subscribeToApplicationTimelineSteps(
-  applicationId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`timeline_steps:${applicationId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'application_timeline_steps',
-        filter: `application_id=eq.${applicationId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _applicationId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-// Subscribe to payments for a specific application
 export function subscribeToApplicationPayments(
-  applicationId: string,
-  callback: (payload: any) => void
-): RealtimeChannel {
-  return supabase
-    .channel(`application_payments:${applicationId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'application_payments',
-        filter: `application_id=eq.${applicationId}`,
-      },
-      callback
-    )
-    .subscribe()
+  _applicationId: string,
+  _callback: (payload: any) => void
+): null {
+  return null
 }
 
-export function unsubscribe(channel: RealtimeChannel) {
-  supabase.removeChannel(channel)
+export function unsubscribe(_channel: any): void {
 }
-
