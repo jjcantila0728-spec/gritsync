@@ -644,6 +644,7 @@ export function Header() {
   ]
 
   const exploreMenuItems = [
+    { label: 'USCIS Tracker', path: '/uscis-tracker', hash: '' },
     { label: 'Sponsorship', path: '/sponsorship', hash: '' },
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },

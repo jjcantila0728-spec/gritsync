@@ -71,6 +71,7 @@ const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').the
 const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ default: m.ClientEmails })))
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
+const USCISTracker = lazy(() => import('./pages/USCISTracker').then(m => ({ default: m.USCISTracker })))
 
 // Loading fallback component
 function PageLoader() {
@@ -247,6 +248,7 @@ function AppRoutes() {
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/uscis-tracker" element={<USCISTracker />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />

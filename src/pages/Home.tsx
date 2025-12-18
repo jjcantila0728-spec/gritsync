@@ -145,9 +145,9 @@ export function Home() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
-        title="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
-        description="Professional NCLEX application processing service. Helping Filipino nurses achieve their American Dream. Fast, secure, and reliable. Trusted by nurses worldwide."
-        keywords="NCLEX, NCLEX application, nursing license, US nursing, NCLEX processing, nursing exam, registered nurse, NCLEX assistance, Filipino nurses, American Dream, EAD application, work authorization"
+        title="GritSync - NCLEX Processing Agency | Filipino Nurses' Path to US Nursing Licensure"
+        description="Expert NCLEX application processing for Filipino nurses pursuing the American Dream. Complete USRN licensing support, EAD applications, Visa Bulletin tracking, and dedicated document management. Fast, secure, and affordable."
+        keywords="NCLEX processing Philippines, Filipino nurse USA, USRN application, NCLEX exam registration, Philippine nursing US license, EB3 visa bulletin Philippines, nursing abroad USA, CGFNS application, VisaScreen, NCLEX-RN exam, international nurse licensure, EAD work permit, green card nursing, immigration Filipino nurses"
         canonicalUrl={currentUrl}
         ogTitle="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
         ogDescription="Professional NCLEX application processing service. Helping Filipino nurses achieve their American Dream."

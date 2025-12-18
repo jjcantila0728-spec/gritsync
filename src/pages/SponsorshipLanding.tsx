@@ -28,9 +28,9 @@ export function SponsorshipLanding() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
-        title="NCLEX Sponsorship Program - Financial Support for Aspiring USRNs | GritSync"
-        description="Apply for NCLEX sponsorship to receive financial support for your NCLEX exam fees. Our program helps nurses overcome financial barriers and achieve their dream of becoming a USRN in the United States."
-        keywords="NCLEX sponsorship, NCLEX financial aid, USRN sponsorship, nursing exam funding, NCLEX support, nursing sponsorship program"
+        title="NCLEX Sponsorship Program - Financial Aid for Filipino Nurses | GritSync"
+        description="Apply for NCLEX sponsorship to receive financial support for your NCLEX-RN exam fees, CGFNS application, and VisaScreen certification. Helping Filipino nurses overcome financial barriers to become licensed USRNs."
+        keywords="NCLEX sponsorship Philippines, NCLEX financial aid Filipino nurses, USRN exam sponsorship, nursing scholarship USA, NCLEX-RN funding, CGFNS sponsorship, VisaScreen payment assistance, Filipino nurse financial support, free NCLEX application, nursing exam grant"
         canonicalUrl={currentUrl}
         ogTitle="NCLEX Sponsorship Program - Financial Support for Aspiring USRNs | GritSync"
         ogDescription="Apply for NCLEX sponsorship to receive financial support for your NCLEX exam fees. Our program helps nurses overcome financial barriers."
@@ -43,21 +43,28 @@ export function SponsorshipLanding() {
       />
       <Header />
       <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-          <div className="container mx-auto px-4 py-12 md:py-16">
+        {/* Hero Section with Banner Image */}
+        <section 
+          className="relative overflow-hidden py-20"
+          style={{
+            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.85)), url('/attached_assets/generated_images/filipino_nurse_studying_nclex.png')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        >
+          <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full mb-6">
-                <Award className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full mb-6">
+                <Award className="h-8 w-8 text-white" />
               </div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
                 <Heart className="h-4 w-4" />
                 <span>Financial Support Program</span>
               </div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
                 NCLEX Sponsorship Program
               </h1>
-              <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
                 Get financial support for your NCLEX exam fees and take the next step toward becoming a USRN. 
                 We're here to help you overcome financial barriers and achieve your nursing career goals.
               </p>

@@ -16,9 +16,9 @@ export function AboutUs() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
-        title="About Us - GritSync | NCLEX Processing Agency"
-        description="Learn about GritSync, founded by experienced USRNs including JJ Cantila, RM, RN, SGRN, CADRN, USRN. We help nurses navigate the NCLEX process to become licensed nurses in the United States."
-        keywords="about GritSync, NCLEX agency, USRN founders, nursing consultancy, NCLEX support, nursing career, healthcare professionals"
+        title="About GritSync - Filipino-Founded NCLEX Processing Experts | Your USRN Journey Partner"
+        description="GritSync was founded by experienced Filipino USRNs who understand the challenges of international nurse licensure. Led by JJ Cantila, RM, RN, SGRN, CADRN, USRN, we provide expert guidance for Filipino nurses pursuing their American Dream."
+        keywords="GritSync about, Filipino USRN founders, NCLEX agency Philippines, nursing consultancy Manila, JJ Cantila USRN, NCLEX support team, Filipino nurse success stories, international nurse agency, USRN journey experts, nurse immigration specialists"
         canonicalUrl={currentUrl}
         ogTitle="About Us - GritSync | NCLEX Processing Agency"
         ogDescription="Learn about GritSync, founded by experienced USRNs. We help nurses navigate the NCLEX process to become licensed nurses in the United States."
@@ -46,21 +46,20 @@ export function AboutUs() {
       />
       <Header />
       
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: 'url(/about-us-banner.png)'
-          }}
-        />
-        {/* Overlay for better text readability */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-50/40 via-white/40 to-primary-50/40 dark:from-gray-900/50 dark:via-gray-900/50 dark:to-primary-900/30" />
+      {/* Hero Section with Generated Banner Image */}
+      <section 
+        className="relative overflow-hidden py-20"
+        style={{
+          backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.85), rgba(147, 51, 234, 0.85)), url('/attached_assets/generated_images/healthcare_team_professionals.png')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
         
-        <div className="container mx-auto px-4 py-20 md:py-32 relative z-10">
+        <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <p className="text-xl md:text-2xl text-gray-700 dark:text-gray-200 mb-8 max-w-2xl mx-auto px-4 py-2 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm rounded-lg border-2 border-primary-200 dark:border-primary-700 shadow-lg inline-block">
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">About GritSync</h1>
+            <p className="text-xl md:text-2xl text-white/90 max-w-2xl mx-auto">
               Your trusted partner in navigating the NCLEX journey to becoming a licensed nurse in the United States.
             </p>
           </div>
