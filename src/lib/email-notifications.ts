@@ -180,12 +180,20 @@ export async function sendPaymentReceiptEmail(
     transactionId: string
     paymentDate: string
     description: string
+    items?: Array<{ name: string; amount: number }>
+    receiptUrl?: string
   }
 ): Promise<boolean> {
-  const formattedAmount = new Intl.NumberFormat('en-US', {
+  const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: data.currency
-  }).format(data.amount)
+  }).format(value)
+
+  const formattedAmount = formatCurrency(data.amount)
+  
+  const itemsHtml = data.items && data.items.length > 0 
+    ? data.items.map(item => `<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.name}</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(item.amount)}</td></tr>`).join('')
+    : ''
 
   return sendTemplateEmail('payment_receipt', email, {
     userName: data.userName,
@@ -193,6 +201,8 @@ export async function sendPaymentReceiptEmail(
     transactionId: data.transactionId,
     paymentDate: data.paymentDate,
     description: data.description,
+    itemsTable: itemsHtml,
+    receiptUrl: data.receiptUrl || '',
   })
 }
 
@@ -283,6 +293,8 @@ export async function sendSchoolLetterEmail(
   return sendTemplateEmail('school_letter', email, {
     applicantName: data.userName,
     applicationId: data.applicationId,
+    schoolName: data.schoolName,
+    letterUrl: data.letterUrl,
     documentRequirements: data.instructions || 'Please provide official transcripts and graduation verification.',
   })
 }
@@ -333,7 +345,11 @@ export async function sendApplicationApprovedEmail(
   return sendTemplateEmail('application_approved', email, {
     userName: data.userName,
     applicationId: data.applicationId,
+    serviceType: data.serviceType,
+    approvalDate: data.approvalDate,
     nextSteps,
+    applicationUrl: data.applicationUrl,
+    certificateUrl: data.certificateUrl || '',
     dashboardUrl: `${baseUrl}/dashboard`,
   })
 }
@@ -358,8 +374,13 @@ export async function sendApplicationRejectedEmail(
 
   return sendTemplateEmail('application_rejected', email, {
     userName: data.userName,
+    applicationId: data.applicationId,
+    serviceType: data.serviceType,
+    rejectionDate: data.rejectionDate,
     rejectionReason: data.reason || 'Please contact support for more details.',
     actionItems: data.appealProcess || 'You may resubmit your application with the required corrections.',
+    applicationUrl: data.applicationUrl,
+    supportContact: data.supportContact || 'support@gritsync.com',
     dashboardUrl: `${baseUrl}/dashboard`,
   })
 }

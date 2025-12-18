@@ -38,6 +38,22 @@ VALUES (
       </table>
     </div>
     
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+      <thead>
+        <tr>
+          <th style="background-color: #f9fafb; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Item</th>
+          <th style="background-color: #f9fafb; padding: 12px; text-align: right; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{itemsTable}}
+      </tbody>
+    </table>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{receiptUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Download Receipt</a>
+    </div>
+    
     <p>This payment confirmation has been sent to your email for your records.</p>
     
     <div class="card" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -56,11 +72,13 @@ Payment Details:
 - Date: {{paymentDate}}
 - Description: {{description}}
 
+Download your receipt: {{receiptUrl}}
+
 This payment confirmation has been sent to your email for your records.
 
 Need help? If you have any questions about this payment, please contact our support team.',
   'payment_receipt',
-  '["userName", "amount", "transactionId", "paymentDate", "description"]'::jsonb,
+  '["userName", "amount", "transactionId", "paymentDate", "description", "itemsTable", "receiptUrl"]'::jsonb,
   true
 );
 
@@ -186,11 +204,11 @@ INSERT INTO email_templates (id, name, subject, body_html, body_text, template_t
 VALUES (
   gen_random_uuid(),
   'Application Approved',
-  'Congratulations! Your Application Has Been Approved - GritSync',
+  'Congratulations! Your {{serviceType}} Has Been Approved - GritSync',
   '<div class="email-content">
     <h1>Application Approved!</h1>
     <p>Hi {{userName}},</p>
-    <p>Great news! Your NCLEX application has been <strong>approved</strong>.</p>
+    <p>Great news! Your {{serviceType}} application has been <strong>approved</strong> on {{approvalDate}}.</p>
     
     <div class="info-box" style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 6px;">
       <h2 style="margin-top: 0; color: #065f46;">Congratulations!</h2>
@@ -201,7 +219,7 @@ VALUES (
     <p>{{nextSteps}}</p>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="{{dashboardUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Dashboard</a>
+      <a href="{{applicationUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Application</a>
     </div>
     
     <p>If you have any questions, our team is here to help you every step of the way.</p>
@@ -210,7 +228,7 @@ VALUES (
 
 Hi {{userName}},
 
-Great news! Your NCLEX application has been approved.
+Great news! Your {{serviceType}} application has been approved on {{approvalDate}}.
 
 Congratulations!
 Your application (ID: {{applicationId}}) has been reviewed and approved. You are one step closer to achieving your American Dream!
@@ -218,11 +236,11 @@ Your application (ID: {{applicationId}}) has been reviewed and approved. You are
 Next Steps:
 {{nextSteps}}
 
-View your dashboard: {{dashboardUrl}}
+View your application: {{applicationUrl}}
 
 If you have any questions, our team is here to help you every step of the way.',
   'application_approved',
-  '["userName", "applicationId", "nextSteps", "dashboardUrl"]'::jsonb,
+  '["userName", "applicationId", "serviceType", "approvalDate", "nextSteps", "applicationUrl", "certificateUrl", "dashboardUrl"]'::jsonb,
   true
 );
 
@@ -231,11 +249,11 @@ INSERT INTO email_templates (id, name, subject, body_html, body_text, template_t
 VALUES (
   gen_random_uuid(),
   'Application Rejected',
-  'Application Update: Additional Action Required - GritSync',
+  'Application Update: {{serviceType}} Action Required - GritSync',
   '<div class="email-content">
     <h1>Application Update</h1>
     <p>Hi {{userName}},</p>
-    <p>We have reviewed your NCLEX application and unfortunately, we are unable to approve it at this time.</p>
+    <p>We have reviewed your {{serviceType}} application (ID: {{applicationId}}) on {{rejectionDate}} and unfortunately, we are unable to approve it at this time.</p>
     
     <div class="warning-box" style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 20px; margin: 25px 0; border-radius: 6px;">
       <h3 style="margin-top: 0; color: #991b1b;">Reason:</h3>
@@ -246,16 +264,16 @@ VALUES (
     <p>{{actionItems}}</p>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="{{dashboardUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Application</a>
+      <a href="{{applicationUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Application</a>
     </div>
     
-    <p>Please do not hesitate to contact our support team if you need assistance.</p>
+    <p>Please do not hesitate to contact our support team at {{supportContact}} if you need assistance.</p>
   </div>',
   'Application Update
 
 Hi {{userName}},
 
-We have reviewed your NCLEX application and unfortunately, we are unable to approve it at this time.
+We have reviewed your {{serviceType}} application (ID: {{applicationId}}) on {{rejectionDate}} and unfortunately, we are unable to approve it at this time.
 
 Reason:
 {{rejectionReason}}
@@ -263,11 +281,11 @@ Reason:
 What You Can Do:
 {{actionItems}}
 
-View your application: {{dashboardUrl}}
+View your application: {{applicationUrl}}
 
-Please contact our support team if you need assistance.',
+Please contact our support team at {{supportContact}} if you need assistance.',
   'application_rejected',
-  '["userName", "rejectionReason", "actionItems", "dashboardUrl"]'::jsonb,
+  '["userName", "applicationId", "serviceType", "rejectionDate", "rejectionReason", "actionItems", "applicationUrl", "supportContact", "dashboardUrl"]'::jsonb,
   true
 );
 
@@ -402,20 +420,25 @@ INSERT INTO email_templates (id, name, subject, body_html, body_text, template_t
 VALUES (
   gen_random_uuid(),
   'School Letter Request',
-  'Document Request: School Verification Letter - GritSync',
+  'Document Request: {{schoolName}} Verification Letter - GritSync',
   '<div class="email-content">
     <h1>School Letter Request</h1>
-    <p>Dear School Administrator,</p>
+    <p>Dear School Administrator at {{schoolName}},</p>
     <p>We are writing to request official verification documents for one of your graduates who is applying for NCLEX licensure in the United States.</p>
     
     <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 6px;">
       <h3 style="margin-top: 0;">Applicant Information:</h3>
       <p><strong>Name:</strong> {{applicantName}}</p>
       <p><strong>Application ID:</strong> {{applicationId}}</p>
+      <p><strong>School:</strong> {{schoolName}}</p>
     </div>
     
     <h3>Required Documents:</h3>
     <p>{{documentRequirements}}</p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{letterUrl}}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Letter</a>
+    </div>
     
     <p>Please send the documents to our processing center or contact us if you have any questions.</p>
     
@@ -423,22 +446,25 @@ VALUES (
   </div>',
   'School Letter Request
 
-Dear School Administrator,
+Dear School Administrator at {{schoolName}},
 
 We are writing to request official verification documents for one of your graduates who is applying for NCLEX licensure in the United States.
 
 Applicant Information:
 - Name: {{applicantName}}
 - Application ID: {{applicationId}}
+- School: {{schoolName}}
 
 Required Documents:
 {{documentRequirements}}
+
+View Letter: {{letterUrl}}
 
 Please send the documents to our processing center or contact us if you have any questions.
 
 Thank you for your assistance in supporting our applicants nursing career journey.',
   'school_letter',
-  '["applicantName", "applicationId", "documentRequirements"]'::jsonb,
+  '["applicantName", "applicationId", "schoolName", "letterUrl", "documentRequirements"]'::jsonb,
   true
 );
 
