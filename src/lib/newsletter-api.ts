@@ -1,36 +1,12 @@
-const NEWSLETTER_STORAGE_KEY = 'gritsync_newsletter_subscriptions'
+import { supabase } from './supabase'
 
 export interface NewsletterSubscription {
   id: string
   email: string
-  subscriptionType: 'visa_bulletin' | 'general' | 'all'
-  subscribedAt: string
-  isActive: boolean
-}
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36)
-}
-
-function getStoredSubscriptions(): NewsletterSubscription[] {
-  if (typeof window === 'undefined') return []
-  
-  try {
-    const stored = localStorage.getItem(NEWSLETTER_STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch {
-    return []
-  }
-}
-
-function saveSubscriptions(subscriptions: NewsletterSubscription[]): void {
-  if (typeof window === 'undefined') return
-  
-  try {
-    localStorage.setItem(NEWSLETTER_STORAGE_KEY, JSON.stringify(subscriptions))
-  } catch (error) {
-    console.error('Failed to save subscriptions:', error)
-  }
+  subscription_type: 'visa_bulletin' | 'general' | 'all'
+  subscribed_at: string
+  is_active: boolean
+  unsubscribed_at?: string
 }
 
 export async function subscribeToNewsletter(
@@ -42,58 +18,176 @@ export async function subscribeToNewsletter(
     return { success: false, message: 'Please enter a valid email address' }
   }
   
-  const subscriptions = getStoredSubscriptions()
-  const existing = subscriptions.find(s => s.email.toLowerCase() === email.toLowerCase())
+  const normalizedEmail = email.toLowerCase().trim()
   
-  if (existing) {
-    if (existing.isActive) {
-      return { success: false, message: 'This email is already subscribed' }
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('newsletter_subscriptions')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+    
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error checking subscription:', fetchError)
+      return { success: false, message: 'Unable to process subscription. Please try again.' }
     }
-    existing.isActive = true
-    existing.subscribedAt = new Date().toISOString()
-    saveSubscriptions(subscriptions)
-    return { success: true, message: 'Welcome back! Your subscription has been reactivated.' }
+    
+    if (existing) {
+      if (existing.is_active) {
+        return { success: false, message: 'This email is already subscribed' }
+      }
+      
+      const { error: updateError } = await supabase
+        .from('newsletter_subscriptions')
+        .update({ 
+          is_active: true, 
+          subscribed_at: new Date().toISOString(),
+          unsubscribed_at: null,
+          subscription_type: subscriptionType
+        })
+        .eq('id', existing.id)
+      
+      if (updateError) {
+        console.error('Error reactivating subscription:', updateError)
+        return { success: false, message: 'Unable to reactivate subscription. Please try again.' }
+      }
+      
+      return { success: true, message: 'Welcome back! Your subscription has been reactivated.' }
+    }
+    
+    const { error: insertError } = await supabase
+      .from('newsletter_subscriptions')
+      .insert({
+        email: normalizedEmail,
+        subscription_type: subscriptionType,
+        subscribed_at: new Date().toISOString(),
+        is_active: true
+      })
+    
+    if (insertError) {
+      console.error('Error creating subscription:', insertError)
+      if (insertError.code === '23505') {
+        return { success: false, message: 'This email is already subscribed' }
+      }
+      return { success: false, message: 'Unable to create subscription. Please try again.' }
+    }
+    
+    return { success: true, message: 'Successfully subscribed to visa bulletin updates!' }
+  } catch (error) {
+    console.error('Subscription error:', error)
+    return { success: false, message: 'An unexpected error occurred. Please try again.' }
   }
-  
-  const newSubscription: NewsletterSubscription = {
-    id: generateId(),
-    email: email.toLowerCase(),
-    subscriptionType,
-    subscribedAt: new Date().toISOString(),
-    isActive: true
-  }
-  
-  subscriptions.push(newSubscription)
-  saveSubscriptions(subscriptions)
-  
-  return { success: true, message: 'Successfully subscribed to visa bulletin updates!' }
 }
 
 export async function unsubscribeFromNewsletter(email: string): Promise<{ success: boolean; message: string }> {
-  const subscriptions = getStoredSubscriptions()
-  const subscription = subscriptions.find(s => s.email.toLowerCase() === email.toLowerCase())
+  const normalizedEmail = email.toLowerCase().trim()
   
-  if (!subscription) {
-    return { success: false, message: 'Email not found in our subscription list' }
+  try {
+    const { data: subscription, error: fetchError } = await supabase
+      .from('newsletter_subscriptions')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+    
+    if (fetchError) {
+      console.error('Error finding subscription:', fetchError)
+      return { success: false, message: 'Unable to process unsubscription. Please try again.' }
+    }
+    
+    if (!subscription) {
+      return { success: false, message: 'Email not found in our subscription list' }
+    }
+    
+    const { error: updateError } = await supabase
+      .from('newsletter_subscriptions')
+      .update({ 
+        is_active: false,
+        unsubscribed_at: new Date().toISOString()
+      })
+      .eq('id', subscription.id)
+    
+    if (updateError) {
+      console.error('Error unsubscribing:', updateError)
+      return { success: false, message: 'Unable to unsubscribe. Please try again.' }
+    }
+    
+    return { success: true, message: 'You have been unsubscribed from visa bulletin updates.' }
+  } catch (error) {
+    console.error('Unsubscription error:', error)
+    return { success: false, message: 'An unexpected error occurred. Please try again.' }
   }
-  
-  subscription.isActive = false
-  saveSubscriptions(subscriptions)
-  
-  return { success: true, message: 'You have been unsubscribed from visa bulletin updates.' }
 }
 
-export function isEmailSubscribed(email: string): boolean {
-  const subscriptions = getStoredSubscriptions()
-  const subscription = subscriptions.find(s => s.email.toLowerCase() === email.toLowerCase())
-  return subscription?.isActive ?? false
+export async function isEmailSubscribed(email: string): Promise<boolean> {
+  const normalizedEmail = email.toLowerCase().trim()
+  
+  try {
+    const { data, error } = await supabase
+      .from('newsletter_subscriptions')
+      .select('is_active')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+    
+    if (error) {
+      console.error('Error checking subscription status:', error)
+      return false
+    }
+    
+    return data?.is_active ?? false
+  } catch {
+    return false
+  }
 }
 
-export function getActiveSubscribers(type?: 'visa_bulletin' | 'general' | 'all'): NewsletterSubscription[] {
-  const subscriptions = getStoredSubscriptions()
-  return subscriptions.filter(s => {
-    if (!s.isActive) return false
-    if (!type) return true
-    return s.subscriptionType === type || s.subscriptionType === 'all'
-  })
+export async function getActiveSubscribers(
+  type?: 'visa_bulletin' | 'general' | 'all'
+): Promise<NewsletterSubscription[]> {
+  try {
+    let query = supabase
+      .from('newsletter_subscriptions')
+      .select('*')
+      .eq('is_active', true)
+    
+    if (type && type !== 'all') {
+      query = query.or(`subscription_type.eq.${type},subscription_type.eq.all`)
+    }
+    
+    const { data, error } = await query.order('subscribed_at', { ascending: false })
+    
+    if (error) {
+      console.error('Error fetching subscribers:', error)
+      return []
+    }
+    
+    return data || []
+  } catch (error) {
+    console.error('Error getting subscribers:', error)
+    return []
+  }
+}
+
+export async function getSubscriberCount(
+  type?: 'visa_bulletin' | 'general' | 'all'
+): Promise<number> {
+  try {
+    let query = supabase
+      .from('newsletter_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+    
+    if (type && type !== 'all') {
+      query = query.or(`subscription_type.eq.${type},subscription_type.eq.all`)
+    }
+    
+    const { count, error } = await query
+    
+    if (error) {
+      console.error('Error counting subscribers:', error)
+      return 0
+    }
+    
+    return count || 0
+  } catch {
+    return 0
+  }
 }

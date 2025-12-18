@@ -236,5 +236,22 @@ For issues specific to:
 - Skip option available at any step
 - Moved onboarding from Home page to Dashboard for contextual learning
 
+## Newsletter & Visa Bulletin Email Integration (December 18, 2025)
+- **Supabase-backed Newsletter Subscriptions**: Replaced localStorage with Supabase database
+  - Tables: `newsletter_subscriptions`, `visa_bulletin_cache`, `visa_bulletin_email_log`
+  - RLS policies: Anonymous users can subscribe, admins can manage all
+  - Migration: `supabase/migrations/add-newsletter-subscriptions-table.sql`
+- **Email Integration with Resend**: 
+  - Created `createVisaBulletinUpdateEmail` template in `email-templates.ts`
+  - Added `sendVisaBulletinUpdateEmail` and `sendVisaBulletinToAllSubscribers` functions
+  - Template includes NCLEX/EAD marketing content
+- **Subscription Form**: Email subscription form on USCIS Tracker page
+- **Email Configuration**: Uses existing Resend setup in `/admin/settings/notifications`
+
+### Future Enhancements (Not Yet Implemented)
+- Backend automation for detecting visa bulletin changes
+- Scheduled job to scrape DOS visa bulletin and trigger emails
+- Edge Function for secure bulk email sending
+
 ## Last Updated
-December 18, 2025 - USCIS Tracker, Visa Bulletin, banner images, and SEO optimization
+December 18, 2025 - Newsletter subscriptions, visa bulletin email integration, Resend email templates

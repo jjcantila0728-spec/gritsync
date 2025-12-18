@@ -548,3 +548,65 @@ export async function sendDocumentRejectedEmail(
   })
 }
 
+/**
+ * Send Visa Bulletin Update Email
+ */
+export async function sendVisaBulletinUpdateEmail(
+  email: string,
+  data: {
+    month: string
+    year: string
+    eb3PhilippinesFinalAction: string
+    eb3PhilippinesDatesForFiling: string
+    previousFinalAction?: string
+    previousDatesForFiling?: string
+  }
+): Promise<boolean> {
+  const { subject, html } = await EmailTemplates.createVisaBulletinUpdateEmail(data)
+
+  return await sendEmail({
+    to: email,
+    subject,
+    html,
+    emailType: 'marketing',
+    emailCategory: 'visa_bulletin_update'
+  })
+}
+
+/**
+ * Send Visa Bulletin Updates to All Subscribers
+ * Called when a new visa bulletin is detected
+ */
+export async function sendVisaBulletinToAllSubscribers(
+  bulletinData: {
+    month: string
+    year: string
+    eb3PhilippinesFinalAction: string
+    eb3PhilippinesDatesForFiling: string
+    previousFinalAction?: string
+    previousDatesForFiling?: string
+  }
+): Promise<{ sent: number; failed: number }> {
+  const { getActiveSubscribers } = await import('./newsletter-api')
+  
+  const subscribers = await getActiveSubscribers('visa_bulletin')
+  let sent = 0
+  let failed = 0
+  
+  for (const subscriber of subscribers) {
+    try {
+      const success = await sendVisaBulletinUpdateEmail(subscriber.email, bulletinData)
+      if (success) {
+        sent++
+      } else {
+        failed++
+      }
+    } catch (error) {
+      console.error(`Failed to send bulletin to ${subscriber.email}:`, error)
+      failed++
+    }
+  }
+  
+  return { sent, failed }
+}
+

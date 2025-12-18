@@ -1403,3 +1403,103 @@ export async function createDocumentRejectedEmail(data: {
   }
 }
 
+/**
+ * Visa Bulletin Update Email Template
+ */
+export async function createVisaBulletinUpdateEmail(data: {
+  month: string
+  year: string
+  eb3PhilippinesFinalAction: string
+  eb3PhilippinesDatesForFiling: string
+  previousFinalAction?: string
+  previousDatesForFiling?: string
+}): Promise<{ subject: string; html: string }> {
+  const {
+    month,
+    year,
+    eb3PhilippinesFinalAction,
+    eb3PhilippinesDatesForFiling,
+    previousFinalAction,
+  } = data
+
+  const hasMovement = previousFinalAction && eb3PhilippinesFinalAction !== previousFinalAction
+  const branding = await getBrandingSettings()
+
+  const content = `
+    <div class="content">
+      <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 24px;">
+        <p style="margin: 0; font-weight: 600; color: #92400e;">
+          📋 ${month} ${year} Visa Bulletin Has Been Released!
+        </p>
+      </div>
+
+      <h2 style="color: #111827; margin: 0 0 16px;">Philippines EB3 Category Update</h2>
+      
+      <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="border: none; padding: 12px 0; border-bottom: 1px solid #bbf7d0;">
+              <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Final Action Date</p>
+              <p style="margin: 4px 0 0; color: #15803d; font-size: 24px; font-weight: bold;">${eb3PhilippinesFinalAction}</p>
+              ${hasMovement ? `<p style="margin: 4px 0 0; color: #16a34a; font-size: 12px;">↑ Changed from ${previousFinalAction}</p>` : ''}
+            </td>
+          </tr>
+          <tr>
+            <td style="border: none; padding: 12px 0;">
+              <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Dates for Filing</p>
+              <p style="margin: 4px 0 0; color: #2563eb; font-size: 24px; font-weight: bold;">${eb3PhilippinesDatesForFiling}</p>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="color: #4b5563; line-height: 1.6; margin: 24px 0;">
+        The ${month} ${year} Visa Bulletin has been released by the U.S. Department of State. 
+        ${hasMovement 
+          ? 'Great news! There has been movement in the Final Action Date for Philippines EB3 category.' 
+          : 'The dates remain steady this month. We continue to monitor for any changes.'}
+      </p>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${branding.siteUrl}/uscis-tracker" class="button">View Full Details</a>
+      </div>
+
+      <div style="background-color: #fef2f2; padding: 24px; border-radius: 12px; margin: 32px 0;">
+        <h3 style="color: ${branding.primaryColor}; margin: 0 0 16px; text-align: center;">
+          ✨ GritSync Services for Filipino Nurses
+        </h3>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
+            <h4 style="margin: 0 0 4px; color: #111827;">📚 NCLEX Processing</h4>
+            <p style="margin: 0; color: #6b7280; font-size: 13px;">Complete application support from start to finish. We handle paperwork, scheduling, and tracking.</p>
+          </div>
+          
+          <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
+            <h4 style="margin: 0 0 4px; color: #111827;">👨‍👩‍👧 EAD Applications for Dependents</h4>
+            <p style="margin: 0; color: #6b7280; font-size: 13px;">Work authorization processing for your spouse and children. Keep your family together during the transition.</p>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 20px;">
+          <a href="${branding.siteUrl}/quote" style="display: inline-block; background-color: #ffffff; color: ${branding.primaryColor}; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 2px solid ${branding.primaryColor};">
+            Get a Free Quote Today
+          </a>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <p style="margin: 0; font-size: 12px; color: #6b7280;">
+          <strong>Source:</strong> U.S. Department of State. Always verify with the official 
+          <a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html" style="color: ${branding.primaryColor};">Visa Bulletin</a>.
+        </p>
+      </div>
+    </div>
+  `
+
+  return {
+    subject: `📋 ${month} ${year} Visa Bulletin Update - Philippines EB3`,
+    html: await createBaseTemplate(content, {})
+  }
+}
+
