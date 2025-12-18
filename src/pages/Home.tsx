@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Header } from '@/components/Header'
+import { HeroSlider } from '@/components/HeroSlider'
+import { OnboardingModal } from '@/components/OnboardingModal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
@@ -17,9 +19,14 @@ import {
   Users,
   ArrowRight,
   Star,
-  Zap,
   Mail,
-  Send
+  Send,
+  Database,
+  Cloud,
+  Briefcase,
+  Heart,
+  Globe,
+  Award
 } from 'lucide-react'
 
 export function Home() {
@@ -34,9 +41,8 @@ export function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    // Handle scroll to section when page loads with hash
     if (location.hash) {
-      const hash = location.hash.substring(1) // Remove the #
+      const hash = location.hash.substring(1)
       setTimeout(() => {
         const element = document.getElementById(hash)
         if (element) {
@@ -54,13 +60,11 @@ export function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validation
     if (!formData.name || !formData.email || !formData.subject || !formData.message) {
       showToast('Please fill in all fields', 'error')
       return
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
       showToast('Please enter a valid email address', 'error')
@@ -70,10 +74,8 @@ export function Home() {
     setIsSubmitting(true)
 
     try {
-      // Get admin email
       const adminEmail = await generalSettings.getAdminEmail()
       
-      // Create email HTML
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2563eb; margin-bottom: 20px;">New Contact Form Submission</h2>
@@ -89,7 +91,6 @@ export function Home() {
         </div>
       `
 
-      // Send email to admin
       const success = await sendEmail({
         to: adminEmail,
         subject: `Contact Form: ${formData.subject}`,
@@ -99,7 +100,6 @@ export function Home() {
 
       if (success) {
         showToast('Thank you! Your message has been sent successfully.', 'success')
-        // Reset form
         setFormData({
           name: '',
           email: '',
@@ -147,11 +147,11 @@ export function Home() {
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
         title="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
-        description="Professional NCLEX application processing service. Get expert assistance with NCLEX applications, document management, and payment processing. Fast, secure, and reliable. Trusted by nurses worldwide."
-        keywords="NCLEX, NCLEX application, nursing license, US nursing, NCLEX processing, nursing exam, registered nurse, NCLEX assistance, NCLEX sponsorship, nursing career, healthcare jobs, NCLEX tracking, nursing application"
+        description="Professional NCLEX application processing service. Helping Filipino nurses achieve their American Dream. Fast, secure, and reliable. Trusted by nurses worldwide."
+        keywords="NCLEX, NCLEX application, nursing license, US nursing, NCLEX processing, nursing exam, registered nurse, NCLEX assistance, Filipino nurses, American Dream, EAD application, work authorization"
         canonicalUrl={currentUrl}
         ogTitle="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
-        ogDescription="Professional NCLEX application processing service. Get expert assistance with NCLEX applications, document management, and payment processing. Trusted by nurses worldwide."
+        ogDescription="Professional NCLEX application processing service. Helping Filipino nurses achieve their American Dream."
         ogImage={`${baseUrl}/gritsync_logo.png`}
         ogUrl={currentUrl}
         twitterTitle="GritSync - NCLEX Processing Agency"
@@ -165,7 +165,7 @@ export function Home() {
             '@context': 'https://schema.org',
             '@type': 'Service',
             serviceType: 'NCLEX Application Processing',
-            description: 'Professional NCLEX application processing service helping nurses navigate the NCLEX process to become registered nurses in the United States.',
+            description: 'Professional NCLEX application processing service helping Filipino nurses navigate the NCLEX process to become registered nurses in the United States.',
             provider: {
               '@type': 'Organization',
               name: 'GritSync',
@@ -182,47 +182,212 @@ export function Home() {
         ]}
       />
       <Header />
+      <OnboardingModal />
       
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-        <div className="container mx-auto px-4 py-20 md:py-32">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
-              <Zap className="h-4 w-4" />
-              <span>Streamline Your NCLEX Application Process</span>
+      <HeroSlider />
+
+      {/* Our Services - Main Focus Areas */}
+      <section className="py-20 bg-white dark:bg-gray-900">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-4">
+              <Globe className="h-4 w-4" />
+              <span>Our Core Services</span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 text-gray-900 dark:text-gray-100 leading-tight">
-              Your Trusted Partner for
-              <span className="text-primary-600 dark:text-primary-400"> NCLEX Processing</span>
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-              Simplify your journey to becoming a licensed nurse. Fast, secure, and reliable application processing with real-time tracking.
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+              Your Gateway to the <span className="text-primary-600">American Dream</span>
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              Comprehensive immigration and licensing services tailored for Filipino healthcare professionals and their families.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-              <Link to="/quote">
-                <Button size="lg" className="w-full sm:w-auto text-lg px-8 py-6">
-                  Get a quote
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/register">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto text-lg px-8 py-6">
-                  Apply Now
-                </Button>
-              </Link>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {/* NCLEX Processing - Primary */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-primary-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
+              <div className="relative p-8 rounded-2xl border-2 border-primary-200 dark:border-primary-800 bg-white dark:bg-gray-800 hover:border-primary-400 dark:hover:border-primary-600 transition-all hover:shadow-xl">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg">
+                    <Award className="h-8 w-8 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-primary-600 dark:text-primary-400">Primary Service</span>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      NCLEX Processing
+                    </h3>
+                  </div>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">
+                  Helping Filipino nurses achieve their dream of becoming licensed healthcare professionals in the United States. Our expert team handles every step of the complex application process.
+                </p>
+                <ul className="space-y-3 mb-6">
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-primary-500 flex-shrink-0" />
+                    <span>Complete application submission & tracking</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-primary-500 flex-shrink-0" />
+                    <span>Document verification & management</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-primary-500 flex-shrink-0" />
+                    <span>State-by-state licensing guidance</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-primary-500 flex-shrink-0" />
+                    <span>24/7 expert support in English & Filipino</span>
+                  </li>
+                </ul>
+                <Link to="/quote">
+                  <Button size="lg" className="w-full">
+                    Get NCLEX Quote
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>No Credit Card Required</span>
+
+            {/* EAD Application - Secondary */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
+              <div className="relative p-8 rounded-2xl border-2 border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:shadow-xl">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                    <Briefcase className="h-8 w-8 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Family Service</span>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      EAD Application
+                    </h3>
+                  </div>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">
+                  Help your dependents work legally in the USA with our streamlined Employment Authorization Document (EAD) application service. Keep your family together on your American journey.
+                </p>
+                <ul className="space-y-3 mb-6">
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                    <span>I-765 form preparation & filing</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                    <span>Dependent visa work authorization</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                    <span>USCIS correspondence handling</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                    <span>Renewal & extension assistance</span>
+                  </li>
+                </ul>
+                <Link to="/ead-application">
+                  <Button size="lg" variant="outline" className="w-full border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                    Start EAD Application
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
               </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>24/7 Support</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* GritSync Perks Section */}
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium mb-4">
+              <Heart className="h-4 w-4" />
+              <span>Exclusive Benefits</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+              Perks of Being a <span className="text-primary-600">GritSync</span> Client
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              More than just application processing - we provide a complete ecosystem to support your professional journey.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Personalized Business Mail */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-7 w-7 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+                    Personalized Business Mail
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Get your own professional GritSync email address to communicate with agencies, employers, and institutions with credibility.
+                  </p>
+                  <div className="inline-block px-4 py-2 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+                    <code className="text-purple-700 dark:text-purple-300 font-mono text-sm">
+                      yourname@gritsync.com
+                    </code>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>Secure & Compliant</span>
+            </div>
+
+            {/* Full Client Database */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                  <Database className="h-7 w-7 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+                    Full Client Database
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    All your application data, history, and progress in one secure dashboard. Access your complete profile anytime, anywhere.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">Real-time sync</span>
+                    <span className="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">Multi-device</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dedicated Document Storage */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow md:col-span-2">
+              <div className="flex flex-col md:flex-row items-start gap-6">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Cloud className="h-7 w-7 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+                    Dedicated Document Cloud Storage
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Securely store all your important documents - passports, diplomas, certificates, and more. Upload once and use them across all your applications. Enterprise-grade encryption keeps your sensitive information safe.
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <Shield className="h-6 w-6 text-green-500 mx-auto mb-1" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Encrypted</span>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <CheckCircle className="h-6 w-6 text-green-500 mx-auto mb-1" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Auto-backup</span>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <Clock className="h-6 w-6 text-green-500 mx-auto mb-1" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">24/7 Access</span>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <Globe className="h-6 w-6 text-green-500 mx-auto mb-1" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Anywhere</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -237,7 +402,7 @@ export function Home() {
               Everything You Need to Succeed
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Comprehensive tools and services designed to make your NCLEX application process seamless
+              Comprehensive tools and services designed to make your application process seamless
             </p>
           </div>
 
@@ -250,7 +415,7 @@ export function Home() {
                 Application Processing
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
-                Submit and track your NCLEX applications with our intuitive, step-by-step form. All required fields and documents in one place.
+                Submit and track your applications with our intuitive, step-by-step form. All required fields and documents in one place.
               </p>
             </div>
 
@@ -302,7 +467,7 @@ export function Home() {
                 Why Choose GritSync?
               </h2>
               <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
-                We understand the challenges of the NCLEX application process. That's why we've built a platform that puts you first.
+                We understand the challenges of navigating the US immigration and licensing process. That's why we've built a platform that puts Filipino healthcare professionals first.
               </p>
               
               <div className="space-y-6">
@@ -326,10 +491,10 @@ export function Home() {
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
-                      Expert Support
+                      Expert Filipino Support
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      Our team of NCLEX specialists is available 24/7 to guide you through every step of the process.
+                      Our team of specialists speaks your language and understands your journey. Available 24/7 in English and Filipino.
                     </p>
                   </div>
                 </div>
@@ -356,11 +521,11 @@ export function Home() {
                   <div className="flex items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary-600 dark:bg-primary-500 flex items-center justify-center text-white font-semibold">
-                        JD
+                        MR
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">John Doe</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Nursing Student</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">Maria Reyes</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Filipino Nurse, California</p>
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -370,21 +535,21 @@ export function Home() {
                     </div>
                   </div>
                   <p className="text-gray-700 dark:text-gray-300 italic">
-                    "GritSync made my NCLEX application process so much easier. The tracking feature kept me informed every step of the way, and their support team was incredibly helpful."
+                    "GritSync made my American Dream possible! The team guided me through every step of the NCLEX process. I'm now a licensed nurse in California, and I couldn't have done it without them. Maraming salamat!"
                   </p>
                 </div>
               </div>
               
               <div className="absolute -bottom-6 -right-6 bg-primary-600 dark:bg-primary-500 text-white p-6 rounded-xl shadow-lg">
                 <div className="text-3xl font-bold">500+</div>
-                <div className="text-sm opacity-90">Applications Processed</div>
+                <div className="text-sm opacity-90">Filipino Nurses Licensed</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Stats Section */}
       <section id="pricing" className="py-20 bg-primary-600 dark:bg-primary-700 text-white scroll-mt-16">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -422,7 +587,6 @@ export function Home() {
             </div>
             
             <div className="grid md:grid-cols-2 gap-8">
-              {/* Contact Form */}
               <div className="bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 rounded-2xl p-8 border-2 border-primary-200 dark:border-primary-800">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-12 h-12 rounded-lg bg-primary-600 dark:bg-primary-500 flex items-center justify-center">
@@ -501,14 +665,13 @@ export function Home() {
                 </form>
               </div>
 
-              {/* Contact Info & CTA */}
               <div className="space-y-6">
                 <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 border-2 border-gray-200 dark:border-gray-700">
                   <h3 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">
                     Ready to Get Started?
                   </h3>
                   <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">
-                    Join hundreds of nursing professionals who trust GritSync for their NCLEX application processing.
+                    Join hundreds of Filipino nursing professionals who trust GritSync for their application processing.
                   </p>
                   <div className="flex flex-col gap-4">
                     <Link to="/register">
@@ -567,16 +730,16 @@ export function Home() {
                 <span className="text-xl font-bold text-white">GritSync</span>
               </div>
               <p className="text-sm">
-                Your trusted partner for NCLEX application processing. Fast, secure, and reliable.
+                Your trusted partner for NCLEX and EAD application processing. Helping Filipino healthcare professionals achieve their American Dream.
               </p>
             </div>
             
             <div>
-              <h4 className="text-white font-semibold mb-4">Product</h4>
+              <h4 className="text-white font-semibold mb-4">Services</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/application/new" className="hover:text-primary-400 transition-colors">New Application</Link></li>
-                <li><Link to="/applications" className="hover:text-primary-400 transition-colors">Track Applications</Link></li>
-                <li><Link to="/quotations" className="hover:text-primary-400 transition-colors">Quotations</Link></li>
+                <li><Link to="/quote" className="hover:text-primary-400 transition-colors">NCLEX Processing</Link></li>
+                <li><Link to="/ead-application" className="hover:text-primary-400 transition-colors">EAD Application</Link></li>
+                <li><Link to="/tracking" className="hover:text-primary-400 transition-colors">Track Applications</Link></li>
               </ul>
             </div>
             
