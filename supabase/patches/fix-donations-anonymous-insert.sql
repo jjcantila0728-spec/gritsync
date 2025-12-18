@@ -16,3 +16,5 @@ WITH CHECK (true);
 -- INSERT INTO donations (amount, currency, status, is_anonymous) 
 -- VALUES (10.00, 'USD', 'pending', true);
 
+
+

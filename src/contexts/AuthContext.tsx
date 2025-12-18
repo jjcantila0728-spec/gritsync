@@ -129,18 +129,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(error.message)
     }
 
-    // Email verification is automatically sent by Supabase Auth
-    // If you want to send a custom verification email, you can do it here:
-    // if (data.user && !data.user.email_confirmed_at) {
-    //   // Custom email verification can be sent here if needed
-    // }
+    // Send welcome email after successful registration
+    try {
+      const { sendWelcomeEmail } = await import('@/lib/email-notifications')
+      const userName = [firstName, lastName].filter(Boolean).join(' ') || normalizedEmail.split('@')[0]
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+      
+      // Send welcome email asynchronously (don't block registration)
+      sendWelcomeEmail(normalizedEmail, {
+        userName,
+        userEmail: normalizedEmail,
+        dashboardUrl: `${baseUrl}/dashboard`
+      }).catch((error) => {
+        console.error('Failed to send welcome email:', error)
+        // Don't throw - registration should succeed even if email fails
+      })
+    } catch (error) {
+      console.error('Error importing welcome email function:', error)
+      // Don't throw - registration should succeed even if email fails
+    }
 
+    // Email verification is automatically sent by Supabase Auth
     // Don't wait for profile creation - the trigger will handle it
     // The auth state change listener will load the profile automatically
     // This makes registration faster and more resilient
   }
 
   async function signOut() {
+    // Clear auth cache before signing out
+    try {
+      const { clearAuthCache } = await import('@/lib/supabase-api')
+      clearAuthCache()
+    } catch {
+      // Ignore if import fails
+    }
+    
     const { error } = await supabase.auth.signOut()
     if (error) {
       throw new Error(error.message)
@@ -155,12 +178,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function requestPasswordReset(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
+    try {
+      // Get user info first to get their name
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .eq('email', email)
+        .maybeSingle()
 
-    if (error) {
-      throw new Error(error.message)
+      // Generate password reset link via edge function
+      const { data: linkData, error: linkError } = await supabase.functions.invoke('generate-password-reset-link', {
+        body: {
+          email,
+          redirectTo: `${window.location.origin}/reset-password`
+        }
+      })
+
+      if (linkError || !linkData?.resetLink) {
+        throw new Error(linkError?.message || 'Failed to generate reset link')
+      }
+
+      // Get user name and ID for email
+      const userName = userData 
+        ? [userData.first_name, userData.last_name].filter(Boolean).join(' ') || email.split('@')[0]
+        : email.split('@')[0]
+      const recipientUserId = userData?.id || null
+
+      // Send email using our custom template
+      const { sendForgotPasswordEmail } = await import('@/lib/email-notifications')
+      const emailSent = await sendForgotPasswordEmail(
+        email,
+        userName,
+        linkData.resetLink,
+        '1 hour',
+        recipientUserId
+      )
+
+      if (!emailSent) {
+        throw new Error('Failed to send password reset email')
+      }
+    } catch (error: any) {
+      console.error('Error in requestPasswordReset:', error)
+      throw new Error(error.message || 'Failed to send password reset email')
     }
   }
 

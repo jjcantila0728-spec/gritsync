@@ -19,8 +19,9 @@ export default defineConfig({
   server: {
     port: 5000,
     host: '0.0.0.0',
-    strictPort: true,
+    strictPort: false, // Allow Vite to use next available port if 5000 is busy
     allowedHosts: true,
+    cors: true,
   },
   build: {
     // Production build optimizations

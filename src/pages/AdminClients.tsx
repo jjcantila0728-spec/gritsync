@@ -10,31 +10,10 @@ import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
 import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { useDebounce } from '@/hooks/useDebounce'
 
-// Generate Gmail address function (same as in supabase-api.ts)
-function generateGmailAddress(firstName: string, middleName: string | null, lastName: string): string {
-  const firstInitial = (firstName || '').trim().charAt(0).toLowerCase()
-  const lastNameParts = (lastName || '').trim().split(/\s+/).filter(part => part.trim())
-  
-  if (lastNameParts.length === 0) {
-    return `${firstInitial}usrn@gmail.com`
-  }
-  
-  let email: string
-  if (lastNameParts.length > 1) {
-    const firstPartInitial = lastNameParts[0].charAt(0).toLowerCase()
-    const lastPart = lastNameParts[lastNameParts.length - 1].toLowerCase()
-    email = `${firstInitial}${firstPartInitial}${lastPart}usrn@gmail.com`
-  } else {
-    const middleInitial = (middleName || '').trim().charAt(0).toLowerCase()
-    const lastPart = lastNameParts[0].toLowerCase()
-    const fallbackInitial = lastPart.charAt(0).toLowerCase()
-    const initialToUse = middleInitial || fallbackInitial
-    email = `${firstInitial}${initialToUse}${lastPart}usrn@gmail.com`
-  }
-  
-  return email
-}
+// GritSync email generation is now handled server-side via database functions
+// Removed client-side generation logic
 import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -58,6 +37,7 @@ export function AdminClients() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 300) // Debounce search input
   const [refreshing, setRefreshing] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
@@ -130,61 +110,22 @@ export function AdminClients() {
   async function fetchClients() {
     try {
       setLoading(true)
-      const data = await clientsAPI.getAll()
-      const clientsData = (data as unknown as Client[]) || []
+      // Use optimized batch method to avoid N+1 queries
+      const clientsWithGmail = await clientsAPI.getAllWithGmailAccounts()
       
-      // Fetch Gmail accounts for each client
-      const clientsWithGmail = await Promise.all(
-        clientsData.map(async (client) => {
-          try {
-            // Get the most recent application for this client
-            const { data: applications } = await supabase
-              .from('applications')
-              .select('id, first_name, middle_name, last_name')
-              .eq('user_id', client.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-            
-            if (applications && applications.length > 0) {
-              const app = applications[0]
-              // Try to get existing Gmail account from processing_accounts
-              const typedApp = app as { id?: string }
-              const { data: gmailAccounts } = await supabase
-                .from('processing_accounts')
-                .select('email')
-                .eq('application_id', typedApp.id || '')
-                .eq('account_type', 'gmail')
-                .limit(1)
-              
-              const typedGmailAccounts = gmailAccounts as Array<{ email?: string }> | null
-              if (typedGmailAccounts && typedGmailAccounts.length > 0) {
-                return { ...client, gmail_account: typedGmailAccounts[0].email }
-              } else {
-                // Generate Gmail address if not found
-                const typedApp = app as { first_name?: string; middle_name?: string; last_name?: string } | null
-                const firstName = typedApp?.first_name || client.first_name || ''
-                const middleName = typedApp?.middle_name || null
-                const lastName = typedApp?.last_name || client.last_name || ''
-                if (firstName && lastName) {
-                  const gmailAddress = generateGmailAddress(firstName, middleName, lastName)
-                  return { ...client, gmail_account: gmailAddress }
-                }
-              }
-            }
-            return { ...client, gmail_account: client.email }
-          } catch (error) {
-            console.error(`Error fetching Gmail for client ${client.id}:`, error)
-            return { ...client, gmail_account: client.email }
-          }
-        })
-      )
-      
-      setClients(clientsWithGmail)
+      setClients(clientsWithGmail as Client[])
       setCurrentPage(1)
     } catch (error: any) {
       console.error('Error fetching clients:', error)
       showToast(error?.message || 'Failed to load clients', 'error')
-      setClients([])
+      // Fallback to basic getAll if optimized method fails
+      try {
+        const data = await clientsAPI.getAll()
+        const clientsData = (data as unknown as Client[]) || []
+        setClients(clientsData.map(c => ({ ...c, gmail_account: c.email })))
+      } catch (fallbackError) {
+        setClients([])
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -426,9 +367,9 @@ export function AdminClients() {
   }
 
   const filteredClients = useMemo(() => {
-    if (!searchQuery.trim()) return clients
+    if (!debouncedSearchQuery.trim()) return clients
 
-    const query = searchQuery.toLowerCase()
+    const query = debouncedSearchQuery.toLowerCase()
     return clients.filter((client) => {
       const fullName = getFullName(client.first_name, client.last_name).toLowerCase()
       return (
@@ -438,7 +379,7 @@ export function AdminClients() {
         (client.grit_id && client.grit_id.toLowerCase().includes(query))
       )
     })
-  }, [clients, searchQuery])
+  }, [clients, debouncedSearchQuery])
 
   const stats = useMemo(() => {
     return {

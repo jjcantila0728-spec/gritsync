@@ -233,3 +233,5 @@ const error = new AppError('Test', ErrorType.NETWORK)
 expect(error.retryable).toBe(true)
 ```
 
+
+

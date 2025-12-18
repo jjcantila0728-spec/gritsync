@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { Card } from '@/components/ui/Card'
@@ -48,6 +48,7 @@ interface Career {
 }
 
 export function CareerListing() {
+  const navigate = useNavigate()
   const [careers, setCareers] = useState<Career[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -62,7 +63,7 @@ export function CareerListing() {
     try {
       setLoading(true)
       const data = await careersAPI.getAll()
-      setCareers(data as unknown as Career[])
+      setCareers(data as Career[])
     } catch (error: any) {
       console.error('Error fetching careers:', error)
     } finally {
@@ -92,7 +93,7 @@ export function CareerListing() {
   ]
 
   const employmentTypes = ['full-time', 'part-time', 'contract', 'temporary', 'internship']
-  const departments = Array.from(new Set(careers.map(c => c.department).filter((d): d is string => Boolean(d))))
+  const departments = Array.from(new Set(careers.map(c => c.department).filter(Boolean)))
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
@@ -231,7 +232,7 @@ interface CareerCardProps {
 
 function CareerCard({ career, featured = false }: CareerCardProps) {
   const navigate = useNavigate()
-  const isDeadlinePassed = Boolean(career.application_deadline && new Date(career.application_deadline) < new Date())
+  const isDeadlinePassed = career.application_deadline && new Date(career.application_deadline) < new Date()
 
   return (
     <Card className={`p-6 hover:shadow-lg transition-shadow h-full flex flex-col ${featured ? 'border-2 border-primary-300 dark:border-primary-700' : ''}`}>

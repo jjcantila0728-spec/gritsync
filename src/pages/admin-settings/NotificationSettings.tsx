@@ -318,15 +318,15 @@ export function NotificationSettings() {
   ]
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-3 sm:p-4 md:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <Bell className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Email & Notification Settings
           </h2>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving} size="sm" className="w-full sm:w-auto">
           {saving ? (
             <>
               <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -372,8 +372,8 @@ export function NotificationSettings() {
 // Email Configuration Tab
 function EmailConfigTab({ settings, setSettings, user, testingEmail, onTestEmail }: any) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+    <div className="space-y-4">
+      <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
         <div>
           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
             Email Service Provider
@@ -409,7 +409,7 @@ function EmailConfigTab({ settings, setSettings, user, testingEmail, onTestEmail
 
         {settings.emailServiceProvider === 'smtp' && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   SMTP Host
@@ -473,7 +473,7 @@ function EmailConfigTab({ settings, setSettings, user, testingEmail, onTestEmail
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               From Email Address
@@ -548,17 +548,17 @@ function NotificationsManagementTab({ notifications, loading, onToggle, onDelete
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Email Notifications
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Manage email notification types ({emailNotifications.length} configured)
           </p>
         </div>
-        <Button onClick={onCreate} size="sm">
+        <Button onClick={onCreate} size="sm" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Add Notification
         </Button>
@@ -647,17 +647,17 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Reminder Notifications
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Manage reminder notification types ({sortedReminders.length} configured)
           </p>
         </div>
-        <Button onClick={onCreate} size="sm">
+        <Button onClick={onCreate} size="sm" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Add Reminder
         </Button>
@@ -676,7 +676,7 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
             
             {/* Show configuration for profile reminder */}
             {notification.key === 'profileReminder' && notification.enabled && (
-              <div className="ml-8 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 space-y-4">
+              <div className="ml-4 sm:ml-8 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Reminder Interval (hours)
@@ -796,17 +796,17 @@ function GreetingsTab({ notifications, loading, onUpdateNotification, onToggle, 
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Greeting Notifications
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Manage greeting notification types ({sortedGreetings.length} configured)
           </p>
         </div>
-        <Button onClick={onCreate} size="sm">
+        <Button onClick={onCreate} size="sm" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Add Greeting
         </Button>
@@ -827,7 +827,7 @@ function GreetingsTab({ notifications, loading, onUpdateNotification, onToggle, 
               
               {/* Show configuration for birthday greeting */}
               {notification.key === 'birthdayGreeting' && (
-                <div className="ml-8 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 space-y-4">
+                <div className="ml-4 sm:ml-8 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3">
                   <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                     Birthday Greeting Configuration
                   </h4>
@@ -929,7 +929,7 @@ function GreetingsTab({ notifications, loading, onUpdateNotification, onToggle, 
 // Notification Card Component
 function NotificationCard({ notification, onToggle, onDelete, onEdit, deleting }: any) {
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+    <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1">
           <div className="text-2xl mt-1">

@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
-import { sponsorshipsAPI } from '@/lib/api'
+import { sponsorshipsAPI, userDocumentsAPI } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, FileText, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
 
 export function NCLEXSponsorship() {
   const { user } = useAuth()
@@ -44,6 +45,8 @@ export function NCLEXSponsorship() {
   const [recommendationLetter, setRecommendationLetter] = useState<File | null>(null)
   const [uploadingFiles, setUploadingFiles] = useState(false)
 
+  // View file modal
+  const [viewingFile, setViewingFile] = useState<{ url: string; fileName: string; isImage: boolean } | null>(null)
 
   // Load user details if logged in
   useEffect(() => {
@@ -59,12 +62,11 @@ export function NCLEXSponsorship() {
             .single()
           
           if (data) {
-            const userData = data as { first_name?: string; last_name?: string; mobile_number?: string; date_of_birth?: string; country?: string }
-            if (userData.first_name) setFirstName(userData.first_name)
-            if (userData.last_name) setLastName(userData.last_name)
-            if (userData.mobile_number) setMobileNumber(userData.mobile_number)
-            if (userData.date_of_birth) setDateOfBirth(userData.date_of_birth)
-            if (userData.country) setCountry(userData.country)
+            if (data.first_name) setFirstName(data.first_name)
+            if (data.last_name) setLastName(data.last_name)
+            if (data.mobile_number) setMobileNumber(data.mobile_number)
+            if (data.date_of_birth) setDateOfBirth(data.date_of_birth)
+            if (data.country) setCountry(data.country)
           }
         } catch (error) {
           // Ignore errors
@@ -101,13 +103,22 @@ export function NCLEXSponsorship() {
     }
 
     try {
-      const fileExt = file.name.split('.').pop()
+      // Compress file before upload to reduce storage size
+      const { compressDocument } = await import('@/lib/document-compression')
+      const compressedFile = await compressDocument(file, {
+        maxWidth: 1920,
+        maxHeight: 1920,
+        quality: 0.85,
+        maxFileSizeMB: 5,
+      })
+
+      const fileExt = compressedFile.name.split('.').pop()
       const fileName = `sponsorship_${type}_${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
       const { error } = await supabase.storage
         .from('documents')
-        .upload(filePath, file, {
+        .upload(filePath, compressedFile, {
           cacheControl: '3600',
           upsert: false,
         })
@@ -235,6 +246,14 @@ export function NCLEXSponsorship() {
     else if (type === 'recommendation_letter') setRecommendationLetter(file)
 
     e.target.value = ''
+  }
+
+  const getFilePreview = (file: File | null): string | null => {
+    if (!file) return null
+    if (file.type.startsWith('image/')) {
+      return URL.createObjectURL(file)
+    }
+    return null
   }
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''

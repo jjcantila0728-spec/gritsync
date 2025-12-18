@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
+import { Textarea } from '@/components/ui/Textarea'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
@@ -82,12 +83,11 @@ export function Career() {
             .single()
           
           if (data) {
-            const userData = data as { first_name?: string; last_name?: string; mobile_number?: string; date_of_birth?: string; country?: string }
-            if (userData.first_name) setFirstName(userData.first_name)
-            if (userData.last_name) setLastName(userData.last_name)
-            if (userData.mobile_number) setMobileNumber(userData.mobile_number)
-            if (userData.date_of_birth) setDateOfBirth(userData.date_of_birth)
-            if (userData.country) setCountry(userData.country)
+            if (data.first_name) setFirstName(data.first_name)
+            if (data.last_name) setLastName(data.last_name)
+            if (data.mobile_number) setMobileNumber(data.mobile_number)
+            if (data.date_of_birth) setDateOfBirth(data.date_of_birth)
+            if (data.country) setCountry(data.country)
           }
         } catch (error) {
           // Ignore errors

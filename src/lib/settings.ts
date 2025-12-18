@@ -29,6 +29,15 @@ async function getAllSettings(): Promise<Record<string, string>> {
     
     if (error) {
       console.error('Error fetching settings:', error)
+      
+      // Check if it's a CORS error
+      if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+        console.error(
+          'CORS Error: Please ensure http://localhost:5000 is added to your Supabase project\'s allowed origins.\n' +
+          'Go to: Supabase Dashboard > Settings > API > Allowed Origins'
+        )
+      }
+      
       // Return cached settings if available, even if expired
       return settingsCache || {}
     }
@@ -190,6 +199,66 @@ export const generalSettings = {
    */
   isMaintenanceMode: async (): Promise<boolean> => {
     return getBooleanSetting('maintenanceMode', false)
+  },
+  
+  /**
+   * Get website URL
+   */
+  getWebsiteUrl: async (): Promise<string> => {
+    return getSetting('websiteUrl', 'https://gritsync.com')
+  },
+  
+  /**
+   * Get logo URL
+   */
+  getLogoUrl: async (): Promise<string> => {
+    return getSetting('logoUrl', '')
+  },
+  
+  /**
+   * Get primary color
+   */
+  getPrimaryColor: async (): Promise<string> => {
+    return getSetting('primaryColor', '#10b981')
+  },
+  
+  /**
+   * Get secondary color
+   */
+  getSecondaryColor: async (): Promise<string> => {
+    return getSetting('secondaryColor', '#3b82f6')
+  },
+  
+  /**
+   * Get company address
+   */
+  getCompanyAddress: async (): Promise<string> => {
+    return getSetting('companyAddress', '')
+  },
+  
+  /**
+   * Get company description
+   */
+  getCompanyDescription: async (): Promise<string> => {
+    return getSetting('companyDescription', '')
+  },
+  
+  /**
+   * Get social media URLs
+   */
+  getSocialMediaUrls: async (): Promise<{
+    facebook?: string
+    twitter?: string
+    linkedin?: string
+    instagram?: string
+  }> => {
+    const allSettings = await getAllSettings()
+    return {
+      facebook: allSettings.facebookUrl || undefined,
+      twitter: allSettings.twitterUrl || undefined,
+      linkedin: allSettings.linkedinUrl || undefined,
+      instagram: allSettings.instagramUrl || undefined,
+    }
   },
 }
 

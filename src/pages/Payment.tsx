@@ -212,7 +212,7 @@ export function Payment() {
               </div>
             </div>
 
-            <Elements stripe={stripePromise} options={{ clientSecret }}>
+            <Elements key={clientSecret} stripe={stripePromise} options={{ clientSecret }}>
               <StripePaymentForm
                 amount={quotation.amount}
                 onSuccess={handlePaymentSuccess}

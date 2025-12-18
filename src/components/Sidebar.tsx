@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
-import { quotationsAPI, userDocumentsAPI } from '@/lib/api'
+import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
 import {
   LayoutDashboard,
   DollarSign,
@@ -10,12 +10,14 @@ import {
   Users,
   Settings,
   FolderOpen,
-  AlertCircle,
   Award,
   Heart,
   Briefcase,
   Building2,
+  Mail,
+  FileText,
 } from 'lucide-react'
+import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
 interface NavItem {
   label: string
@@ -26,8 +28,9 @@ interface NavItem {
 
 const clientNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'My Applications', path: '/applications', icon: ClipboardList },
+  { label: 'Applications', path: '/applications', icon: ClipboardList },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
+  { label: 'Emails', path: '/client/emails', icon: Mail },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -35,6 +38,7 @@ const adminNavItems: NavItem[] = [
   { label: 'All Applications', path: '/admin/applications', icon: ClipboardList },
   { label: 'Clients', path: '/admin/clients', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
+  { label: 'Emails', path: '/admin/emails', icon: Mail },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
   { label: 'Donations', path: '/admin/donations', icon: Heart },
   { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },
@@ -47,6 +51,27 @@ export function Sidebar() {
   const location = useLocation()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
+  const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
+  
+  // Load cached applications payment status from localStorage
+  const getCachedApplicationsPaymentStatus = () => {
+    if (!user?.id) return false
+    try {
+      const cached = localStorage.getItem(`applicationsPaymentStatus_${user.id}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Check if cache is still valid (less than 2 minutes old)
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+          return parsed.hasPayment
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+    return false
+  }
+  
+  const [hasApplicationsNeedingPayment, setHasApplicationsNeedingPayment] = useState(getCachedApplicationsPaymentStatus)
   
   // Load cached documents status from localStorage
   const getCachedDocumentsStatus = () => {
@@ -196,6 +221,116 @@ export function Sidebar() {
     }
   }, [isAdmin, user])
 
+  // Check for applications needing payment
+  useEffect(() => {
+    if (isAdmin() || !user) return
+
+    // Load from cache first
+    const cached = getCachedApplicationsPaymentStatus()
+    setHasApplicationsNeedingPayment(cached)
+
+    const checkApplicationsNeedingPayment = async () => {
+      try {
+        const applications = await applicationsAPI.getAll()
+        if (applications && applications.length > 0) {
+          // Check each application for pending payments
+          const needsPaymentPromises = applications.map(async (app: any) => {
+            try {
+              const payments = await applicationPaymentsAPI.getByApplication(app.id)
+              return payments.some(
+                (p: any) => p.status === 'pending' || p.status === 'pending_approval'
+              )
+            } catch {
+              return false
+            }
+          })
+          
+          const results = await Promise.all(needsPaymentPromises)
+          const hasPayment = results.some(Boolean)
+          setHasApplicationsNeedingPayment(hasPayment)
+          
+          // Cache the status
+          try {
+            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+              hasPayment,
+              timestamp: Date.now(),
+            }))
+          } catch {
+            // Ignore errors
+          }
+        } else {
+          setHasApplicationsNeedingPayment(false)
+          
+          // Cache the status
+          try {
+            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+              hasPayment: false,
+              timestamp: Date.now(),
+            }))
+          } catch {
+            // Ignore errors
+          }
+        }
+      } catch (error) {
+        console.error('Error checking applications needing payment:', error)
+        // Keep cached value on error
+      }
+    }
+
+    checkApplicationsNeedingPayment()
+
+    // Listen for application updates
+    const handleApplicationsUpdate = () => {
+      checkApplicationsNeedingPayment()
+    }
+
+    window.addEventListener('applicationsUpdated', handleApplicationsUpdate)
+    
+    // Check periodically (every 30 seconds)
+    const interval = setInterval(checkApplicationsNeedingPayment, 30000)
+
+    return () => {
+      window.removeEventListener('applicationsUpdated', handleApplicationsUpdate)
+      clearInterval(interval)
+    }
+  }, [isAdmin, user])
+
+  // Load unread emails count from localStorage and listen for updates
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getUnreadEmailsCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadEmailsCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          // Check if cache is still valid (less than 2 minutes old)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+      return 0
+    }
+
+    // Load initial count
+    setUnreadEmailsCount(getUnreadEmailsCount())
+
+    // Listen for updates from email pages
+    const handleEmailsUpdate = () => {
+      setUnreadEmailsCount(getUnreadEmailsCount())
+    }
+    window.addEventListener('emailsUpdated', handleEmailsUpdate)
+    window.addEventListener('storage', handleEmailsUpdate)
+
+    return () => {
+      window.removeEventListener('emailsUpdated', handleEmailsUpdate)
+      window.removeEventListener('storage', handleEmailsUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="hidden md:block w-64 min-h-screen border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
       <nav className="space-y-2">
@@ -211,12 +346,19 @@ export function Sidebar() {
               location.pathname.startsWith('/application/')
           }
 
-          // Show counter for Quotations link
-          const showCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          // Show counter for Quotations link (admin only)
+          const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          
+          // Show counter for Emails link (both admin and client)
+          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
             (!documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport)
+          
+          // Show stop indicator for Applications link if there are applications needing payment
+          const showApplicationsStop = (item.path === '/applications' || item.path === '/admin/applications') && 
+            hasApplicationsNeedingPayment
           
           return (
             <Link
@@ -231,13 +373,21 @@ export function Sidebar() {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               <span className="flex-1 min-w-0">{item.label}</span>
-              {showCounter && (
+              {showQuotesCounter && (
                 <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
                 </span>
               )}
+              {showEmailsCounter && (
+                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
+                </span>
+              )}
               {showDocumentsStop && (
-                <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500 dark:text-red-400" />
+                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+              )}
+              {showApplicationsStop && (
+                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
               )}
             </Link>
           )
@@ -257,6 +407,26 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   
+  // Load cached applications payment status from localStorage
+  const getCachedApplicationsPaymentStatus = () => {
+    if (!user?.id) return false
+    try {
+      const cached = localStorage.getItem(`applicationsPaymentStatus_${user.id}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Check if cache is still valid (less than 2 minutes old)
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+          return parsed.hasPayment
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+    return false
+  }
+  
+  const [hasApplicationsNeedingPayment, setHasApplicationsNeedingPayment] = useState(getCachedApplicationsPaymentStatus)
+  
   // Load cached documents status from localStorage
   const getCachedDocumentsStatus = () => {
     if (!user?.id) return { picture: false, diploma: false, passport: false }
@@ -405,6 +575,116 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
     }
   }, [isAdmin, user])
 
+  // Check for applications needing payment
+  useEffect(() => {
+    if (isAdmin() || !user) return
+
+    // Load from cache first
+    const cached = getCachedApplicationsPaymentStatus()
+    setHasApplicationsNeedingPayment(cached)
+
+    const checkApplicationsNeedingPayment = async () => {
+      try {
+        const applications = await applicationsAPI.getAll()
+        if (applications && applications.length > 0) {
+          // Check each application for pending payments
+          const needsPaymentPromises = applications.map(async (app: any) => {
+            try {
+              const payments = await applicationPaymentsAPI.getByApplication(app.id)
+              return payments.some(
+                (p: any) => p.status === 'pending' || p.status === 'pending_approval'
+              )
+            } catch {
+              return false
+            }
+          })
+          
+          const results = await Promise.all(needsPaymentPromises)
+          const hasPayment = results.some(Boolean)
+          setHasApplicationsNeedingPayment(hasPayment)
+          
+          // Cache the status
+          try {
+            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+              hasPayment,
+              timestamp: Date.now(),
+            }))
+          } catch {
+            // Ignore errors
+          }
+        } else {
+          setHasApplicationsNeedingPayment(false)
+          
+          // Cache the status
+          try {
+            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+              hasPayment: false,
+              timestamp: Date.now(),
+            }))
+          } catch {
+            // Ignore errors
+          }
+        }
+      } catch (error) {
+        console.error('Error checking applications needing payment:', error)
+        // Keep cached value on error
+      }
+    }
+
+    checkApplicationsNeedingPayment()
+
+    // Listen for application updates
+    const handleApplicationsUpdate = () => {
+      checkApplicationsNeedingPayment()
+    }
+
+    window.addEventListener('applicationsUpdated', handleApplicationsUpdate)
+    
+    // Check periodically (every 30 seconds)
+    const interval = setInterval(checkApplicationsNeedingPayment, 30000)
+
+    return () => {
+      window.removeEventListener('applicationsUpdated', handleApplicationsUpdate)
+      clearInterval(interval)
+    }
+  }, [isAdmin, user])
+
+  // Load unread emails count from localStorage and listen for updates
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getUnreadEmailsCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadEmailsCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          // Check if cache is still valid (less than 2 minutes old)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 2 * 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+      return 0
+    }
+
+    // Load initial count
+    setUnreadEmailsCount(getUnreadEmailsCount())
+
+    // Listen for updates from email pages
+    const handleEmailsUpdate = () => {
+      setUnreadEmailsCount(getUnreadEmailsCount())
+    }
+    window.addEventListener('emailsUpdated', handleEmailsUpdate)
+    window.addEventListener('storage', handleEmailsUpdate)
+
+    return () => {
+      window.removeEventListener('emailsUpdated', handleEmailsUpdate)
+      window.removeEventListener('storage', handleEmailsUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="w-full h-full bg-white dark:bg-gray-900 p-4 overflow-visible">
       <nav className="space-y-2">
@@ -420,12 +700,19 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
               location.pathname.startsWith('/application/')
           }
 
-          // Show counter for Quotations link
-          const showCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          // Show counter for Quotations link (admin only)
+          const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
+          
+          // Show counter for Emails link (both admin and client)
+          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
             (!documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport)
+          
+          // Show stop indicator for Applications link if there are applications needing payment
+          const showApplicationsStop = (item.path === '/applications' || item.path === '/admin/applications') && 
+            hasApplicationsNeedingPayment
           
           return (
             <Link
@@ -442,13 +729,21 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               <span className="flex-1 min-w-0 block">{item.label}</span>
-              {showCounter && (
+              {showQuotesCounter && (
                 <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
                 </span>
               )}
+              {showEmailsCounter && (
+                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
+                </span>
+              )}
               {showDocumentsStop && (
-                <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500 dark:text-red-400" />
+                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+              )}
+              {showApplicationsStop && (
+                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
               )}
             </Link>
           )

@@ -3,13 +3,14 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { Logo } from './Logo'
-import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle, Bell } from 'lucide-react'
+import { NotificationBell } from './NotificationBell'
+import { NotificationDropdown } from './NotificationDropdown'
+import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle } from 'lucide-react'
 import { Button } from './ui/Button'
 import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 import { userDetailsAPI, notificationsAPI } from '@/lib/api'
-import { formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/supabase-api'
 import { supabase } from '@/lib/supabase'
 import { subscribeToNotifications, unsubscribe } from '@/lib/realtime'
@@ -59,6 +60,7 @@ export function Header() {
     return null
   })
   const [fullName, setFullName] = useState<string | null>(null)
+  const [gritsyncEmail, setGritsyncEmail] = useState<string | null>(null)
 
   // Helper to set firstName and cache it
   const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
@@ -301,6 +303,7 @@ export function Header() {
       
       // Fetch avatar from users table (same source as MyDetails page)
       // Always check database to detect avatar changes, but use cache to prevent flicker
+      const cachedAvatarKey = `avatar_${user.id}`
       const cachedAvatarPathKey = `avatar_path_${user.id}`
       
       // Only fetch if we're not already fetching
@@ -351,7 +354,18 @@ export function Header() {
           if (newAvatarPath && (avatarPathChanged || userIdChanged)) {
             avatarPathRef.current = newAvatarPath
             try {
-              const url = await getSignedFileUrl(newAvatarPath)
+              const url = await getSignedFileUrl(newAvatarPath, 3600, true) // silent=true for avatars
+              
+              // If URL is null (file doesn't exist), handle gracefully
+              if (!url) {
+                // Only reset if user changed or path changed
+                if (userIdChanged || avatarPathChanged) {
+                  setAvatarUrl(null)
+                  clearAvatarCache(user.id)
+                }
+                isFetchingAvatarRef.current = false
+                return // Exit early, no need to try loading image
+              }
               
               // Preload image before setting state to prevent flicker
               const img = new Image()
@@ -374,6 +388,7 @@ export function Header() {
               }
               img.src = url
             } catch (error) {
+              // Silently handle errors for avatars - don't log to console
               // Only reset if user changed or path changed
               if (userIdChanged || avatarPathChanged) {
                 setAvatarUrl(null)
@@ -437,10 +452,28 @@ export function Header() {
         .catch(() => {
           // Keep the current name if fetch fails
         })
+      
+      // Fetch GritSync email address
+      supabase
+        .from('email_addresses')
+        .select('email_address')
+        .eq('user_id', user.id)
+        .eq('address_type', 'client')
+        .eq('is_primary', true)
+        .maybeSingle() // Use maybeSingle() instead of single() to avoid 406 error
+        .then(({ data, error }) => {
+          if (!error && data?.email_address) {
+            setGritsyncEmail(data.email_address)
+          }
+        })
+        .catch(() => {
+          // Keep the current email if fetch fails
+        })
     } else {
       // Only reset if user is actually null (logged out)
       setFirstName(null)
       setFullName(null)
+      setGritsyncEmail(null)
       setAvatarUrl(null)
       avatarPathRef.current = null
       currentUserIdRef.current = null
@@ -768,93 +801,28 @@ export function Header() {
                   )}
                 </Button>
 
-                {/* Notification Icon */}
+                {/* Notification Icon with Smart Badge */}
                 <div className="relative" ref={notificationsRef}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="relative"
-                    aria-label="Notifications"
+                  <NotificationBell
+                    unreadCount={unreadCount}
                     onClick={() => {
                       setNotificationsOpen(!notificationsOpen)
                       if (!notificationsOpen) {
                         fetchNotifications()
                       }
                     }}
-                  >
-                    <Bell className="h-5 w-5" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-                    )}
-                  </Button>
+                  />
 
                   {/* Notifications Dropdown */}
                   {notificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 md:w-96 max-w-[calc(100vw-2rem)] sm:max-w-none rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg z-50 max-h-[500px] flex flex-col">
-                      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          Notifications
-                        </h3>
-                        {unreadCount > 0 && (
-                          <button
-                            onClick={handleMarkAllAsRead}
-                            className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
-                          >
-                            Mark all as read
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="overflow-y-auto flex-1">
-                        {loadingNotifications ? (
-                          <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                            Loading...
-                          </div>
-                        ) : notifications.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                            No notifications
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {notifications.map((notification) => (
-                              <div
-                                key={notification.id}
-                                className={cn(
-                                  "p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer",
-                                  !notification.read && "bg-primary-50/50 dark:bg-primary-900/10"
-                                )}
-                                onClick={() => {
-                                  if (notification.application_id) {
-                                    navigate(`/applications/${notification.application_id}/timeline`)
-                                    setNotificationsOpen(false)
-                                  }
-                                  if (!notification.read) {
-                                    handleMarkAsRead(notification.id)
-                                  }
-                                }}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                      {notification.title}
-                                    </p>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                      {notification.message}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                                      {formatDate(notification.created_at)}
-                                    </p>
-                                  </div>
-                                  {!notification.read && (
-                                    <div className="h-2 w-2 bg-primary-600 dark:bg-primary-400 rounded-full flex-shrink-0 mt-1"></div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <NotificationDropdown
+                      notifications={notifications}
+                      loading={loadingNotifications}
+                      unreadCount={unreadCount}
+                      onMarkAsRead={handleMarkAsRead}
+                      onMarkAllAsRead={handleMarkAllAsRead}
+                      onClose={() => setNotificationsOpen(false)}
+                    />
                   )}
                 </div>
 
@@ -944,10 +912,10 @@ export function Header() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                              {displayFullName || user.email}
+                              {displayFullName || gritsyncEmail || user.email}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                              {user.email}
+                              {gritsyncEmail || user.email}
                             </p>
                           </div>
                         </div>

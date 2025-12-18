@@ -12,7 +12,11 @@ import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocum
 import { useToast } from '@/components/ui/Toast'
 import { getSignedFileUrl } from '@/lib/supabase-api'
 import { formatDate, formatCurrency, cn, debounce } from '@/lib/utils'
+import { QuickActionsPanel } from '@/components/QuickActionsPanel'
+import { ActivityFeed, ActivityItem } from '@/components/ActivityFeed'
+import { PersonalizedRecommendations } from '@/components/PersonalizedRecommendations'
 import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuotations, subscribeToAllQuotations, subscribeToPendingApprovalPayments, unsubscribe } from '@/lib/realtime'
+import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { greetingSettings } from '@/lib/settings'
 
@@ -24,6 +28,7 @@ interface RecentActivity {
   date: string
   link: string
   service_type?: string
+  application_type?: 'NCLEX' | 'EAD'
   grit_app_id?: string
 }
 
@@ -36,6 +41,7 @@ interface PendingItem {
   link: string
   priority?: 'high' | 'medium' | 'low'
   service_type?: string
+  application_type?: 'NCLEX' | 'EAD'
   grit_app_id?: string
 }
 
@@ -53,6 +59,8 @@ export function Dashboard() {
     completedApplications: 0,
     rejectedApplications: 0,
     paidQuotations: 0,
+    nclexApplications: 0,
+    eadApplications: 0,
   })
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([])
@@ -273,53 +281,35 @@ export function Dashboard() {
     }
   }, [user])
 
-  // Set up real-time subscriptions for application status changes
+  // Set up real-time subscriptions for application status changes (optimized)
   useEffect(() => {
     if (!user) return
 
     const channels: RealtimeChannel[] = []
 
-    // Subscribe to applications
+    // Use optimized combined subscriptions (reduces connection overhead)
     if (isAdmin()) {
-      // Admin: subscribe to all applications
-      const appsChannel = subscribeToAllApplications((payload) => {
-        handleApplicationUpdate(payload)
+      // Admin: single channel for applications, quotations, and payments
+      const dashboardChannel = subscribeToAdminDashboard({
+        onApplicationUpdate: handleApplicationUpdate,
+        onQuotationUpdate: handleQuotationUpdate,
+        onPaymentUpdate: handlePaymentUpdate,
       })
-      channels.push(appsChannel)
+      channels.push(dashboardChannel)
     } else {
-      // Client: subscribe to user's applications
-      const appsChannel = subscribeToUserApplications(user.id, (payload) => {
-        handleApplicationUpdate(payload)
+      // Client: single channel for applications and quotations
+      const dashboardChannel = subscribeToClientDashboard(user.id, {
+        onApplicationUpdate: handleApplicationUpdate,
+        onQuotationUpdate: handleQuotationUpdate,
       })
-      channels.push(appsChannel)
-    }
-
-    // Subscribe to quotations
-    if (isAdmin()) {
-      // Admin: subscribe to all quotations
-      const quotesChannel = subscribeToAllQuotations((payload) => {
-        handleQuotationUpdate(payload)
-      })
-      channels.push(quotesChannel)
-
-      // Admin: subscribe to pending approval payments
-      const paymentsChannel = subscribeToPendingApprovalPayments((payload) => {
-        handlePaymentUpdate(payload)
-      })
-      channels.push(paymentsChannel)
-    } else {
-      // Client: subscribe to user's quotations
-      const quotesChannel = subscribeToQuotations(user.id, (payload) => {
-        handleQuotationUpdate(payload)
-      })
-      channels.push(quotesChannel)
+      channels.push(dashboardChannel)
     }
 
     channelsRef.current = channels
 
     // Cleanup on unmount
     return () => {
-      channels.forEach(channel => unsubscribe(channel))
+      channels.forEach(channel => unsubscribeOptimized(channel))
       channelsRef.current = []
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -466,7 +456,19 @@ export function Dashboard() {
       const results = await Promise.all(promises)
       const [statsData, applications, , pendingPaymentsData] = results
       
-      setStats(statsData)
+      // Calculate NCLEX and EAD application counts
+      const nclexCount = Array.isArray(applications) 
+        ? applications.filter((app: any) => (app.application_type || 'NCLEX') === 'NCLEX').length 
+        : 0
+      const eadCount = Array.isArray(applications) 
+        ? applications.filter((app: any) => app.application_type === 'EAD').length 
+        : 0
+      
+      setStats({
+        ...statsData,
+        nclexApplications: nclexCount,
+        eadApplications: eadCount,
+      })
       
       // Set pending payments for admin
       if (isAdmin()) {
@@ -485,6 +487,7 @@ export function Dashboard() {
           : applications.slice(0, 3)
         recentApps.forEach((app: any) => {
           const routeId = app.grit_app_id || app.id
+          const appType = app.application_type || 'NCLEX'
           activities.push({
             id: app.id,
             type: 'application',
@@ -494,7 +497,8 @@ export function Dashboard() {
             status: app.status,
             date: app.created_at,
             link: isAdmin() ? `/admin/applications/${routeId}/timeline` : `/applications/${routeId}`,
-            service_type: app.service_type || 'NCLEX Processing',
+            service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
+            application_type: appType,
             grit_app_id: app.grit_app_id,
           })
         })
@@ -552,6 +556,7 @@ export function Dashboard() {
           .slice(0, 5)
           .forEach((app: any) => {
             const routeId = app.grit_app_id || app.id
+            const appType = app.application_type || 'NCLEX'
             pending.push({
               id: app.id,
               type: 'application',
@@ -560,7 +565,8 @@ export function Dashboard() {
               date: app.created_at,
               link: `/admin/applications/${routeId}/timeline`,
               priority: 'high',
-              service_type: app.service_type || 'NCLEX Processing',
+              service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
+              application_type: appType,
               grit_app_id: app.grit_app_id,
             })
           })
@@ -717,9 +723,10 @@ export function Dashboard() {
                   <div className="flex-1">
                     <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
                     <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                      <FileText className="h-3 w-3" />
-                      <span>All time</span>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
+                      <span>NCLEX: {stats.nclexApplications || 0}</span>
+                      <span>•</span>
+                      <span>EAD: {stats.eadApplications || 0}</span>
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20">
@@ -1075,13 +1082,24 @@ export function Dashboard() {
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors truncate">
                                 {activity.type === 'application' 
-                                  ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
+                                  ? `${activity.service_type || (activity.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')} - ${activity.grit_app_id || activity.id}`
                                   : activity.title}
                               </p>
                               {activity.type === 'application' && (
-                                <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(activity.status)}`}>
-                                  {activity.status}
-                                </span>
+                                <>
+                                  {activity.application_type && (
+                                    <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${
+                                      activity.application_type === 'EAD'
+                                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    }`}>
+                                      {activity.application_type}
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(activity.status)}`}>
+                                    {activity.status}
+                                  </span>
+                                </>
                               )}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -1142,9 +1160,10 @@ export function Dashboard() {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">Total Applications</p>
                   <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
-                  <div className="flex items-center gap-1 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                    <TrendingUp className="h-3 w-3" />
-                    <span>All time</span>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
+                    <span>NCLEX: {stats.nclexApplications || 0}</span>
+                    <span>•</span>
+                    <span>EAD: {stats.eadApplications || 0}</span>
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-primary-500/10 dark:bg-primary-400/20">
@@ -1303,106 +1322,50 @@ export function Dashboard() {
 
           {/* Main Content Grid */}
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Quick Actions - Takes 1 column */}
-            <Card className="lg:col-span-1 border-0 shadow-md">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30">
-                  <Activity className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h2>
-              </div>
-              <div className="space-y-3">
-                <Link to="/application/new">
-                  <div className="group p-4 rounded-xl border-2 border-transparent bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all duration-200 cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20 group-hover:bg-primary-500/20 transition-colors">
-                        <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                          New Application
-                        </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                          Submit NCLEX application
-                        </p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
-                    </div>
-                  </div>
-                </Link>
-              </div>
-            </Card>
+            {/* Quick Actions & Recommendations - Takes 1 column */}
+            <div className="lg:col-span-1 space-y-6">
+              <Card className="border-0 shadow-md p-6">
+                <QuickActionsPanel
+                  pendingApplications={stats.pending || 0}
+                  pendingPayments={pendingPayments.length}
+                  pendingDocuments={
+                    (!documentsStatus.picture ? 1 : 0) +
+                    (!documentsStatus.diploma ? 1 : 0) +
+                    (!documentsStatus.passport ? 1 : 0)
+                  }
+                  upcomingDeadlines={0}
+                />
+              </Card>
+              
+              {/* Personalized Recommendations */}
+              <PersonalizedRecommendations maxRecommendations={5} />
+            </div>
 
             {/* Recent Activity - Takes 2 columns */}
-            <Card className="lg:col-span-2 border-0 shadow-md">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-                    <Clock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  </div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Recent Activity</h2>
-                </div>
-                <Link to="/applications">
-                  <Button variant="ghost" size="sm" className="text-xs">
-                    View all
-                    <ArrowRight className="h-3 w-3 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-              {recentActivity.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-                    <Activity className="h-8 w-8 text-gray-400" />
-                  </div>
-                  <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">No recent activity</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">
-                    Your recent applications and quotations will appear here
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentActivity.map((activity) => (
-                    <Link
-                      key={activity.id}
-                      to={activity.link}
-                      className="group block p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 hover:shadow-sm transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-                          activity.type === 'application' 
-                            ? 'bg-primary-100 dark:bg-primary-900/30' 
-                            : 'bg-blue-100 dark:bg-blue-900/30'
-                        }`}>
-                          {activity.type === 'application' ? (
-                            <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                          ) : (
-                            <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors truncate">
-                              {activity.type === 'application' 
-                                ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
-                                : activity.title}
-                            </p>
-                            {activity.type === 'application' && (
-                              <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(activity.status)}`}>
-                                {activity.status}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDate(activity.date)}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex-shrink-0" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </Card>
+            <div className="lg:col-span-2">
+              <ActivityFeed
+                activities={recentActivity.map(activity => ({
+                  id: activity.id,
+                  type: activity.type === 'application' ? 'application' : 'payment',
+                  title: activity.type === 'application' 
+                    ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
+                    : activity.title,
+                  description: activity.type === 'application'
+                    ? `Status: ${activity.status}`
+                    : activity.title,
+                  status: activity.status,
+                  date: activity.date,
+                  link: activity.link,
+                }))}
+                maxItems={5}
+                onRefresh={() => {
+                  // Refresh data
+                  if (user) {
+                    fetchData()
+                  }
+                }}
+              />
+            </div>
           </div>
         </main>
       </div>

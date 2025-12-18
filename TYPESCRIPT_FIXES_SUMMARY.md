@@ -65,3 +65,5 @@ supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/database.ty
 
 The remaining errors are **non-blocking**. The application will run fine, but TypeScript won't provide full type safety for those specific queries until they're fixed.
 
+
+

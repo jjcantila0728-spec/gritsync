@@ -7,7 +7,7 @@
  * by checking various configuration and code quality aspects.
  */
 
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -224,7 +224,6 @@ function checkMigrations() {
   }
   
   try {
-    const { readdirSync } = await import('fs')
     const migrations = readdirSync(migrationsDir).filter(file => file.endsWith('.sql'))
     
     log(`  ${checkmark()} Found ${migrations.length} migration file(s)`, colors.green)

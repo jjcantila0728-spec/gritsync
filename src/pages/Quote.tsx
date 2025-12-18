@@ -15,85 +15,8 @@ import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/componen
 import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
-
-interface Quotation {
-  id: string
-  amount: number
-  description: string
-  status: string
-  created_at: string
-  user_id: string | null // NULL for public/guest quotations
-  service?: string
-  state?: string
-  payment_type?: string
-  line_items?: QuoteLineItem[]
-  client_first_name?: string
-  client_last_name?: string
-  client_email?: string
-  client_mobile?: string
-  validity_date?: string // Quote expiration date
-}
-
-interface QuoteLineItem {
-  id: string
-  description: string
-  quantity: number
-  unitPrice: number
-  total: number
-  payLater?: boolean // Flag to indicate items that will be paid later (for staggered payments)
-  taxable?: boolean // Flag to indicate if item is taxable
-}
-
-interface QuoteFormData {
-  service: string
-  state: string
-  takerType: 'first-time' | 'retaker' | null
-  firstName: string
-  lastName: string
-  email: string
-  mobileNumber: string
-  paymentType: 'full' | 'staggered' | null
-  lineItems: QuoteLineItem[]
-  total: number
-  subtotal: number // Subtotal before tax
-  tax: number // Tax amount
-}
-
-// Service configuration type
-interface ServiceConfig {
-  step1: {
-    total: number
-    items: Array<{ description: string; amount: number; taxable?: boolean }>
-  }
-  step2: {
-    total: number
-    items: Array<{ description: string; amount: number; taxable?: boolean }>
-  }
-}
-
-// Tax rate constant
-const TAX_RATE = 0.12 // 12% tax
-
-// Default fallback service configuration
-const DEFAULT_NCLEX_SERVICES: ServiceConfig = {
-  step1: {
-    total: 267.99,
-    items: [
-      { description: 'NCLEX NY BON Application Fee', amount: 143 },
-      { description: 'NCLEX NY Mandatory Courses', amount: 54.99 },
-      { description: 'NCLEX NY Bond Fee', amount: 70 },
-    ],
-  },
-  step2: {
-    total: 508,
-    items: [
-      { description: 'NCLEX PV Application Fee', amount: 200 },
-      { description: 'NCLEX PV NCSBN Exam Fee', amount: 150 },
-      { description: 'NCLEX GritSync Service Fee', amount: 150 },
-      { description: 'NCLEX NY Quick Results', amount: 8 },
-    ],
-  },
-}
+import type { Quotation, QuoteLineItem, QuoteFormData, ServiceConfig } from './Quote/types'
+import { TAX_RATE, DEFAULT_NCLEX_SERVICES } from './Quote/constants'
 
 export function Quote() {
   const { id: quoteId } = useParams<{ id?: string }>()
@@ -121,14 +44,118 @@ export function Quote() {
   const [isExpired, setIsExpired] = useState(false)
   const [expirationDate, setExpirationDate] = useState<Date | null>(null)
   const [serviceConfig, setServiceConfig] = useState<ServiceConfig>(DEFAULT_NCLEX_SERVICES)
+  const [availableServices, setAvailableServices] = useState<string[]>([])
+  const [availableStates, setAvailableStates] = useState<string[]>([])
+  const [availablePaymentTypes, setAvailablePaymentTypes] = useState<('full' | 'staggered')[]>([])
+  
+  // Initialize form data
+  const getInitialFormData = (): QuoteFormData => {
+    return {
+      service: '',
+      state: '',
+      takerType: null,
+      firstName: '',
+      lastName: '',
+      email: '',
+      mobileNumber: '',
+      paymentType: null,
+      lineItems: [],
+      total: 0,
+      subtotal: 0,
+      tax: 0
+    }
+  }
+
+  const [formData, setFormData] = useState<QuoteFormData>(getInitialFormData())
+  const [validationErrors, setValidationErrors] = useState<{
+    firstName?: string
+    lastName?: string
+    email?: string
+    mobileNumber?: string
+  }>({})
+
+  // Helper function to update form field
+  const updateFormField = (field: keyof QuoteFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+  
+  // Load available services and states from database
+  useEffect(() => {
+    async function loadAvailableServicesAndStates() {
+      try {
+        const services = await servicesAPI.getAll()
+        // Get unique service names
+        const uniqueServices = Array.from(new Set(services.map((s: any) => s.service_name)))
+        setAvailableServices(uniqueServices.sort())
+      } catch (error) {
+        console.error('Error loading available services:', error)
+      }
+    }
+    loadAvailableServicesAndStates()
+  }, [])
+
+  // Load available states for selected service
+  useEffect(() => {
+    async function loadAvailableStates() {
+      if (!formData.service) {
+        setAvailableStates([])
+        return
+      }
+      
+      try {
+        const services = await servicesAPI.getAll()
+        // Get unique states for the selected service
+        const statesForService = services
+          .filter((s: any) => s.service_name === formData.service)
+          .map((s: any) => s.state)
+        const uniqueStates = Array.from(new Set(statesForService))
+        setAvailableStates(uniqueStates.sort())
+        
+        // If only one state is available, auto-select it
+        if (uniqueStates.length === 1 && !formData.state) {
+          setFormData(prev => ({ ...prev, state: uniqueStates[0] }))
+        } else if (!uniqueStates.includes(formData.state)) {
+          // Clear state if it's not available for selected service
+          setFormData(prev => ({ ...prev, state: '' }))
+        }
+      } catch (error) {
+        console.error('Error loading available states:', error)
+      }
+    }
+    loadAvailableStates()
+  }, [formData.service])
   
   // Fetch service configuration from database
   // Fetches both staggered and full payment services to get complete configuration
+  // Loads services dynamically based on selected service and state
   useEffect(() => {
     async function loadServices() {
+      // Only load services if both service and state are selected
+      if (!formData.service || !formData.state) {
+        setAvailablePaymentTypes([])
+        return
+      }
+
       try {
-        // Fetch all services for NCLEX Processing - New York (both staggered and full)
-        const services = await servicesAPI.getAllByServiceAndState('NCLEX Processing', 'New York')
+        // Fetch all services for the selected service and state (both staggered and full)
+        const services = await servicesAPI.getAllByServiceAndState(formData.service, formData.state)
+        
+        // Determine which payment types are available
+        const paymentTypes = services
+          .map((s: any) => s.payment_type)
+          .filter((pt: string | null | undefined): pt is 'full' | 'staggered' => 
+            pt === 'full' || pt === 'staggered'
+          ) as ('full' | 'staggered')[]
+        const uniquePaymentTypes = Array.from(new Set(paymentTypes))
+        setAvailablePaymentTypes(uniquePaymentTypes)
+        
+        // If only one payment type is available and payment type is not set, auto-select it
+        if (uniquePaymentTypes.length === 1 && !formData.paymentType) {
+          setFormData(prev => ({ ...prev, paymentType: uniquePaymentTypes[0] }))
+        } else if (formData.paymentType && !uniquePaymentTypes.includes(formData.paymentType)) {
+          // Clear payment type if it's not available for this service
+          setFormData(prev => ({ ...prev, paymentType: null }))
+        }
         
         if (services && services.length > 0) {
           // Prefer staggered service for step structure (it has step1 and step2 clearly defined)
@@ -136,59 +163,93 @@ export function Quote() {
           const fullService = services.find((s: any) => s.payment_type === 'full')
           
           // Use staggered service if available (it has step information)
+          // Otherwise use full service, but we need to handle it differently
           const serviceToUse = staggeredService || fullService || services[0]
-          const typedService = serviceToUse as { line_items?: any } | null
+          const typedService = serviceToUse as { line_items?: any; payment_type?: string } | null
           
           if (typedService && typedService.line_items) {
             const lineItems = typedService.line_items as Array<{ step?: number }>
-            const step1Items = lineItems.filter((item: any) => !item.step || item.step === 1)
-            const step2Items = lineItems.filter((item: any) => item.step === 2)
             
-            // Calculate subtotals (before tax) from line items
-            // Line item amounts are the base prices (subtotals)
-            const step1Subtotal = step1Items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
-            const step2Subtotal = step2Items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
-            
-            // Calculate tax for each step (12% on taxable items only)
-            const step1Tax = step1Items.reduce((sum: number, item: any) => {
-              return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
-            }, 0)
-            const step2Tax = step2Items.reduce((sum: number, item: any) => {
-              return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
-            }, 0)
-            
-            // Calculate totals (subtotal + tax)
-            // Database totals should match this, but we calculate from line items for accuracy
-            const step1Total = step1Subtotal + step1Tax
-            const step2Total = step2Subtotal + step2Tax
-            
-            
-            setServiceConfig({
-              step1: {
-                total: step1Total,
-                items: step1Items.map((item: any) => ({ 
-                  description: item.description, 
-                  amount: item.amount,
-                  taxable: item.taxable || false
-                }))
-              },
-              step2: {
-                total: step2Total,
-                items: step2Items.map((item: any) => ({ 
-                  description: item.description, 
-                  amount: item.amount,
-                  taxable: item.taxable || false
-                }))
-              }
-            })
+            // For full payment services, all items are typically in one step
+            // For staggered services, items are split into step 1 and step 2
+            if (typedService.payment_type === 'staggered') {
+              const step1Items = lineItems.filter((item: any) => !item.step || item.step === 1)
+              const step2Items = lineItems.filter((item: any) => item.step === 2)
+              
+              // Calculate subtotals (before tax) from line items
+              const step1Subtotal = step1Items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+              const step2Subtotal = step2Items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+              
+              // Calculate tax for each step (12% on taxable items only)
+              const step1Tax = step1Items.reduce((sum: number, item: any) => {
+                return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
+              }, 0)
+              const step2Tax = step2Items.reduce((sum: number, item: any) => {
+                return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
+              }, 0)
+              
+              // Calculate totals (subtotal + tax)
+              const step1Total = step1Subtotal + step1Tax
+              const step2Total = step2Subtotal + step2Tax
+              
+              setServiceConfig({
+                step1: {
+                  total: step1Total,
+                  items: step1Items.map((item: any) => ({ 
+                    description: item.description, 
+                    amount: item.amount,
+                    taxable: item.taxable || false
+                  }))
+                },
+                step2: {
+                  total: step2Total,
+                  items: step2Items.map((item: any) => ({ 
+                    description: item.description, 
+                    amount: item.amount,
+                    taxable: item.taxable || false
+                  }))
+                }
+              })
+            } else {
+              // For full payment services, all items go into step1, step2 is empty
+              // Or we can put all items in both steps - let's put them all in step1
+              const allItems = lineItems
+              
+              const subtotal = allItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+              const tax = allItems.reduce((sum: number, item: any) => {
+                return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
+              }, 0)
+              const total = subtotal + tax
+              
+              setServiceConfig({
+                step1: {
+                  total: total,
+                  items: allItems.map((item: any) => ({ 
+                    description: item.description, 
+                    amount: item.amount,
+                    taxable: item.taxable || false
+                  }))
+                },
+                step2: {
+                  total: 0,
+                  items: []
+                }
+              })
+            }
           }
+        } else {
+          // Reset to default if no services found
+          setServiceConfig(DEFAULT_NCLEX_SERVICES)
         }
       } catch (error) {
         // Use default configuration if API fails
+        console.error('Error loading services:', error)
+        setServiceConfig(DEFAULT_NCLEX_SERVICES)
+        setAvailablePaymentTypes([])
       }
     }
     loadServices()
-  }, [])
+  }, [formData.service, formData.state])
   
   // Check if quote is expired (30 days from creation or validity_date)
   // Quotes are saved in database until expiration - no automatic deletion
@@ -207,26 +268,6 @@ export function Quote() {
     setExpirationDate(expiryDate)
     return new Date() > expiryDate
   }
-  
-  // Initialize form data
-  const getInitialFormData = (): QuoteFormData => {
-    return {
-      service: 'NCLEX Processing',
-      state: 'New York',
-      takerType: null,
-      firstName: '',
-      lastName: '',
-      email: '',
-      mobileNumber: '',
-      paymentType: null,
-      lineItems: [],
-      total: 0,
-      subtotal: 0,
-      tax: 0
-    }
-  }
-
-  const [formData, setFormData] = useState<QuoteFormData>(getInitialFormData())
 
   useEffect(() => {
     if (quoteId) {
@@ -439,8 +480,14 @@ export function Quote() {
   // This handles both Full Payment and Staggered Payment based on service configuration:
   // - First Time Taker: Full Payment includes Step 1 + Step 2, Staggered includes both steps
   // - Retaker: Only Step 2, Full Payment only
+  // - Other services (like EAD Processing): All items in full payment
   // Tax is calculated on taxable items only (12% rate)
   useEffect(() => {
+    // Only calculate if service and state are selected
+    if (!formData.service || !formData.state || serviceConfig.step1.items.length === 0) {
+      return
+    }
+
     // Helper function to calculate tax and totals
     const calculateTaxAndTotal = (items: QuoteLineItem[]) => {
       const subtotal = items.reduce((sum, item) => sum + item.total, 0)
@@ -451,8 +498,55 @@ export function Quote() {
       return { subtotal, tax, total }
     }
 
+    // For services without taker types (like EAD Processing), use all items based on available payment types
+    if (formData.service !== 'NCLEX Processing') {
+      if (formData.paymentType === 'full') {
+        // For full payment, use all items from step1 (for full-only services, all items are in step1)
+        // If step2 has items, include them too
+        const allItems = serviceConfig.step2.items.length > 0
+          ? [...serviceConfig.step1.items, ...serviceConfig.step2.items]
+          : serviceConfig.step1.items
+        const lineItems: QuoteLineItem[] = allItems.map((item, idx) => ({
+          id: `item-${idx}`,
+          description: item.description,
+          quantity: 1,
+          unitPrice: item.amount,
+          total: item.amount,
+          payLater: false,
+          taxable: item.taxable || false
+        }))
+        const { subtotal, tax, total } = calculateTaxAndTotal(lineItems)
+        setFormData(prev => ({ ...prev, lineItems, subtotal, tax, total }))
+      } else if (formData.paymentType === 'staggered') {
+        // Staggered payment: Step 1 (pay now) + Step 2 (pay later)
+        const step1Items: QuoteLineItem[] = serviceConfig.step1.items.map((item, idx) => ({
+          id: `item-${idx}`,
+          description: item.description,
+          quantity: 1,
+          unitPrice: item.amount,
+          total: item.amount,
+          payLater: false,
+          taxable: item.taxable || false
+        }))
+        const step2Items: QuoteLineItem[] = serviceConfig.step2.items.map((item, idx) => ({
+          id: `item-step2-${idx}`,
+          description: item.description,
+          quantity: 1,
+          unitPrice: item.amount,
+          total: item.amount,
+          payLater: true,
+          taxable: item.taxable || false
+        }))
+        const allItems = [...step1Items, ...step2Items]
+        const { subtotal, tax, total } = calculateTaxAndTotal(step1Items)
+        setFormData(prev => ({ ...prev, lineItems: allItems, subtotal, tax, total }))
+      } else {
+        // No payment type selected yet
+        setFormData(prev => ({ ...prev, lineItems: [], subtotal: 0, tax: 0, total: 0 }))
+      }
+    }
     // Retaker: Only Step 2, Full Payment only
-    if (formData.takerType === 'retaker') {
+    else if (formData.takerType === 'retaker') {
       if (formData.paymentType === 'full') {
         // Retaker full payment: Step 2 only
         const step2Items: QuoteLineItem[] = serviceConfig.step2.items.map((item, idx) => ({
@@ -558,10 +652,6 @@ export function Quote() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const updateFormField = (field: keyof QuoteFormData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleGeneratePDF = async () => {
@@ -886,16 +976,53 @@ export function Quote() {
   const handleNextStep = () => {
     // Validate current step before proceeding
     if (currentStep === 1) {
-      // Section 1: Validate taker type is selected
-      if (!formData.takerType) {
+      // Section 1: Validate service and state are selected
+      if (!formData.service) {
+        showToast('Please select a service', 'error')
+        return
+      }
+      if (!formData.state) {
+        showToast('Please select a state', 'error')
+        return
+      }
+      // For NCLEX Processing, validate taker type is selected
+      if (formData.service === 'NCLEX Processing' && !formData.takerType) {
         showToast('Please select First Time Taker or Retaker', 'error')
         return
       }
       setCurrentStep(2)
     } else if (currentStep === 2) {
-      // Validate client details
-      if (!formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber) {
-        showToast('Please fill in all client details', 'error')
+      // Validate client details with detailed validation
+      const validateField = (field: string, value: string): string | undefined => {
+        if (!value.trim()) return `${field} is required`
+        if (field === 'Email') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+          if (!emailRegex.test(value.trim())) return 'Please enter a valid email address'
+        } else if (field === 'First Name' || field === 'Last Name') {
+          if (value.trim().length < 2) return `${field} must be at least 2 characters`
+          if (!/^[a-zA-Z\s'-]+$/.test(value.trim())) return `${field} can only contain letters, spaces, hyphens, and apostrophes`
+        } else if (field === 'Mobile Number') {
+          const cleaned = value.replace(/[\s\-\(\)\+]/g, '')
+          if (!/^\d+$/.test(cleaned)) return 'Mobile number can only contain digits and formatting characters'
+          if (cleaned.length < 7 || cleaned.length > 15) return 'Mobile number must be between 7 and 15 digits'
+        }
+        return undefined
+      }
+      
+      const errors: typeof validationErrors = {}
+      const firstNameError = validateField('First Name', formData.firstName)
+      if (firstNameError) errors.firstName = firstNameError
+      const lastNameError = validateField('Last Name', formData.lastName)
+      if (lastNameError) errors.lastName = lastNameError
+      const emailError = validateField('Email', formData.email)
+      if (emailError) errors.email = emailError
+      const mobileNumberError = validateField('Mobile Number', formData.mobileNumber)
+      if (mobileNumberError) errors.mobileNumber = mobileNumberError
+      
+      setValidationErrors(errors)
+      
+      if (Object.keys(errors).length > 0) {
+        showToast('Please fix the validation errors before proceeding', 'error')
         return
       }
       setCurrentStep(3)
@@ -1000,17 +1127,17 @@ export function Quote() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <SEO
-        title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | NCLEX Processing Agency` : 'Get a Quote - NCLEX Processing Services | GritSync'}
-        description={quoteId ? `View your NCLEX processing quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX application processing services.` : 'Get instant, transparent quotes for NCLEX application processing. No hidden fees, clear pricing upfront. Calculate your NCLEX processing costs with GritSync.'}
-        keywords="NCLEX quote, NCLEX pricing, NCLEX cost, NCLEX processing fee, quotation, NCLEX service cost, nursing application pricing"
+        title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | Professional Processing Services` : 'Get a Quote - Professional Processing Services | GritSync'}
+        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing, EAD Processing, and more.` : 'Get instant, transparent quotes for NCLEX Processing, EAD Processing, and other professional services. No hidden fees, clear pricing upfront.'}
+        keywords="quote, quotation, NCLEX quote, EAD processing quote, service pricing, processing services, transparent pricing"
         canonicalUrl={currentUrl}
-        ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - NCLEX Processing Services | GritSync'}
-        ogDescription={quoteId ? `View your NCLEX processing quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for NCLEX application processing. No hidden fees.'}
+        ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - Professional Processing Services | GritSync'}
+        ogDescription={quoteId ? `View your quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for professional processing services. No hidden fees.'}
         ogImage={`${baseUrl}/gritsync_logo.png`}
         ogUrl={currentUrl}
         structuredData={[
           generateBreadcrumbSchema(breadcrumbs),
-          generateServiceSchema('NCLEX Processing Quotation', 'Get instant quotes for NCLEX application processing services with transparent pricing'),
+          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing, EAD Processing, and other professional services with transparent pricing'),
         ]}
       />
       <Header />
@@ -1026,10 +1153,10 @@ export function Quote() {
                   <span>Get Instant Quotes</span>
                 </div>
                 <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                  NCLEX Processing Quotation
+                  Get Your Service Quotation
                 </h1>
                 <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                  Get transparent, instant quotes for your NCLEX application processing. No hidden fees, clear pricing upfront.
+                  Get transparent, instant quotes for NCLEX Processing, EAD Processing, and more. No hidden fees, clear pricing upfront.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">
@@ -1203,7 +1330,7 @@ export function Quote() {
                           <span className="text-red-600 dark:text-red-400">SYNC</span>
                         </h2>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
-                          NCLEX Application Processing Services
+                          Professional Processing Services
                         </p>
                       </div>
                     </div>
@@ -1752,24 +1879,58 @@ export function Quote() {
                         <div className="space-y-4">
                           <div>
                             <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                              Service
+                              Service *
                             </label>
-                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100">
-                              {formData.service}
-                            </div>
+                            <select
+                              value={formData.service}
+                              onChange={(e) => {
+                                updateFormField('service', e.target.value)
+                                // Reset state and taker type when service changes
+                                updateFormField('state', '')
+                                updateFormField('takerType', null)
+                                updateFormField('paymentType', null)
+                              }}
+                              className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            >
+                              <option value="">Select a service...</option>
+                              {availableServices.map((service) => (
+                                <option key={service} value={service}>
+                                  {service}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                              State
-                            </label>
-                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100">
-                              {formData.state}
+                          {formData.service && (
+                            <div>
+                              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                                State *
+                              </label>
+                              <select
+                                value={formData.state}
+                                onChange={(e) => {
+                                  updateFormField('state', e.target.value)
+                                  // Reset taker type and payment type when state changes
+                                  updateFormField('takerType', null)
+                                  updateFormField('paymentType', null)
+                                }}
+                                className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                disabled={availableStates.length === 0}
+                              >
+                                <option value="">Select a state...</option>
+                                {availableStates.map((state) => (
+                                  <option key={state} value={state}>
+                                    {state}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                              Taker Type *
-                            </label>
+                          )}
+                          {/* Only show Taker Type for NCLEX Processing */}
+                          {formData.service === 'NCLEX Processing' && formData.state && (
+                            <div>
+                              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                                Taker Type *
+                              </label>
                             <div className="space-y-3">
                               <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
                                 formData.takerType === 'first-time'
@@ -1822,7 +1983,8 @@ export function Quote() {
                                 </div>
                               </label>
                             </div>
-                          </div>
+                            </div>
+                          )}
                         </div>
                         <div className="flex justify-end mt-6">
                           <Button onClick={handleNextStep}>
@@ -1849,33 +2011,97 @@ export function Quote() {
                             label="First Name *"
                             type="text"
                             value={formData.firstName}
-                            onChange={(e) => updateFormField('firstName', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('firstName', e.target.value)
+                              if (validationErrors.firstName) {
+                                setValidationErrors(prev => ({ ...prev, firstName: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const error = !formData.firstName.trim() 
+                                ? 'First name is required'
+                                : formData.firstName.trim().length < 2
+                                ? 'First name must be at least 2 characters'
+                                : !/^[a-zA-Z\s'-]+$/.test(formData.firstName.trim())
+                                ? 'First name can only contain letters, spaces, hyphens, and apostrophes'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, firstName: error }))
+                            }}
                             placeholder="John"
                             required
+                            error={validationErrors.firstName}
                           />
                           <Input
                             label="Last Name *"
                             type="text"
                             value={formData.lastName}
-                            onChange={(e) => updateFormField('lastName', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('lastName', e.target.value)
+                              if (validationErrors.lastName) {
+                                setValidationErrors(prev => ({ ...prev, lastName: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const error = !formData.lastName.trim() 
+                                ? 'Last name is required'
+                                : formData.lastName.trim().length < 2
+                                ? 'Last name must be at least 2 characters'
+                                : !/^[a-zA-Z\s'-]+$/.test(formData.lastName.trim())
+                                ? 'Last name can only contain letters, spaces, hyphens, and apostrophes'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, lastName: error }))
+                            }}
                             placeholder="Doe"
                             required
+                            error={validationErrors.lastName}
                           />
                           <Input
                             label="Email *"
                             type="email"
                             value={formData.email}
-                            onChange={(e) => updateFormField('email', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('email', e.target.value)
+                              if (validationErrors.email) {
+                                setValidationErrors(prev => ({ ...prev, email: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                              const error = !formData.email.trim() 
+                                ? 'Email is required'
+                                : !emailRegex.test(formData.email.trim())
+                                ? 'Please enter a valid email address'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, email: error }))
+                            }}
                             placeholder="client@example.com"
                             required
+                            error={validationErrors.email}
                           />
                           <Input
                             label="Mobile Number *"
                             type="tel"
                             value={formData.mobileNumber}
-                            onChange={(e) => updateFormField('mobileNumber', e.target.value)}
+                            onChange={(e) => {
+                              updateFormField('mobileNumber', e.target.value)
+                              if (validationErrors.mobileNumber) {
+                                setValidationErrors(prev => ({ ...prev, mobileNumber: undefined }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const cleaned = formData.mobileNumber.replace(/[\s\-\(\)\+]/g, '')
+                              const error = !formData.mobileNumber.trim() 
+                                ? 'Mobile number is required'
+                                : !/^\d+$/.test(cleaned)
+                                ? 'Mobile number can only contain digits and formatting characters'
+                                : cleaned.length < 7 || cleaned.length > 15
+                                ? 'Mobile number must be between 7 and 15 digits'
+                                : undefined
+                              setValidationErrors(prev => ({ ...prev, mobileNumber: error }))
+                            }}
                             placeholder="+1 (555) 123-4567"
                             required
+                            error={validationErrors.mobileNumber}
                           />
                         </div>
                         <div className="flex justify-between mt-6">
@@ -1893,51 +2119,179 @@ export function Quote() {
                   )}
 
                   {/* Section 3: Payment Type */}
-                  {currentStep === 3 && (
-                    <Card>
-                      <div className="py-6">
-                        <div className="flex items-center gap-2 mb-6">
-                          <DollarSign className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                            Section 3: Select Payment Type
-                          </h2>
-                        </div>
-                        <div className="space-y-4">
-                          {/* First Time Taker: Show both Full and Staggered Payment */}
-                          {formData.takerType === 'first-time' && (
-                            <>
-                              {/* Full Payment Option */}
-                              <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.paymentType === 'full'
-                                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                                  : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                              }`}>
-                                <div className="flex items-start gap-3">
-                                  <input
-                                    type="radio"
-                                    name="paymentType"
-                                    value="full"
-                                    checked={formData.paymentType === 'full'}
-                                    onChange={(e) => updateFormField('paymentType', e.target.value)}
-                                    className="mt-1"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                                      Full Payment
+                  {currentStep === 3 && (() => {
+                    // Real-time calculation helpers for Step 1 and Step 2
+                    const calculateStep1 = () => {
+                      const subtotal = serviceConfig.step1.items.reduce((sum, item) => sum + item.amount, 0)
+                      const tax = serviceConfig.step1.items.reduce((sum, item) => 
+                        sum + (item.taxable ? item.amount * TAX_RATE : 0), 0)
+                      const total = subtotal + tax
+                      return { subtotal, tax, total }
+                    }
+
+                    const calculateStep2 = () => {
+                      const subtotal = serviceConfig.step2.items.reduce((sum, item) => sum + item.amount, 0)
+                      const tax = serviceConfig.step2.items.reduce((sum, item) => 
+                        sum + (item.taxable ? item.amount * TAX_RATE : 0), 0)
+                      const total = subtotal + tax
+                      return { subtotal, tax, total }
+                    }
+
+                    const step1 = calculateStep1()
+                    const step2 = calculateStep2()
+                    const fullTotal = step1.total + step2.total
+                    const fullSubtotal = step1.subtotal + step2.subtotal
+                    const fullTax = step1.tax + step2.tax
+
+                    return (
+                      <Card>
+                        <div className="py-6">
+                          <div className="flex items-center gap-2 mb-6">
+                            <DollarSign className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                              Section 3: Select Payment Type
+                            </h2>
+                          </div>
+                          <div className="space-y-4">
+                            {/* For non-NCLEX services, show payment options based on what's configured */}
+                            {formData.service !== 'NCLEX Processing' && availablePaymentTypes.length > 0 && (
+                              <>
+                                {/* Full Payment Option - only show if configured */}
+                                {availablePaymentTypes.includes('full') && (
+                                  <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                    formData.paymentType === 'full'
+                                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                  }`}>
+                                    <div className="flex items-start gap-3">
+                                      <input
+                                        type="radio"
+                                        name="paymentType"
+                                        value="full"
+                                        checked={formData.paymentType === 'full'}
+                                        onChange={(e) => updateFormField('paymentType', e.target.value)}
+                                        className="mt-1"
+                                      />
+                                      <div className="flex-1">
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                                          Full Payment
+                                        </div>
+                                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                          Pay for all items upfront:
+                                        </div>
+                                        <div className="text-sm space-y-1 ml-6">
+                                          <div className="space-y-0.5">
+                                            <div><strong>All Items:</strong> {formatCurrency(fullTotal)}</div>
+                                            <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                              Subtotal: {formatCurrency(fullSubtotal)} + Tax: {formatCurrency(fullTax)}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                      Pay for both steps upfront:
+                                  </label>
+                                )}
+                                {/* Staggered Payment Option - only show if configured */}
+                                {availablePaymentTypes.includes('staggered') && (
+                                  <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                    formData.paymentType === 'staggered'
+                                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                  }`}>
+                                    <div className="flex items-start gap-3">
+                                      <input
+                                        type="radio"
+                                        name="paymentType"
+                                        value="staggered"
+                                        checked={formData.paymentType === 'staggered'}
+                                        onChange={(e) => updateFormField('paymentType', e.target.value)}
+                                        className="mt-1"
+                                      />
+                                      <div className="flex-1">
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                                          Staggered Payment
+                                        </div>
+                                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                          Pay now for Step 1, pay later for Step 2:
+                                        </div>
+                                        <div className="text-sm space-y-1 ml-6">
+                                          <div className="space-y-0.5">
+                                            <div><strong>Step 1 (Pay Now):</strong> {formatCurrency(step1.total)}</div>
+                                            <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                              Subtotal: {formatCurrency(step1.subtotal)} + Tax: {formatCurrency(step1.tax)}
+                                            </div>
+                                          </div>
+                                          <div className="space-y-0.5">
+                                            <div><strong>Step 2 (Pay Later):</strong> {formatCurrency(step2.total)}</div>
+                                            <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                              Subtotal: {formatCurrency(step2.subtotal)} + Tax: {formatCurrency(step2.tax)}
+                                            </div>
+                                          </div>
+                                          <div className="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600 space-y-0.5">
+                                            <div className="font-semibold text-primary-600 dark:text-primary-400">
+                                              Total (Step 1 + Step 2): {formatCurrency(fullTotal)}
+                                            </div>
+                                            <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                              You'll pay {formatCurrency(step1.total)} now, and {formatCurrency(step2.total)} later
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="text-sm space-y-1 ml-6">
-                                      <div><strong>Step 1:</strong> {formatCurrency(serviceConfig.step1.total)}</div>
-                                      <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)}</div>
-                                      <div className="font-semibold text-primary-600 dark:text-primary-400 mt-2">
-                                        Total: {formatCurrency(serviceConfig.step1.total + serviceConfig.step2.total)}
+                                  </label>
+                                )}
+                              </>
+                            )}
+                            {/* First Time Taker: Show both Full and Staggered Payment */}
+                            {formData.takerType === 'first-time' && (
+                              <>
+                                {/* Full Payment Option */}
+                                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                  formData.paymentType === 'full'
+                                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                }`}>
+                                  <div className="flex items-start gap-3">
+                                    <input
+                                      type="radio"
+                                      name="paymentType"
+                                      value="full"
+                                      checked={formData.paymentType === 'full'}
+                                      onChange={(e) => updateFormField('paymentType', e.target.value)}
+                                      className="mt-1"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                                        Full Payment
+                                      </div>
+                                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        Pay for both steps upfront:
+                                      </div>
+                                      <div className="text-sm space-y-1 ml-6">
+                                        <div className="space-y-0.5">
+                                          <div><strong>Step 1:</strong> {formatCurrency(step1.total)}</div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(step1.subtotal)} + Tax: {formatCurrency(step1.tax)}
+                                          </div>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <div><strong>Step 2:</strong> {formatCurrency(step2.total)}</div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(step2.subtotal)} + Tax: {formatCurrency(step2.tax)}
+                                          </div>
+                                        </div>
+                                        <div className="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600 space-y-0.5">
+                                          <div className="font-semibold text-primary-600 dark:text-primary-400">
+                                            Total: {formatCurrency(fullTotal)}
+                                          </div>
+                                          <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                            Subtotal: {formatCurrency(fullSubtotal)} + Estimated Tax: {formatCurrency(fullTax)}
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              </label>
+                                </label>
 
                               {/* Staggered Payment Option */}
                               <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
@@ -1962,17 +2316,36 @@ export function Quote() {
                                       Pay Step 1 now, Step 2 later:
                                     </div>
                                     <div className="text-sm space-y-1 ml-6">
-                                      <div><strong>Step 1:</strong> {formatCurrency(serviceConfig.step1.total)} (Pay Now)</div>
-                                      <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)} (Pay later)</div>
-                                      <div className="mt-2 space-y-1">
+                                      <div className="space-y-0.5">
+                                        <div><strong>Step 1:</strong> {formatCurrency(step1.total)} (Pay Now)</div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step1.subtotal)} + Estimated Tax: {formatCurrency(step1.tax)}
+                                        </div>
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        <div><strong>Step 2:</strong> {formatCurrency(step2.total)} (Pay later)</div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 space-y-1 pt-2 border-t border-gray-300 dark:border-gray-600">
                                         <div className="font-semibold text-primary-600 dark:text-primary-400">
-                                          Pay Now: {formatCurrency(serviceConfig.step1.total)}
+                                          Pay Now: {formatCurrency(step1.total)}
                                         </div>
-                                        <div className="text-gray-900 dark:text-gray-100">
-                                          Pay Later: {formatCurrency(serviceConfig.step2.total)}
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step1.subtotal)} + Estimated Tax: {formatCurrency(step1.tax)}
                                         </div>
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 pt-1 border-t border-gray-300 dark:border-gray-600">
-                                          Total: {formatCurrency(serviceConfig.step1.total + serviceConfig.step2.total)}
+                                        <div className="text-gray-900 dark:text-gray-100 mt-1">
+                                          Pay Later: {formatCurrency(step2.total)}
+                                        </div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                        </div>
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 pt-1 border-t border-gray-300 dark:border-gray-600 mt-1">
+                                          Total: {formatCurrency(fullTotal)}
+                                        </div>
+                                        <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                          Subtotal: {formatCurrency(fullSubtotal)} + Estimated Tax: {formatCurrency(fullTax)}
                                         </div>
                                       </div>
                                     </div>
@@ -2006,9 +2379,19 @@ export function Quote() {
                                     Pay Step 2 only (Retaker):
                                   </div>
                                   <div className="text-sm space-y-1 ml-6">
-                                    <div><strong>Step 2:</strong> {formatCurrency(serviceConfig.step2.total)}</div>
-                                    <div className="font-semibold text-primary-600 dark:text-primary-400 mt-2">
-                                      Total: {formatCurrency(serviceConfig.step2.total)}
+                                    <div className="space-y-0.5">
+                                      <div><strong>Step 2:</strong> {formatCurrency(step2.total)}</div>
+                                      <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                        Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                      </div>
+                                    </div>
+                                    <div className="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600">
+                                      <div className="font-semibold text-primary-600 dark:text-primary-400">
+                                        Total: {formatCurrency(step2.total)}
+                                      </div>
+                                      <div className="ml-4 text-xs text-gray-500 dark:text-gray-400">
+                                        Subtotal: {formatCurrency(step2.subtotal)} + Estimated Tax: {formatCurrency(step2.tax)}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -2146,7 +2529,8 @@ export function Quote() {
                         </div>
                       </div>
                     </Card>
-                  )}
+                    )
+                  })()}
 
                   {/* Result Section (Step 4) */}
                   {currentStep === 4 && (generatedQuote || viewingQuote) && (

@@ -78,19 +78,20 @@ export function SystemSettings() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-3 sm:p-4 md:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <Server className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <Server className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             System Information & Statistics
           </h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
             onClick={handleExportSettings}
             size="sm"
+            className="w-full sm:w-auto"
           >
             <Download className="h-4 w-4 mr-2" />
             Export Settings
@@ -99,6 +100,7 @@ export function SystemSettings() {
             variant="outline"
             onClick={fetchStats}
             size="sm"
+            className="w-full sm:w-auto"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -106,12 +108,12 @@ export function SystemSettings() {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* System Info */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">System Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2.5">System Information</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="p-2.5 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
               <span className="text-xs text-gray-600 dark:text-gray-400">Database Type</span>
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">Supabase (PostgreSQL)</p>
             </div>
@@ -137,12 +139,12 @@ export function SystemSettings() {
 
         {/* Statistics */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2.5 flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Statistics
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            <div className="p-2.5 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
               <div className="flex items-center gap-2 mb-1">
                 <Users className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
                 <span className="text-xs text-gray-600 dark:text-gray-400">Users</span>

@@ -109,3 +109,5 @@ DROP FUNCTION IF EXISTS increment_career_applications(UUID);
 
 **Warning**: Only use rollback in development. In production, create proper migration rollback scripts.
 
+
+

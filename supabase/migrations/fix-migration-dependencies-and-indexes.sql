@@ -215,3 +215,5 @@ GRANT EXECUTE ON FUNCTION get_sponsorship_statistics() TO authenticated;
 -- 6. Adds helper functions for MVP features
 -- 7. Grants necessary permissions
 
+
+

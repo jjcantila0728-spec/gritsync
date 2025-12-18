@@ -1,48 +1,214 @@
 import { supabase } from './supabase'
 import type { Database } from './database.types'
 import { 
+  handleSupabaseError, 
   normalizeError, 
   retryWithBackoff,
-  AppError 
+  isRetryableError,
+  AppError,
+  ErrorType,
+  ErrorSeverity,
+  logError
 } from './error-handler'
 
 type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
 type Inserts<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
 type Updates<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
 
+// Removed unused QueryResult type
+
+// Lightweight auth cache to reduce repeated auth.getUser calls
+let cachedUserId: string | null = null
+let cachedUserFetchedAt = 0
+let cachedIsAdmin: boolean | null = null
+let cachedAdminFetchedAt = 0
+const USER_CACHE_TTL_MS = 60 * 1000 // 1 minute cache
+
+/**
+ * Enhanced Supabase query wrapper with error handling, retry logic, and session validation
+ * Automatically refreshes sessions on auth errors and retries the query
+ */
+async function executeQuery<T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  context?: Record<string, any>,
+  retry: boolean = true,
+  requireAuth: boolean = true
+): Promise<T> {
+  // Ensure valid session before executing query (if auth is required)
+  if (requireAuth) {
+    try {
+      const { ensureValidSession } = await import('./session-utils')
+      await ensureValidSession()
+    } catch (sessionError) {
+      // If session validation fails, log but don't fail yet - let the query fail naturally
+      console.warn('Session validation warning:', sessionError)
+    }
+  }
+
+  const execute = async (attempt: number = 1): Promise<T> => {
+    const startTime = performance.now()
+    const { data, error } = await queryFn()
+    const duration = performance.now() - startTime
+
+    // Track query performance (async import to avoid circular dependencies)
+    try {
+      const { trackQueryPerformance } = await import('./query-performance')
+      const { trackSuccessfulQuery, trackFailedQuery } = await import('./connection-monitor')
+      
+      if (error) {
+        trackQueryPerformance(
+          context?.operation || 'unknown',
+          duration,
+          false,
+          error.message,
+          context
+        )
+        trackFailedQuery()
+      } else {
+        trackQueryPerformance(
+          context?.operation || 'unknown',
+          duration,
+          true,
+          undefined,
+          context
+        )
+        trackSuccessfulQuery()
+      }
+    } catch (importError) {
+      // Silently fail if performance tracking is unavailable
+      console.warn('Failed to track query performance:', importError)
+    }
+
+    if (error) {
+      // Check if this is an auth error that we can recover from
+      const isAuthError = error?.code === 'PGRST301' || 
+                         error?.message?.includes('JWT') ||
+                         error?.message?.includes('token') ||
+                         error?.message?.includes('session') ||
+                         error?.status === 401
+
+      // If auth error on first attempt and we require auth, try refreshing session and retry once
+      if (isAuthError && requireAuth && attempt === 1) {
+        try {
+          const { forceRefreshSession } = await import('./session-utils')
+          const refreshedSession = await forceRefreshSession()
+          
+          if (refreshedSession) {
+            console.log('Session refreshed, retrying query...')
+            // Retry the query once after refreshing session
+            return await execute(attempt + 1)
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh session:', refreshError)
+        }
+      }
+
+      const normalizedError = normalizeError(error, context)
+      throw normalizedError
+    }
+    
+    if (data === null) {
+      throw normalizeError(new Error('No data returned'), context)
+    }
+    
+    return data
+  }
+
+  if (retry) {
+    try {
+      return await execute()
+    } catch (error: any) {
+      if (isRetryableError(error)) {
+        return await retryWithBackoff(() => execute(), 3, 1000, error)
+      }
+      throw error
+    }
+  }
+
+  return await execute()
+}
+
 // Helper to get current user ID
-async function getCurrentUserId(): Promise<string> {
+// Combined function to get both userId and admin status in one call
+async function getCurrentUserInfo(): Promise<{ userId: string; isAdmin: boolean }> {
   try {
+    const now = Date.now()
+    // Return cached values if available and fresh
+    if (cachedUserId && cachedIsAdmin !== null && now - cachedUserFetchedAt < USER_CACHE_TTL_MS) {
+      return { userId: cachedUserId, isAdmin: cachedIsAdmin }
+    }
+
+    // Fetch user once
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error) {
-      throw normalizeError(error, { operation: 'getCurrentUserId' })
+      throw normalizeError(error, { operation: 'getCurrentUserInfo' })
     }
     if (!user) {
-      throw normalizeError(new Error('Not authenticated'), { operation: 'getCurrentUserId' })
+      throw normalizeError(new Error('Not authenticated'), { operation: 'getCurrentUserInfo' })
     }
-    return user.id
+    
+    // Cache both values
+    cachedUserId = user.id
+    const role = user.user_metadata?.role
+    cachedIsAdmin = role === 'admin'
+    cachedUserFetchedAt = now
+    cachedAdminFetchedAt = now
+    
+    return { userId: user.id, isAdmin: cachedIsAdmin }
   } catch (error: any) {
+    cachedUserId = null
+    cachedIsAdmin = null
     if (error instanceof AppError) {
       throw error
     }
-    throw normalizeError(error, { operation: 'getCurrentUserId' })
+    throw normalizeError(error, { operation: 'getCurrentUserInfo' })
   }
 }
 
+export async function getCurrentUserId(): Promise<string> {
+  const { userId } = await getCurrentUserInfo()
+  return userId
+}
+
 // Helper to check if user is admin
-// Uses auth metadata to avoid RLS issues
+// Uses cached value to avoid repeated auth.getUser calls
 async function isAdmin(): Promise<boolean> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
-    
-    // Check role from user_metadata (maps to raw_user_meta_data in auth.users)
-    // This matches what our RLS policies check
-    const role = user.user_metadata?.role
-    return role === 'admin'
+    const now = Date.now()
+    // Return cached value if available and fresh
+    if (cachedIsAdmin !== null && now - cachedAdminFetchedAt < USER_CACHE_TTL_MS) {
+      return cachedIsAdmin
+    }
+
+    // Use combined function to get both (will cache both)
+    const { isAdmin: adminStatus } = await getCurrentUserInfo()
+    return adminStatus
   } catch (error) {
+    cachedIsAdmin = false
     return false
   }
+}
+
+// Function to clear auth cache (useful on logout or role changes)
+export function clearAuthCache(): void {
+  cachedUserId = null
+  cachedIsAdmin = null
+  cachedUserFetchedAt = 0
+  cachedAdminFetchedAt = 0
+}
+
+function resolveServiceType(app: { service_type?: string; application_type?: string }) {
+  if (app.service_type) {
+    return app.service_type
+  }
+  return app.application_type === 'EAD' ? 'EAD (I-765)' : 'NCLEX Processing'
+}
+
+function resolveServiceState(app: { service_state?: string; application_type?: string }) {
+  if (app.service_state) {
+    return app.service_state
+  }
+  return app.application_type === 'EAD' ? 'USCIS' : 'New York'
 }
 
 // Applications API
@@ -65,29 +231,60 @@ export const applicationsAPI = {
       throw normalizeError(error, { operation: 'applicationsAPI.getAll' })
     }
     const applications = data || []
-    
+
+    const applicationIds = applications
+      .map((app: any) => app.id)
+      .filter((id: any) => typeof id === 'string' || typeof id === 'number')
+
+    // Batch-load timelines and payments to avoid per-application queries
+    const [
+      { data: timelineSteps, error: timelineError },
+      { data: paymentsData, error: paymentsError }
+    ] = applicationIds.length > 0
+      ? await Promise.all([
+          supabase
+            .from('application_timeline_steps')
+            .select('*')
+            .in('application_id', applicationIds)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('application_payments')
+            .select('*')
+            .in('application_id', applicationIds)
+        ])
+      : [{ data: [], error: null }, { data: [], error: null }]
+
+    // Log errors gracefully without breaking the flow
+    if (timelineError) {
+      logError(normalizeError(timelineError, { operation: 'applicationsAPI.getAll', context: 'timeline' }), { operation: 'applicationsAPI.getAll', context: 'timeline' })
+    }
+    if (paymentsError) {
+      logError(normalizeError(paymentsError, { operation: 'applicationsAPI.getAll', context: 'payments' }), { operation: 'applicationsAPI.getAll', context: 'payments' })
+    }
+
+    const stepsByApp = new Map<string, any[]>()
+    const paymentsByApp = new Map<string, any[]>()
+
+    ;(timelineSteps || []).forEach((step: any) => {
+      if (!step?.application_id) return
+      const list = stepsByApp.get(step.application_id) || []
+      list.push(step)
+      stepsByApp.set(step.application_id, list)
+    })
+
+    ;(paymentsData || []).forEach((payment: any) => {
+      if (!payment?.application_id) return
+      const list = paymentsByApp.get(payment.application_id) || []
+      list.push(payment)
+      paymentsByApp.set(payment.application_id, list)
+    })
+
     // Enhance each application with timeline-based current_progress and next_step
     const applicationsWithTimeline = await Promise.all(
       applications.map(async (app: any) => {
         try {
-          // Get timeline steps for this application
-          const { data: steps, error: stepsError } = await supabase
-            .from('application_timeline_steps')
-            .select('*')
-            .eq('application_id', app.id)
-            .order('created_at', { ascending: true })
-          
-          if (stepsError) {
-            return app
-          }
-          
-          const allSteps = steps || []
-          
-          // Get payments for this application
-          const { data: payments } = await supabase
-            .from('application_payments')
-            .select('*')
-            .eq('application_id', app.id)
+          const allSteps = stepsByApp.get(app.id) || []
+          const payments = paymentsByApp.get(app.id) || []
           
           // Define step order and names (based on timeline structure)
           const stepOrder = [
@@ -188,6 +385,24 @@ export const applicationsAPI = {
                 const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
                 const hasResult = !!(data.result)
                 return hasResult || (stepData && stepData.status === 'completed')
+              }
+              case 'ead_uscis_submission': {
+                const appSubmitted = stepStatusMap['ead_application_submitted']
+                const receiptReceived = stepStatusMap['ead_receipt_received']
+                const allSubStepsDone = (appSubmitted && appSubmitted.status === 'completed') &&
+                                       (receiptReceived && receiptReceived.status === 'completed')
+                return allSubStepsDone || (stepData && stepData.status === 'completed')
+              }
+              case 'ead_approval': {
+                const cardProduction = stepStatusMap['ead_card_production']
+                const cardMailed = stepStatusMap['ead_card_mailed']
+                const cardReceived = stepStatusMap['ead_card_received']
+                const ssnReceived = stepStatusMap['ead_ssn_received']
+                const allSubStepsDone = (cardProduction && cardProduction.status === 'completed') &&
+                                       (cardMailed && cardMailed.status === 'completed') &&
+                                       (cardReceived && cardReceived.status === 'completed') &&
+                                       (ssnReceived && ssnReceived.status === 'completed')
+                return allSubStepsDone || (stepData && stepData.status === 'completed')
               }
               default:
                 return stepData && stepData.status === 'completed'
@@ -431,40 +646,32 @@ export const applicationsAPI = {
           // Ensure progress doesn't exceed 100%
           progressPercentage = Math.min(100, Math.max(0, progressPercentage))
           
-          // Get Gmail account email from processing accounts
+          // Get GritSync account email from processing accounts
           let displayEmail = app.email
           try {
-            const { data: gmailAccounts, error: gmailError } = await supabase
+            const { data: gritsyncAccounts, error: gritsyncError } = await supabase
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
-              .eq('account_type', 'gmail')
+              .eq('account_type', 'gritsync')
               .limit(1)
             
-            if (!gmailError && gmailAccounts && gmailAccounts.length > 0) {
-              const gmailAccount = gmailAccounts[0] as { email?: string } | null
-              if (gmailAccount?.email) {
-                displayEmail = gmailAccount.email
+            if (!gritsyncError && gritsyncAccounts && gritsyncAccounts.length > 0) {
+              const gritsyncAccount = gritsyncAccounts[0] as { email?: string } | null
+              if (gritsyncAccount?.email) {
+                displayEmail = gritsyncAccount.email
               }
             } else {
-              // If no Gmail account exists, generate the email address
-              const firstName = app.first_name || ''
-              const middleName = app.middle_name || null
-              const lastName = app.last_name || ''
-              if (firstName && lastName) {
-                displayEmail = generateGmailAddress(firstName, middleName, lastName)
-              }
+              // If no GritSync account exists, use application email
+              displayEmail = app.email || ''
             }
           } catch (error) {
-            // If error, fall back to generating email from name
-            const firstName = app.first_name || ''
-            const middleName = app.middle_name || null
-            const lastName = app.last_name || ''
-            if (firstName && lastName) {
-              displayEmail = generateGmailAddress(firstName, middleName, lastName)
-            }
+            // If error, fall back to application email
+            displayEmail = app.email || ''
           }
           
+          const serviceType = resolveServiceType(app)
+          const serviceState = resolveServiceState(app)
           return {
             ...app,
             email: displayEmail, // Use generated Gmail instead of user email
@@ -473,8 +680,8 @@ export const applicationsAPI = {
             progress_percentage: progressPercentage,
             completed_steps: completedItems,
             total_steps: totalItems,
-            service_type: app.service_type || 'NCLEX Processing',
-            service_state: app.service_state || 'New York',
+            service_type: serviceType,
+            service_state: serviceState,
           }
         } catch (error) {
           // Try to get or generate Gmail email even in error case
@@ -484,7 +691,7 @@ export const applicationsAPI = {
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
-              .eq('account_type', 'gmail')
+              .eq('account_type', 'gritsync')
               .limit(1)
             
             if (gmailAccounts && gmailAccounts.length > 0) {
@@ -493,23 +700,16 @@ export const applicationsAPI = {
                 displayEmail = gmailAccount.email
               }
             } else {
-              const firstName = app.first_name || ''
-              const middleName = app.middle_name || null
-              const lastName = app.last_name || ''
-              if (firstName && lastName) {
-                displayEmail = generateGmailAddress(firstName, middleName, lastName)
-              }
+              // If no GritSync account exists, use application email
+              displayEmail = app.email || ''
             }
           } catch (emailError) {
-            // If error, try to generate from name
-            const firstName = app.first_name || ''
-            const middleName = app.middle_name || null
-            const lastName = app.last_name || ''
-            if (firstName && lastName) {
-              displayEmail = generateGmailAddress(firstName, middleName, lastName)
-            }
+            // If error, fall back to application email
+            displayEmail = app.email || ''
           }
           
+          const serviceType = resolveServiceType(app)
+          const serviceState = resolveServiceState(app)
           return {
             ...app,
             email: displayEmail,
@@ -518,8 +718,8 @@ export const applicationsAPI = {
             progress_percentage: 0,
             completed_steps: 0,
             total_steps: 0,
-            service_type: app.service_type || 'NCLEX Processing',
-            service_state: app.service_state || 'New York',
+            service_type: serviceType,
+            service_state: serviceState,
           }
         }
       })
@@ -528,11 +728,36 @@ export const applicationsAPI = {
     return applicationsWithTimeline
   },
 
+  getServiceTypes: async () => {
+    const { userId, isAdmin: admin } = await getCurrentUserInfo()
+
+    const query = supabase
+      .from('applications')
+      .select('application_type')
+      .order('created_at', { ascending: false })
+
+    if (!admin) {
+      query.eq('user_id', userId)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const types = Array.from(
+      new Set(
+        (data || []).map((app: any) => (app.application_type || 'NCLEX'))
+      )
+    )
+
+    return types
+  },
+
   getById: async (id: string) => {
     // Try to find by grit_app_id first (if it looks like AP + 12 alphanumeric)
     // Otherwise, fall back to UUID id
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(id)
     
+    // Try authenticated query first
     let query = supabase
       .from('applications')
       .select('*')
@@ -543,29 +768,109 @@ export const applicationsAPI = {
       query = query.eq('id', id)
     }
     
-    const { data, error } = await query.single()
+    let { data, error } = await query
+    
+    // If authenticated query fails, try without filters to see what's available
+    if (error || (Array.isArray(data) && data.length === 0)) {
+      // Try case-insensitive search for grit_app_id
+      if (isGritAppId) {
+        const { data: allApps, error: allError } = await supabase
+          .from('applications')
+          .select('*')
+        
+        if (allError) {
+          logError(normalizeError(allError, { operation: 'applicationsAPI.getById', context: 'alternative_query' }), { operation: 'applicationsAPI.getById', context: 'alternative_query' })
+        }
+        
+        if (allApps && allApps.length > 0) {
+          // Find by case-insensitive grit_app_id
+          const found = allApps.find((app: any) => 
+            app.grit_app_id?.toUpperCase() === id.toUpperCase()
+          )
+          
+          if (found) {
+            return found
+          }
+        }
+      }
+      
+      // Last resort: try with UUID if we haven't already
+      if (isGritAppId) {
+        const { data: uuidData, error: uuidError } = await supabase
+          .from('applications')
+          .select('*')
+          .ilike('grit_app_id', id)
+        
+        if (uuidError) {
+          logError(normalizeError(uuidError, { operation: 'applicationsAPI.getById', context: 'ilike_query' }), { operation: 'applicationsAPI.getById', context: 'ilike_query' })
+        }
+        
+        if (uuidData && uuidData.length > 0) {
+          return uuidData[0]
+        }
+      }
+    }
     
     if (error) throw new Error(error.message)
-    return data as Tables<'user_documents'>
+    
+    // If using grit_app_id, return the first matching result
+    // If using UUID id, return the single result
+    if (Array.isArray(data)) {
+      if (data.length === 0) {
+        throw new Error(`Application not found with ID: ${id}. Please check that the application exists.`)
+      }
+      return data[0]
+    }
+    
+    if (!data) {
+      throw new Error(`Application not found with ID: ${id}. Please check that the application exists.`)
+    }
+    
+    return data
   },
 
   create: async (applicationData: any, files?: { picture?: File; diploma?: File; passport?: File }) => {
     const userId = await getCurrentUserId()
     
-    let picturePath = applicationData.picture_path
-    let diplomaPath = applicationData.diploma_path
-    let passportPath = applicationData.passport_path
+    // Determine application type (default to NCLEX for backward compatibility)
+    const applicationType = applicationData.application_type || 'NCLEX'
+    const isEAD = applicationType === 'EAD'
     
-    // Upload files to Supabase Storage if provided
+    let picturePath = applicationData.picture_path || null
+    let diplomaPath = applicationData.diploma_path || null
+    let passportPath = applicationData.passport_path || null
+    
+    // Upload files to Supabase Storage if provided (required for NCLEX, optional for EAD)
     if (files) {
+      // Import compression utility
+      const { compressDocument } = await import('./document-compression')
+      
       if (files.picture) {
-        picturePath = await uploadFile(userId, files.picture, 'picture')
+        const compressedPicture = await compressDocument(files.picture, {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 0.85,
+          maxFileSizeMB: 5,
+        })
+        picturePath = await uploadFile(userId, compressedPicture, 'picture')
       }
       if (files.diploma) {
-        diplomaPath = await uploadFile(userId, files.diploma, 'diploma')
+        const compressedDiploma = await compressDocument(files.diploma, {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 0.85,
+          maxFileSizeMB: 5,
+        })
+        diplomaPath = await uploadFile(userId, compressedDiploma, 'diploma')
       }
       if (files.passport) {
-        passportPath = await uploadFile(userId, files.passport, 'passport')
+        const compressedPassport = await compressDocument(files.passport, {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 0.85,
+          maxFileSizeMB: 5,
+        })
+        passportPath = await uploadFile(userId, compressedPassport, 'passport')
       }
     }
     
@@ -594,21 +899,53 @@ export const applicationsAPI = {
       attempts++
     }
     
-    // Create application (grit_app_id will be generated by database default if not provided)
+    // Prepare insert data - include all fields from applicationData
+    const insertData: any = {
+      ...applicationData,
+      grit_app_id: gritAppId,
+      user_id: userId,
+      application_type: applicationType,
+    }
+    
+    // For NCLEX applications, include document paths (required)
+    // For EAD applications, document paths are optional
+    if (!isEAD) {
+      insertData.picture_path = picturePath
+      insertData.diploma_path = diplomaPath
+      insertData.passport_path = passportPath
+    } else {
+      // EAD applications don't require these documents, but include if provided
+      if (picturePath) insertData.picture_path = picturePath
+      if (diplomaPath) insertData.diploma_path = diplomaPath
+      if (passportPath) insertData.passport_path = passportPath
+    }
+    
+    // Create application
     const { data, error } = await supabase
       .from('applications')
-      .insert({
-        ...applicationData,
-        grit_app_id: gritAppId, // Set GRIT APP ID
-        user_id: userId,
-        picture_path: picturePath,
-        diploma_path: diplomaPath,
-        passport_path: passportPath,
-      })
+      .insert(insertData)
       .select('*')
       .single()
     
     if (error) throw new Error(error.message)
+    
+    // Create initial timeline step for the application
+    if (data) {
+      try {
+        const timelineStepsAPI = await import('./supabase-api').then(m => m.timelineStepsAPI)
+        if (isEAD) {
+          // EAD timeline: Application Submission
+          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
+        } else {
+          // NCLEX timeline: Application Submission
+          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
+        }
+      } catch (timelineError) {
+        // Log but don't fail the application creation if timeline step creation fails
+        logError(normalizeError(timelineError, { operation: 'applicationsAPI.create', context: 'timeline_step_creation' }), { operation: 'applicationsAPI.create', context: 'timeline_step_creation' })
+      }
+    }
+    
     return data as Tables<'processing_accounts'>
   },
 
@@ -639,6 +976,22 @@ export const applicationsAPI = {
     
     if (!data) {
       return { id, status } as Tables<'applications'>
+    }
+    
+    // Execute workflows if status changed (get old status from currentApp if available)
+    // Note: We can't easily get old status here, so workflows will check conditions
+    try {
+      const { executeWorkflowsForTrigger } = await import('./workflow-executor')
+      await executeWorkflowsForTrigger('application_status_change', {
+        id: data.id,
+        application_id: data.id,
+        status: status,
+        new_status: status,
+        ...data,
+      })
+    } catch (error) {
+      console.error('Error executing workflows for application status change:', error)
+      // Don't throw - workflow failures shouldn't break status update
     }
     
     return data as unknown as Tables<'applications'>
@@ -682,13 +1035,54 @@ export const applicationsAPI = {
     
     return data as unknown as Tables<'applications'>
   },
+
+  delete: async (id: string) => {
+    const { userId, isAdmin: admin } = await getCurrentUserInfo()
+    
+    // Check if user owns the application or is admin
+    const { data: existing, error: fetchError } = await supabase
+      .from('applications')
+      .select('user_id')
+      .eq('id', id)
+      .single()
+    
+    if (fetchError) throw new Error(fetchError.message)
+    if (!existing) throw new Error('Application not found')
+    
+    // Non-admins can only delete their own applications
+    if (!admin && existing.user_id !== userId) {
+      throw new Error('Unauthorized: You can only delete your own applications')
+    }
+    
+    const { error } = await supabase
+      .from('applications')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  },
 }
 
 // Quotations API
+// Cache for quotations to reduce repeated queries
+const quotationsCache = new Map<string, { data: any[]; expiresAt: number }>()
+const QUOTATIONS_CACHE_TTL = 30 * 1000 // 30 seconds cache for quotations
+
 export const quotationsAPI = {
-  getAll: async () => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
+  getAll: async (useCache: boolean = true) => {
+    const { userId, isAdmin: admin } = await getCurrentUserInfo()
+    
+    // Check cache first
+    if (useCache) {
+      const cacheKey = admin ? 'admin_all' : `user_${userId}`
+      const cached = quotationsCache.get(cacheKey)
+      const now = Date.now()
+      if (cached && cached.expiresAt > now) {
+        return cached.data
+      }
+    }
+    
+    let result: Tables<'quotations'>[]
     
     if (admin) {
       // For admins, show all quotations
@@ -698,7 +1092,7 @@ export const quotationsAPI = {
         .order('created_at', { ascending: false })
       
       if (error) throw new Error(error.message)
-      return ((data || []) as unknown) as Tables<'quotations'>[]
+      result = ((data || []) as unknown) as Tables<'quotations'>[]
     } else {
       // For non-admin users, fetch their own quotations and public quotations separately, then combine
       const [userQuotes, publicQuotes] = await Promise.all([
@@ -730,8 +1124,24 @@ export const quotationsAPI = {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )
       
-      return uniqueQuotes
+      result = uniqueQuotes
     }
+    
+    // Cache the result
+    if (useCache) {
+      const cacheKey = admin ? 'admin_all' : `user_${userId}`
+      quotationsCache.set(cacheKey, {
+        data: result,
+        expiresAt: Date.now() + QUOTATIONS_CACHE_TTL
+      })
+    }
+    
+    return result
+  },
+  
+  // Invalidate quotations cache (call after create/update/delete)
+  invalidateCache: () => {
+    quotationsCache.clear()
   },
 
   // Fetch all quotations without any user filtering (for display purposes)
@@ -923,13 +1333,15 @@ export const quotationsAPI = {
       .single()
     
     if (error) {
-      console.error('Error creating public quotation:', error)
-      throw new Error(`Failed to save quotation: ${error.message}`)
+      throw normalizeError(error, { operation: 'quotationsAPI.createPublic', context: 'create_quotation' })
     }
     
     if (!data) {
       throw new Error('Failed to save quotation: No data returned')
     }
+    
+    // Invalidate cache after creating
+    quotationsAPI.invalidateCache()
     
     return data
   },
@@ -956,10 +1368,17 @@ export const quotationsAPI = {
         if (!dataArray || dataArray.length === 0) {
           throw new Error('Quotation not found')
         }
-        return dataArray[0]
+        const result = dataArray[0]
+        // Invalidate cache after updating
+        quotationsAPI.invalidateCache()
+        return result
       }
       throw new Error(error.message)
     }
+    
+    // Invalidate cache after updating
+    quotationsAPI.invalidateCache()
+    
     return data
   },
 
@@ -985,16 +1404,21 @@ export const quotationsAPI = {
         if (!dataArray || dataArray.length === 0) {
           throw new Error('Quotation not found')
         }
-        return dataArray[0]
+        const result = dataArray[0]
+        // Invalidate cache after updating status
+        quotationsAPI.invalidateCache()
+        return result
       }
       throw new Error(error.message)
     }
+    
+    // Invalidate cache after updating status
+    quotationsAPI.invalidateCache()
+    
     return data
   },
 
   delete: async (id: string) => {
-    console.log('[quotationsAPI.delete] Attempting to delete quotation:', id)
-    
     // First, verify the quotation exists and we can access it
     const { data: existing, error: fetchError } = await supabase
       .from('quotations')
@@ -1003,22 +1427,18 @@ export const quotationsAPI = {
       .single()
     
     if (fetchError) {
-      console.error('[quotationsAPI.delete] Error fetching quotation:', fetchError)
       if (fetchError.code !== 'PGRST116') { // PGRST116 = not found
-        throw new Error(`Failed to verify quotation: ${fetchError.message} (Code: ${fetchError.code})`)
+        throw normalizeError(fetchError, { operation: 'quotationsAPI.delete', context: 'fetch_verification', quotationId: id })
       }
-      throw new Error('Quotation not found')
+      throw normalizeError(new Error('Quotation not found'), { operation: 'quotationsAPI.delete', quotationId: id })
     }
     
     if (!existing) {
-      throw new Error('Quotation not found or you do not have permission to delete it')
+      throw normalizeError(new Error('Quotation not found or you do not have permission to delete it'), { operation: 'quotationsAPI.delete', quotationId: id })
     }
     
-    console.log('[quotationsAPI.delete] Quotation found:', existing)
-    
-    // Check if user is admin
-    const adminCheck = await isAdmin()
-    console.log('[quotationsAPI.delete] Is admin:', adminCheck)
+    // Get user info (includes admin check)
+    const { isAdmin: adminCheck } = await getCurrentUserInfo()
     
     // Perform the deletion
     const { data, error } = await supabase
@@ -1028,15 +1448,11 @@ export const quotationsAPI = {
       .select() // Return deleted data to verify
     
     if (error) {
-      console.error('[quotationsAPI.delete] Delete error:', error)
-      throw new Error(`Failed to delete quotation: ${error.message} (Code: ${error.code}, Details: ${error.details || 'N/A'})`)
+      throw normalizeError(error, { operation: 'quotationsAPI.delete', context: 'delete_operation', quotationId: id })
     }
-    
-    console.log('[quotationsAPI.delete] Delete response:', data)
     
     // Verify deletion was successful
     if (!data || data.length === 0) {
-      console.warn('[quotationsAPI.delete] No data returned from delete, verifying...')
       // Double-check by trying to fetch it again
       const { data: verifyData, error: verifyError } = await supabase
         .from('quotations')
@@ -1045,14 +1461,12 @@ export const quotationsAPI = {
         .single()
       
       if (!verifyError && verifyData) {
-        console.error('[quotationsAPI.delete] Quotation still exists after deletion!')
-        throw new Error('Deletion appeared to succeed but quotation still exists. This may be a permissions issue. Please check RLS policies.')
-      } else {
-        console.log('[quotationsAPI.delete] Verification passed - quotation is deleted')
+        throw normalizeError(new Error('Deletion appeared to succeed but quotation still exists. This may be a permissions issue. Please check RLS policies.'), { operation: 'quotationsAPI.delete', context: 'verification_failed', quotationId: id })
       }
-    } else {
-      console.log('[quotationsAPI.delete] Deletion successful, deleted:', data.length, 'row(s)')
     }
+    
+    // Invalidate cache after deleting
+    quotationsAPI.invalidateCache()
     
     return data
   },
@@ -1085,8 +1499,28 @@ export const servicesAPI = {
     return data || []
   },
 
-  getByServiceAndState: async (serviceName: string, state: string) => {
-    // Use Supabase directly (serverless)
+  getByServiceAndState: async (serviceName: string, state: string, useCache: boolean = true) => {
+    // Use cache for service lookups
+    if (useCache) {
+      const { cachedQuery, cacheKeys } = await import('./query-cache')
+      return cachedQuery(
+        cacheKeys.service(serviceName, state),
+        async () => {
+          const { data, error: supabaseError } = await supabase
+            .from('services')
+            .select('*')
+            .eq('service_name', serviceName)
+            .eq('state', state)
+            .maybeSingle()
+          
+          if (supabaseError) throw new Error(supabaseError.message)
+          return data
+        },
+        5 * 60 * 1000 // Cache for 5 minutes
+      )
+    }
+
+    // Direct query without cache
     const { data, error: supabaseError } = await supabase
       .from('services')
       .select('*')
@@ -1193,6 +1627,117 @@ export const servicesAPI = {
       .delete()
       .eq('id', id)
     
+    if (error) throw new Error(error.message)
+  },
+}
+
+export const serviceRequiredDocumentsAPI = {
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .select('*')
+      .order('service_type', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getByServiceTypes: async (serviceTypes: string[]) => {
+    const query = supabase
+      .from('service_required_documents')
+      .select('*')
+      .order('service_type', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (serviceTypes && serviceTypes.length > 0) {
+      query.in('service_type', serviceTypes)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  create: async (doc: {
+    service_type: string
+    document_type: string
+    name: string
+    accepted_formats?: string[]
+    required?: boolean
+    sort_order?: number
+  }) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const payload = {
+      service_type: doc.service_type,
+      document_type: doc.document_type,
+      name: doc.name,
+      accepted_formats: doc.accepted_formats && doc.accepted_formats.length > 0
+        ? doc.accepted_formats
+        : ['.pdf', '.jpg', '.jpeg', '.png'],
+      required: doc.required ?? true,
+      sort_order: doc.sort_order ?? 0,
+    }
+
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id: string, updates: Partial<{
+    service_type: string
+    document_type: string
+    name: string
+    accepted_formats: string[]
+    required: boolean
+    sort_order: number
+  }>) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const updatePayload: Record<string, any> = {}
+    if (updates.service_type !== undefined) updatePayload.service_type = updates.service_type
+    if (updates.document_type !== undefined) updatePayload.document_type = updates.document_type
+    if (updates.name !== undefined) updatePayload.name = updates.name
+    if (updates.accepted_formats !== undefined) updatePayload.accepted_formats = updates.accepted_formats
+    if (updates.required !== undefined) updatePayload.required = updates.required
+    if (updates.sort_order !== undefined) updatePayload.sort_order = updates.sort_order
+
+    const { data, error } = await supabase
+      .from('service_required_documents')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  delete: async (id: string) => {
+    const admin = await isAdmin()
+    if (!admin) {
+      throw new Error('Admin access required')
+    }
+
+    const { error } = await supabase
+      .from('service_required_documents')
+      .delete()
+      .eq('id', id)
+
     if (error) throw new Error(error.message)
   },
 }
@@ -1315,11 +1860,10 @@ export const notificationsAPI = {
           ])
           
           // Prefer email from users table, fallback to auth
-          const userProfile = userProfileResult.data as { first_name?: string; last_name?: string; email?: string } | null
-          const userEmail = userProfile?.email || userDataResult.data?.user?.email
+          const userEmail = userProfileResult.data?.email || userDataResult.data?.user?.email
           
           if (userEmail) {
-            const profile = userProfile
+            const profile = userProfileResult.data as { first_name?: string; last_name?: string } | null
             const userName = (profile?.first_name && profile?.last_name 
                               ? `${profile.first_name} ${profile.last_name}` 
                               : profile?.first_name || 'User')
@@ -1336,7 +1880,7 @@ export const notificationsAPI = {
             })
           }
         } catch (emailError) {
-          console.error('Error sending notification email:', emailError)
+          logError(normalizeError(emailError, { operation: 'notificationsAPI.create', context: 'email_sending' }), { operation: 'notificationsAPI.create', context: 'email_sending' })
           // Don't throw - email failure shouldn't break notification creation
         }
       })
@@ -1376,12 +1920,102 @@ export const notificationsAPI = {
     notificationsAPI.invalidateCountCache(userId)
     notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
   },
+
+  // Trigger notification generation functions
+  generateDocumentReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_document_reminders')
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateDocumentReminders' })
+      return data
+    } catch (error) {
+      throw normalizeError(error, { operation: 'notificationsAPI.generateDocumentReminders' })
+    }
+  },
+
+  generateProfileCompletionReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_profile_completion_reminders')
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateProfileCompletionReminders' })
+      return data
+    } catch (error) {
+      throw normalizeError(error, { operation: 'notificationsAPI.generateProfileCompletionReminders' })
+    }
+  },
+
+  generatePaymentReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('generate_payment_reminders')
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.generatePaymentReminders' })
+      return data
+    } catch (error) {
+      throw normalizeError(error, { operation: 'notificationsAPI.generatePaymentReminders' })
+    }
+  },
+
+  generateCredentialingReminders: async () => {
+    try {
+      const { data, error } = await supabase.rpc('notify_credentialing_reminder')
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateCredentialingReminders' })
+      return data
+    } catch (error) {
+      throw normalizeError(error, { operation: 'notificationsAPI.generateCredentialingReminders' })
+    }
+  },
+
+  checkMissingDocuments: async (userId?: string) => {
+    try {
+      const targetUserId = userId || await getCurrentUserId()
+      const { data, error } = await supabase.rpc('check_missing_documents', {
+        p_user_id: targetUserId
+      })
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.checkMissingDocuments', userId: targetUserId })
+      return data || []
+    } catch (error) {
+      logError(normalizeError(error, { operation: 'notificationsAPI.checkMissingDocuments', userId: userId || 'current' }), { operation: 'notificationsAPI.checkMissingDocuments' })
+      return []
+    }
+  },
+
+  checkIncompleteProfile: async (userId?: string) => {
+    try {
+      const targetUserId = userId || await getCurrentUserId()
+      const { data, error } = await supabase.rpc('check_incomplete_profile', {
+        p_user_id: targetUserId
+      })
+      if (error) throw normalizeError(error, { operation: 'notificationsAPI.checkIncompleteProfile', userId: targetUserId })
+      return data || false
+    } catch (error) {
+      logError(normalizeError(error, { operation: 'notificationsAPI.checkIncompleteProfile', userId: userId || 'current' }), { operation: 'notificationsAPI.checkIncompleteProfile' })
+      return false
+    }
+  },
 }
 
 // User Details API
 export const userDetailsAPI = {
-  get: async () => {
+  get: async (useCache: boolean = true) => {
     const userId = await getCurrentUserId()
+    
+    // Use cache for user details (they don't change frequently)
+    if (useCache) {
+      const { cachedQuery, cacheKeys } = await import('./query-cache')
+      return cachedQuery(
+        cacheKeys.userDetails(userId),
+        async () => {
+          const { data, error } = await supabase
+            .from('user_details')
+            .select('*')
+            .eq('user_id', userId)
+            .maybeSingle()
+          
+          if (error) throw new Error(error.message)
+          return data as Tables<'user_details'> | null
+        },
+        60 * 1000 // Cache for 60 seconds
+      )
+    }
+
+    // Direct query without cache
     const { data, error } = await supabase
       .from('user_details')
       .select('*')
@@ -1394,8 +2028,7 @@ export const userDetailsAPI = {
 
   // Get user details for a specific user (for admins viewing client details)
   getByUserId: async (userId: string) => {
-    const admin = await isAdmin()
-    const currentUserId = await getCurrentUserId()
+    const { userId: currentUserId, isAdmin: admin } = await getCurrentUserInfo()
     
     // Only allow admins or the user themselves to fetch details
     if (!admin && userId !== currentUserId) {
@@ -1417,6 +2050,14 @@ export const userDetailsAPI = {
 
   save: async (details: any) => {
     const userId = await getCurrentUserId()
+    
+    // Invalidate cache when user details are saved
+    try {
+      const { invalidateUserCache } = await import('./query-cache')
+      invalidateUserCache(userId)
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
     
     // Clean up the details object - remove undefined values and convert empty strings to null
     const cleanedDetails: any = { user_id: userId }
@@ -1529,8 +2170,7 @@ export const userDocumentsAPI = {
 
   // Get documents for a specific user (for admins viewing client applications)
   getByUserId: async (userId: string) => {
-    const admin = await isAdmin()
-    const currentUserId = await getCurrentUserId()
+    const { userId: currentUserId, isAdmin: admin } = await getCurrentUserInfo()
     
     // Only allow admins or the user themselves to fetch documents
     if (!admin && userId !== currentUserId) {
@@ -1547,29 +2187,55 @@ export const userDocumentsAPI = {
     return data || []
   },
 
-  upload: async (type: 'picture' | 'diploma' | 'passport', file: File) => {
+  upload: async (type: string, file: File) => {
     const userId = await getCurrentUserId()
-    const filePath = await uploadFile(userId, file, type)
     
-    // Check if document already exists
+    // Compress file before upload to reduce storage size
+    const { compressDocument } = await import('./document-compression')
+    const compressedFile = await compressDocument(file, {
+      maxWidth: 1920,
+      maxHeight: 1920,
+      quality: 0.85,
+      maxFileSizeMB: 5,
+    })
+    
+    // Check if document already exists and delete old file from storage
     const { data: existing, error: checkError } = await supabase
       .from('user_documents')
-      .select('id')
+      .select('id, file_path')
       .eq('user_id', userId)
       .eq('document_type', type)
       .maybeSingle()
     
     if (checkError) throw new Error(checkError.message)
     
+    // Delete old file from storage if it exists
+    if (existing && !('error' in existing) && 'id' in existing && existing.file_path) {
+      try {
+        const pathParts = existing.file_path.split('/')
+        const fileName = pathParts[pathParts.length - 1]
+        const storagePath = `${userId}/${fileName}`
+        await supabase.storage
+          .from('documents')
+          .remove([storagePath])
+      } catch (storageError) {
+        logError(normalizeError(storageError, { operation: 'userDocumentsAPI.upload', context: 'delete_old_file' }), { operation: 'userDocumentsAPI.upload', context: 'delete_old_file', severity: 'low' })
+        // Continue even if storage deletion fails
+      }
+    }
+    
+    // Upload the compressed file
+    const filePath = await uploadFile(userId, compressedFile, type)
+    
     let data, error
     if (existing && !('error' in existing) && 'id' in existing) {
-      // Update existing document
+      // Update existing document (use compressed file size)
       const { data: updated, error: updateError } = await supabase
         .from('user_documents')
         .update({
           file_path: filePath,
-          file_name: file.name,
-          file_size: file.size,
+          file_name: file.name, // Keep original filename for display
+          file_size: compressedFile.size, // Store compressed file size
           uploaded_at: new Date().toISOString(),
         })
         .eq('id', (existing as { id: string }).id)
@@ -1578,15 +2244,15 @@ export const userDocumentsAPI = {
       data = updated
       error = updateError
     } else {
-      // Insert new document
+      // Insert new document (use compressed file size)
       const { data: inserted, error: insertError } = await supabase
         .from('user_documents')
         .insert({
           user_id: userId,
           document_type: type,
           file_path: filePath,
-          file_name: file.name,
-          file_size: file.size,
+          file_name: file.name, // Keep original filename for display
+          file_size: compressedFile.size, // Store compressed file size
         })
         .select()
         .single()
@@ -1600,67 +2266,161 @@ export const userDocumentsAPI = {
 
   // Upload document for a specific user (for admins)
   uploadForUser: async (userId: string, type: string, file: File) => {
-    const admin = await isAdmin()
-    const currentUserId = await getCurrentUserId()
+    const { userId: currentUserId, isAdmin: admin } = await getCurrentUserInfo()
     
     // Only allow admins or the user themselves to upload documents
     if (!admin && userId !== currentUserId) {
       throw new Error('Unauthorized')
     }
     
-    const filePath = await uploadFile(userId, file, type)
+    // Compress file before upload to reduce storage size
+    const { compressDocument } = await import('./document-compression')
+    const compressedFile = await compressDocument(file, {
+      maxWidth: 1920,
+      maxHeight: 1920,
+      quality: 0.85,
+      maxFileSizeMB: 5,
+    })
     
-    // Check if document already exists
-    const { data: existing, error: checkError } = await supabase
-      .from('user_documents')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('document_type', type)
-      .maybeSingle()
-    
-    if (checkError) throw new Error(checkError.message)
-    
-    let data, error
-    if (existing && !('error' in existing) && 'id' in existing) {
-      // Update existing document
-      const { data: updated, error: updateError } = await supabase
+    // For G-1145, I-765, and cover letter, delete all existing documents of the same type to prevent duplicates
+    // This ensures that upload and generate operations overwrite each other
+    if (type === 'additional_g1145' || type === 'additional_i765' || type === 'additional_cover_letter') {
+      const { data: existingDocs, error: checkError } = await supabase
         .from('user_documents')
-        .update({
-          file_path: filePath,
-          file_name: file.name,
-          file_size: file.size,
-          uploaded_at: new Date().toISOString(),
-        })
-        .eq('id', (existing as { id: string }).id)
-        .select()
-        .single()
-      data = updated
-      error = updateError
+        .select('id, file_path')
+        .eq('user_id', userId)
+        .eq('document_type', type)
+      
+      if (checkError) throw new Error(checkError.message)
+      
+      // Delete all existing documents of this type
+      if (existingDocs && existingDocs.length > 0) {
+        // Delete old files from storage
+        for (const doc of existingDocs) {
+          if (doc.file_path) {
+            try {
+              const pathParts = doc.file_path.split('/')
+              const fileName = pathParts[pathParts.length - 1]
+              const storagePath = `${userId}/${fileName}`
+              await supabase.storage
+                .from('documents')
+                .remove([storagePath])
+            } catch (storageError) {
+              logError(normalizeError(storageError, { operation: 'userDocumentsAPI.deleteAllByType', context: 'delete_old_file' }), { operation: 'userDocumentsAPI.deleteAllByType', context: 'delete_old_file', severity: 'low' })
+              // Continue even if storage deletion fails
+            }
+          }
+        }
+        
+        // Delete all database records
+        const { error: deleteError } = await supabase
+          .from('user_documents')
+          .delete()
+          .eq('user_id', userId)
+          .eq('document_type', type)
+        
+        if (deleteError) throw new Error(deleteError.message)
+      }
     } else {
-      // Insert new document
+      // For other document types, check if document already exists and update it
+      const { data: existing, error: checkError } = await supabase
+        .from('user_documents')
+        .select('id, file_path')
+        .eq('user_id', userId)
+        .eq('document_type', type)
+        .maybeSingle()
+      
+      if (checkError) throw new Error(checkError.message)
+      
+      if (existing && !('error' in existing) && 'id' in existing && existing.file_path) {
+        // Delete old file from storage before updating
+        try {
+          const pathParts = existing.file_path.split('/')
+          const fileName = pathParts[pathParts.length - 1]
+          const storagePath = `${userId}/${fileName}`
+          await supabase.storage
+            .from('documents')
+            .remove([storagePath])
+        } catch (storageError) {
+          logError(normalizeError(storageError, { operation: 'userDocumentsAPI.upload', context: 'delete_old_file' }), { operation: 'userDocumentsAPI.upload', context: 'delete_old_file', severity: 'low' })
+          // Continue even if storage deletion fails
+        }
+      }
+    }
+    
+    // Upload the compressed file
+    const filePath = await uploadFile(userId, compressedFile, type)
+    
+    // For G-1145, I-765, and cover letter, always insert new (we've already deleted all existing ones)
+    // For other types, update if exists, otherwise insert
+    if (type === 'additional_g1145' || type === 'additional_i765' || type === 'additional_cover_letter') {
+      // Insert new document (use compressed file size)
       const { data: inserted, error: insertError } = await supabase
         .from('user_documents')
         .insert({
           user_id: userId,
           document_type: type,
           file_path: filePath,
-          file_name: file.name,
-          file_size: file.size,
+          file_name: file.name, // Keep original filename for display
+          file_size: compressedFile.size, // Store compressed file size
         })
         .select()
         .single()
-      data = inserted
-      error = insertError
+      
+      if (insertError) throw new Error(insertError.message)
+      return inserted as Tables<'user_documents'>
+    } else {
+      // For other document types, update if exists, otherwise insert
+      const { data: existing, error: checkError } = await supabase
+        .from('user_documents')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('document_type', type)
+        .maybeSingle()
+      
+      if (checkError) throw new Error(checkError.message)
+      
+      let data, error
+      if (existing && !('error' in existing) && 'id' in existing) {
+        // Update existing document (use compressed file size)
+        const { data: updated, error: updateError } = await supabase
+          .from('user_documents')
+          .update({
+            file_path: filePath,
+            file_name: file.name, // Keep original filename for display
+            file_size: compressedFile.size, // Store compressed file size
+            uploaded_at: new Date().toISOString(),
+          })
+          .eq('id', (existing as { id: string }).id)
+          .select()
+          .single()
+        data = updated
+        error = updateError
+      } else {
+        // Insert new document (use compressed file size)
+        const { data: inserted, error: insertError } = await supabase
+          .from('user_documents')
+          .insert({
+            user_id: userId,
+            document_type: type,
+            file_path: filePath,
+            file_name: file.name, // Keep original filename for display
+            file_size: compressedFile.size, // Store compressed file size
+          })
+          .select()
+          .single()
+        data = inserted
+        error = insertError
+      }
+      
+      if (error) throw new Error(error.message)
+      return data as Tables<'user_documents'>
     }
-    
-    if (error) throw new Error(error.message)
-    return data as Tables<'user_documents'>
   },
 
   // Delete a document
   delete: async (documentId: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
+    const { userId, isAdmin: admin } = await getCurrentUserInfo()
     
     // First check if user owns the document or is admin
     const { data: doc, error: fetchError } = await supabase
@@ -1685,16 +2445,21 @@ export const userDocumentsAPI = {
 }
 
 // File upload helper
+// Note: File compression should be done before calling this function
 async function uploadFile(userId: string, file: File, type: string): Promise<string> {
   const fileExt = file.name.split('.').pop()
-  const fileName = `${type}_${Date.now()}.${fileExt}`
+  // Use consistent filename based on document type to allow overwriting
+  // This ensures smooth replacement without accumulating duplicate files
+  // Special case: ead_2x2_picture should be saved as 2x2picture for compilation process compatibility
+  const fileNamePrefix = type === 'ead_2x2_picture' ? '2x2picture' : type
+  const fileName = `${fileNamePrefix}.${fileExt}`
   const filePath = `${userId}/${fileName}`
   
   const { error } = await supabase.storage
     .from('documents')
     .upload(filePath, file, {
       cacheControl: '3600',
-      upsert: false,
+      upsert: true, // Allow overwriting existing files for smooth replacement
     })
   
   if (error) throw new Error(error.message)
@@ -1710,50 +2475,426 @@ export function getFileUrl(filePath: string): string {
   return data.publicUrl
 }
 
-// Get signed URL for private files (expires in 1 hour)
-export async function getSignedFileUrl(filePath: string, expiresIn: number = 3600): Promise<string> {
+// Get signed URL for private files (expires in 1 hour by default, cache for longer)
+// Optimized in-memory cache to minimize storage API calls
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>()
+const signedUrlInflight = new Map<string, Promise<string>>()
+// Negative cache for files that don't exist (cache for 15 minutes to avoid repeated failed lookups)
+const negativeCache = new Map<string, { expiresAt: number }>()
+// Rate limiter for file listing to prevent server crashes
+const fileListingCache = new Map<string, { files: any[] | null; expiresAt: number }>()
+const FILE_LISTING_CACHE_TTL = 5 * 60 * 1000 // 5 minutes cache for file listings
+const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000 // Clean up every 5 minutes
+const CACHE_BUFFER_MS = 60000 // 1 minute buffer before expiration
+const NEGATIVE_CACHE_TTL = 15 * 60 * 1000 // 15 minutes for negative cache
+
+// Cleanup expired cache entries periodically
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now()
+    for (const [key, value] of signedUrlCache.entries()) {
+      if (value.expiresAt <= now) {
+        signedUrlCache.delete(key)
+      }
+    }
+    for (const [key, value] of negativeCache.entries()) {
+      if (value.expiresAt <= now) {
+        negativeCache.delete(key)
+      }
+    }
+    for (const [key, value] of fileListingCache.entries()) {
+      if (value.expiresAt <= now) {
+        fileListingCache.delete(key)
+      }
+    }
+  }, CACHE_CLEANUP_INTERVAL)
+}
+
+export async function getSignedFileUrl(filePath: string, expiresIn: number = 3600, silent: boolean = false): Promise<string> {
   if (!filePath || filePath.trim() === '') {
-    console.error('getSignedFileUrl: File path is required', filePath)
-    throw new Error('File path is required')
+    if (!silent) {
+      logError(normalizeError(new Error('File path is required'), { operation: 'getSignedFileUrl', filePath }), { operation: 'getSignedFileUrl' })
+    }
+    throw normalizeError(new Error('File path is required'), { operation: 'getSignedFileUrl', filePath })
   }
   
   // Normalize path (handle Windows backslashes)
   const normalizedPath = filePath.replace(/\\/g, '/')
+  const cacheKey = `${normalizedPath}:${expiresIn}`
+  const now = Date.now()
   
-  console.log('getSignedFileUrl: Attempting to get signed URL for path:', normalizedPath)
-  console.log('getSignedFileUrl: Using bucket: documents')
+  // Check positive cache first
+  const cached = signedUrlCache.get(cacheKey)
+  if (cached && cached.expiresAt > now + CACHE_BUFFER_MS) {
+    return cached.url
+  }
   
-  const { data, error } = await supabase.storage
-    .from('documents')
-    .createSignedUrl(normalizedPath, expiresIn)
-  
-  if (error) {
-    console.error('getSignedFileUrl: Error getting signed URL:', error)
-    console.error('getSignedFileUrl: Error details:', {
-      message: error.message,
-      path: normalizedPath
-    })
-    
-    // Provide more helpful error messages
-    if (error.message?.includes('not found') || 
-        error.message?.includes('Object not found')) {
-      throw new Error(`File not found in storage: ${normalizedPath}`)
+  // Check negative cache (files that don't exist) - avoid repeated API calls
+  const negativeCached = negativeCache.get(normalizedPath)
+  if (negativeCached && negativeCached.expiresAt > now) {
+    // File was previously not found
+    // For silent mode (avatars), return null instead of throwing
+    if (shouldBeSilent) {
+      return null as any
     }
-    throw new Error(error.message || 'Failed to get signed URL')
+    // For non-silent mode, throw error immediately without API call
+    throw new Error(`File not found in storage: ${normalizedPath}`)
   }
   
-  if (!data?.signedUrl) {
-    console.error('getSignedFileUrl: No signed URL returned in data:', data)
-    throw new Error('No signed URL returned')
-  }
+  // Check if there's already an inflight request for this file
+  const inflight = signedUrlInflight.get(cacheKey)
+  if (inflight) return inflight
   
-  console.log('getSignedFileUrl: Successfully got signed URL for:', normalizedPath)
-  return data.signedUrl
+  // Check if this is an avatar file (for silent error handling)
+  const isAvatar = normalizedPath.includes('avatar') || normalizedPath.includes('picture')
+  const shouldBeSilent = silent || isAvatar
+
+  const promise = (async (): Promise<string> => {
+    // For silent mode (avatars), check negative cache first to avoid unnecessary API calls
+    if (shouldBeSilent) {
+      const negativeCached = negativeCache.get(normalizedPath)
+      if (negativeCached && negativeCached.expiresAt > now) {
+        // File was previously not found, return null silently
+        return null as any
+      }
+    }
+    
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(normalizedPath, expiresIn)
+    
+    if (error) {
+      // For silent mode, immediately cache as negative and return null without trying alternatives
+      if (shouldBeSilent && (error.message?.includes('not found') || error.message?.includes('Object not found') || error.statusCode === 400)) {
+        negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
+        return null as any
+      }
+      // If file not found, try alternative paths (with/without timestamps)
+      if (error.message?.includes('not found') || error.message?.includes('Object not found')) {
+        const pathParts = normalizedPath.split('/')
+        const fileName = pathParts[pathParts.length - 1]
+        const directory = pathParts.slice(0, -1).join('/')
+        
+        // Try alternative paths
+        let alternativePath: string | null = null
+        
+        // Case 1: If path contains timestamp, try without timestamp and also try 2x2picture variations
+        if (normalizedPath.match(/_\d{13}\./)) {
+          const match = fileName.match(/^(.+?)_\d+\.(.+)$/)
+          if (match) {
+            const [, docType, ext] = match
+            
+            // First try without timestamp
+            const pathWithoutTimestamp = directory ? `${directory}/${docType}.${ext}` : `${docType}.${ext}`
+            
+            // If it's a picture type, also try 2x2picture variations
+            if (docType.toLowerCase() === 'picture') {
+              const extLower = ext.toLowerCase()
+              const extUpper = ext.toUpperCase()
+              const extVariations = [ext, extLower, extUpper]
+              
+              // Try 2x2picture with various extension cases first (more likely to be correct)
+              for (const extVar of extVariations) {
+                const altPath = directory ? `${directory}/2x2picture.${extVar}` : `2x2picture.${extVar}`
+                const altNegativeCached = negativeCache.get(altPath)
+                if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
+                  try {
+                    const { data: altData, error: altError } = await supabase.storage
+                      .from('documents')
+                      .createSignedUrl(altPath, expiresIn)
+                    if (!altError && altData?.signedUrl) {
+                      signedUrlCache.set(cacheKey, { url: altData.signedUrl, expiresAt: now + expiresIn * 1000 })
+                      return altData.signedUrl
+                    }
+                  } catch {
+                    // Continue to next variation
+                  }
+                }
+              }
+            }
+            
+            // Also try the path without timestamp
+            alternativePath = pathWithoutTimestamp
+          }
+        } 
+        // Case 2: If path doesn't contain timestamp, try to find files with timestamps or alternative names
+        else {
+          // First, try direct name variations (picture <-> 2x2picture)
+          const baseNameMatch = fileName.match(/^(.+?)\.(.+)$/)
+          if (baseNameMatch) {
+            const [, baseName, ext] = baseNameMatch
+            
+            // Try 2x2picture if looking for picture, or picture if looking for 2x2picture
+            // Also try case variations of the extension (jpg/JPG/jpg)
+            const extLower = ext.toLowerCase()
+            const extUpper = ext.toUpperCase()
+            const extVariations = [ext, extLower, extUpper]
+            
+            if (baseName.toLowerCase() === 'picture') {
+              // Try 2x2picture with various extension cases
+              for (const extVar of extVariations) {
+                const altPath = directory ? `${directory}/2x2picture.${extVar}` : `2x2picture.${extVar}`
+                // Check negative cache first
+                const altNegativeCached = negativeCache.get(altPath)
+                if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
+                  try {
+                    const { data: altData, error: altError } = await supabase.storage
+                      .from('documents')
+                      .createSignedUrl(altPath, expiresIn)
+                    if (!altError && altData?.signedUrl) {
+                      signedUrlCache.set(cacheKey, { url: altData.signedUrl, expiresAt: now + expiresIn * 1000 })
+                      return altData.signedUrl
+                    }
+                  } catch {
+                    // Continue to next variation or file listing fallback
+                  }
+                }
+              }
+            } else if (baseName.toLowerCase() === '2x2picture') {
+              // Try picture with various extension cases
+              for (const extVar of extVariations) {
+                const altPath = directory ? `${directory}/picture.${extVar}` : `picture.${extVar}`
+                // Check negative cache first
+                const altNegativeCached = negativeCache.get(altPath)
+                if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
+                  try {
+                    const { data: altData, error: altError } = await supabase.storage
+                      .from('documents')
+                      .createSignedUrl(altPath, expiresIn)
+                    if (!altError && altData?.signedUrl) {
+                      signedUrlCache.set(cacheKey, { url: altData.signedUrl, expiresAt: now + expiresIn * 1000 })
+                      return altData.signedUrl
+                    }
+                  } catch {
+                    // Continue to next variation or file listing fallback
+                  }
+                }
+              }
+            }
+          }
+          
+          // List files in the directory to find matching files with timestamps or alternative names
+          // Only do this for picture files to avoid excessive API calls
+          // Use cached file listings to prevent repeated API calls
+          try {
+            // Check if we have a cached file listing for this directory
+            const cachedListing = fileListingCache.get(directory || '')
+            let files: any[] | null = null
+            
+            if (cachedListing && cachedListing.expiresAt > now) {
+              // Use cached listing
+              files = cachedListing.files
+            } else {
+              // Fetch fresh listing with rate limiting
+              const { data: listData, error: listError } = await supabase.storage
+                .from('documents')
+                .list(directory || '', {
+                  limit: 100
+                })
+              
+              if (!listError && listData) {
+                files = listData
+                // Cache the listing
+                fileListingCache.set(directory || '', { 
+                  files: listData, 
+                  expiresAt: now + FILE_LISTING_CACHE_TTL 
+                })
+              }
+            }
+            
+            if (files && files.length > 0) {
+              // Extract base name and extension from fileName (e.g., "picture.JPG" -> "picture", "JPG")
+              if (baseNameMatch) {
+                const [, baseName, ext] = baseNameMatch
+                
+                // Look for files matching pattern: baseName_timestamp.ext
+                const timestampPattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d+\\.${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+                let matchingFile = files.find(f => timestampPattern.test(f.name))
+                
+                // If not found and looking for picture, try 2x2picture variations
+                if (!matchingFile && baseName.toLowerCase() === 'picture') {
+                  const pattern2x2 = new RegExp(`^2x2picture(_\\d+)?\\.${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+                  matchingFile = files.find(f => pattern2x2.test(f.name))
+                }
+                
+                // If not found and looking for 2x2picture, try picture variations
+                if (!matchingFile && baseName.toLowerCase() === '2x2picture') {
+                  const patternPic = new RegExp(`^picture(_\\d+)?\\.${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+                  matchingFile = files.find(f => patternPic.test(f.name))
+                }
+                
+                if (matchingFile) {
+                  alternativePath = directory ? `${directory}/${matchingFile.name}` : matchingFile.name
+                }
+              }
+            }
+          } catch (listErr) {
+            // If listing fails, continue with other fallback logic - don't crash
+          }
+        }
+        
+        // Try alternative path if found
+        if (alternativePath) {
+          // Check negative cache for alternative path
+          const alternativeNegativeCached = negativeCache.get(alternativePath)
+          if (alternativeNegativeCached && alternativeNegativeCached.expiresAt > now) {
+            // Both paths failed before, try file listing as last resort
+            alternativePath = null // Reset to trigger file listing
+          } else {
+            const { data: fallbackData, error: fallbackError } = await supabase.storage
+              .from('documents')
+              .createSignedUrl(alternativePath, expiresIn)
+            
+            if (!fallbackError && fallbackData?.signedUrl) {
+              // Cache successful result with original cache key
+              signedUrlCache.set(cacheKey, { url: fallbackData.signedUrl, expiresAt: now + expiresIn * 1000 })
+              return fallbackData.signedUrl
+            }
+            
+            // Alternative path failed, try file listing as last resort
+            alternativePath = null
+          }
+        }
+        
+        // If alternative path failed or wasn't found, try listing files (especially for picture/2x2picture)
+        // Only do this for picture files to avoid excessive API calls that crash the server
+        // Use cached file listings to prevent repeated API calls
+        if (!alternativePath && fileName.toLowerCase().includes('picture')) {
+          try {
+            // Check if we have a cached file listing for this directory
+            const cachedListing = fileListingCache.get(directory || '')
+            let files: any[] | null = null
+            
+            if (cachedListing && cachedListing.expiresAt > now) {
+              // Use cached listing
+              files = cachedListing.files
+            } else {
+              // Fetch fresh listing with rate limiting
+              const { data: listData, error: listError } = await supabase.storage
+                .from('documents')
+                .list(directory || '', {
+                  limit: 100
+                })
+              
+              if (!listError && listData) {
+                files = listData
+                // Cache the listing
+                fileListingCache.set(directory || '', { 
+                  files: listData, 
+                  expiresAt: now + FILE_LISTING_CACHE_TTL 
+                })
+              }
+            }
+            
+            if (files && files.length > 0) {
+              // Extract base name from original fileName or normalizedPath
+              const originalFileName = normalizedPath.split('/').pop() || ''
+              const baseNameMatch = originalFileName.match(/^(.+?)(?:_\d+)?\.(.+)$/)
+              
+              if (baseNameMatch) {
+                const [, baseName, ext] = baseNameMatch
+                
+                // For picture files, prioritize 2x2picture
+                if (baseName.toLowerCase() === 'picture') {
+                  // Look for 2x2picture files (with or without timestamp, any case)
+                  const pattern2x2 = new RegExp(`^2x2picture(_\\d+)?\\.${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+                  let matchingFile = files.find(f => pattern2x2.test(f.name))
+                  
+                  // If not found, try any file starting with 2x2picture
+                  if (!matchingFile) {
+                    matchingFile = files.find(f => f.name.toLowerCase().startsWith('2x2picture'))
+                  }
+                  
+                  if (matchingFile) {
+                    alternativePath = directory ? `${directory}/${matchingFile.name}` : matchingFile.name
+                  }
+                }
+              }
+            }
+          } catch (listErr) {
+            // If listing fails, continue to error - don't crash
+          }
+        }
+        
+        // Try the file listing result if found
+        if (alternativePath) {
+          const { data: fallbackData, error: fallbackError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(alternativePath, expiresIn)
+          
+          if (!fallbackError && fallbackData?.signedUrl) {
+            signedUrlCache.set(cacheKey, { url: fallbackData.signedUrl, expiresAt: now + expiresIn * 1000 })
+            return fallbackData.signedUrl
+          }
+        }
+        
+        // All attempts failed, cache as negative
+        negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
+        if (alternativePath) {
+          negativeCache.set(alternativePath, { expiresAt: now + NEGATIVE_CACHE_TTL })
+        }
+        
+        // Provide more helpful error messages
+        throw new Error(`File not found in storage: ${normalizedPath}`)
+      }
+      
+      throw new Error(error.message || 'Failed to get signed URL')
+    }
+  
+    if (!data?.signedUrl) {
+      // Cache as negative since no URL was returned
+      negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
+      throw new Error('No signed URL returned')
+    }
+    
+    // Cache successful result
+    signedUrlCache.set(cacheKey, { url: data.signedUrl, expiresAt: now + expiresIn * 1000 })
+    // Remove from negative cache if it was there (file now exists)
+    negativeCache.delete(normalizedPath)
+    return data.signedUrl
+  })()
+
+  signedUrlInflight.set(cacheKey, promise)
+  try {
+    return await promise
+  } catch (error) {
+    // If silent mode is enabled (for avatars), don't throw - return null instead
+    // This prevents console errors for missing avatar files
+    if (shouldBeSilent) {
+      // Cache as negative to prevent repeated attempts
+      negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
+      return null as any // Return null instead of throwing
+    }
+    // Re-throw the error for non-silent cases
+    throw error
+  } finally {
+    signedUrlInflight.delete(cacheKey)
+  }
 }
 
 // Application Timeline Steps API
 export const timelineStepsAPI = {
-  getByApplication: async (applicationId: string) => {
+  getByApplication: async (applicationId: string, useCache: boolean = true) => {
+    // Use cache for timeline steps (they don't change frequently)
+    if (useCache) {
+      const { cachedQuery, cacheKeys } = await import('./query-cache')
+      return cachedQuery(
+        cacheKeys.applicationTimeline(applicationId),
+        async () => {
+          const { data, error } = await supabase
+            .from('application_timeline_steps')
+            .select('*')
+            .eq('application_id', applicationId)
+            .order('created_at', { ascending: true })
+          
+          if (error) throw new Error(error.message)
+          return data || []
+        },
+        30 * 1000 // Cache for 30 seconds
+      )
+    }
+
+    // Direct query without cache
     const { data, error } = await supabase
       .from('application_timeline_steps')
       .select('*')
@@ -1765,8 +2906,17 @@ export const timelineStepsAPI = {
   },
 
   update: async (applicationId: string, stepKey: string, status: 'pending' | 'completed', data?: any) => {
+    // Invalidate cache when timeline is updated
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      invalidateApplicationCache(applicationId)
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
+    
     // Map step keys to step names
     const stepNameMap: { [key: string]: string } = {
+      // NCLEX Steps
       'app_submission': 'Application Submission',
       'app_created': 'Application created',
       'documents_submitted': 'Required documents submitted',
@@ -1791,6 +2941,20 @@ export const timelineStepsAPI = {
       'quick_results': 'Quick Results',
       'quick_result_paid': 'Quick Result request has been paid',
       'exam_result': 'Exam Result',
+      // EAD Steps
+      'ead_app_submission': 'Application Submission',
+      'ead_form_review': 'Form Review',
+      'ead_uscis_submission': 'USCIS Submission',
+      'ead_receipt_received': 'Receipt Notice Received',
+      'ead_biometrics': 'Biometrics Appointment',
+      'ead_biometrics_completed': 'Biometrics Completed',
+      'ead_rfe': 'Request for Evidence (RFE)',
+      'ead_rfe_response': 'RFE Response Submitted',
+      'ead_approval': 'EAD Approval',
+      'ead_card_production': 'Card Production',
+      'ead_card_mailed': 'Card Mailed',
+      'ead_card_received': 'Card Received',
+      'ead_denial': 'EAD Denial',
     }
     
     // First, fetch existing step data to merge with new data
@@ -1882,38 +3046,50 @@ export const timelineStepsAPI = {
   },
 }
 
-// Helper function to generate Gmail address from name
-// Format: first letter of firstname + first letter of first part of lastname + last part of lastname + "usrn"@gmail.com
-// Example: joy jeric alburo cantila -> jacantilausrn@gmail.com
-function generateGmailAddress(firstName: string, middleName: string | null, lastName: string): string {
-  // Get first letter of first name (lowercase)
-  const firstInitial = (firstName || '').trim().charAt(0).toLowerCase()
-  
-  // Get last name parts
-  const lastNameParts = (lastName || '').trim().split(/\s+/).filter(part => part.trim())
-  
-  if (lastNameParts.length === 0) {
-    // Fallback if no last name
-    return `${firstInitial}usrn@gmail.com`
+// GritSync email generation is now handled server-side via database functions
+// Removed client-side generation logic
+
+// Helper function to generate security question answers
+function generateSecurityAnswers(
+  elementarySchool: string | null,
+  gender: string | null,
+  middleName: string | null,
+  maritalStatus: string | null
+): { question1: string; question2: string; question3: string } {
+  // Question 1: What was the name of the first school you attended?
+  // Answer: First name of elementary school (lowercase, one word)
+  let question1 = 'unknown'
+  if (elementarySchool) {
+    const firstWord = elementarySchool.trim().split(/\s+/)[0].toLowerCase()
+    question1 = firstWord
   }
   
-  // Based on example "joy jeric alburo cantila" -> "jacantilausrn@gmail.com"
-  // It seems to use: j (joy) + a (first letter of "alburo", first part of last name) + cantila (last part)
-  let email: string
-  if (lastNameParts.length > 1) {
-    // Multiple parts in last name: use first letter of first part + last part
-    const firstPartInitial = lastNameParts[0].charAt(0).toLowerCase()
-    const lastPart = lastNameParts[lastNameParts.length - 1].toLowerCase()
-    email = `${firstInitial}${firstPartInitial}${lastPart}usrn@gmail.com`
-  } else {
-    // Single part last name: use first letter of middle name if available, otherwise first letter of last name
-    const middleInitial = (middleName || '').trim().charAt(0).toLowerCase()
-    const lastPart = lastNameParts[0].toLowerCase()
-    const fallbackInitial = lastPart.charAt(0).toLowerCase()
-    email = `${firstInitial}${middleInitial || fallbackInitial}${lastPart}usrn@gmail.com`
+  // Question 2: Who was your childhood hero?
+  // Answer: superman (male) or darna (female), lowercase
+  let question2 = 'superman' // default
+  if (gender) {
+    const genderLower = gender.toLowerCase()
+    if (genderLower === 'female') {
+      question2 = 'darna'
+    } else if (genderLower === 'male') {
+      question2 = 'superman'
+    }
   }
   
-  return email
+  // Question 3: What is your oldest sibling's middle name?
+  // Answer: user's middle name (lowercase, one word)
+  // If married and previous not available, use user's middle name
+  let question3 = 'none'
+  if (middleName) {
+    const firstWord = middleName.trim().split(/\s+/)[0].toLowerCase()
+    question3 = firstWord
+  }
+  
+  return {
+    question1,
+    question2,
+    question3
+  }
 }
 
 // Processing Accounts API
@@ -1928,7 +3104,7 @@ export const processingAccountsAPI = {
     
     let query = supabase
       .from('applications')
-      .select('id, user_id, first_name, middle_name, last_name')
+      .select('id, user_id, first_name, middle_name, last_name, elementary_school, gender, marital_status')
     
     if (isGritAppId) {
       query = query.eq('grit_app_id', applicationId.toUpperCase())
@@ -1973,7 +3149,7 @@ export const processingAccountsAPI = {
     
     // Check if Gmail and Pearson Vue accounts exist
     const typedAccounts = existingAccounts as Array<{ account_type?: string }>
-    const existingGmail = typedAccounts.find(acc => acc.account_type === 'gmail')
+    const existingGritsync = typedAccounts.find(acc => acc.account_type === 'gritsync')
     const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
     
     // Get user's grit_id for password
@@ -1994,53 +3170,31 @@ export const processingAccountsAPI = {
       password = `@GRiT${numericPart}`
     }
     
-    // Generate Gmail address from application name
-    const firstName = typedApplication.first_name || ''
-    const middleName = typedApplication.middle_name || null
-    const lastName = typedApplication.last_name || ''
-    const gmailAddress = generateGmailAddress(firstName, middleName, lastName)
+    // GritSync accounts are now created via database triggers/functions
+    // No need to generate email client-side - rely on server-side generation
     
-    // Create Gmail account if it doesn't exist
-    if (!existingGmail) {
-      try {
-        if (password && firstName && lastName) {
-          const { error: gmailError } = await supabase
-            .from('processing_accounts')
-            .insert({
-              application_id: actualApplicationId,
-              account_type: 'gmail',
-              email: gmailAddress,
-              password: password,
-              status: 'inactive', // Inactive by default, must be activated by admin
-              created_by: typedApplication.user_id,
-            })
-            .select()
-            .single()
-          
-          // Silently handle duplicate errors (account already exists)
-          if (gmailError && gmailError.code !== '23505' && !gmailError.message?.includes('duplicate') && !gmailError.message?.includes('unique')) {
-            // Only log non-duplicate errors
-          }
-        }
-      } catch (error: any) {
-        // Silently handle duplicate errors
-        if (error?.code !== '23505' && !error?.message?.includes('duplicate') && !error?.message?.includes('unique')) {
-          // Only log non-duplicate errors
-        }
-      }
-    }
-    
-    // Create Pearson Vue account if it doesn't exist (same email and password as Gmail)
+    // Create Pearson Vue account if it doesn't exist (same email and password as GritSync)
     if (!existingPearson) {
       try {
         if (password && firstName && lastName) {
+          // Generate security question answers
+          const securityAnswers = generateSecurityAnswers(
+            typedApplication.elementary_school || null,
+            typedApplication.gender || null,
+            typedApplication.middle_name || null,
+            typedApplication.marital_status || null
+          )
+          
           const { error: pearsonError } = await supabase
             .from('processing_accounts')
             .insert({
               application_id: actualApplicationId,
               account_type: 'pearson_vue',
-              email: gmailAddress,
+              email: gritsyncEmail,
               password: password,
+              security_question_1: securityAnswers.question1,
+              security_question_2: securityAnswers.question2,
+              security_question_3: securityAnswers.question3,
               status: 'inactive', // Inactive by default, must be activated by admin
               created_by: typedApplication.user_id,
             })
@@ -2080,10 +3234,10 @@ export const processingAccountsAPI = {
       new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
     )
     
-    // Sort accounts: Gmail and Pearson Vue first, then custom accounts
+    // Sort accounts: GritSync and Pearson Vue first, then custom accounts
     const typedUniqueAccounts = uniqueAccounts as Array<{ account_type?: string; created_at?: string }>
     typedUniqueAccounts.sort((a, b) => {
-      const order: { [key: string]: number } = { 'gmail': 1, 'pearson_vue': 2, 'custom': 3 }
+      const order: { [key: string]: number } = { 'gritsync': 1, 'pearson_vue': 2, 'custom': 3 }
       const aOrder = order[a.account_type || ''] || 99
       const bOrder = order[b.account_type || ''] || 99
       if (aOrder !== bOrder) {
@@ -2096,7 +3250,7 @@ export const processingAccountsAPI = {
   },
 
   create: async (applicationId: string, accountData: {
-    account_type: 'gmail' | 'pearson_vue' | 'custom'
+    account_type: 'gritsync' | 'pearson_vue' | 'custom'
     name?: string
     link?: string
     email: string
@@ -2126,7 +3280,7 @@ export const processingAccountsAPI = {
   },
 
   update: async (id: string, updates: Partial<{
-    account_type: 'gmail' | 'pearson_vue' | 'custom'
+    account_type: 'gmail' | 'gritsync' | 'pearson_vue' | 'custom'
     name: string
     link: string
     email: string
@@ -2151,8 +3305,8 @@ export const processingAccountsAPI = {
     
     // Check if this is a Gmail or Pearson Vue account
     const accountData = account as { account_type?: string; application_id?: string }
-    const isSystemAccount = accountData.account_type === 'gmail' || accountData.account_type === 'pearson_vue'
-    const isGmailAccount = accountData.account_type === 'gmail'
+    const isSystemAccount = accountData.account_type === 'gritsync' || accountData.account_type === 'pearson_vue'
+    const isGritsyncAccount = accountData.account_type === 'gritsync'
     
     // For Gmail accounts:
     // - Clients can update status and password for their own applications
@@ -2258,6 +3412,76 @@ export const clientsAPI = {
     return data || []
   },
 
+  // Optimized: Get clients with their Gmail accounts in batch (reduces N+1 queries)
+  getAllWithGmailAccounts: async () => {
+    const clients = await clientsAPI.getAll()
+    if (clients.length === 0) return []
+
+    const clientIds = clients.map((c: any) => c.id).filter(Boolean)
+
+    // Batch fetch: Get latest application for each client
+    const { data: allApplications, error: appsError } = await supabase
+      .from('applications')
+      .select('id, user_id, first_name, middle_name, last_name')
+      .in('user_id', clientIds)
+      .order('created_at', { ascending: false })
+
+    if (appsError) {
+      logError(normalizeError(appsError, { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_applications' }), { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_applications' })
+    }
+
+    // Group applications by user_id, keeping only the most recent
+    const latestAppsByUserId = new Map<string, any>()
+    ;(allApplications || []).forEach((app: any) => {
+      if (!app.user_id) return
+      const existing = latestAppsByUserId.get(app.user_id)
+      if (!existing) {
+        latestAppsByUserId.set(app.user_id, app)
+      }
+    })
+
+    const applicationIds = Array.from(latestAppsByUserId.values())
+      .map((app: any) => app.id)
+      .filter(Boolean)
+
+    // Batch fetch: Get GritSync accounts for all applications at once
+    const { data: gritsyncAccounts, error: accountsError } = applicationIds.length > 0
+      ? await supabase
+          .from('processing_accounts')
+          .select('application_id, email')
+          .in('application_id', applicationIds)
+          .eq('account_type', 'gritsync')
+      : { data: [], error: null }
+
+    if (accountsError) {
+      logError(normalizeError(accountsError, { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_gritsync_accounts' }), { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_gritsync_accounts' })
+    }
+
+    // Map GritSync accounts by application_id
+    const gritsyncByAppId = new Map<string, string>()
+    ;(gritsyncAccounts || []).forEach((acc: any) => {
+      if (acc.application_id && acc.email) {
+        gritsyncByAppId.set(acc.application_id, acc.email)
+      }
+    })
+
+    // Combine data
+    return clients.map((client: any) => {
+      const latestApp = latestAppsByUserId.get(client.id)
+      if (!latestApp) {
+        return { ...client, gmail_account: client.email }
+      }
+
+      const gritsyncEmail = gritsyncByAppId.get(latestApp.id)
+      if (gritsyncEmail) {
+        return { ...client, gmail_account: gritsyncEmail }
+      }
+
+      // No gritsync account found - fallback to client email
+      return { ...client, gmail_account: client.email }
+    })
+  },
+
   // Admin impersonation - login as user
   loginAsUser: async (userId: string) => {
     // This will be handled by a server endpoint that uses Supabase Admin API
@@ -2292,9 +3516,33 @@ export const dashboardAPI = {
     const userId = await getCurrentUserId()
     const admin = await isAdmin()
     
-    // Use Supabase directly (serverless)
-      if (admin) {
-        // Admin stats - comprehensive system-wide statistics
+    const mapStats = (row: any) => ({
+      totalApplications: row?.total_applications ?? row?.applications ?? 0,
+      pendingApplications: row?.pending_applications ?? row?.pending ?? 0,
+      completedApplications: row?.completed_applications ?? row?.completed ?? 0,
+      rejectedApplications: row?.rejected_applications ?? 0,
+      totalQuotations: row?.total_quotations ?? row?.quotations ?? 0,
+      pendingQuotations: row?.pending_quotations ?? 0,
+      paidQuotations: row?.paid_quotations ?? 0,
+      totalClients: row?.total_clients ?? 0,
+      revenue: Number(row?.revenue ?? 0),
+      applications: row?.total_applications ?? row?.applications ?? 0,
+      pending: row?.pending_applications ?? row?.pending ?? 0,
+      completed: row?.completed_applications ?? row?.completed ?? 0,
+      quotations: row?.total_quotations ?? row?.quotations ?? 0,
+    })
+    
+    // Use Supabase RPC for aggregated stats when available; fallback to legacy queries
+    if (admin) {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_stats', { is_admin: true })
+      if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+        return mapStats(rpcData[0])
+      }
+      if (rpcError) {
+        logError(normalizeError(rpcError, { operation: 'dashboardAPI.getStats', context: 'rpc_admin_fallback' }), { operation: 'dashboardAPI.getStats', context: 'rpc_admin_fallback' })
+      }
+
+      // Admin stats - comprehensive system-wide statistics (fallback path)
       const [
         applications,
         pendingApps,
@@ -2319,7 +3567,7 @@ export const dashboardAPI = {
       
       // Check for errors in queries
       if (completedApps.error) {
-        console.error('Error fetching completed apps:', completedApps.error)
+        logError(normalizeError(completedApps.error, { operation: 'dashboardAPI.getStats', context: 'fetch_completed_apps' }), { operation: 'dashboardAPI.getStats', context: 'fetch_completed_apps' })
       }
       
       // Fallback: If count queries fail, fetch all and count manually
@@ -2423,7 +3671,15 @@ export const dashboardAPI = {
         quotations: quotations.count || 0,
       }
     } else {
-      // Client stats
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_stats', { is_admin: false })
+      if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+        return mapStats(rpcData[0])
+      }
+      if (rpcError) {
+        logError(normalizeError(rpcError, { operation: 'dashboardAPI.getStats', context: 'rpc_client_fallback' }), { operation: 'dashboardAPI.getStats', context: 'rpc_client_fallback' })
+      }
+
+      // Client stats (fallback path)
       const [applications, quotations, payments] = await Promise.all([
         supabase.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('user_id', userId),
@@ -2573,8 +3829,7 @@ export const adminAPI = {
       
       return phpRate
     } catch (error: any) {
-      console.error('Error fetching USD to PHP rate:', error)
-      throw new Error(error.message || 'Failed to fetch real-time exchange rate')
+      throw normalizeError(error, { operation: 'adminAPI.fetchUsdToPhpRate', context: 'exchange_rate_fetch' })
     }
   },
 
@@ -2621,7 +3876,7 @@ export const adminAPI = {
 
       return rate
     } catch (error: any) {
-      console.error('Error getting USD to PHP rate:', error)
+      logError(normalizeError(error, { operation: 'adminAPI.getUsdToPhpRate' }), { operation: 'adminAPI.getUsdToPhpRate' })
       // Return default rate if error
       return 56.00
     }
@@ -2643,7 +3898,7 @@ export const adminAPI = {
       if (error) {
         // If table doesn't exist, return empty array (migration not run)
         if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
-          console.warn('notification_types table does not exist. Run migration: create_notification_types_table.sql')
+          logError(normalizeError(new Error('notification_types table does not exist. Run migration: create_notification_types_table.sql'), { operation: 'notificationsAPI.getNotificationTypes', context: 'missing_table' }), { operation: 'notificationsAPI.getNotificationTypes', context: 'missing_table', severity: 'low' })
           return []
         }
         throw new Error(error.message)
@@ -2652,7 +3907,7 @@ export const adminAPI = {
     } catch (error: any) {
       // Handle case where table doesn't exist
       if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('notification_types table does not exist. Run migration: create_notification_types_table.sql')
+        logError(normalizeError(new Error('notification_types table does not exist. Run migration: create_notification_types_table.sql'), { operation: 'notificationsAPI.getNotificationTypes', context: 'missing_table' }), { operation: 'notificationsAPI.getNotificationTypes', context: 'missing_table', severity: 'low' })
         return []
       }
       throw error
@@ -2729,6 +3984,22 @@ export const adminAPI = {
 }
 
 // Application Payments API
+// Helper function to calculate GritSync service fee based on payment type
+// This is the portion that promo codes can discount
+const calculateServiceFee = (paymentType: 'step1' | 'step2' | 'full'): number => {
+  const FULL_SERVICE_FEE = 150.00
+  
+  switch(paymentType) {
+    case 'full':
+      return FULL_SERVICE_FEE
+    case 'step1':
+    case 'step2':
+      return FULL_SERVICE_FEE / 2 // $75 per step
+    default:
+      return FULL_SERVICE_FEE
+  }
+}
+
 export const applicationPaymentsAPI = {
   checkRetaker: async () => {
     const userId = await getCurrentUserId()
@@ -2745,12 +4016,21 @@ export const applicationPaymentsAPI = {
   },
 
   create: async (applicationId: string, paymentType: 'step1' | 'step2' | 'full', amount: number) => {
-    const userId = await getCurrentUserId()
+    // Invalidate payment cache when creating new payment
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      invalidateApplicationCache(applicationId)
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
+    
+    const currentUserId = await getCurrentUserId()
     
     // Resolve application ID (could be grit_app_id or UUID)
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
     
     let actualApplicationId = applicationId
+    let applicationOwnerId: string | undefined = undefined
     
     if (isGritAppId) {
       // Look up the application by grit_app_id to get the UUID
@@ -2764,9 +4044,12 @@ export const applicationPaymentsAPI = {
         throw new Error(appError?.message || 'Application not found')
       }
       
-      // Check if user owns the application
+      // Get application owner's user_id
       const appData = application as { user_id?: string }
-      if (appData.user_id !== userId) {
+      applicationOwnerId = appData.user_id
+      
+      // Check if user owns the application or is admin
+      if (appData.user_id !== currentUserId) {
         const admin = await isAdmin()
         if (!admin) {
           throw new Error('Unauthorized')
@@ -2775,15 +4058,44 @@ export const applicationPaymentsAPI = {
       
       const typedApp = application as { id?: string }
       actualApplicationId = typedApp.id || ''
+    } else {
+      // For UUID, fetch application to get user_id
+      const { data: application, error: appError } = await supabase
+        .from('applications')
+        .select('id, user_id')
+        .eq('id', applicationId)
+        .single()
+      
+      if (appError || !application) {
+        throw new Error(appError?.message || 'Application not found')
+      }
+      
+      const appData = application as { user_id?: string }
+      applicationOwnerId = appData.user_id
+      
+      // Check if user owns the application or is admin
+      if (appData.user_id !== currentUserId) {
+        const admin = await isAdmin()
+        if (!admin) {
+          throw new Error('Unauthorized')
+        }
+      }
     }
+    
+    // Use application owner's user_id (not admin's user_id) so client can see the payment
+    const paymentUserId = applicationOwnerId || currentUserId
+    
+    // Calculate service fee amount for this payment type
+    const serviceFeeAmount = calculateServiceFee(paymentType)
     
     const { data, error } = await supabase
       .from('application_payments')
       .insert({
         application_id: actualApplicationId,
-        user_id: userId,
+        user_id: paymentUserId, // Use application owner's user_id, not admin's
         payment_type: paymentType,
         amount,
+        service_fee_amount: serviceFeeAmount,
         status: 'pending',
       })
       .select('*')
@@ -2798,24 +4110,43 @@ export const applicationPaymentsAPI = {
     const context = { operation: 'applicationPaymentsAPI.createPaymentIntent', paymentId }
     
     try {
-      // Get the current session to ensure we have auth token
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError || !session) {
-        throw normalizeError(
-          sessionError || new Error('Not authenticated. Please log in and try again.'),
-          { ...context, step: 'getSession' }
-        )
+      // Get session if available (application payments can be made by anyone with the link)
+      let authHeader: string | undefined = undefined
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        // Only use session if it exists and is valid
+        if (!sessionError && session?.access_token) {
+          // Verify the token is still valid
+          const { error: userError } = await supabase.auth.getUser()
+          if (!userError) {
+            authHeader = `Bearer ${session.access_token}`
+            // Using authenticated session for payment intent
+          } else {
+            // Session token invalid, proceeding as public user
+          }
+        } else {
+          // No session found, proceeding as public user
+        }
+      } catch (sessionCheckError) {
+        // If session check fails, proceed as public user (no auth header)
+        logError(normalizeError(sessionCheckError, { operation: 'applicationPaymentsAPI.createPaymentIntent', context: 'session_check' }), { operation: 'applicationPaymentsAPI.createPaymentIntent', context: 'session_check', severity: 'low' })
       }
       
       // Call Supabase Edge Function for Stripe payment intent creation with retry logic
       const executeInvoke = async () => {
-        const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+        const invokeOptions: any = {
           body: { payment_id: paymentId },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        })
+        }
+        
+        // Only add auth header if we have a valid session
+        if (authHeader) {
+          invokeOptions.headers = {
+            Authorization: authHeader,
+          }
+        }
+        
+        const { data, error } = await supabase.functions.invoke('create-application-payment-intent', invokeOptions)
         
         if (error) {
           // Try to extract error message from response body
@@ -2910,190 +4241,425 @@ export const applicationPaymentsAPI = {
     gcashDetails?: { number: string; reference: string },
     proofOfPaymentFile?: File
   ) => {
-    const userId = await getCurrentUserId()
+    // Allow public access for checkout (payment can be completed by anyone with the link)
+    // Fetch payment data BEFORE update to avoid RLS issues after update
+    // This ensures we have the data needed for receipt creation
+    let userId: string | undefined
+    let originalPaymentData: any = null
+    
+    try {
+      userId = await getCurrentUserId()
+    } catch {
+      // User not authenticated, proceed as public user
+    }
+    
+    // Fetch payment data before update (needed for receipt creation and to get user_id)
+    try {
+      const { data: paymentData, error: fetchError } = await supabase
+        .from('application_payments')
+        .select('*')
+        .eq('id', paymentId)
+        .maybeSingle()
+      
+      if (paymentData) {
+        originalPaymentData = paymentData
+        const typedPayment = paymentData as { user_id?: string }
+        userId = typedPayment.user_id || userId
+      } else if (fetchError && !userId) {
+        // If we can't fetch and no userId, try minimal fetch for user_id only
+        const { data: minimalData } = await supabase
+          .from('application_payments')
+          .select('user_id')
+          .eq('id', paymentId)
+          .maybeSingle()
+        
+        if (minimalData) {
+          const typedMinimal = minimalData as { user_id?: string }
+          userId = typedMinimal.user_id
+        }
+      }
+    } catch (err) {
+      // If fetch fails completely, continue with update anyway
+      // We'll create minimal payment data for receipt if needed
+    }
     
     // Upload proof of payment file if provided (for mobile banking)
     let proofOfPaymentFilePath: string | undefined
     if (proofOfPaymentFile) {
       try {
-        proofOfPaymentFilePath = await uploadFile(userId, proofOfPaymentFile, 'proof_of_payment')
-      } catch (error: any) {
-        throw new Error(`Failed to upload proof of payment: ${error.message}`)
+        // Validate file before upload
+        if (!proofOfPaymentFile.name || proofOfPaymentFile.size === 0) {
+          throw new Error('Invalid file: File appears to be empty or corrupted')
+        }
+
+        // Validate file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024
+        if (proofOfPaymentFile.size > maxSize) {
+          throw new Error('File size exceeds 10MB limit')
+        }
+
+        // Simple upload - no compression or processing
+        const fileExt = (proofOfPaymentFile.name.split('.').pop() || '').toLowerCase()
+        const fileName = `proof_of_payment_${paymentId}_${Date.now()}.${fileExt}`
+        // Use paymentId as folder if userId is not available (public checkout)
+        const filePath = userId ? `${userId}/payments/${fileName}` : `public/payments/${fileName}`
+
+        // Determine correct MIME type from file extension (more reliable than File.type)
+        let contentType = proofOfPaymentFile.type
+        if (!contentType || contentType === 'application/octet-stream' || contentType === 'application/json') {
+          // Fallback: detect MIME type from file extension
+          const mimeTypes: { [key: string]: string } = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp',
+            'pdf': 'application/pdf',
+          }
+          contentType = mimeTypes[fileExt] || 'application/octet-stream'
+        }
+
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        if (!allowedTypes.includes(contentType)) {
+          throw new Error(`Unsupported file type: ${contentType}. Please upload JPG, PNG, WebP, or PDF files.`)
+        }
+
+        console.log('🔧 PROOF OF PAYMENT UPLOAD v5.0 (BINARY ARRAYBUFFER - NO JSON) 🔧')
+        console.log('Uploading proof of payment:', {
+          fileName,
+          fileSize: proofOfPaymentFile.size,
+          originalType: proofOfPaymentFile.type,
+          detectedType: contentType,
+          fileExtension: fileExt,
+          filePath
+        })
+
+        // Convert File to Blob with explicit type
+        const arrayBuffer = await proofOfPaymentFile.arrayBuffer()
+        const blob = new Blob([arrayBuffer], { type: contentType })
+        
+        console.log('Created Blob (Supabase will auto-detect from Blob.type):', {
+          blobSize: blob.size,
+          blobType: blob.type,
+          originalFileSize: proofOfPaymentFile.size,
+          note: 'NOT setting contentType explicitly - letting Blob.type be used'
+        })
+
+        // Try REST API upload as workaround for SDK contentType issue
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const token = session?.access_token
+          
+          if (!token) {
+            throw new Error('No authentication token available')
+          }
+
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+          const uploadUrl = `${supabaseUrl}/storage/v1/object/documents/${filePath}`
+          
+          console.log('Uploading via REST API:', {
+            url: uploadUrl,
+            blobType: blob.type,
+            blobSize: blob.size
+          })
+
+          const response = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': blob.type,  // Set as request header
+              'x-upsert': 'false',
+            },
+            body: blob
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('REST API upload error:', response.status, errorText)
+            throw new Error(`Upload failed: ${response.status} ${errorText}`)
+          }
+
+          console.log('REST API upload successful!', await response.json())
+        } catch (restError: any) {
+          console.error('REST API upload failed, falling back to SDK:', restError)
+          
+          // Fallback to SDK method
+          const { error: uploadError } = await supabase.storage
+            .from('documents')
+            .upload(filePath, blob, {
+              cacheControl: '3600',
+              upsert: false,
+            })
+
+          if (uploadError) {
+            console.error('SDK upload error:', uploadError)
+            throw new Error(`Failed to upload proof of payment: ${uploadError.message}`)
+          }
+        }
+        
+        console.log('Proof of payment uploaded successfully:', filePath, '| Blob.type was:', blob.type, '| Should auto-detect in Supabase')
+        proofOfPaymentFilePath = filePath
+      } catch (uploadErr: any) {
+        console.error('Proof of payment upload failed:', uploadErr)
+        throw new Error(`Upload failed: ${uploadErr.message || 'Unknown error'}`)
       }
     }
-
-    const updateData: any = {
+    
+    // Determine payment status based on payment method
+    let paymentStatus: 'paid' | 'pending_approval' = 'paid'
+    if (paymentMethod === 'gcash' || paymentMethod === 'mobile_banking') {
+      paymentStatus = 'pending_approval' // Manual verification required
+    }
+    
+    // Update payment record
+    // Note: Don't manually set updated_at - it's handled by database trigger
+    const updatePayload: any = {
+      status: paymentStatus,
       payment_method: paymentMethod,
     }
     
-    // Only set transaction_id if provided
     if (transactionId) {
-      updateData.transaction_id = transactionId
+      updatePayload.transaction_id = transactionId
     }
-
-    // Store USD to PHP conversion rate for PHP-convertible payment methods (mobile_banking and gcash)
-    // Only set if the column exists (migration may not have been run yet)
-    if (paymentMethod === 'mobile_banking' || paymentMethod === 'gcash') {
-      try {
-        const conversionRate = await adminAPI.getUsdToPhpRate()
-        // Try to set the rate, but don't fail if column doesn't exist
-        updateData.usd_to_php_rate = conversionRate
-      } catch (error) {
-        // If rate fetch fails, use default rate
-        updateData.usd_to_php_rate = 56.00
-      }
+    
+    if (stripePaymentIntentId) {
+      updatePayload.stripe_payment_intent_id = stripePaymentIntentId
     }
-
-    // Set status based on payment method
-    if (paymentMethod === 'mobile_banking') {
-      // Mobile banking requires admin approval
-      updateData.status = 'pending_approval'
-      if (proofOfPaymentFilePath) {
-        updateData.proof_of_payment_file_path = proofOfPaymentFilePath
-      }
-    } else if (paymentMethod === 'gcash') {
-      // GCash also requires manual verification (keep as pending_approval or paid based on webhook)
-      // For manual GCash payments, status will be 'pending_approval' until admin verifies
-      updateData.status = 'pending_approval'
-      if (gcashDetails) {
-        updateData.transaction_id = `GCASH-${gcashDetails.reference}`
+    
+    if (proofOfPaymentFilePath) {
+      updatePayload.proof_of_payment_file_path = proofOfPaymentFilePath
+    }
+    
+    // Add GCash details ONLY if payment method is explicitly 'gcash'
+    // Note: These columns need to exist in the database (run migration: add-gcash-columns-to-payments.sql)
+    // For mobile_banking, we don't use GCash fields - only proof_of_payment_file_path
+    if (paymentMethod === 'gcash' && gcashDetails && gcashDetails.number && gcashDetails.reference) {
+      updatePayload.gcash_number = gcashDetails.number
+      updatePayload.gcash_reference = gcashDetails.reference
+    }
+    
+    // Log the update payload for debugging (without sensitive data)
+    console.log('Updating payment with payload:', {
+      paymentId,
+      status: updatePayload.status,
+      payment_method: updatePayload.payment_method,
+      hasTransactionId: !!updatePayload.transaction_id,
+      hasStripeIntentId: !!updatePayload.stripe_payment_intent_id,
+      hasProofOfPayment: !!updatePayload.proof_of_payment_file_path,
+      hasGcashDetails: !!updatePayload.gcash_number,
+    })
+    
+    // Update payment record
+    // Don't select after update to avoid RLS 406 errors - update and fetch separately
+    const { error: updateError } = await supabase
+      .from('application_payments')
+      .update(updatePayload)
+      .eq('id', paymentId)
+    
+    if (updateError) {
+      console.error('Payment update error:', {
+        error: updateError,
+        code: updateError.code,
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        payload: updatePayload,
+      })
+      throw new Error(`Failed to update payment: ${updateError.message || updateError.details || 'Unknown error'}`)
+    }
+    
+    // Use original payment data merged with update payload (avoids RLS fetch after update)
+    // This prevents 406 errors from trying to fetch after update
+    let paymentData: any = null
+    if (originalPaymentData) {
+      // Merge update payload into original data
+      paymentData = {
+        ...originalPaymentData,
+        ...updatePayload,
       }
     } else {
-      // Stripe card payments are automatically paid
-      // Set status to 'paid' immediately for better UX
-      // Webhook will also update but will check for duplicates
-      updateData.status = 'paid'
-      if (stripePaymentIntentId) {
-        updateData.stripe_payment_intent_id = stripePaymentIntentId
-        updateData.transaction_id = stripePaymentIntentId
-      }
-    }
-
-
-    // First, try to update with all fields
-    let { data, error } = await supabase
-      .from('application_payments')
-      .update(updateData)
-      .eq('id', paymentId)
-      .select()
-      .single()
-    
-    if (error) {
-      // Handle missing column errors
-      if (error.message?.includes('usd_to_php_rate') || error.code === 'PGRST204') {
-        
-        const { usd_to_php_rate, ...updateWithoutRate } = updateData
-        const retryResult = await supabase
-          .from('application_payments')
-          .update(updateWithoutRate)
-          .eq('id', paymentId)
-          .select()
-          .single()
-        
-        if (retryResult.error) {
-          // Check if it's a status constraint error
-          if (retryResult.error.message?.includes('status') || retryResult.error.message?.includes('pending_approval')) {
-            throw new Error('The status "pending_approval" is not allowed. Please run the migration: supabase/add-mobile-banking-proof-of-payment.sql')
-          }
-          
-          throw new Error(retryResult.error.message || 'Failed to update payment')
-        }
-        
-        return retryResult.data
-      }
-      
-      // Check if it's a status constraint error
-      if (error.message?.includes('status') || error.message?.includes('pending_approval') || error.message?.includes('constraint')) {
-        throw new Error('The payment status constraint failed. Please ensure these migrations are run: supabase/add-mobile-banking-proof-of-payment.sql and supabase/add-usd-to-php-rate-to-payments.sql')
-      }
-      
-      throw new Error(error.message || 'Failed to update payment')
+      // Fallback: create minimal payment object if we couldn't fetch original
+      paymentData = {
+        id: paymentId,
+        application_id: undefined,
+        amount: undefined,
+        payment_type: undefined,
+        status: updatePayload.status,
+        payment_method: updatePayload.payment_method,
+        user_id: userId,
+      } as any
     }
     
-    // Auto-update timeline steps when payment is completed (status = 'paid')
-    // Note: For Stripe payments, webhook also updates timeline (idempotent upsert)
-    // This ensures timeline is updated even if webhook is delayed
-    const typedData = data as unknown as { status?: string } | null
-    if (typedData && typedData.status === 'paid') {
+    // Invalidate payment cache
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      const typedPayment = paymentData as { application_id?: string }
+      if (typedPayment.application_id) {
+        invalidateApplicationCache(typedPayment.application_id)
+      }
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
+    
+    // RECEIPT AND EMAIL FLOW:
+    // 1. Stripe payments (credit card): Create receipt and send email immediately upon payment success
+    // 2. Mobile banking/GCash: Receipt and email will be created/sent only after admin approval
+    //    (See approvePayment function for mobile banking/GCash receipt creation)
+    if (paymentMethod === 'stripe' && paymentData) {
       try {
-        // Get the payment with application_id
-        const { data: paymentWithApp } = await supabase
-          .from('application_payments')
-          .select('application_id, payment_type, amount')
-          .eq('id', paymentId)
-          .single()
+        const typedPayment = paymentData as { 
+          application_id?: string
+          amount?: number
+          payment_type?: string
+        }
         
-        if (paymentWithApp) {
-          const paymentData = paymentWithApp as { application_id?: string; payment_type?: string; amount?: number | string }
-          const applicationId = paymentData.application_id
-          const paymentType = paymentData.payment_type
-          
-          // Get all paid payments for this application to calculate total
-          const { data: allPayments } = await supabase
-            .from('application_payments')
-            .select('amount, payment_type')
-            .eq('application_id', applicationId)
-            .eq('status', 'paid')
-          
-          // Calculate total amount paid
-          const typedPayments = allPayments as Array<{ amount?: number | string }> | null
-          const totalAmountPaid = typedPayments?.reduce((sum, p) => sum + (parseFloat(String(p.amount || 0)) || 0), 0) || 0
-          
-          // Update timeline step based on payment type
-          if (applicationId) {
-            if (paymentType === 'step1') {
-              await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-                amount: paymentData.amount,
-                total_amount_paid: totalAmountPaid,
-                payment_method: paymentMethod,
-                completed_at: new Date().toISOString()
-              })
-            } else if (paymentType === 'step2') {
-              await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-                amount: paymentData.amount,
-                total_amount_paid: totalAmountPaid,
-                payment_method: paymentMethod,
-                completed_at: new Date().toISOString()
-              })
-            } else if (paymentType === 'full') {
-              // For full payment, update both step1 and step2 as completed
-              await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-                amount: paymentData.amount,
-                total_amount_paid: totalAmountPaid,
-                payment_method: paymentMethod,
-                completed_at: new Date().toISOString()
-              })
-              await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-                amount: paymentData.amount,
-                total_amount_paid: totalAmountPaid,
-                payment_method: paymentMethod,
-                completed_at: new Date().toISOString()
-              })
+        // Generate receipt
+        const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+        
+        // Get user_id from payment if not available
+        let receiptUserId = userId
+        if (!receiptUserId) {
+          const typedPaymentWithUserId = paymentData as { user_id?: string }
+          receiptUserId = typedPaymentWithUserId.user_id
+        }
+        
+        // Try to fetch service details for proper line items
+        let receiptItems: Array<{ name: string; amount: number }> = [
+          {
+            name: `NCLEX Application Processing (${typedPayment.payment_type})`,
+            amount: typedPayment.amount,
+          },
+        ]
+        
+        if (typedPayment.application_id) {
+          try {
+            // Fetch application to get service details
+            const { data: appData } = await supabase
+              .from('applications')
+              .select('application_type, province, payment_type')
+              .eq('id', typedPayment.application_id)
+              .single()
+            
+            if (appData) {
+              const applicationType = appData.application_type || 'NCLEX'
+              const isEAD = applicationType === 'EAD'
+              const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
+              const serviceState = isEAD ? 'All States' : (appData.province || 'New York')
+              const dbPaymentType = appData.payment_type || typedPayment.payment_type
+              const servicePaymentType = (dbPaymentType === 'full' ? 'full' : 'staggered') as 'full' | 'staggered'
+              
+              // Fetch service to get line items
+              const { servicesAPI } = await import('./api')
+              const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, servicePaymentType)
+              
+              if (service && service.line_items) {
+                // Filter line items based on payment type
+                let filteredItems: any[] = []
+                if (typedPayment.payment_type === 'step1' && servicePaymentType === 'staggered') {
+                  filteredItems = (service.line_items as any[]).filter((item: any) => item.step === 1 || !item.step)
+                } else if (typedPayment.payment_type === 'step2' && servicePaymentType === 'staggered') {
+                  filteredItems = (service.line_items as any[]).filter((item: any) => item.step === 2)
+                } else if (typedPayment.payment_type === 'full') {
+                  filteredItems = service.line_items as any[]
+                }
+                
+                if (filteredItems.length > 0) {
+                  receiptItems = filteredItems.map((item: any) => ({
+                    name: item.description || item.name || 'Service Item',
+                    amount: item.amount || 0,
+                  }))
+                }
+              }
             }
+          } catch (serviceError) {
+            // If service fetch fails, use default items
+            console.warn('Failed to fetch service details for receipt items:', serviceError)
           }
         }
-      } catch {
-        // Silently handle timeline update errors
+        
+        const { data: receipt, error: receiptError } = await supabase
+          .from('receipts')
+          .insert({
+            payment_id: paymentId,
+            application_id: typedPayment.application_id,
+            user_id: receiptUserId,
+            receipt_number: receiptNumber,
+            amount: typedPayment.amount,
+            payment_type: typedPayment.payment_type,
+            items: receiptItems,
+          })
+          .select('*')
+          .single()
+        
+        if (receiptError) {
+          console.error('Failed to create receipt:', receiptError)
+          // Don't throw error, payment is still complete
+        } else if (receipt) {
+          // Send email with PDF attachments asynchronously (don't wait for it)
+          try {
+            // Fetch application and user data for email
+            let applicationData: any = null
+            let userData: any = null
+            
+            if (typedPayment.application_id) {
+              const { data: appData } = await supabase
+                .from('applications')
+                .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                .eq('id', typedPayment.application_id)
+                .single()
+              applicationData = appData
+            }
+            
+            if (receiptUserId) {
+              const { data: uData } = await supabase
+                .from('users')
+                .select('id, email, full_name, first_name, last_name')
+                .eq('id', receiptUserId)
+                .single()
+              userData = uData
+            }
+            
+            // Send email with attachments (fire and forget)
+            const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
+            sendPaymentReceiptEmailWithAttachments({
+              receipt: receipt as any,
+              payment: payment as any,
+              application: applicationData,
+              user: userData,
+            }).catch((emailError) => {
+              console.error('Error sending payment receipt email:', emailError)
+              // Don't throw - email failure shouldn't fail payment
+            })
+          } catch (emailErr) {
+            console.error('Error preparing payment receipt email:', emailErr)
+            // Don't throw - email failure shouldn't fail payment
+          }
+        }
+        
+        return { payment: paymentData, receipt }
+      } catch (receiptErr) {
+        console.error('Receipt generation error:', receiptErr)
+        return { payment: paymentData }
       }
     }
     
-    return data
+    return { payment: paymentData }
   },
 
   getByApplication: async (applicationId: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
     // Resolve application ID (could be grit_app_id or UUID)
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
     
-    let actualApplicationId = applicationId
+    let query = supabase
+      .from('application_payments')
+      .select('*')
+      .order('created_at', { ascending: false })
     
     if (isGritAppId) {
-      // Look up the application by grit_app_id to get the UUID
+      // First get the application UUID from grit_app_id
       const { data: application, error: appError } = await supabase
         .from('applications')
-        .select('id, user_id')
+        .select('id')
         .eq('grit_app_id', applicationId.toUpperCase())
         .single()
       
@@ -3101,37 +4667,13 @@ export const applicationPaymentsAPI = {
         throw new Error(appError?.message || 'Application not found')
       }
       
-      // Check if user owns the application or is admin
-      const appCheckData = application as { user_id?: string; id?: string }
-      if (!admin && appCheckData.user_id !== userId) {
-        throw new Error('Unauthorized')
-      }
-      
-      actualApplicationId = appCheckData.id || ''
+      const typedApp = application as { id?: string }
+      query = query.eq('application_id', typedApp.id || '')
     } else {
-      // If it's a UUID, verify the user has access to this application
-      const { data: application, error: appError } = await supabase
-        .from('applications')
-        .select('user_id')
-        .eq('id', applicationId)
-        .single()
-      
-      if (appError || !application) {
-        throw new Error(appError?.message || 'Application not found')
-      }
-      
-      // Check if user owns the application or is admin
-      const appCheckData = application as { user_id?: string }
-      if (!admin && appCheckData.user_id !== userId) {
-        throw new Error('Unauthorized')
-      }
+      query = query.eq('application_id', applicationId)
     }
     
-    const { data, error } = await supabase
-      .from('application_payments')
-      .select('*')
-      .eq('application_id', actualApplicationId)
-      .order('created_at', { ascending: false })
+    const { data, error } = await query
     
     if (error) throw new Error(error.message)
     return data || []
@@ -3144,559 +4686,440 @@ export const applicationPaymentsAPI = {
       .eq('payment_id', paymentId)
       .single()
     
-    if (error) throw new Error(error.message)
-    return data as Tables<'user_documents'>
-  },
-
-  // Admin methods for approving/rejecting payments
-  getPendingApproval: async () => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Admin access required')
+    if (error) {
+      // If receipt doesn't exist, return null instead of throwing
+      if (error.code === 'PGRST116') {
+        return null
+      }
+      throw new Error(error.message)
     }
-
-    const { data, error } = await supabase
-      .from('application_payments')
-      .select(`
-        *,
-        applications!inner(
-          id,
-          grit_app_id,
-          first_name,
-          last_name,
-          email
-        )
-      `)
-      .eq('status', 'pending_approval')
-      .order('created_at', { ascending: false })
     
-    if (error) throw new Error(error.message)
-    return data || []
+    return data
   },
 
   approvePayment: async (paymentId: string) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Admin access required')
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-
-    // Get payment details before updating to check previous status
-    const { data: paymentBefore } = await supabase
+    
+    // Get current USD to PHP rate for GCash/mobile banking payments
+    const { data: payment, error: fetchError } = await supabase
       .from('application_payments')
-      .select('user_id, application_id, payment_type, amount, status')
+      .select('payment_method, amount')
       .eq('id', paymentId)
       .single()
-
-    const { data, error } = await supabase
+    
+    if (fetchError) {
+      throw new Error(`Failed to fetch payment: ${fetchError.message}`)
+    }
+    
+    const updatePayload: any = {
+      status: 'paid',
+      updated_at: new Date().toISOString(),
+    }
+    
+    // For GCash and mobile banking payments, fetch USD to PHP rate
+    if (payment && (payment.payment_method === 'gcash' || payment.payment_method === 'mobile_banking')) {
+      try {
+        const { adminAPI } = await import('./api')
+        const rate = await adminAPI.getUsdToPhpRate()
+        updatePayload.usd_to_php_rate = rate
+      } catch (rateError) {
+        // If rate fetch fails, continue without it
+        console.warn('Failed to fetch USD to PHP rate:', rateError)
+      }
+    }
+    
+    const { data: updatedPayment, error: updateError } = await supabase
       .from('application_payments')
-      .update({ status: 'paid' })
+      .update(updatePayload)
       .eq('id', paymentId)
-      .select('application_id, payment_type, amount, payment_method, user_id')
+      .select('*')
       .single()
     
-    if (error) throw new Error(error.message)
+    if (updateError) {
+      throw new Error(`Failed to approve payment: ${updateError.message}`)
+    }
     
-    // Create notification if payment status changed to paid
-    const paymentData = data as { user_id?: string; payment_type?: string; amount?: number | string; application_id?: string; payment_method?: string } | null
-    const beforeData = paymentBefore as { status?: string } | null
-    if (paymentData && beforeData && beforeData.status !== 'paid' && paymentData.user_id) {
-      const paymentTypeNames: Record<string, string> = {
-        'step1': 'Step 1',
-        'step2': 'Step 2',
-        'full': 'Full Payment'
+    // RECEIPT AND EMAIL FLOW FOR MANUAL PAYMENTS:
+    // When admin approves a mobile banking or GCash payment, create receipt and send email
+    // This is the second instance of receipt sending (first is for Stripe in complete function)
+    // Create receipt for approved payment if it doesn't exist
+    if (updatedPayment) {
+      const typedPayment = updatedPayment as { 
+        id?: string
+        application_id?: string
+        amount?: number
+        payment_type?: string
+        user_id?: string
       }
       
-      await notificationsAPI.create(
-        'Payment Approved',
-        `Your ${paymentTypeNames[paymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(paymentData.amount || 0)).toFixed(2)} has been approved and processed successfully.`,
-        'payment',
-        paymentData.application_id
-      )
-    }
-    
-    // Auto-update timeline steps when payment is approved
-    if (paymentData) {
-      try {
-        const applicationId = paymentData.application_id
-        const paymentType = paymentData.payment_type
-        
-        // Get all paid payments for this application to calculate total
-        const { data: allPayments } = await supabase
-          .from('application_payments')
-          .select('amount, payment_type')
-          .eq('application_id', applicationId)
-          .eq('status', 'paid')
-        
-        // Calculate total amount paid
-        const typedAllPayments = allPayments as Array<{ amount?: number | string }> | null
-        const totalAmountPaid = typedAllPayments?.reduce((sum, p) => sum + (parseFloat(String(p.amount || 0)) || 0), 0) || 0
-        
-        // Update timeline step based on payment type
-        if (applicationId) {
-          if (paymentType === 'step1') {
-            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-              amount: paymentData.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentData.payment_method || 'mobile_banking',
-              completed_at: new Date().toISOString()
-            })
-          } else if (paymentType === 'step2') {
-            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-              amount: paymentData.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentData.payment_method || 'mobile_banking',
-              completed_at: new Date().toISOString()
-            })
-          } else if (paymentType === 'full') {
-            // For full payment, update both step1 and step2 as completed
-            await timelineStepsAPI.update(applicationId, 'app_paid', 'completed', {
-              amount: paymentData.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentData.payment_method || 'stripe',
-              completed_at: new Date().toISOString()
-            })
-            await timelineStepsAPI.update(applicationId, 'app_step2_paid', 'completed', {
-              amount: paymentData.amount,
-              total_amount_paid: totalAmountPaid,
-              payment_method: paymentData.payment_method || 'stripe',
-              completed_at: new Date().toISOString()
-            })
+      // Check if receipt already exists
+      const { data: existingReceipt } = await supabase
+        .from('receipts')
+        .select('id')
+        .eq('payment_id', paymentId)
+        .maybeSingle()
+      
+      if (!existingReceipt && typedPayment.id) {
+        try {
+          const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+          
+          // Try to fetch service details for proper line items
+          let receiptItems: Array<{ name: string; amount: number }> = [
+            {
+              name: `NCLEX Application Processing (${typedPayment.payment_type})`,
+              amount: typedPayment.amount,
+            },
+          ]
+          
+          if (typedPayment.application_id) {
+            try {
+              // Fetch application to get service details
+              const { data: appData } = await supabase
+                .from('applications')
+                .select('application_type, province, payment_type')
+                .eq('id', typedPayment.application_id)
+                .single()
+              
+              if (appData) {
+                const applicationType = appData.application_type || 'NCLEX'
+                const isEAD = applicationType === 'EAD'
+                const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
+                const serviceState = isEAD ? 'All States' : (appData.province || 'New York')
+                const dbPaymentType = appData.payment_type || typedPayment.payment_type
+                const servicePaymentType = (dbPaymentType === 'full' ? 'full' : 'staggered') as 'full' | 'staggered'
+                
+                // Fetch service to get line items
+                const { servicesAPI } = await import('./api')
+                const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, servicePaymentType)
+                
+                if (service && service.line_items) {
+                  // Filter line items based on payment type
+                  let filteredItems: any[] = []
+                  if (typedPayment.payment_type === 'step1' && servicePaymentType === 'staggered') {
+                    filteredItems = (service.line_items as any[]).filter((item: any) => item.step === 1 || !item.step)
+                  } else if (typedPayment.payment_type === 'step2' && servicePaymentType === 'staggered') {
+                    filteredItems = (service.line_items as any[]).filter((item: any) => item.step === 2)
+                  } else if (typedPayment.payment_type === 'full') {
+                    filteredItems = service.line_items as any[]
+                  }
+                  
+                  if (filteredItems.length > 0) {
+                    receiptItems = filteredItems.map((item: any) => ({
+                      name: item.description || item.name || 'Service Item',
+                      amount: item.amount || 0,
+                    }))
+                    // Calculate tax for taxable items
+                    const TAX_RATE = 0.12
+                    const subtotal = receiptItems.reduce((sum, item) => sum + item.amount, 0)
+                    const tax = filteredItems.reduce((sum: number, item: any) => {
+                      return sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0)
+                    }, 0)
+                    const total = subtotal + tax
+                    
+                    // If total doesn't match payment amount, adjust the last item
+                    if (Math.abs(total - typedPayment.amount) > 0.01) {
+                      const difference = typedPayment.amount - total
+                      if (receiptItems.length > 0) {
+                        receiptItems[receiptItems.length - 1].amount += difference
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (serviceError) {
+              // If service fetch fails, use default items
+              console.warn('Failed to fetch service details for receipt items:', serviceError)
+            }
           }
+          
+          const { data: receipt, error: receiptError } = await supabase
+            .from('receipts')
+            .insert({
+              payment_id: typedPayment.id,
+              application_id: typedPayment.application_id,
+              user_id: typedPayment.user_id,
+              receipt_number: receiptNumber,
+              amount: typedPayment.amount,
+              payment_type: typedPayment.payment_type,
+              items: receiptItems,
+            })
+            .select('*')
+            .single()
+          
+          if (receiptError) {
+            console.error('Failed to create receipt:', receiptError)
+            // Don't throw error, payment is still approved
+          } else if (receipt) {
+            // Send email with PDF attachments asynchronously (don't wait for it)
+            try {
+              // Fetch application and user data for email
+              let applicationData: any = null
+              let userData: any = null
+              
+              if (typedPayment.application_id) {
+                const { data: appData } = await supabase
+                  .from('applications')
+                  .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                  .eq('id', typedPayment.application_id)
+                  .single()
+                applicationData = appData
+              }
+              
+              if (typedPayment.user_id) {
+                const { data: uData } = await supabase
+                  .from('users')
+                  .select('id, email, full_name, first_name, last_name')
+                  .eq('id', typedPayment.user_id)
+                  .single()
+                userData = uData
+              }
+              
+              // Send email with attachments (fire and forget)
+              const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
+              sendPaymentReceiptEmailWithAttachments({
+                receipt: receipt as any,
+                payment: updatedPayment as any,
+                application: applicationData,
+                user: userData,
+              }).catch((emailError) => {
+                console.error('Error sending payment receipt email:', emailError)
+                // Don't throw - email failure shouldn't fail payment approval
+              })
+            } catch (emailErr) {
+              console.error('Error preparing payment receipt email:', emailErr)
+              // Don't throw - email failure shouldn't fail payment approval
+            }
+          }
+        } catch (receiptErr) {
+          console.error('Receipt generation error:', receiptErr)
         }
-      } catch (timelineError: any) {
-        // Log error but don't fail the payment approval
       }
     }
     
-    return data
+    // Invalidate payment cache
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      const typedPayment = updatedPayment as { application_id?: string }
+      if (typedPayment.application_id) {
+        invalidateApplicationCache(typedPayment.application_id)
+      }
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
+    
+    return updatedPayment
   },
 
   rejectPayment: async (paymentId: string, reason?: string) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Admin access required')
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-
-    // Get payment details before updating to check previous status
-    const { data: paymentBefore } = await supabase
+    
+    // First, fetch the payment to get its details
+    const { data: existingPayment, error: fetchError } = await supabase
       .from('application_payments')
-      .select('user_id, application_id, payment_type, amount, status')
+      .select('*')
       .eq('id', paymentId)
       .single()
-
-    const { data, error } = await supabase
+    
+    if (fetchError) throw new Error(fetchError.message)
+    if (!existingPayment) throw new Error('Payment not found')
+    
+    const payment = existingPayment as any
+    
+    // Update the rejected payment
+    const updatePayload: any = {
+      status: 'failed',
+      updated_at: new Date().toISOString(),
+    }
+    
+    if (reason) {
+      updatePayload.admin_note = reason
+    }
+    
+    const { error: updateError } = await supabase
       .from('application_payments')
-      .update({ 
-        status: 'failed',
-        transaction_id: 'REJECTED',
-        admin_note: reason || undefined
-      })
+      .update(updatePayload)
       .eq('id', paymentId)
-      .select('user_id, application_id, payment_type, amount')
-      .single()
     
-    if (error) throw new Error(error.message)
+    if (updateError) {
+      throw new Error(`Failed to reject payment: ${updateError.message}`)
+    }
     
-    // Create notification if payment was rejected
-    const rejectPaymentData = data as { user_id?: string; payment_type?: string; amount?: number | string; application_id?: string } | null
-    const rejectBeforeData = paymentBefore as { status?: string } | null
-    if (rejectPaymentData && rejectBeforeData && rejectBeforeData.status !== 'failed' && rejectPaymentData.user_id) {
-      const paymentTypeNames: Record<string, string> = {
-        'step1': 'Step 1',
-        'step2': 'Step 2',
-        'full': 'Full Payment'
+    // Create a new pending payment entry so the user can try again
+    // Only create if this was a payment that required approval (gcash or mobile_banking)
+    const requiresApproval = payment.payment_method === 'gcash' || payment.payment_method === 'mobile_banking'
+    
+    if (requiresApproval && payment.payment_type && payment.application_id && payment.amount) {
+      // Check if there's already a pending payment for this type
+      const { data: existingPending, error: checkError } = await supabase
+        .from('application_payments')
+        .select('id')
+        .eq('application_id', payment.application_id)
+        .eq('payment_type', payment.payment_type)
+        .eq('status', 'pending')
+        .maybeSingle()
+      
+      // Only create if no pending payment exists for this type
+      if (!checkError && !existingPending) {
+        // Calculate service fee amount for this payment type
+        const serviceFeeAmount = calculateServiceFee(payment.payment_type)
+        
+        const { error: createError } = await supabase
+          .from('application_payments')
+          .insert({
+            application_id: payment.application_id,
+            user_id: payment.user_id,
+            payment_type: payment.payment_type,
+            amount: payment.amount,
+            service_fee_amount: serviceFeeAmount,
+            status: 'pending',
+          })
+        
+        if (createError) {
+          // Log error but don't fail the rejection
+          console.error('Failed to create new pending payment after rejection:', createError)
+        }
       }
-      
-      const rejectionMessage = reason 
-        ? `Your ${paymentTypeNames[rejectPaymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(rejectPaymentData.amount || 0)).toFixed(2)} has been rejected. Reason: ${reason}`
-        : `Your ${paymentTypeNames[rejectPaymentData.payment_type || ''] || 'payment'} of $${parseFloat(String(rejectPaymentData.amount || 0)).toFixed(2)} has been rejected. Please contact support for more information.`
-      
-      await notificationsAPI.create(
-        'Payment Rejected',
-        rejectionMessage,
-        'payment',
-        rejectPaymentData.application_id
-      )
     }
     
-    return data
+    // Get the updated payment
+    const { data: updatedPayment, error: selectError } = await supabase
+      .from('application_payments')
+      .select('*')
+      .eq('id', paymentId)
+      .single()
+    
+    // Invalidate payment cache
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      const typedPayment = updatedPayment || payment
+      const appId = (typedPayment as { application_id?: string }).application_id
+      if (appId) {
+        invalidateApplicationCache(appId)
+      }
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
+    
+    // Return the updated payment or the payment data we have
+    return updatedPayment || { ...payment, ...updatePayload }
+  },
+
+  delete: async (paymentId: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+    
+    // Get payment to invalidate cache
+    const { data: payment, error: fetchError } = await supabase
+      .from('application_payments')
+      .select('application_id')
+      .eq('id', paymentId)
+      .single()
+    
+    if (fetchError) {
+      throw new Error(`Failed to fetch payment: ${fetchError.message}`)
+    }
+    
+    if (!payment) {
+      throw new Error('Payment not found')
+    }
+    
+    // Delete the payment
+    const { data: deletedData, error: deleteError } = await supabase
+      .from('application_payments')
+      .delete()
+      .eq('id', paymentId)
+      .select()
+    
+    if (deleteError) {
+      // Provide more detailed error message
+      console.error('Delete payment error:', deleteError)
+      if (deleteError.code === '42501') {
+        throw new Error('Permission denied: Admin delete policy may not be configured. Please contact system administrator.')
+      } else if (deleteError.code === 'PGRST301') {
+        throw new Error('No rows deleted: Payment may have already been deleted or does not exist.')
+      }
+      throw new Error(`Failed to delete payment: ${deleteError.message} (Code: ${deleteError.code || 'unknown'})`)
+    }
+    
+    // Verify deletion
+    if (!deletedData || deletedData.length === 0) {
+      throw new Error('Payment was not deleted. It may have already been deleted or you may not have permission.')
+    }
+    
+    // Invalidate payment cache
+    try {
+      const { invalidateApplicationCache } = await import('./query-cache')
+      const typedPayment = payment as { application_id?: string }
+      if (typedPayment.application_id) {
+        invalidateApplicationCache(typedPayment.application_id)
+      }
+    } catch {
+      // Cache module might not be available, continue anyway
+    }
   },
 }
 
 // Tracking API
 export const trackingAPI = {
-  track: async (id: string) => {
-    // Use Supabase directly for tracking - no server dependency
-    // This works for both authenticated and public users
-    // RLS policies should allow public access to tracking data
-    const normalizedId = id.trim().toUpperCase()
-    
-    console.log('Tracking API: Starting track for ID:', normalizedId)
-    
-    // Check if ID is a GRIT APP ID (AP + 12 alphanumeric) or UUID
-    const isGritAppId = /^AP[0-9A-Z]{12}$/.test(normalizedId)
-    console.log('Tracking API: Is GRIT APP ID?', isGritAppId)
-    
-    let application: any = null
-    let appError: any = null
-    
-    // Query by grit_app_id if it's a GRIT APP ID, otherwise by UUID id
-    // Note: Only select columns that actually exist in the applications table
-    if (isGritAppId) {
-      console.log('Tracking API: Querying by grit_app_id:', normalizedId)
-      const { data, error } = await supabase
-        .from('applications')
-        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
-        .eq('grit_app_id', normalizedId)
-        .single()
-      
-      application = data
-      appError = error
-      
-      if (error) {
-        console.error('Tracking API: Error querying by grit_app_id:', error)
-      } else {
-        console.log('Tracking API: Found application by grit_app_id:', application?.id)
-      }
-    } else {
-      // Query by UUID id
-      console.log('Tracking API: Querying by UUID id:', normalizedId)
-      const { data, error } = await supabase
-        .from('applications')
-        .select('id, first_name, last_name, email, status, created_at, updated_at, picture_path, user_id, grit_app_id')
-        .eq('id', normalizedId)
-        .single()
-      
-      application = data
-      appError = error
-      
-      if (error) {
-        console.error('Tracking API: Error querying by UUID:', error)
-      } else {
-        console.log('Tracking API: Found application by UUID:', application?.id)
-      }
-    }
-    
-    if (appError) {
-      console.error('Tracking API: Application query failed:', {
-        error: appError,
-        message: appError.message,
-        code: appError.code,
-        details: appError.details,
-        hint: appError.hint
-      })
-      
-      // Provide more helpful error messages
-      if (appError.code === 'PGRST116' || appError.message?.includes('No rows')) {
-        throw new Error('Application not found. Please check your tracking ID and try again.')
-      } else if (appError.code === '42501' || appError.message?.includes('permission denied') || appError.message?.includes('row-level security')) {
-        throw new Error('Access denied. Please ensure the public tracking policies are applied in Supabase.')
-      } else {
-        throw new Error(appError.message || 'Failed to fetch application. Please try again later.')
-      }
-    }
-    
-    if (!application) {
-      console.error('Tracking API: No application returned')
-      throw new Error('Application not found. Please check your tracking ID and try again.')
-    }
-    
-    // Use the actual UUID id for related queries
-    const applicationId = application.id
-    console.log('Tracking API: Application ID:', applicationId)
-    
-    // Get timeline steps
-    console.log('Tracking API: Fetching timeline steps...')
-    const { data: steps, error: stepsError } = await supabase
-      .from('application_timeline_steps')
-      .select('step_key, step_name, status, data, completed_at, updated_at, created_at')
-      .eq('application_id', applicationId)
-      .order('created_at', { ascending: true })
-    
-    if (stepsError) {
-      console.warn('Tracking API: Error fetching timeline steps:', stepsError)
-    }
-    const allSteps = steps || []
-    console.log('Tracking API: Found', allSteps.length, 'timeline steps')
-    
-    // Get payments
-    console.log('Tracking API: Fetching payments...')
-    const { data: payments, error: paymentsError } = await supabase
-      .from('application_payments')
+  getByGritAppId: async (gritAppId: string) => {
+    const { data, error } = await supabase
+      .from('applications')
       .select('*')
-      .eq('application_id', applicationId)
+      .eq('grit_app_id', gritAppId.toUpperCase())
+      .single()
     
-    if (paymentsError) {
-      console.warn('Tracking API: Error fetching payments:', paymentsError)
-    }
-    const allPayments = payments || []
-    console.log('Tracking API: Found', allPayments.length, 'payments')
-    
-    // Get processing accounts
-    console.log('Tracking API: Fetching processing accounts...')
-    const { data: processingAccounts, error: processingError } = await supabase
-      .from('processing_accounts')
-      .select('account_type, email')
-      .eq('application_id', applicationId)
-    
-    if (processingError) {
-      console.warn('Tracking API: Error fetching processing accounts:', processingError)
-    }
-    const allProcessingAccounts = processingAccounts || []
-    console.log('Tracking API: Found', allProcessingAccounts.length, 'processing accounts')
-    
-    // Get Gmail from processing account
-    const typedProcessingAccounts = allProcessingAccounts as Array<{ account_type?: string; email?: string }>
-    const gmailAccounts = typedProcessingAccounts.filter(acc => acc.account_type === 'gmail')
-    const displayEmail = (gmailAccounts && gmailAccounts.length > 0) ? gmailAccounts[0].email : application.email
-    
-    // Create step status map
-    const stepStatusMap: { [key: string]: any } = {}
-    allSteps.forEach((step: any) => {
-      if (step.data && typeof step.data === 'string') {
-        try {
-          step.data = JSON.parse(step.data)
-        } catch (e) {
-          // Keep as is if parsing fails
-        }
-      }
-      stepStatusMap[step.step_key] = step
-    })
-    
-    // Helper to get step status
-    const getStepStatus = (key: string) => {
-      const step = stepStatusMap[key]
-      return step?.status || 'pending'
-    }
-    
-    // Helper to check if step is completed (simplified version matching server logic)
-    const isStepCompleted = (stepKey: string): boolean => {
-      const stepData = stepStatusMap[stepKey]
-      
-      switch (stepKey) {
-        case 'app_submission': {
-          const appCreated = getStepStatus('app_created') === 'completed' || !!application.created_at
-          const docsSubmitted = getStepStatus('documents_submitted') === 'completed' || !!(application.picture_path)
-          const appPaid = getStepStatus('app_paid') === 'completed' || (allPayments && allPayments.some((p: any) => p.status === 'paid' && (p.payment_type === 'step1' || p.payment_type === 'full')))
-          return (appCreated && docsSubmitted && appPaid) || (stepData && stepData.status === 'completed')
-        }
-        case 'credentialing': {
-          const letterGenerated = getStepStatus('letter_generated') === 'completed'
-          const letterSubmitted = getStepStatus('letter_submitted') === 'completed'
-          const officialDocs = getStepStatus('official_docs_submitted') === 'completed'
-          return (letterGenerated && letterSubmitted && officialDocs) || (stepData && stepData.status === 'completed')
-        }
-        case 'bon_application': {
-          const mandatoryCourses = getStepStatus('mandatory_courses') === 'completed'
-          const form1Submitted = getStepStatus('form1_submitted') === 'completed'
-          const typedAllPayments = allPayments as Array<{ status?: string; payment_type?: string }> | null
-        const appStep2Paid = getStepStatus('app_step2_paid') === 'completed' || (typedAllPayments && typedAllPayments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
-          return (mandatoryCourses && form1Submitted && appStep2Paid) || (stepData && stepData.status === 'completed')
-        }
-        case 'nclex_eligibility': {
-          return getStepStatus('nclex_eligibility_approved') === 'completed' || (stepData && stepData.status === 'completed')
-        }
-        case 'pearson_vue': {
-          const pearsonAccountCreated = getStepStatus('pearson_account_created') === 'completed' || (allProcessingAccounts && allProcessingAccounts.some((acc: any) => acc.account_type === 'pearson_vue'))
-          const attRequested = getStepStatus('att_requested') === 'completed'
-          return (pearsonAccountCreated && attRequested) || (stepData && stepData.status === 'completed')
-        }
-        case 'att': {
-          const attReceived = stepStatusMap['att_received']
-          if (!attReceived || !attReceived.data) {
-            return (stepData && stepData.status === 'completed')
-          }
-          const attData = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
-          return !!(attData?.code || attData?.att_code) && !!(attData?.expiry_date || attData?.att_expiry_date) || (stepData && stepData.status === 'completed')
-        }
-        case 'nclex_exam': {
-          const examBooked = stepStatusMap['exam_date_booked']
-          if (!examBooked || !examBooked.data) {
-            return (stepData && stepData.status === 'completed')
-          }
-          const examData = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
-          return !!(examData?.date || examData?.exam_date) && !!(examData?.time || examData?.exam_time) && !!(examData?.location || examData?.exam_location) || (stepData && stepData.status === 'completed')
-        }
-        default:
-          return stepData && stepData.status === 'completed'
-      }
-    }
-    
-    // Step order
-    const stepOrder = [
-      { key: 'app_submission', name: 'Application Submission' },
-      { key: 'credentialing', name: 'Credentialing' },
-      { key: 'bon_application', name: 'BON Application' },
-      { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
-      { key: 'pearson_vue', name: 'Pearson VUE Application' },
-      { key: 'att', name: 'ATT' },
-      { key: 'nclex_exam', name: 'NCLEX Exam' }
-    ]
-    
-    // Type assertion for application
-    const typedApp = application as { updated_at?: string; created_at?: string; grit_app_id?: string | null }
-    
-    // Find latest update
-    let latestUpdate = typedApp.updated_at || typedApp.created_at
-    allSteps.forEach((step: any) => {
-      const timestamps = []
-      if (step.updated_at) timestamps.push(new Date(step.updated_at).getTime())
-      if (step.completed_at) timestamps.push(new Date(step.completed_at).getTime())
-      if (step.created_at) timestamps.push(new Date(step.created_at).getTime())
-      if (timestamps.length > 0) {
-        const maxTime = Math.max(...timestamps)
-        const latestTime = latestUpdate ? new Date(latestUpdate).getTime() : 0
-        if (maxTime > latestTime) {
-          latestUpdate = step.completed_at || step.updated_at || step.created_at
-        }
-      }
-    })
-    
-    // Find current progress
-    let currentProgress = null
-    let currentProgressStep = null
-    for (let i = stepOrder.length - 1; i >= 0; i--) {
-      const step = stepOrder[i]
-      if (isStepCompleted(step.key)) {
-        currentProgress = step.name
-        currentProgressStep = step
-        break
-      }
-    }
-    
-    if (!currentProgress && application.created_at) {
-      currentProgress = 'Application Submission'
-      currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
-    }
-    
-    // Find next step
-    let nextStep = null
-    const currentIndex = currentProgressStep ? stepOrder.findIndex(s => s.key === currentProgressStep.key) : -1
-    if (currentIndex >= 0 && currentIndex < stepOrder.length - 1) {
-      for (let i = currentIndex + 1; i < stepOrder.length; i++) {
-        if (!isStepCompleted(stepOrder[i].key)) {
-          nextStep = stepOrder[i].name
-          break
-        }
-      }
-    } else if (currentIndex === -1 && stepOrder.length > 0) {
-      if (!isStepCompleted(stepOrder[0].key)) {
-        nextStep = stepOrder[0].name
-      }
-    }
-    
-    // Check for exam result
-    const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results') as any
-    const quickResultsData = quickResultsStep && 'data' in quickResultsStep ? quickResultsStep.data : undefined
-    const hasResult = !!(quickResultsData?.result)
-    
-    let currentProgressMessage = currentProgress || 'Not started'
-    let nextStepMessage = nextStep
-    
-    if (hasResult) {
-      const resultValue = quickResultsData.result
-      if (resultValue === 'pass' || resultValue === 'Passed') {
-        currentProgressMessage = 'Congratulations!, You Passed the NCLEX-RN Exam!'
-        nextStepMessage = 'Wait for 1-2 weeks for your license to reflect in "Nursys"'
-      } else if (resultValue === 'failed' || resultValue === 'Failed') {
-        currentProgressMessage = 'You have failed the exam, Don\'t worry, you can take it again anytime.'
-        nextStepMessage = 'Retake again!'
-      } else {
-        currentProgressMessage = `Exam Result: ${resultValue}`
-      }
-    } else if (stepOrder.every(step => isStepCompleted(step.key)) || application.status === 'completed') {
-      nextStepMessage = null
-    }
-    
-    // Get picture URL
-    let picture_url = null
-    if (application.picture_path) {
-      try {
-        picture_url = getFileUrl(application.picture_path)
-      } catch (error) {
-        picture_url = null
-      }
-    }
-    
-    const result = {
-      ...application,
-      email: displayEmail,
-      current_progress: currentProgressMessage,
-      next_step: nextStepMessage,
-      latest_update: latestUpdate,
-      picture_url: picture_url,
-      service_type: 'NCLEX Processing', // Default value (not stored in DB)
-      service_state: 'New York', // Default value (not stored in DB)
-      grit_app_id: typedApp.grit_app_id || null
-    }
-    
-    console.log('Tracking API: Successfully completed tracking for:', normalizedId)
-    console.log('Tracking API: Result summary:', {
-      name: `${result.first_name} ${result.last_name}`,
-      current_progress: result.current_progress,
-      next_step: result.next_step,
-      email: result.email
-    })
-    
-    return result
+    if (error) throw new Error(error.message)
+    return data
   },
 }
 
-// NCLEX Sponsorships API
-export const sponsorshipsAPI = {
+// Careers API
+export const careersAPI = {
   getAll: async () => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
-    const query = supabase
-      .from('nclex_sponsorships')
+    const { data, error } = await supabase
+      .from('careers')
       .select('*')
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
     
-    if (!admin) {
-      query.eq('user_id', userId)
-    }
-    
-    const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
 
   getById: async (id: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
-    let query = supabase
-      .from('nclex_sponsorships')
+    const { data, error } = await supabase
+      .from('careers')
       .select('*')
       .eq('id', id)
+      .single()
     
-    if (!admin) {
-      query = query.eq('user_id', userId)
-    }
-    
-    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
     return data
   },
 
-  create: async (sponsorshipData: any) => {
-    // Allow anonymous users to create sponsorships
-    // Try to get user ID if authenticated, otherwise null
-    let userId: string | null = null
-    try {
-      userId = await getCurrentUserId()
-    } catch {
-      // User is not authenticated, allow anonymous sponsorship
-      userId = null
+  create: async (career: {
+    title: string
+    description: string
+    requirements?: string
+    responsibilities?: string
+    location?: string
+    employment_type?: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship'
+    salary_range?: string
+    department?: string
+    is_active?: boolean
+  }) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
+
     const { data, error } = await supabase
-      .from('nclex_sponsorships')
-      .insert({
-        ...sponsorshipData,
-        user_id: userId,
-      })
+      .from('careers')
+      .insert(career)
       .select('*')
       .single()
     
@@ -3704,57 +5127,23 @@ export const sponsorshipsAPI = {
     return data
   },
 
-  update: async (id: string, updates: Partial<Tables<'nclex_sponsorships'>>) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      // Non-admins can only update pending sponsorships
-      const { data: existingData } = await supabase
-        .from('nclex_sponsorships')
-        .select('status, user_id')
-        .eq('id', id)
-        .single()
-      
-      if (!existingData) throw new Error('Sponsorship not found')
-      const existing = existingData as any
-      
-      const userId = await getCurrentUserId()
-      if (existing.user_id !== userId) {
-        throw new Error('Unauthorized')
-      }
-      
-      if (existing.status !== 'pending') {
-        throw new Error('Can only update pending sponsorships')
-      }
+  update: async (id: string, updates: Partial<{
+    title: string
+    description: string
+    requirements: string
+    responsibilities: string
+    location: string
+    employment_type: 'full-time' | 'part-time' | 'contract' | 'temporary' | 'internship'
+    salary_range: string
+    department: string
+    is_active: boolean
+  }>) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
-    const { data, error } = await supabase
-      .from('nclex_sponsorships')
-      .update(updates)
-      .eq('id', id)
-      .select('*')
-      .single()
-    
-    if (error) throw new Error(error.message)
-    return data
-  },
 
-  updateStatus: async (id: string, status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'awarded', adminNotes?: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
-    const userId = await getCurrentUserId()
-    const updates: any = {
-      status,
-      reviewed_by: userId,
-      reviewed_at: new Date().toISOString(),
-    }
-    
-    if (adminNotes !== undefined) {
-      updates.admin_notes = adminNotes
-    }
-    
     const { data, error } = await supabase
-      .from('nclex_sponsorships')
+      .from('careers')
       .update(updates)
       .eq('id', id)
       .select('*')
@@ -3765,11 +5154,12 @@ export const sponsorshipsAPI = {
   },
 
   delete: async (id: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { error } = await supabase
-      .from('nclex_sponsorships')
+      .from('careers')
       .delete()
       .eq('id', id)
     
@@ -3780,30 +5170,10 @@ export const sponsorshipsAPI = {
 // Donations API
 export const donationsAPI = {
   getAll: async () => {
-    const admin = await isAdmin()
-    if (!admin) {
-      // Non-admins can only see their own donations
-      const userId = await getCurrentUserId()
-      const { data: userData } = await supabase
-        .from('users')
-        .select('email')
-        .eq('id', userId)
-        .single()
-      
-      if (!userData) throw new Error('User not found')
-      const user = userData as any
-      
-      const { data, error } = await supabase
-        .from('donations')
-        .select('*')
-        .eq('donor_email', user.email)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw new Error(error.message)
-      return data || []
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
-    // Admins can see all donations
+
     const { data, error } = await supabase
       .from('donations')
       .select('*')
@@ -3814,36 +5184,35 @@ export const donationsAPI = {
   },
 
   getById: async (id: string) => {
-    const admin = await isAdmin()
-    
-    let query = supabase
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await supabase
       .from('donations')
       .select('*')
       .eq('id', id)
+      .single()
     
-    if (!admin) {
-      const userId = await getCurrentUserId()
-      const { data: user } = await supabase
-        .from('users')
-        .select('email')
-        .eq('id', userId)
-        .single()
-      
-      if (user) {
-        query = query.eq('donor_email', (user as any).email)
-      }
-    }
-    
-    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
     return data
   },
 
-  create: async (donationData: any) => {
-    // Anyone can create donations (including anonymous)
+  create: async (donation: {
+    donor_name?: string
+    donor_email?: string
+    donor_phone?: string
+    is_anonymous: boolean
+    amount: number
+    currency: string
+    payment_method?: string
+    stripe_payment_intent_id?: string
+    status: 'pending' | 'completed' | 'failed'
+    message?: string
+  }) => {
     const { data, error } = await supabase
       .from('donations')
-      .insert(donationData)
+      .insert(donation)
       .select('*')
       .single()
     
@@ -3851,10 +5220,11 @@ export const donationsAPI = {
     return data
   },
 
-  update: async (id: string, updates: Partial<Tables<'donations'>>) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+  update: async (id: string, updates: Partial<{
+    status: 'pending' | 'completed' | 'failed'
+    payment_method: string
+    stripe_payment_intent_id: string
+  }>) => {
     const { data, error } = await supabase
       .from('donations')
       .update(updates)
@@ -3865,90 +5235,36 @@ export const donationsAPI = {
     if (error) throw new Error(error.message)
     return data
   },
-
-  updateStatus: async (id: string, status: 'pending' | 'completed' | 'failed' | 'refunded') => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
-    const { data, error } = await supabase
-      .from('donations')
-      .update({ status })
-      .eq('id', id)
-      .select('*')
-      .single()
-    
-    if (error) throw new Error(error.message)
-    return data
-  },
-
-  getStats: async () => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
-    const { data, error } = await supabase
-      .from('donations')
-      .select('amount, status, currency')
-    
-    if (error) throw new Error(error.message)
-    
-    const donations = (data || []) as any[]
-    const total = donations
-      .filter(d => d.status === 'completed')
-      .reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0)
-    
-    const count = donations.filter(d => d.status === 'completed').length
-    
-    return {
-      total,
-      count,
-      pending: donations.filter(d => d.status === 'pending').length,
-      failed: donations.filter(d => d.status === 'failed').length,
-    }
-  },
-
-  createPaymentIntent: async (donationId: string, amount: number) => {
-    // Get session if available (donations can be anonymous)
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    // Call Supabase Edge Function to create Stripe payment intent
-    const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-      body: { 
-        donation_id: donationId,
-        amount: amount * 100, // Convert to cents
-      },
-      headers: session ? {
-        Authorization: `Bearer ${session.access_token}`,
-      } : {},
-    })
-    
-    if (error) throw new Error(error.message)
-    return data as { client_secret: string; payment_intent_id: string }
-  },
 }
 
 // Partner Agencies API
 export const partnerAgenciesAPI = {
-  getAll: async (activeOnly: boolean = false) => {
-    const admin = await isAdmin()
-    
-    const query = supabase
+  getAll: async () => {
+    const { data, error } = await supabase
       .from('partner_agencies')
       .select('*')
+      .eq('is_active', true)
       .order('name', { ascending: true })
     
-    if (!admin || activeOnly) {
-      query.eq('is_active', true)
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getAllAdmin: async () => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
+
+    const { data, error } = await supabase
+      .from('partner_agencies')
+      .select('*')
+      .order('created_at', { ascending: false })
     
-    const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
 
   getById: async (id: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
     const { data, error } = await supabase
       .from('partner_agencies')
       .select('*')
@@ -3959,13 +5275,27 @@ export const partnerAgenciesAPI = {
     return data
   },
 
-  create: async (agencyData: any) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+  create: async (agency: {
+    name: string
+    email: string
+    phone?: string
+    website?: string
+    address?: string
+    city?: string
+    state?: string
+    country: string
+    description?: string
+    services_offered?: string
+    logo_url?: string
+    is_active?: boolean
+  }) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { data, error } = await supabase
       .from('partner_agencies')
-      .insert(agencyData)
+      .insert(agency)
       .select('*')
       .single()
     
@@ -3973,10 +5303,24 @@ export const partnerAgenciesAPI = {
     return data
   },
 
-  update: async (id: string, updates: Partial<any>) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+  update: async (id: string, updates: Partial<{
+    name: string
+    email: string
+    phone: string
+    website: string
+    address: string
+    city: string
+    state: string
+    country: string
+    description: string
+    services_offered: string
+    logo_url: string
+    is_active: boolean
+  }>) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { data, error } = await supabase
       .from('partner_agencies')
       .update(updates)
@@ -3989,9 +5333,10 @@ export const partnerAgenciesAPI = {
   },
 
   delete: async (id: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { error } = await supabase
       .from('partner_agencies')
       .delete()
@@ -4004,118 +5349,90 @@ export const partnerAgenciesAPI = {
 // Career Applications API
 export const careerApplicationsAPI = {
   getAll: async () => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
-    const query = supabase
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await supabase
       .from('career_applications')
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email,
-          contact_person_name,
-          contact_person_email
-        )
-      `)
+      .select('*, careers(*)')
       .order('created_at', { ascending: false })
     
-    if (!admin) {
-      query.eq('user_id', userId)
-    }
-    
-    const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
 
   getById: async (id: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
-    let query = supabase
-      .from('career_applications')
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email,
-          contact_person_name,
-          contact_person_email,
-          phone,
-          website
-        )
-      `)
-      .eq('id', id)
-    
-    if (!admin) {
-      query = query.eq('user_id', userId)
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
+
+    const { data, error } = await supabase
+      .from('career_applications')
+      .select('*, careers(*)')
+      .eq('id', id)
+      .single()
     
-    const { data, error } = await query.single()
     if (error) throw new Error(error.message)
-    return data as any
+    return data
   },
 
-  create: async (applicationData: any) => {
-    // Allow anonymous users to create career applications
-    let userId: string | null = null
-    try {
-      userId = await getCurrentUserId()
-    } catch {
-      // User is not authenticated, allow anonymous application
-      userId = null
+  getByCareer: async (careerId: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
+
+    const { data, error } = await supabase
+      .from('career_applications')
+      .select('*')
+      .eq('career_id', careerId)
+      .order('created_at', { ascending: false })
     
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  create: async (application: {
+    career_id?: string
+    first_name: string
+    last_name: string
+    email: string
+    mobile_number: string
+    date_of_birth?: string
+    country?: string
+    nursing_school?: string
+    graduation_date?: string
+    years_of_experience?: string
+    current_employment_status?: string
+    license_number?: string
+    resume_path?: string
+    cover_letter?: string
+    partner_agency_id?: string
+  }) => {
+    const userId = await getCurrentUserId().catch(() => null)
+
     const { data, error } = await supabase
       .from('career_applications')
       .insert({
-        ...applicationData,
+        ...application,
         user_id: userId,
+        status: 'pending',
       })
       .select('*')
       .single()
     
     if (error) throw new Error(error.message)
-    
-    // Increment applications count for the career if career_id is provided
-    if (applicationData.career_id) {
-      try {
-        await supabase.rpc('increment_career_applications', { career_uuid: applicationData.career_id })
-      } catch (err) {
-        // Ignore errors in increment
-        console.error('Error incrementing applications count:', err)
-      }
-    }
-    
     return data
   },
 
-  update: async (id: string, updates: Partial<any>) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      // Non-admins can only update pending applications
-      const { data: existingData } = await supabase
-        .from('career_applications')
-        .select('status, user_id')
-        .eq('id', id)
-        .single()
-      
-      if (!existingData) throw new Error('Career application not found')
-      const existing = existingData as any
-      
-      const userId = await getCurrentUserId()
-      if (existing.user_id !== userId) {
-        throw new Error('Unauthorized')
-      }
-      
-      if (existing.status !== 'pending') {
-        throw new Error('Can only update pending applications')
-      }
+  update: async (id: string, updates: Partial<{
+    status: 'pending' | 'reviewed' | 'shortlisted' | 'rejected' | 'hired'
+    admin_notes: string
+  }>) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
+
     const { data, error } = await supabase
       .from('career_applications')
       .update(updates)
@@ -4124,166 +5441,14 @@ export const careerApplicationsAPI = {
       .single()
     
     if (error) throw new Error(error.message)
-    return data
-  },
-
-  updateStatus: async (
-    id: string,
-    status: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected',
-    adminNotes?: string,
-    partnerAgencyId?: string
-  ) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
-    const userId = await getCurrentUserId()
-    const updates: any = {
-      status,
-      reviewed_by: userId,
-      reviewed_at: new Date().toISOString(),
-    }
-    
-    if (adminNotes !== undefined) {
-      updates.admin_notes = adminNotes
-    }
-    
-    if (partnerAgencyId !== undefined) {
-      updates.partner_agency_id = partnerAgencyId
-      if (status === 'forwarded') {
-        updates.forwarded_to_agency_at = new Date().toISOString()
-      }
-    }
-    
-    const { data, error } = await supabase
-      .from('career_applications')
-      .update(updates)
-      .eq('id', id)
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email,
-          contact_person_name,
-          contact_person_email,
-          phone,
-          website
-        )
-      `)
-      .single()
-    
-    if (error) throw new Error(error.message)
-    return data
-  },
-
-  forwardToAgency: async (id: string, partnerAgencyId: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
-    // Get application and agency details
-    const { data: applicationData } = await supabase
-      .from('career_applications')
-      .select('*')
-      .eq('id', id)
-      .single()
-    
-    if (!applicationData) throw new Error('Application not found')
-    const application = applicationData as any
-    
-    const { data: agencyData } = await supabase
-      .from('partner_agencies')
-      .select('*')
-      .eq('id', partnerAgencyId)
-      .single()
-    
-    if (!agencyData) throw new Error('Partner agency not found')
-    const agency = agencyData as any
-    
-    // Update application status
-    const userId = await getCurrentUserId()
-    const { data, error } = await supabase
-      .from('career_applications')
-      .update({
-        status: 'forwarded',
-        partner_agency_id: partnerAgencyId,
-        forwarded_to_agency_at: new Date().toISOString(),
-        forwarded_email_sent: false,
-        reviewed_by: userId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email,
-          contact_person_name,
-          contact_person_email,
-          phone,
-          website
-        )
-      `)
-      .single()
-    
-    if (error) throw new Error(error.message)
-    
-    // Send email to partner agency (async, don't wait)
-    try {
-      const { sendEmail } = await import('./email-service')
-      const emailSubject = `New Career Application from GritSync - ${application.first_name} ${application.last_name}`
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2563eb; margin-bottom: 20px;">New Career Application</h2>
-          <p>Dear ${agency.contact_person_name || agency.name},</p>
-          <p>We have received a new career application that has been forwarded to your agency.</p>
-          
-          <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #111827; margin-bottom: 15px;">Applicant Information</h3>
-            <p><strong>Name:</strong> ${application.first_name} ${application.last_name}</p>
-            <p><strong>Email:</strong> ${application.email}</p>
-            <p><strong>Phone:</strong> ${application.mobile_number}</p>
-            ${application.date_of_birth ? `<p><strong>Date of Birth:</strong> ${application.date_of_birth}</p>` : ''}
-            ${application.country ? `<p><strong>Country:</strong> ${application.country}</p>` : ''}
-            ${application.nursing_school ? `<p><strong>Nursing School:</strong> ${application.nursing_school}</p>` : ''}
-            ${application.graduation_date ? `<p><strong>Graduation Date:</strong> ${application.graduation_date}</p>` : ''}
-            ${application.years_of_experience ? `<p><strong>Years of Experience:</strong> ${application.years_of_experience}</p>` : ''}
-            ${application.license_number ? `<p><strong>License Number:</strong> ${application.license_number}</p>` : ''}
-            ${application.license_state ? `<p><strong>License State:</strong> ${application.license_state}</p>` : ''}
-          </div>
-          
-          <p>Please review this application and contact the applicant directly if interested.</p>
-          <p>Best regards,<br>GritSync Team</p>
-        </div>
-      `
-      
-      const recipientEmail = agency.contact_person_email || agency.email
-      sendEmail({
-        to: recipientEmail,
-        subject: emailSubject,
-        html: emailHtml,
-        text: `New Career Application from GritSync\n\nApplicant: ${application.first_name} ${application.last_name}\nEmail: ${application.email}\nPhone: ${application.mobile_number}`,
-      }).catch((emailError) => {
-        console.error('Failed to send forwarding email:', emailError)
-      })
-      
-      // Mark email as sent
-      await supabase
-        .from('career_applications')
-        .update({ forwarded_email_sent: true })
-        .eq('id', id)
-    } catch (emailError) {
-      console.error('Error sending forwarding email:', emailError)
-      // Don't throw - email failure shouldn't break the forwarding
-    }
-    
     return data
   },
 
   delete: async (id: string) => {
-    const admin = await isAdmin()
-    if (!admin) throw new Error('Admin access required')
-    
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { error } = await supabase
       .from('career_applications')
       .delete()
@@ -4293,75 +5458,62 @@ export const careerApplicationsAPI = {
   },
 }
 
-// Careers API
-export const careersAPI = {
-  getAll: async (includeInactive: boolean = false) => {
-    const admin = await isAdmin()
-    
-    const query = supabase
-      .from('careers')
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email
-        )
-      `)
+// Sponsorships API (NCLEX Sponsorships)
+export const sponsorshipsAPI = {
+  getAll: async () => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await supabase
+      .from('nclex_sponsorships')
+      .select('*')
       .order('created_at', { ascending: false })
     
-    // Only show active careers to non-admins
-    if (!admin && !includeInactive) {
-      query.eq('is_active', true)
-    }
-    
-    const { data, error } = await query
     if (error) throw new Error(error.message)
     return data || []
   },
 
   getById: async (id: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
     const { data, error } = await supabase
-      .from('careers')
-      .select(`
-        *,
-        partner_agencies (
-          id,
-          name,
-          email,
-          phone,
-          website
-        )
-      `)
+      .from('nclex_sponsorships')
+      .select('*')
       .eq('id', id)
       .single()
     
     if (error) throw new Error(error.message)
-    
-    // Increment views count
-    try {
-      await supabase.rpc('increment_career_views', { career_uuid: id })
-    } catch (err) {
-      // Ignore errors in view increment
-      console.error('Error incrementing views:', err)
-    }
-    
     return data
   },
 
-  create: async (careerData: any) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Unauthorized: Only admins can create careers')
-    }
-    
-    const userId = await getCurrentUserId()
-    
+  create: async (sponsorship: {
+    first_name: string
+    last_name: string
+    email: string
+    mobile_number: string
+    date_of_birth?: string
+    country?: string
+    nursing_school?: string
+    graduation_date?: string
+    current_employment_status?: string
+    years_of_experience?: string
+    financial_need_description: string
+    motivation_statement: string
+    resume_path?: string
+    transcript_path?: string
+    recommendation_letter_path?: string
+  }) => {
+    const userId = await getCurrentUserId().catch(() => null)
+
     const { data, error } = await supabase
-      .from('careers')
+      .from('nclex_sponsorships')
       .insert({
-        ...careerData,
-        created_by: userId,
+        ...sponsorship,
+        user_id: userId,
+        status: 'pending',
       })
       .select('*')
       .single()
@@ -4370,14 +5522,17 @@ export const careersAPI = {
     return data
   },
 
-  update: async (id: string, updates: Partial<any>) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Unauthorized: Only admins can update careers')
+  update: async (id: string, updates: Partial<{
+    status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'sponsored'
+    admin_notes: string
+    sponsor_details: string
+  }>) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
+
     const { data, error } = await supabase
-      .from('careers')
+      .from('nclex_sponsorships')
       .update(updates)
       .eq('id', id)
       .select('*')
@@ -4388,17 +5543,15 @@ export const careersAPI = {
   },
 
   delete: async (id: string) => {
-    const admin = await isAdmin()
-    if (!admin) {
-      throw new Error('Unauthorized: Only admins can delete careers')
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
     }
-    
+
     const { error } = await supabase
-      .from('careers')
+      .from('nclex_sponsorships')
       .delete()
       .eq('id', id)
     
     if (error) throw new Error(error.message)
   },
 }
-

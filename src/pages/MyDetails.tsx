@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -18,87 +18,15 @@ import { cn, getFullNameWithMiddle } from '@/lib/utils'
 import { Link, useNavigate } from 'react-router-dom'
 import { reminderSettings } from '@/lib/settings'
 
-// Helper function to format MM/DD/YYYY input
-function formatMMDDYYYY(value: string): string {
-  const digits = value.replace(/\D/g, '')
-  const limited = digits.slice(0, 8)
-  
-  if (limited.length <= 2) {
-    return limited
-  } else if (limited.length <= 4) {
-    return `${limited.slice(0, 2)}/${limited.slice(2)}`
-  } else {
-    return `${limited.slice(0, 2)}/${limited.slice(2, 4)}/${limited.slice(4)}`
-  }
-}
-
-// Helper function to format MM/YYYY input
-function formatMMYYYY(value: string): string {
-  const digits = value.replace(/\D/g, '')
-  const limited = digits.slice(0, 6)
-  
-  if (limited.length <= 2) {
-    return limited
-  } else {
-    return `${limited.slice(0, 2)}/${limited.slice(2)}`
-  }
-}
-
-// Convert from database format (YYYY-MM-DD or other) to MM/DD/YYYY
-function convertFromDatabaseFormat(dateStr: string | null | undefined): string {
-  if (!dateStr) return ''
-  
-  if (/^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/\d{4}$/.test(dateStr)) {
-    return dateStr
-  }
-  
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const [year, month, day] = dateStr.split('-')
-    return `${month}/${day}/${year}`
-  }
-  
-  if (/^(0[1-9]|1[0-2])\/\d{4}$/.test(dateStr)) {
-    const [month, year] = dateStr.split('/')
-    return `${month}/01/${year}`
-  }
-  
-  const date = new Date(dateStr)
-  if (!isNaN(date.getTime())) {
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const year = date.getFullYear()
-    return `${month}/${day}/${year}`
-  }
-  
-  return dateStr
-}
-
-// Convert MM/DD/YYYY to YYYY-MM-DD for database storage
-function convertToDatabaseFormat(mmddyyyy: string): string {
-  if (!mmddyyyy || !/^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/\d{4}$/.test(mmddyyyy)) return ''
-  
-  const [month, day, year] = mmddyyyy.split('/')
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-}
-
-// Convert YYYY-MM to MM/YYYY
-function convertToMMYYYY(dateStr: string | null | undefined): string {
-  if (!dateStr) return ''
-  if (/^(0[1-9]|1[0-2])\/\d{4}$/.test(dateStr)) return dateStr
-  if (/^\d{4}-\d{2}$/.test(dateStr)) {
-    const [year, month] = dateStr.split('-')
-    return `${month}/${year}`
-  }
-  return dateStr
-}
-
-// Convert MM/YYYY to YYYY-MM for database storage
-function convertMMYYYYToDatabase(mmyyyy: string): string {
-  if (!mmyyyy || !/^(0[1-9]|1[0-2])\/\d{4}$/.test(mmyyyy)) return ''
-  
-  const [month, year] = mmyyyy.split('/')
-  return `${year}-${month.padStart(2, '0')}`
-}
+// Import shared date formatting utilities
+import {
+  formatMMDDYYYY,
+  formatMMYYYY,
+  convertFromDatabaseFormat,
+  convertToDatabaseFormat,
+  convertToMMYYYY,
+  convertMMYYYYToDatabase
+} from '@/lib/utils/dateFormatters'
 
 // Helper function to format month-year dates
 function formatMonthYear(dateStr: string): string {
@@ -180,6 +108,7 @@ export function MyDetails() {
   const [completionPercentage, setCompletionPercentage] = useState(0)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({})
+  const [clientEmail, setClientEmail] = useState<string | null>(null)
 
   // Validation functions
   const validateEmail = (email: string): string => {
@@ -269,7 +198,7 @@ export function MyDetails() {
       const dateError = validateDate(dateOfBirth, 'Date of Birth')
       if (dateError) errors.dateOfBirth = dateError
     }
-    if (maritalStatus === 'single' && !singleFullName.trim()) {
+    if (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && !singleFullName.trim()) {
       errors.singleFullName = 'Full name when single is required'
     }
 
@@ -639,8 +568,23 @@ export function MyDetails() {
     if (user) {
       fetchDetails()
       checkAndSendReminders()
+      fetchClientEmail()
     }
   }, [user])
+
+  async function fetchClientEmail() {
+    if (!user?.id) return
+    try {
+      const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+      const addresses = await emailAddressesAPI.getUserAddresses(user.id)
+      const primaryAddress = addresses.find(addr => addr.is_primary && addr.address_type === 'client')
+      if (primaryAddress) {
+        setClientEmail(primaryAddress.email_address)
+      }
+    } catch (error) {
+      console.error('Error fetching client email:', error)
+    }
+  }
 
   async function fetchDetails() {
     try {
@@ -654,7 +598,7 @@ export function MyDetails() {
         
         const typedUserData = userData as { avatar_path?: string; default_avatar_design?: string | null } | null
         if (typedUserData?.avatar_path) {
-          const url = await getSignedFileUrl(typedUserData.avatar_path)
+          const url = await getSignedFileUrl(typedUserData.avatar_path, 3600, true) // silent=true for avatars
           setAvatarUrl(url)
         } else {
           setAvatarUrl(null)
@@ -1047,7 +991,7 @@ export function MyDetails() {
         last_name: safeTrim(lastName),
         gender: gender || null,
         marital_status: maritalStatus || null,
-        single_full_name: maritalStatus === 'single' ? safeTrim(singleFullName) : null,
+        single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? safeTrim(singleFullName) : null,
         date_of_birth: convertToDatabaseFormat(dateOfBirth) || null,
         birth_place: safeTrim(birthPlace),
         email: safeTrim(email) || user?.email || null,
@@ -1116,6 +1060,37 @@ export function MyDetails() {
       delete mergedData.updated_at
       
       await userDetailsAPI.save(mergedData)
+      
+      // Auto-generate and save email address if names are provided
+      if (firstName && lastName && user?.id) {
+        try {
+          // Update middle_name in users table if needed
+          if (middleName) {
+            await supabase
+              .from('users')
+              .update({ middle_name: middleName.trim() })
+              .eq('id', user.id)
+          }
+          
+          // Generate or regenerate the client email address
+          const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+          
+          // Check if email exists, if not create it
+          const addresses = await emailAddressesAPI.getUserAddresses(user.id)
+          const clientAddress = addresses.find(addr => addr.address_type === 'client')
+          
+          if (!clientAddress) {
+            // Create new email address
+            await emailAddressesAPI.generateClientEmail(user.id)
+          }
+          
+          // Refresh client email display
+          await fetchClientEmail()
+        } catch (emailError) {
+          console.error('Error generating client email:', emailError)
+          // Don't fail the save if email generation fails
+        }
+      }
       
       showToast('Details saved successfully! These will auto-fill your next application.', 'success')
       setEditing(false)
@@ -1342,7 +1317,7 @@ export function MyDetails() {
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         {completionPercentage === 100 
-                          ? 'All details completed! 🎉' 
+                          ? 'All details completed! ðŸŽ‰' 
                           : `${completionPercentage}% complete - Fill in more details to speed up your applications`}
                       </p>
                     </div>
@@ -1478,7 +1453,7 @@ export function MyDetails() {
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
                     <Mail className="h-4 w-4 text-gray-400" />
                     <p className="text-gray-600 dark:text-gray-400">
-                      {user.email}
+                      {clientEmail || user.email}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
@@ -1613,15 +1588,11 @@ export function MyDetails() {
                       <Input
                         label="Email Address"
                         type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onBlur={() => handleFieldBlur('email')}
-                        placeholder="john.doe@example.com"
-                        error={touchedFields.email ? validationErrors.email : undefined}
-                        className={cn(
-                          getFieldStatus('email', email) === 'success' && 'border-green-500 focus:ring-green-500',
-                          getFieldStatus('email', email) === 'error' && 'border-red-500 focus:ring-red-500'
-                        )}
+                        value={clientEmail || email}
+                        disabled
+                        placeholder="Auto-generated from your name"
+                        className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
+                        hint="This email is auto-generated based on your first name, middle name, and last name"
                       />
                     </div>
                     <Select
@@ -1647,7 +1618,7 @@ export function MyDetails() {
                         { value: 'widowed', label: 'Widowed' },
                       ]}
                     />
-                    {maritalStatus === 'single' && (
+                    {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && (
                       <div>
                         <Input
                           label="Write Your Full Name When You Are Single"
@@ -1777,7 +1748,7 @@ export function MyDetails() {
                       {mobileNumber || 'Not set'}
                     </p>
                   </div>
-                  {maritalStatus === 'single' && singleFullName && (
+                  {gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '' && singleFullName && (
                     <div className="group">
                       <div className="flex items-center gap-2 mb-2">
                         <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name When Single</label>

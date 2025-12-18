@@ -25,6 +25,39 @@ export function formatDate(date: string | Date, includeTime: boolean = false): s
   return dateStr
 }
 
+export function formatDistanceToNow(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  const now = new Date()
+  const diffInSeconds = Math.floor((now.getTime() - dateObj.getTime()) / 1000)
+  
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds} second${diffInSeconds !== 1 ? 's' : ''}`
+  }
+  
+  const diffInMinutes = Math.floor(diffInSeconds / 60)
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''}`
+  }
+  
+  const diffInHours = Math.floor(diffInMinutes / 60)
+  if (diffInHours < 24) {
+    return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''}`
+  }
+  
+  const diffInDays = Math.floor(diffInHours / 24)
+  if (diffInDays < 30) {
+    return `${diffInDays} day${diffInDays !== 1 ? 's' : ''}`
+  }
+  
+  const diffInMonths = Math.floor(diffInDays / 30)
+  if (diffInMonths < 12) {
+    return `${diffInMonths} month${diffInMonths !== 1 ? 's' : ''}`
+  }
+  
+  const diffInYears = Math.floor(diffInMonths / 12)
+  return `${diffInYears} year${diffInYears !== 1 ? 's' : ''}`
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -107,6 +140,118 @@ export function getFirstName(user?: { first_name?: string | null; last_name?: st
 // Input sanitization - remove potentially dangerous characters
 export function sanitizeInput(input: string): string {
   return input.trim().replace(/[<>]/g, '')
+}
+
+// HTML sanitization using DOMPurify for XSS protection
+// Cache DOMPurify instance to avoid repeated imports
+let DOMPurifyInstance: any = null
+let DOMPurifyInitPromise: Promise<any> | null = null
+
+function initDOMPurify() {
+  if (DOMPurifyInitPromise) {
+    return DOMPurifyInitPromise
+  }
+  
+  if (typeof window === 'undefined') {
+    return Promise.resolve(null)
+  }
+  
+  DOMPurifyInitPromise = (async () => {
+    try {
+      const createDOMPurify = (await import('isomorphic-dompurify')).default
+      DOMPurifyInstance = createDOMPurify(window)
+      return DOMPurifyInstance
+    } catch (error) {
+      console.error('Error loading DOMPurify:', error)
+      return null
+    }
+  })()
+  
+  return DOMPurifyInitPromise
+}
+
+// Initialize DOMPurify on module load (non-blocking)
+if (typeof window !== 'undefined') {
+  initDOMPurify().catch(() => {
+    // Silently fail - will be retried on first use
+  })
+}
+
+export function sanitizeHTML(html: string, options?: { allowEmailTemplates?: boolean }): string {
+  if (typeof window === 'undefined') {
+    // Server-side: return as-is (DOMPurify needs DOM)
+    return html
+  }
+  
+  // If DOMPurify is already loaded, use it synchronously
+  if (DOMPurifyInstance) {
+    try {
+      // For email templates, use more permissive settings
+      if (options?.allowEmailTemplates) {
+        return DOMPurifyInstance.sanitize(html, {
+          ALLOWED_TAGS: [
+            'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'a', 'img', 'div', 'span', 'table', 'thead', 'tbody',
+            'tr', 'td', 'th', 'blockquote', 'pre', 'code', 'hr', 'b', 'i', 'small',
+            'sub', 'sup', 'mark', 'del', 'ins', 'abbr', 'address', 'article', 'aside',
+            'footer', 'header', 'main', 'nav', 'section', 'time', 'html', 'head', 'body',
+            'meta', 'title', 'style', 'link', 'script', 'form', 'input', 'button', 'label',
+            'select', 'option', 'textarea', 'fieldset', 'legend', 'colgroup', 'col', 'tfoot'
+          ],
+          ALLOWED_ATTR: [
+            'href', 'src', 'alt', 'title', 'class', 'id', 'style', 'width', 'height',
+            'align', 'valign', 'colspan', 'rowspan', 'target', 'rel', 'type', 'charset',
+            'name', 'content', 'media', 'lang', 'dir', 'role', 'aria-label', 'data-*',
+            'bgcolor', 'color', 'border', 'cellpadding', 'cellspacing', 'valign', 'align',
+            'background', 'background-color', 'font-family', 'font-size', 'font-weight',
+            'text-align', 'padding', 'margin', 'border-radius', 'display', 'flex', 'flex-direction',
+            'border-color', 'border-width', 'border-style', 'text-decoration', 'line-height'
+          ],
+          ALLOW_DATA_ATTR: true,
+          ALLOW_UNKNOWN_PROTOCOLS: false,
+          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+          KEEP_CONTENT: true,
+          RETURN_DOM: false,
+          RETURN_DOM_FRAGMENT: false,
+          RETURN_TRUSTED_TYPE: false
+        })
+      }
+      
+      // Default sanitization for regular content
+      return DOMPurifyInstance.sanitize(html, {
+        ALLOWED_TAGS: [
+          'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+          'ul', 'ol', 'li', 'a', 'img', 'div', 'span', 'table', 'thead', 'tbody',
+          'tr', 'td', 'th', 'blockquote', 'pre', 'code', 'hr', 'b', 'i', 'small',
+          'sub', 'sup', 'mark', 'del', 'ins', 'abbr', 'address', 'article', 'aside',
+          'footer', 'header', 'main', 'nav', 'section', 'time'
+        ],
+        ALLOWED_ATTR: [
+          'href', 'src', 'alt', 'title', 'class', 'id', 'style', 'width', 'height',
+          'align', 'valign', 'colspan', 'rowspan', 'target', 'rel'
+        ],
+        ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+        KEEP_CONTENT: true,
+        RETURN_DOM: false,
+        RETURN_DOM_FRAGMENT: false,
+        RETURN_TRUSTED_TYPE: false
+      })
+    } catch (error) {
+      console.error('Error sanitizing HTML:', error)
+      return html
+    }
+  }
+  
+  // If DOMPurify is not loaded yet, try to initialize it (non-blocking)
+  // and return HTML as-is for now (safe for trusted templates)
+  if (!DOMPurifyInitPromise) {
+    initDOMPurify().catch(() => {
+      // Silently fail
+    })
+  }
+  
+  // For trusted templates like cover letters, return as-is if DOMPurify isn't ready yet
+  return html
 }
 
 // Export data to CSV

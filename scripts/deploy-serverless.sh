@@ -48,6 +48,11 @@ FUNCTIONS=(
     "create-payment-intent"
     "stripe-webhook"
     "send-email"
+    "resend-inbox"
+    "compile-documents"
+    "sign-documents-client"
+    "sign-documents-preparer"
+    "generate-cover-letter"
 )
 
 for func in "${FUNCTIONS[@]}"; do

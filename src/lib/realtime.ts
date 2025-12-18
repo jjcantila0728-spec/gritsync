@@ -152,6 +152,36 @@ export function subscribeToAllClients(
     .subscribe()
 }
 
+// Subscribe to compilation job status changes
+export function subscribeToCompilationJob(
+  jobId: string,
+  callback: (payload: {
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+    new?: any
+    old?: any
+  }) => void
+): RealtimeChannel {
+  return supabase
+    .channel(`compilation_job:${jobId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'document_compilation_jobs',
+        filter: `id=eq.${jobId}`,
+      },
+      (payload) => {
+        callback({
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: payload.new,
+          old: payload.old,
+        })
+      }
+    )
+    .subscribe()
+}
+
 // Subscribe to timeline steps for a specific application
 export function subscribeToApplicationTimelineSteps(
   applicationId: string,

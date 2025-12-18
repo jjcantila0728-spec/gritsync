@@ -158,24 +158,24 @@ export function PaymentSettings() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-5">
         <Loading text="Loading settings..." />
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-2 mb-6">
-        <DollarSign className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+    <div className="p-3 sm:p-4 md:p-5">
+      <div className="flex items-center gap-2 mb-3 sm:mb-4">
+        <DollarSign className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
           Payment Settings
         </h2>
       </div>
 
-      <div className="space-y-4 max-w-2xl">
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div>
+      <div className="space-y-3 max-w-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="flex-1 min-w-0">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Stripe Integration
             </label>
@@ -195,7 +195,7 @@ export function PaymentSettings() {
         </div>
 
         {settings.stripeEnabled && (
-          <div className="space-y-4 pl-4 border-l-2 border-primary-200 dark:border-primary-800">
+          <div className="space-y-3 pl-3 sm:pl-4 border-l-2 border-primary-200 dark:border-primary-800">
             <div>
               <Input
                 label="Stripe Publishable Key"
@@ -283,10 +283,10 @@ export function PaymentSettings() {
               </p>
             </div>
 
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-2">
                 <Key className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-blue-800 dark:text-blue-300">
+                <div className="text-xs sm:text-sm text-blue-800 dark:text-blue-300">
                   <p className="font-medium mb-1">Security Note:</p>
                   <p>Secret keys are stored securely and masked when displayed. Only enter new keys if you need to update them.</p>
                 </div>
@@ -296,8 +296,8 @@ export function PaymentSettings() {
         )}
 
         {/* Mobile Banking Settings */}
-        <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-4">
+        <div className="pt-4 sm:pt-5 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
@@ -319,9 +319,9 @@ export function PaymentSettings() {
           </div>
 
           {settings.mobileBankingEnabled && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {mobileBankingConfigs.map((config, index) => (
-                <div key={config.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                <div key={config.id} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <input
@@ -346,7 +346,7 @@ export function PaymentSettings() {
                   </div>
 
                   {config.enabled && (
-                    <div className="space-y-3 pl-6 border-l-2 border-primary-200 dark:border-primary-800">
+                    <div className="space-y-2.5 sm:space-y-3 pl-3 sm:pl-4 md:pl-6 border-l-2 border-primary-200 dark:border-primary-800">
                       <div>
                         <Input
                           label="Bank/Service Name"
@@ -430,10 +430,11 @@ export function PaymentSettings() {
           )}
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
           <Button
             onClick={handleSave}
             disabled={saving}
+            size="sm"
           >
             {saving ? (
               <>

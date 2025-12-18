@@ -914,8 +914,8 @@ export function ApplicationPayment() {
                   onError={(error: string) => showToast(error, 'error')}
                 />
               ) : clientSecret && stripePromise ? (
-                // Stripe payment form
-                <Elements stripe={stripePromise} options={{ clientSecret }}>
+                // Stripe payment form - use key prop to force remount when clientSecret changes
+                <Elements key={clientSecret} stripe={stripePromise} options={{ clientSecret }}>
                   <StripePaymentForm
                     paymentIntentId={paymentIntentId || undefined}
                     amount={paymentType === 'step1' ? (staggeredService?.total_step1 || 0) : (staggeredService?.total_step2 || 0)}

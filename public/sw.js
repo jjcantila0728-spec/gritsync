@@ -113,17 +113,50 @@ self.addEventListener('fetch', (event) => {
   )
 })
 
-// Message event - handle cache clearing
+// Message event - handle messages from the app
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    // Skip waiting and activate immediately
+    self.skipWaiting()
+  } else if (event.data && event.data.type === 'CLEAR_CACHE') {
     console.log('[Service Worker] Clearing all caches...')
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => caches.delete(cacheName))
       )
     }).then(() => {
-      event.ports[0].postMessage({ success: true })
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ success: true })
+      }
     })
   }
+})
+
+// Handle push notifications (for future use)
+self.addEventListener('push', (event) => {
+  if (event.data) {
+    const data = event.data.json()
+    const title = data.title || 'GritSync'
+    const options = {
+      body: data.body || 'You have a new notification',
+      icon: '/gritsync_logo.png',
+      badge: '/gritsync_logo.png',
+      tag: data.tag || 'default',
+      data: data.data || {}
+    }
+    
+    event.waitUntil(
+      self.registration.showNotification(title, options)
+    )
+  }
+})
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  
+  event.waitUntil(
+    clients.openWindow(event.notification.data?.url || '/')
+  )
 })
 

@@ -64,22 +64,22 @@ export function SecuritySettings() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-5">
         <Loading text="Loading settings..." />
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-2 mb-6">
-        <Lock className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+    <div className="p-3 sm:p-4 md:p-5">
+      <div className="flex items-center gap-2 mb-3 sm:mb-4">
+        <Lock className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
           Security Settings
         </h2>
       </div>
 
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-3 max-w-2xl">
         <div>
           <Input
             label="Session Timeout (minutes)"
@@ -149,8 +149,8 @@ export function SecuritySettings() {
           </p>
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div className="flex-1 min-w-0">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Require Strong Passwords
             </label>
@@ -169,10 +169,11 @@ export function SecuritySettings() {
           </label>
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
           <Button
             onClick={handleSave}
             disabled={saving}
+            size="sm"
           >
             {saving ? (
               <>
