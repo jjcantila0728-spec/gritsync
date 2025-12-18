@@ -1145,22 +1145,29 @@ export function Quote() {
         {user && <Sidebar />}
         <main className="flex-1">
           {/* Banner Section */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-            <div className="container mx-auto px-4 py-12 md:py-16">
+          <section 
+            className="relative overflow-hidden py-16 md:py-20"
+            style={{
+              backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.85), rgba(153, 27, 27, 0.9)), url('/attached_assets/generated_images/quote_page_banner_image.png')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          >
+            <div className="container mx-auto px-4">
               <div className="max-w-4xl mx-auto text-center">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
                   <DollarSign className="h-4 w-4" />
                   <span>Get Instant Quotes</span>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white">
                   Get Your Service Quotation
                 </h1>
-                <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+                <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
                   Get transparent, instant quotes for NCLEX Processing, EAD Processing, and more. No hidden fees, clear pricing upfront.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">
-                    <Button size="lg" className="text-lg px-8 py-6">
+                    <Button size="lg" className="text-lg px-8 py-6 bg-white text-red-600 hover:bg-gray-100">
                       <Plus className="h-5 w-5 mr-2" />
                       Create New Quotation
                     </Button>

@@ -20,8 +20,13 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  Loader2
+  Loader2,
+  Mail,
+  Bell,
+  Sparkles
 } from 'lucide-react'
+import { fetchVisaBulletin as fetchBulletinData, getBulletinReleaseSchedule, type VisaBulletinData } from '@/lib/visa-bulletin-api'
+import { subscribeToNewsletter, isEmailSubscribed } from '@/lib/newsletter-api'
 
 interface CaseStatus {
   receiptNumber: string
@@ -33,14 +38,9 @@ interface CaseStatus {
   processingCenter?: string
 }
 
-interface VisaBulletinData {
-  month: string
-  year: string
-  eb3Philippines: {
-    finalAction: string
-    datesForFiling: string
-  }
-  lastUpdated: string
+interface ExtendedVisaBulletinData extends VisaBulletinData {
+  nextBulletinDate: string
+  source: string
 }
 
 const STORAGE_KEY = 'uscis_saved_cases'
@@ -52,8 +52,11 @@ export function USCISTracker() {
   const [caseStatus, setCaseStatus] = useState<CaseStatus | null>(null)
   const [savedCases, setSavedCases] = useState<CaseStatus[]>([])
   const [showVisaBulletin, setShowVisaBulletin] = useState(true)
-  const [visaBulletin, setVisaBulletin] = useState<VisaBulletinData | null>(null)
+  const [visaBulletin, setVisaBulletin] = useState<ExtendedVisaBulletinData | null>(null)
   const [loadingBulletin, setLoadingBulletin] = useState(true)
+  const [subscribeEmail, setSubscribeEmail] = useState('')
+  const [subscribing, setSubscribing] = useState(false)
+  const [bulletinSchedule, setBulletinSchedule] = useState<{ currentMonth: string; nextRelease: string; isNewBulletinExpected: boolean } | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -66,29 +69,42 @@ export function USCISTracker() {
         }
       }
     }
-    fetchVisaBulletin()
+    loadVisaBulletin()
   }, [])
 
-  const fetchVisaBulletin = async () => {
+  const loadVisaBulletin = async () => {
     setLoadingBulletin(true)
     try {
-      const now = new Date()
-      const currentMonth = now.toLocaleString('en-US', { month: 'long' })
-      const currentYear = now.getFullYear().toString()
-      
-      setVisaBulletin({
-        month: currentMonth,
-        year: currentYear,
-        eb3Philippines: {
-          finalAction: 'December 01, 2022',
-          datesForFiling: 'January 01, 2023'
-        },
-        lastUpdated: now.toISOString()
-      })
+      const data = await fetchBulletinData()
+      setVisaBulletin(data)
+      const schedule = getBulletinReleaseSchedule()
+      setBulletinSchedule(schedule)
     } catch (error) {
       console.error('Failed to fetch visa bulletin:', error)
     } finally {
       setLoadingBulletin(false)
+    }
+  }
+
+  const handleSubscribe = async () => {
+    if (!subscribeEmail) {
+      showToast('Please enter your email address', 'error')
+      return
+    }
+
+    setSubscribing(true)
+    try {
+      const result = await subscribeToNewsletter(subscribeEmail, 'visa_bulletin')
+      if (result.success) {
+        showToast(result.message, 'success')
+        setSubscribeEmail('')
+      } else {
+        showToast(result.message, 'error')
+      }
+    } catch (error) {
+      showToast('Failed to subscribe. Please try again.', 'error')
+    } finally {
+      setSubscribing(false)
     }
   }
 
@@ -244,22 +260,22 @@ export function USCISTracker() {
       <Header />
 
       <div 
-        className="relative bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 py-20"
+        className="relative py-20"
         style={{
-          backgroundImage: `linear-gradient(to bottom right, rgba(30, 58, 138, 0.9), rgba(55, 48, 163, 0.9)), url('/attached_assets/generated_images/immigration-office-professional-scene.png')`,
+          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/attached_assets/generated_images/uscis_tracker_banner_image.png')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}
       >
         <div className="container mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm text-white text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
             <Globe className="h-4 w-4" />
             <span>Immigration Status Tracking</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            USCIS Case Status & <span className="text-blue-300">Visa Bulletin</span> Tracker
+            USCIS Case Status & <span className="text-red-200">Visa Bulletin</span> Tracker
           </h1>
-          <p className="text-xl text-blue-100 max-w-2xl mx-auto">
+          <p className="text-xl text-white/90 max-w-2xl mx-auto">
             Track your immigration case status and stay updated on the Visa Bulletin for Philippines EB3 category.
           </p>
         </div>
@@ -484,7 +500,7 @@ export function USCISTracker() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={fetchVisaBulletin}
+                      onClick={loadVisaBulletin}
                       disabled={loadingBulletin}
                     >
                       {loadingBulletin ? (
@@ -520,11 +536,21 @@ export function USCISTracker() {
                         </div>
                       </div>
 
-                      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-xs">
-                        <p className="text-amber-800 dark:text-amber-200">
-                          <strong>Note:</strong> Dates shown are for reference. Always verify with the official State Department Visa Bulletin.
-                        </p>
-                      </div>
+                      {bulletinSchedule && (
+                        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-xs">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Calendar className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            <span className="font-medium text-blue-800 dark:text-blue-200">Next Bulletin Release</span>
+                          </div>
+                          <p className="text-blue-700 dark:text-blue-300">{bulletinSchedule.nextRelease}</p>
+                          {bulletinSchedule.isNewBulletinExpected && (
+                            <p className="mt-1 text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              New bulletin expected soon!
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         <p className="mb-2">
@@ -532,6 +558,12 @@ export function USCISTracker() {
                         </p>
                         <p>
                           <strong>Dates for Filing:</strong> The date when you may file your application if a visa is expected to be available within a reasonable timeframe.
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-xs">
+                        <p className="text-amber-800 dark:text-amber-200">
+                          <strong>Source:</strong> {visaBulletin.source}. Always verify with the official State Department.
                         </p>
                       </div>
                     </>
@@ -548,6 +580,52 @@ export function USCISTracker() {
                   </a>
                 </div>
               )}
+            </Card>
+
+            <Card className="p-6 border-t-4 border-t-red-500">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                  <Bell className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    Get Bulletin Updates
+                  </h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Be the first to know when new bulletins are released
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <Input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={subscribeEmail}
+                  onChange={(e) => setSubscribeEmail(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSubscribe()}
+                />
+                <Button
+                  onClick={handleSubscribe}
+                  disabled={subscribing}
+                  className="w-full bg-red-600 hover:bg-red-700"
+                >
+                  {subscribing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Subscribing...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4 mr-2" />
+                      Subscribe to Updates
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+                  Get instant notifications when new visa bulletins are released
+                </p>
+              </div>
             </Card>
 
             <Card className="p-6">

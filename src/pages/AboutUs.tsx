@@ -50,14 +50,17 @@ export function AboutUs() {
       <section 
         className="relative overflow-hidden py-20"
         style={{
-          backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.85), rgba(147, 51, 234, 0.85)), url('/attached_assets/generated_images/healthcare_team_professionals.png')`,
+          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/attached_assets/generated_images/about_us_banner_image.png')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}
       >
-        
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
+              <Users className="h-4 w-4" />
+              <span>Meet Our Team</span>
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">About GritSync</h1>
             <p className="text-xl md:text-2xl text-white/90 max-w-2xl mx-auto">
               Your trusted partner in navigating the NCLEX journey to becoming a licensed nurse in the United States.
