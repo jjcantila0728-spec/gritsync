@@ -1,37 +1,172 @@
 /**
  * Email Notifications System
- * High-level functions to send specific notification emails
+ * Uses database-managed templates from email_templates table
+ * Templates are managed via /admin/emails/templates
  */
 
 import { sendEmail } from './email-service'
-import * as EmailTemplates from './email-templates'
 import { supabase } from './supabase'
+import { generalSettings } from './settings'
+
+interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  body_html: string
+  body_text: string | null
+  template_type: string
+  variables: string[]
+  is_active: boolean
+}
 
 /**
- * Send Forgot Password Email
+ * Get template from database by template_type
  */
-export async function sendForgotPasswordEmail(
-  email: string,
-  userName: string,
-  resetLink: string,
-  expiryTime?: string,
-  recipientUserId?: string | null
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createForgotPasswordEmail({
-    userName,
-    resetLink,
-    expiryTime
+async function getTemplateByType(templateType: string): Promise<EmailTemplate | null> {
+  const { data, error } = await supabase
+    .from('email_templates')
+    .select('*')
+    .eq('template_type', templateType)
+    .eq('is_active', true)
+    .single()
+
+  if (error) {
+    console.error(`Error fetching template ${templateType}:`, error)
+    return null
+  }
+
+  return data
+}
+
+/**
+ * Render template by replacing {{variables}} with values
+ */
+function renderTemplate(
+  template: EmailTemplate,
+  variables: Record<string, string>
+): { subject: string; html: string; text?: string } {
+  let subject = template.subject
+  let html = template.body_html
+  let text = template.body_text || ''
+
+  Object.entries(variables).forEach(([key, value]) => {
+    const placeholder = `{{${key}}}`
+    const safeValue = value || ''
+    const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    subject = subject.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
+    html = html.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
+    text = text.replace(new RegExp(escapedPlaceholder, 'g'), safeValue)
   })
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    recipientUserId: recipientUserId || undefined,
-    emailType: 'transactional',
-    emailCategory: 'password_reset'
+  return { subject, html, text: text || undefined }
+}
+
+/**
+ * Wrap content in base email template
+ */
+async function wrapInBaseTemplate(content: string): Promise<string> {
+  const [siteName, siteUrl, supportEmail, phoneNumber, logoUrl, primaryColor, companyAddress] = await Promise.all([
+    generalSettings.getSiteName(),
+    generalSettings.getWebsiteUrl(),
+    generalSettings.getSupportEmail(),
+    generalSettings.getPhoneNumber(),
+    generalSettings.getLogoUrl(),
+    generalSettings.getPrimaryColor(),
+    generalSettings.getCompanyAddress(),
+  ])
+
+  const primaryDark = primaryColor.replace(/^#/, '')
+  const r = parseInt(primaryDark.slice(0, 2), 16) * 0.9
+  const g = parseInt(primaryDark.slice(2, 4), 16) * 0.9
+  const b = parseInt(primaryDark.slice(4, 6), 16) * 0.9
+  const darkerColor = `#${Math.round(r).toString(16).padStart(2, '0')}${Math.round(g).toString(16).padStart(2, '0')}${Math.round(b).toString(16).padStart(2, '0')}`
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${siteName}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1f2937; background-color: #f9fafb; margin: 0; padding: 0; }
+    .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+    .email-header { background: linear-gradient(135deg, ${primaryColor} 0%, ${darkerColor} 100%); padding: 40px 20px; text-align: center; }
+    .email-body { padding: 40px 30px; }
+    h1 { font-size: 28px; color: #1f2937; margin-bottom: 20px; }
+    p { margin-bottom: 16px; color: #6b7280; font-size: 16px; }
+    .button { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, ${primaryColor} 0%, ${darkerColor} 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; }
+    .info-box { background-color: #f0fdf4; border-left: 4px solid ${primaryColor}; padding: 20px; margin: 25px 0; border-radius: 6px; }
+    .warning-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 6px; }
+    .card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .email-footer { background-color: #f9fafb; padding: 30px 20px; text-align: center; border-top: 1px solid #e5e7eb; }
+    .footer-text { color: #6b7280; font-size: 14px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="email-header">
+      ${logoUrl 
+        ? `<a href="${siteUrl}"><img src="${logoUrl}" alt="${siteName}" width="180" style="max-width: 180px; height: auto;" /></a>`
+        : `<a href="${siteUrl}" style="font-size: 32px; font-weight: bold; color: #ffffff; text-decoration: none;">GRIT<span style="color: rgba(255,255,255,0.85);">SYNC</span></a>`
+      }
+      <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Your NCLEX Journey Partner</p>
+    </div>
+    <div class="email-body">
+      ${content}
+    </div>
+    <div class="email-footer">
+      ${companyAddress ? `<p class="footer-text">${companyAddress.replace(/\n/g, '<br>')}</p>` : ''}
+      <p class="footer-text">
+        Email: <a href="mailto:${supportEmail}" style="color: ${primaryColor};">${supportEmail}</a>
+        ${phoneNumber ? `<br>Phone: <a href="tel:${phoneNumber.replace(/[^\d+]/g, '')}" style="color: ${primaryColor};">${phoneNumber}</a>` : ''}
+      </p>
+      <p class="footer-text" style="font-size: 12px; margin-top: 20px;">
+        © ${new Date().getFullYear()} ${siteName}. All rights reserved.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+/**
+ * Send email using database template
+ */
+async function sendTemplateEmail(
+  templateType: string,
+  to: string,
+  variables: Record<string, string>,
+  options?: {
+    recipientUserId?: string
+    emailType?: 'transactional' | 'notification' | 'marketing'
+    tags?: string[]
+  }
+): Promise<boolean> {
+  const template = await getTemplateByType(templateType)
+  
+  if (!template) {
+    console.error(`Template not found or inactive: ${templateType}`)
+    return false
+  }
+
+  const rendered = renderTemplate(template, variables)
+  const wrappedHtml = await wrapInBaseTemplate(rendered.html)
+
+  return sendEmail({
+    to,
+    subject: rendered.subject,
+    html: wrappedHtml,
+    text: rendered.text,
+    recipientUserId: options?.recipientUserId,
+    emailType: options?.emailType || 'transactional',
+    emailCategory: templateType,
+    tags: options?.tags || [templateType],
   })
 }
+
+// ============================================
+// PUBLIC EMAIL FUNCTIONS
+// ============================================
 
 /**
  * Send Payment Receipt Email
@@ -45,16 +180,19 @@ export async function sendPaymentReceiptEmail(
     transactionId: string
     paymentDate: string
     description: string
-    items?: Array<{ name: string; amount: number }>
-    receiptUrl?: string
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createPaymentReceiptEmail(data)
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: data.currency
+  }).format(data.amount)
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('payment_receipt', email, {
+    userName: data.userName,
+    amount: formattedAmount,
+    transactionId: data.transactionId,
+    paymentDate: data.paymentDate,
+    description: data.description,
   })
 }
 
@@ -70,15 +208,15 @@ export async function sendTimelineUpdateEmail(
     updateMessage: string
     newStatus?: string
     actionUrl?: string
-    timeline?: Array<{ date: string; title: string; completed: boolean }>
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createTimelineUpdateEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+  
+  return sendTemplateEmail('timeline_update', email, {
+    userName: data.userName,
+    updateTitle: data.updateTitle,
+    updateMessage: data.updateMessage,
+    actionUrl: data.actionUrl || `${baseUrl}/applications/${data.applicationId}`,
   })
 }
 
@@ -95,12 +233,14 @@ export async function sendMissingDocumentEmail(
     uploadUrl: string
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createMissingDocumentEmail(data)
+  const documentList = data.missingDocuments
+    .map(doc => `- ${doc.name}${doc.required ? ' (Required)' : ''}`)
+    .join('<br>')
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('missing_document', email, {
+    userName: data.userName,
+    documentList,
+    uploadUrl: data.uploadUrl,
   })
 }
 
@@ -116,12 +256,14 @@ export async function sendMissingDetailsEmail(
     isUrgent?: boolean
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createMissingDetailsEmail(data)
+  const fieldList = data.missingFields
+    .map(field => `- ${field.fieldName}`)
+    .join('<br>')
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('missing_details', email, {
+    userName: data.userName,
+    fieldList,
+    profileUrl: data.profileUrl,
   })
 }
 
@@ -138,12 +280,10 @@ export async function sendSchoolLetterEmail(
     instructions?: string
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createSchoolLetterEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('school_letter', email, {
+    applicantName: data.userName,
+    applicationId: data.applicationId,
+    documentRequirements: data.instructions || 'Please provide official transcripts and graduation verification.',
   })
 }
 
@@ -160,33 +300,138 @@ export async function sendFullInstructionsEmail(
     resourcesUrl?: string
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createFullInstructionsEmail(data)
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+  const instructions = data.steps
+    .map(step => `<p><strong>Step ${step.stepNumber}: ${step.title}</strong><br>${step.description}</p>`)
+    .join('')
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('full_instructions', email, {
+    userName: data.userName,
+    instructions,
+    dashboardUrl: `${baseUrl}/dashboard`,
   })
 }
 
 /**
- * Send Welcome Email
+ * Send Application Approved Email
  */
-export async function sendWelcomeEmail(
+export async function sendApplicationApprovedEmail(
   email: string,
   data: {
     userName: string
-    userEmail: string
-    dashboardUrl: string
+    applicationId: string
+    serviceType: string
+    approvalDate: string
+    nextSteps?: string[]
+    applicationUrl: string
+    certificateUrl?: string
   }
 ): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createWelcomeEmail(data)
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+  const nextSteps = data.nextSteps?.map(step => `- ${step}`).join('<br>') || 'Check your dashboard for next steps.'
 
-  return await sendEmail({
-    to: email,
-    subject,
-    html
+  return sendTemplateEmail('application_approved', email, {
+    userName: data.userName,
+    applicationId: data.applicationId,
+    nextSteps,
+    dashboardUrl: `${baseUrl}/dashboard`,
   })
+}
+
+/**
+ * Send Application Rejected Email
+ */
+export async function sendApplicationRejectedEmail(
+  email: string,
+  data: {
+    userName: string
+    applicationId: string
+    serviceType: string
+    rejectionDate: string
+    reason?: string
+    appealProcess?: string
+    applicationUrl: string
+    supportContact?: string
+  }
+): Promise<boolean> {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+
+  return sendTemplateEmail('application_rejected', email, {
+    userName: data.userName,
+    rejectionReason: data.reason || 'Please contact support for more details.',
+    actionItems: data.appealProcess || 'You may resubmit your application with the required corrections.',
+    dashboardUrl: `${baseUrl}/dashboard`,
+  })
+}
+
+/**
+ * Send Document Approved Email
+ */
+export async function sendDocumentApprovedEmail(
+  email: string,
+  data: {
+    userName: string
+    documentName: string
+    documentType: string
+    applicationId: string
+    applicationUrl: string
+    remainingDocuments?: Array<{ name: string; status: string }>
+  }
+): Promise<boolean> {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+
+  return sendTemplateEmail('document_approved', email, {
+    userName: data.userName,
+    documentName: data.documentName,
+    dashboardUrl: `${baseUrl}/dashboard`,
+  })
+}
+
+/**
+ * Send Document Rejected Email
+ */
+export async function sendDocumentRejectedEmail(
+  email: string,
+  data: {
+    userName: string
+    documentName: string
+    documentType: string
+    applicationId: string
+    reason: string
+    resubmissionUrl: string
+    tips?: string[]
+  }
+): Promise<boolean> {
+  return sendTemplateEmail('document_rejected', email, {
+    userName: data.userName,
+    documentName: data.documentName,
+    rejectionReason: data.reason,
+    uploadUrl: data.resubmissionUrl,
+  })
+}
+
+/**
+ * Send Visa Bulletin Update Email
+ */
+export async function sendVisaBulletinUpdateEmail(
+  email: string,
+  data: {
+    userName: string
+    month: string
+    year: string
+    finalActionDate: string
+    datesForFiling: string
+    bulletinUrl: string
+  }
+): Promise<boolean> {
+  return sendTemplateEmail('visa_bulletin_update', email, {
+    userName: data.userName,
+    month: data.month,
+    year: data.year,
+    finalActionDate: data.finalActionDate,
+    datesForFiling: data.datesForFiling,
+    bulletinUrl: data.bulletinUrl,
+  }, { emailType: 'notification' })
 }
 
 /**
@@ -213,17 +458,12 @@ export async function sendApplicationStatusEmail(
   const applicationUrl = `${baseUrl}/applications/${applicationId}`
   const status = newStatus.toLowerCase()
 
-  // Use specialized templates for approved/rejected
   if (status === 'approved' || status === 'completed') {
-    return await sendApplicationApprovedEmail(email, {
+    return sendApplicationApprovedEmail(email, {
       userName,
       applicationId,
       serviceType: additionalData?.serviceType || 'Application',
-      approvalDate: new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      }),
+      approvalDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       nextSteps: additionalData?.nextSteps,
       applicationUrl,
       certificateUrl: additionalData?.certificateUrl
@@ -231,15 +471,11 @@ export async function sendApplicationStatusEmail(
   }
 
   if (status === 'rejected') {
-    return await sendApplicationRejectedEmail(email, {
+    return sendApplicationRejectedEmail(email, {
       userName,
       applicationId,
       serviceType: additionalData?.serviceType || 'Application',
-      rejectionDate: new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      }),
+      rejectionDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       reason: additionalData?.reason || message,
       appealProcess: additionalData?.appealProcess,
       applicationUrl,
@@ -247,7 +483,6 @@ export async function sendApplicationStatusEmail(
     })
   }
 
-  // Use timeline update for other status changes
   const statusMessages: Record<string, string> = {
     submitted: 'Your application has been received and is under review.',
     in_review: 'Our team is currently reviewing your application.',
@@ -256,7 +491,7 @@ export async function sendApplicationStatusEmail(
     pending: 'Your application is pending review.'
   }
 
-  return await sendTimelineUpdateEmail(email, {
+  return sendTimelineUpdateEmail(email, {
     userName,
     applicationId,
     updateTitle: `Status Changed: ${newStatus}`,
@@ -267,346 +502,32 @@ export async function sendApplicationStatusEmail(
 }
 
 /**
- * Send Payment Confirmation Email
+ * Send Welcome Email (for new registrations)
+ * Note: This is handled by Supabase Auth. Use Supabase Dashboard to customize.
  */
-export async function sendPaymentConfirmationEmail(
+export async function sendWelcomeEmail(
+  email: string,
+  data: {
+    userName: string
+    userEmail: string
+    dashboardUrl: string
+  }
+): Promise<boolean> {
+  console.log('Welcome email should be sent via Supabase Auth templates')
+  return true
+}
+
+/**
+ * Send Forgot Password Email
+ * Note: This is handled by Supabase Auth. Use Supabase Dashboard to customize.
+ */
+export async function sendForgotPasswordEmail(
   email: string,
   userName: string,
-  paymentData: {
-    amount: number
-    currency: string
-    transactionId: string
-    applicationId: string
-    serviceName: string
-  }
+  resetLink: string,
+  expiryTime?: string,
+  recipientUserId?: string | null
 ): Promise<boolean> {
-  const { amount, currency, transactionId, applicationId, serviceName } = paymentData
-
-  return await sendPaymentReceiptEmail(email, {
-    userName,
-    amount,
-    currency,
-    transactionId,
-    paymentDate: new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }),
-    description: `${serviceName} - Application #${applicationId}`,
-    receiptUrl: `${window.location.origin}/payments/${transactionId}/receipt`
-  })
+  console.log('Forgot password email should be sent via Supabase Auth templates')
+  return true
 }
-
-/**
- * Check and send missing document reminders
- */
-export async function checkAndSendDocumentReminders(
-  userId: string
-): Promise<void> {
-  try {
-    // Get user's applications with missing documents
-    const { data: applications, error } = await supabase
-      .from('applications')
-      .select(`
-        id,
-        user_id,
-        status,
-        users!inner (
-          email,
-          full_name
-        ),
-        documents (
-          id,
-          document_type,
-          status
-        )
-      `)
-      .eq('user_id', userId)
-      .in('status', ['submitted', 'in_review', 'documents_requested'])
-
-    if (error) throw error
-
-    for (const app of applications || []) {
-      const requiredDocs = [
-        { type: 'passport', name: 'Passport Copy', required: true },
-        { type: 'diploma', name: 'Diploma/Degree', required: true },
-        { type: 'transcript', name: 'Academic Transcript', required: true },
-        { type: 'license', name: 'Professional License', required: false }
-      ]
-
-      const uploadedDocs = (app.documents || []).map((d: any) => d.document_type)
-      const missingDocs = requiredDocs.filter(doc => !uploadedDocs.includes(doc.type))
-
-      if (missingDocs.length > 0) {
-        const userInfo = (app.users as any)
-        await sendMissingDocumentEmail(userInfo?.email || '', {
-          userName: userInfo?.full_name || 'User',
-          applicationId: app.id,
-          missingDocuments: missingDocs.map(doc => ({
-            name: doc.name,
-            required: doc.required
-          })),
-          uploadUrl: `${window.location.origin}/applications/${app.id}/documents`
-        })
-      }
-    }
-  } catch (error) {
-    console.error('Error checking document reminders:', error)
-  }
-}
-
-/**
- * Check and send missing details reminders
- */
-export async function checkAndSendDetailsReminders(
-  userId: string
-): Promise<void> {
-  try {
-    // Get user details
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (userError) throw userError
-
-    // Get user_details
-    const { data: details, error: detailsError } = await supabase
-      .from('user_details')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (detailsError && detailsError.code !== 'PGRST116') throw detailsError
-
-    const missingFields: Array<{ fieldName: string; description?: string }> = []
-
-    // Check required fields
-    if (!user.phone) {
-      missingFields.push({ fieldName: 'Phone Number', description: 'Your contact phone number' })
-    }
-    if (!details?.date_of_birth) {
-      missingFields.push({ fieldName: 'Date of Birth', description: 'Required for verification' })
-    }
-    if (!details?.address) {
-      missingFields.push({ fieldName: 'Address', description: 'Your current residential address' })
-    }
-    if (!details?.country) {
-      missingFields.push({ fieldName: 'Country', description: 'Your country of residence' })
-    }
-
-    if (missingFields.length > 0) {
-      await sendMissingDetailsEmail(user.email, {
-        userName: user.full_name || 'User',
-        missingFields,
-        profileUrl: `${window.location.origin}/my-details`,
-        isUrgent: missingFields.length > 2
-      })
-    }
-  } catch (error) {
-    console.error('Error checking details reminders:', error)
-  }
-}
-
-/**
- * Send Email Verification Email
- */
-export async function sendEmailVerificationEmail(
-  email: string,
-  userName: string,
-  verificationLink: string,
-  expiryTime?: string
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createEmailVerificationEmail({
-    userName,
-    userEmail: email,
-    verificationLink,
-    expiryTime
-  })
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'transactional',
-    emailCategory: 'email_verification'
-  })
-}
-
-/**
- * Send Application Approved Email
- */
-export async function sendApplicationApprovedEmail(
-  email: string,
-  data: {
-    userName: string
-    applicationId: string
-    serviceType: string
-    approvalDate: string
-    nextSteps?: string[]
-    applicationUrl: string
-    certificateUrl?: string
-  }
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createApplicationApprovedEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'notification',
-    emailCategory: 'application_approved',
-    applicationId: data.applicationId,
-    recipientName: data.userName
-  })
-}
-
-/**
- * Send Application Rejected Email
- */
-export async function sendApplicationRejectedEmail(
-  email: string,
-  data: {
-    userName: string
-    applicationId: string
-    serviceType: string
-    rejectionDate: string
-    reason?: string
-    appealProcess?: string
-    applicationUrl: string
-    supportContact?: string
-  }
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createApplicationRejectedEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'notification',
-    emailCategory: 'application_rejected',
-    applicationId: data.applicationId,
-    recipientName: data.userName
-  })
-}
-
-/**
- * Send Document Approved Email
- */
-export async function sendDocumentApprovedEmail(
-  email: string,
-  data: {
-    userName: string
-    applicationId: string
-    documentName: string
-    approvedDate: string
-    approvedBy?: string
-    applicationUrl: string
-    notes?: string
-  }
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createDocumentApprovedEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'notification',
-    emailCategory: 'document_approved',
-    applicationId: data.applicationId,
-    recipientName: data.userName
-  })
-}
-
-/**
- * Send Document Rejected Email
- */
-export async function sendDocumentRejectedEmail(
-  email: string,
-  data: {
-    userName: string
-    applicationId: string
-    documentName: string
-    rejectionDate: string
-    rejectionReason: string
-    requiredActions?: string[]
-    uploadUrl: string
-    reviewedBy?: string
-  }
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createDocumentRejectedEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'notification',
-    emailCategory: 'document_rejected',
-    applicationId: data.applicationId,
-    recipientName: data.userName
-  })
-}
-
-/**
- * Send Visa Bulletin Update Email
- */
-export async function sendVisaBulletinUpdateEmail(
-  email: string,
-  data: {
-    month: string
-    year: string
-    eb3PhilippinesFinalAction: string
-    eb3PhilippinesDatesForFiling: string
-    previousFinalAction?: string
-    previousDatesForFiling?: string
-  }
-): Promise<boolean> {
-  const { subject, html } = await EmailTemplates.createVisaBulletinUpdateEmail(data)
-
-  return await sendEmail({
-    to: email,
-    subject,
-    html,
-    emailType: 'marketing',
-    emailCategory: 'visa_bulletin_update'
-  })
-}
-
-/**
- * Send Visa Bulletin Updates to All Subscribers
- * Called when a new visa bulletin is detected
- */
-export async function sendVisaBulletinToAllSubscribers(
-  bulletinData: {
-    month: string
-    year: string
-    eb3PhilippinesFinalAction: string
-    eb3PhilippinesDatesForFiling: string
-    previousFinalAction?: string
-    previousDatesForFiling?: string
-  }
-): Promise<{ sent: number; failed: number }> {
-  const { getActiveSubscribers } = await import('./newsletter-api')
-  
-  const subscribers = await getActiveSubscribers('visa_bulletin')
-  let sent = 0
-  let failed = 0
-  
-  for (const subscriber of subscribers) {
-    try {
-      const success = await sendVisaBulletinUpdateEmail(subscriber.email, bulletinData)
-      if (success) {
-        sent++
-      } else {
-        failed++
-      }
-    } catch (error) {
-      console.error(`Failed to send bulletin to ${subscriber.email}:`, error)
-      failed++
-    }
-  }
-  
-  return { sent, failed }
-}
-
