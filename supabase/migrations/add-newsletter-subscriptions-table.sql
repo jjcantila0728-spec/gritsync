@@ -165,3 +165,14 @@ GRANT ALL ON visa_bulletin_email_log TO service_role;
 COMMENT ON TABLE newsletter_subscriptions IS 'Stores email subscriptions for visa bulletin and other newsletters';
 COMMENT ON TABLE visa_bulletin_cache IS 'Caches visa bulletin data to detect changes and trigger notifications';
 COMMENT ON TABLE visa_bulletin_email_log IS 'Tracks visa bulletin notification emails sent to subscribers';
+
+-- Seed initial visa bulletin data for Philippines EB3
+INSERT INTO visa_bulletin_cache (bulletin_month, bulletin_year, category, country, final_action_date, dates_for_filing, source, fetched_at)
+VALUES 
+  ('December', 2025, 'EB3', 'Philippines', '2018-01-01', '2019-01-01', 'U.S. Department of State', NOW()),
+  ('November', 2025, 'EB3', 'Philippines', '2017-12-01', '2019-01-01', 'U.S. Department of State', NOW()),
+  ('October', 2025, 'EB3', 'Philippines', '2017-11-01', '2018-12-01', 'U.S. Department of State', NOW()),
+  ('September', 2025, 'EB3', 'Philippines', '2017-10-01', '2018-11-01', 'U.S. Department of State', NOW()),
+  ('August', 2025, 'EB3', 'Philippines', '2017-09-01', '2018-10-01', 'U.S. Department of State', NOW()),
+  ('July', 2025, 'EB3', 'Philippines', '2017-08-01', '2018-09-01', 'U.S. Department of State', NOW())
+ON CONFLICT (bulletin_month, bulletin_year, category, country) DO NOTHING;

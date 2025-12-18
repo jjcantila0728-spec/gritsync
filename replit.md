@@ -171,14 +171,36 @@ Verify:
 
 ## Architecture Notes
 
-The application uses a fully serverless architecture:
-- **Frontend**: React SPA served as static files
-- **Backend**: Supabase handles auth, database, storage, and realtime
-- **API**: Direct Supabase client calls (no Express server)
-- **Payments**: Stripe client SDK
-- **File Storage**: Supabase Storage buckets with RLS
+The application uses a **100% serverless architecture** powered by Supabase:
 
-This architecture makes the app highly scalable and cost-effective, with no server maintenance required.
+### Core Services (Supabase)
+- **Authentication**: Supabase Auth with role-based access control
+- **Database**: PostgreSQL with Row Level Security (RLS)
+- **File Storage**: Supabase Storage buckets with RLS policies
+- **Real-time**: Supabase Realtime for live updates
+- **Edge Functions**: Serverless functions for email sending, PDF generation
+- **Email Service**: Resend integration via Supabase Edge Functions
+
+### Frontend
+- **Framework**: React 18 + TypeScript + Vite
+- **Hosting**: Static deployment (Replit or any CDN)
+- **State**: React Context + Supabase real-time subscriptions
+
+### External Integrations
+- **Payments**: Stripe (client-side SDK)
+- **Email**: Resend (via Supabase Edge Functions)
+
+### Data Flow
+1. All data operations go through Supabase client SDK
+2. RLS policies enforce security at the database level
+3. Edge Functions handle server-side operations (emails, PDFs)
+4. No traditional backend server required
+
+This architecture provides:
+- Automatic scaling with no server management
+- Built-in security with RLS policies
+- Cost-effective (pay only for what you use)
+- Global edge distribution for low latency
 
 ## Support
 
