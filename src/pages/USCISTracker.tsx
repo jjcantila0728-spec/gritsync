@@ -72,15 +72,21 @@ export function USCISTracker() {
     loadVisaBulletin()
   }, [])
 
-  const loadVisaBulletin = async () => {
+  const loadVisaBulletin = async (showNotification: boolean = false) => {
     setLoadingBulletin(true)
     try {
       const data = await fetchBulletinData()
       setVisaBulletin(data)
       const schedule = getBulletinReleaseSchedule()
       setBulletinSchedule(schedule)
+      if (showNotification) {
+        showToast(`Visa Bulletin updated! ${data.month} ${data.year} - Philippines EB3 Final Action: ${data.eb3Philippines.finalAction}`, 'success')
+      }
     } catch (error) {
       console.error('Failed to fetch visa bulletin:', error)
+      if (showNotification) {
+        showToast('Failed to fetch latest visa bulletin. Please try again.', 'error')
+      }
     } finally {
       setLoadingBulletin(false)
     }
@@ -500,8 +506,9 @@ export function USCISTracker() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={loadVisaBulletin}
+                      onClick={() => loadVisaBulletin(true)}
                       disabled={loadingBulletin}
+                      title="Refresh Visa Bulletin"
                     >
                       {loadingBulletin ? (
                         <Loader2 className="h-4 w-4 animate-spin" />

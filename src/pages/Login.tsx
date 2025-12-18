@@ -130,7 +130,15 @@ export function Login() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+    <div 
+      className="min-h-screen"
+      style={{
+        backgroundImage: `linear-gradient(to bottom right, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92)), url('/login_page_professional_background.png')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       <SEO
         title="Login - GritSync | NCLEX Processing Agency"
         description="Sign in to your GritSync account to access your NCLEX applications, track status, manage documents, and process payments. Secure login for nurses and clients."

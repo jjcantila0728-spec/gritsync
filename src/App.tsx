@@ -73,6 +73,7 @@ const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const USCISTracker = lazy(() => import('./pages/USCISTracker').then(m => ({ default: m.USCISTracker })))
 const SuccessStories = lazy(() => import('./pages/SuccessStories').then(m => ({ default: m.SuccessStories })))
+const AdminTestimonials = lazy(() => import('./pages/AdminTestimonials').then(m => ({ default: m.AdminTestimonials })))
 
 // Loading fallback component
 function PageLoader() {
@@ -528,6 +529,14 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminDonations />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/testimonials"
+        element={
+          <AdminRoute>
+            <AdminTestimonials />
           </AdminRoute>
         }
       />

@@ -51,7 +51,15 @@ export function ForgotPassword() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+    <div 
+      className="min-h-screen"
+      style={{
+        backgroundImage: `linear-gradient(to bottom right, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.92)), url('/forgot_password_page_background.png')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       <SEO
         title="Forgot Password - Reset Your GritSync Account | NCLEX Processing Agency"
         description="Reset your GritSync account password. Enter your email address to receive password reset instructions. Secure password recovery for your NCLEX application account."
