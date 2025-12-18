@@ -275,5 +275,24 @@ For issues specific to:
 - Scheduled job to scrape DOS visa bulletin and trigger emails
 - Edge Function for secure bulk email sending
 
+## Success Stories Page (December 18, 2025)
+- **New Success Stories page** accessible via Explore menu (/success-stories)
+- **20 Filipino testimonials** with authentic Tagalog-English mixed language (Taglish)
+  - Real Filipino names and locations (e.g., "Manila to California")
+  - Service types: NCLEX Processing, EAD Processing, NCLEX + EAD Processing
+- **AI-generated Filipino profile pictures** (20 images in attached_assets/generated_images/)
+  - Various healthcare professional attire (scrubs, medical coats)
+  - Professional headshot style on white backgrounds
+- **Testimonial submission form** with:
+  - Profile photo upload to Supabase Storage (public-assets bucket)
+  - Form fields: name, email, location journey, service type, testimony
+  - Proper error handling - surfaces failures to users with appropriate messages
+- **Database integration**:
+  - Migration: `supabase/migrations/add-testimonials-table.sql`
+  - RLS policies: Anonymous/authenticated users can submit (pending status), admins manage all
+  - Table includes: status (pending/approved/rejected), featured flag, approval tracking
+- **Home page footer** now uses shared Footer component instead of inline footer
+- Added to Header.tsx Explore menu navigation
+
 ## Last Updated
-December 18, 2025 - Newsletter subscriptions, visa bulletin email integration, Resend email templates
+December 18, 2025 - Success Stories page with 20 Filipino testimonials, testimonial submission form

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { HeroSlider } from '@/components/HeroSlider'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -713,59 +714,7 @@ export function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 dark:bg-black text-gray-400 py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="logo-container">
-                  <img 
-                    src="/gritsync_logo.png" 
-                    alt="GritSync Logo" 
-                    className="rounded-lg"
-                  />
-                </div>
-                <span className="text-xl font-bold text-white">GritSync</span>
-              </div>
-              <p className="text-sm">
-                Your trusted partner for NCLEX and EAD application processing. Helping Filipino healthcare professionals achieve their American Dream.
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="text-white font-semibold mb-4">Services</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/quote" className="hover:text-primary-400 transition-colors">NCLEX Processing</Link></li>
-                <li><Link to="/ead-application" className="hover:text-primary-400 transition-colors">EAD Application</Link></li>
-                <li><Link to="/tracking" className="hover:text-primary-400 transition-colors">Track Applications</Link></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="text-white font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/about-us" className="hover:text-primary-400 transition-colors">About Us</Link></li>
-                <li><a href="#contact" className="hover:text-primary-400 transition-colors">Contact</a></li>
-                <li><Link to="/privacy" className="hover:text-primary-400 transition-colors">Privacy Policy</Link></li>
-                <li><Link to="/terms" className="hover:text-primary-400 transition-colors">Terms of Service</Link></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="text-white font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-primary-400 transition-colors">Help Center</a></li>
-                <li><a href="#" className="hover:text-primary-400 transition-colors">Documentation</a></li>
-                <li><a href="#" className="hover:text-primary-400 transition-colors">FAQs</a></li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-gray-800 pt-8 text-center text-sm">
-            <p>&copy; {new Date().getFullYear()} GritSync. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

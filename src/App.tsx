@@ -72,6 +72,7 @@ const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ defa
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const USCISTracker = lazy(() => import('./pages/USCISTracker').then(m => ({ default: m.USCISTracker })))
+const SuccessStories = lazy(() => import('./pages/SuccessStories').then(m => ({ default: m.SuccessStories })))
 
 // Loading fallback component
 function PageLoader() {
@@ -249,6 +250,7 @@ function AppRoutes() {
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/uscis-tracker" element={<USCISTracker />} />
+        <Route path="/success-stories" element={<SuccessStories />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />
