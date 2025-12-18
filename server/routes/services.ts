@@ -27,6 +27,30 @@ router.get('/all', authenticateToken, requireAdmin, async (_req, res: Response) 
   }
 });
 
+router.get('/by-type', async (req, res: Response) => {
+  try {
+    const { serviceType, serviceState, paymentType } = req.query;
+    
+    const allServices = await db.select().from(services).where(eq(services.is_active, true));
+    
+    const matchingService = allServices.find((s: any) => {
+      const metadata = s.metadata || {};
+      const matchesType = !serviceType || s.name?.toLowerCase().includes((serviceType as string).toLowerCase()) || s.category?.toLowerCase().includes((serviceType as string).toLowerCase());
+      const matchesState = !serviceState || metadata.state === serviceState || metadata.states?.includes(serviceState);
+      const matchesPaymentType = !paymentType || metadata.payment_type === paymentType || metadata.paymentType === paymentType;
+      return matchesType && matchesState && matchesPaymentType;
+    });
+    
+    if (!matchingService) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+    
+    res.json(matchingService);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:id', async (req, res: Response) => {
   try {
     const { id } = req.params;

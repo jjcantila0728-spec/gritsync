@@ -62,16 +62,35 @@ export const userPreferencesAPI = {
 };
 
 export const userDocumentsAPI = {
-  async getAll(_userId: string) {
-    return [];
+  async getAll() {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/documents');
   },
-  async upload(_userId: string, _file: File, _metadata: any) {
-    console.warn('File upload not implemented yet');
-    return null;
+  async getByUserId(userId: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>(`/documents/user/${userId}`);
   },
-  async delete(_documentId: string) {
-    console.warn('Document delete not implemented yet');
-    return null;
+  async getById(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any>(`/documents/${id}`);
+  },
+  async getDownloadUrl(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<{ url: string }>(`/documents/${id}/url`);
+  },
+  async upload(filename: string, fileData: string, mimeType: string, documentType: string, applicationId?: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/documents/upload', {
+      filename,
+      fileData,
+      mimeType,
+      documentType,
+      applicationId,
+    });
+  },
+  async delete(documentId: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/documents/${documentId}`);
   }
 };
 
@@ -84,6 +103,10 @@ export const applicationPaymentsAPI = {
     const { paymentsAPI } = await import('./api-client');
     return paymentsAPI.getByApplication(applicationId);
   },
+  async getByApplication(applicationId: string) {
+    const { paymentsAPI } = await import('./api-client');
+    return paymentsAPI.getByApplication(applicationId);
+  },
   async create(data: any) {
     const { paymentsAPI } = await import('./api-client');
     return paymentsAPI.create(data);
@@ -91,6 +114,10 @@ export const applicationPaymentsAPI = {
   async update(id: string, data: any) {
     const { paymentsAPI } = await import('./api-client');
     return paymentsAPI.update(id, data);
+  },
+  async delete(id: string) {
+    const { paymentsAPI } = await import('./api-client');
+    return paymentsAPI.delete(id);
   }
 };
 
@@ -106,6 +133,14 @@ export const servicesAPI = {
   async getById(id: string) {
     const { apiClient } = await import('./api-client');
     return apiClient.get<any>(`/services/${id}`);
+  },
+  async getByServiceStateAndPaymentType(serviceType: string, serviceState: string, paymentType: string) {
+    const { apiClient } = await import('./api-client');
+    try {
+      return await apiClient.get<any>(`/services/by-type?serviceType=${encodeURIComponent(serviceType)}&serviceState=${encodeURIComponent(serviceState)}&paymentType=${encodeURIComponent(paymentType)}`);
+    } catch {
+      return null;
+    }
   },
   async create(data: any) {
     const { apiClient } = await import('./api-client');
@@ -123,10 +158,28 @@ export const servicesAPI = {
 
 export const serviceRequiredDocumentsAPI = {
   async getAll() {
-    return [];
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/service-required-documents');
   },
-  async getByServiceId(_serviceId: string) {
-    return [];
+  async getByServiceId(serviceId: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>(`/service-required-documents/service/${serviceId}`);
+  },
+  async getByServiceTypes(serviceTypes: string[]) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any[]>('/service-required-documents/by-types', { serviceTypes });
+  },
+  async create(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/service-required-documents', data);
+  },
+  async update(id: string, data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.patch<any>(`/service-required-documents/${id}`, data);
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/service-required-documents/${id}`);
   }
 };
 
@@ -159,8 +212,13 @@ export const processingAccountsAPI = {
 };
 
 export const trackingAPI = {
-  async getByApplicationId(_applicationId: string) {
-    return null;
+  async track(trackingId: string) {
+    const { applicationsAPI } = await import('./api-client');
+    return applicationsAPI.getById(trackingId);
+  },
+  async getByApplicationId(applicationId: string) {
+    const { applicationsAPI } = await import('./api-client');
+    return applicationsAPI.getById(applicationId);
   }
 };
 

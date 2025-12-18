@@ -234,21 +234,15 @@ export const nclexSponsorships = pgTable('nclex_sponsorships', {
 export const partnerAgencies = pgTable('partner_agencies', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull(),
-  phone: varchar('phone', { length: 50 }),
-  website: text('website'),
+  description: text('description'),
+  logo_url: text('logo_url'),
+  website_url: text('website_url'),
+  contact_email: varchar('contact_email', { length: 255 }),
+  contact_phone: varchar('contact_phone', { length: 50 }),
   address: text('address'),
-  city: varchar('city', { length: 100 }),
-  state: varchar('state', { length: 100 }),
-  country: varchar('country', { length: 100 }).default('USA'),
-  zipcode: varchar('zipcode', { length: 20 }),
-  contact_person_name: varchar('contact_person_name', { length: 255 }),
-  contact_person_email: varchar('contact_person_email', { length: 255 }),
-  contact_person_phone: varchar('contact_person_phone', { length: 50 }),
   is_active: boolean('is_active').default(true),
-  notes: text('notes'),
-  created_at: timestamp('created_at').defaultNow(),
-  updated_at: timestamp('updated_at').defaultNow(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
 export const careers = pgTable('careers', {
@@ -445,6 +439,19 @@ export const userDocuments = pgTable('user_documents', {
   file_size: integer('file_size'),
   status: varchar('status', { length: 50 }).default('uploaded'),
   notes: text('notes'),
+  created_at: timestamp('created_at').defaultNow(),
+  updated_at: timestamp('updated_at').defaultNow(),
+});
+
+export const serviceRequiredDocuments = pgTable('service_required_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  service_type: varchar('service_type', { length: 100 }).notNull(),
+  document_type: varchar('document_type', { length: 100 }).notNull(),
+  document_name: varchar('document_name', { length: 255 }).notNull(),
+  description: text('description'),
+  required: boolean('required').default(true),
+  sort_order: integer('sort_order').default(0),
+  is_active: boolean('is_active').default(true),
   created_at: timestamp('created_at').defaultNow(),
   updated_at: timestamp('updated_at').defaultNow(),
 });
