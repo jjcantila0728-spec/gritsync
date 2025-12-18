@@ -391,7 +391,11 @@ export async function sendEmail(options: EmailOptions & {
       )
     }
 
-    // Prepare the email payload
+    // Get site URL for unsubscribe links
+    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
+    const unsubscribeUrl = `${siteUrl}/unsubscribe?email=${encodeURIComponent(options.to.trim())}`
+    
+    // Prepare the email payload with spam prevention headers
     const emailPayload: any = {
       to: options.to.trim(),
       subject: options.subject.trim(),
@@ -401,6 +405,12 @@ export async function sendEmail(options: EmailOptions & {
       replyTo: options.replyTo || undefined,
       cc: options.cc || undefined,
       bcc: options.bcc || undefined,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+        'Precedence': 'bulk',
+      },
     }
 
     // Add attachments if any

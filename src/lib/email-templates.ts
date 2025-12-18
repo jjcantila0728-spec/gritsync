@@ -659,7 +659,7 @@ export async function createTimelineUpdateEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>📋 Application Update</h1>
+      <h1>Application Update</h1>
       <p>Hi ${userName},</p>
       <p>There's an update on your application <strong>#${applicationId}</strong>:</p>
 
@@ -682,7 +682,7 @@ export async function createTimelineUpdateEmail(data: {
   `
 
   return {
-    subject: `📋 Update: ${updateTitle}`,
+    subject: `Application Update: ${updateTitle}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -708,7 +708,7 @@ export async function createMissingDocumentEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>📄 Document Upload Required</h1>
+      <h1>Document Upload Required</h1>
       <p>Hi ${userName},</p>
       <p>We noticed that some documents are still missing from your application <strong>#${applicationId}</strong>.</p>
 
@@ -750,7 +750,7 @@ export async function createMissingDocumentEmail(data: {
   `
 
   return {
-    subject: `📄 Action Required: Upload Missing Documents`,
+    subject: `Action Required: Upload Missing Documents`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -777,7 +777,7 @@ export async function createMissingDetailsEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>✏️ Complete Your Profile</h1>
+      <h1>Complete Your Profile</h1>
       <p>Hi ${userName},</p>
       <p>We need some additional information to complete your profile and process your application.</p>
 
@@ -807,13 +807,13 @@ export async function createMissingDetailsEmail(data: {
       <p>Completing your profile helps us serve you better and speeds up the processing of your application.</p>
 
       <div class="info-box">
-        <p style="margin: 0;"><strong>💡 Tip:</strong> Having all your information ready before you start will make the process faster. You can save your progress and come back later if needed.</p>
+        <p style="margin: 0;"><strong>Tip:</strong> Having all your information ready before you start will make the process faster. You can save your progress and come back later if needed.</p>
       </div>
     </div>
   `
 
   return {
-    subject: isUrgent ? '🚨 Urgent: Complete Your Profile' : '✏️ Action Required: Complete Your Profile',
+    subject: isUrgent ? 'URGENT: Complete Your Profile' : 'Action Required: Complete Your Profile',
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -839,7 +839,7 @@ export async function createSchoolLetterEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>🎓 Your School Letter is Ready</h1>
+      <h1>Your School Letter is Ready</h1>
       <p>Hi ${userName},</p>
       <p>Great news! Your verification letter for <strong>${schoolName}</strong> has been generated and is ready for download.</p>
 
@@ -880,7 +880,7 @@ export async function createSchoolLetterEmail(data: {
   `
 
   return {
-    subject: `🎓 Your School Letter for ${schoolName}`,
+    subject: `Your School Letter for ${schoolName}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -906,7 +906,7 @@ export async function createFullInstructionsEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>📚 Complete Instructions for Your Application</h1>
+      <h1>Complete Instructions for Your Application</h1>
       <p>Hi ${userName},</p>
       <p>Welcome! Here are the complete instructions for your <strong>${serviceType}</strong> application (#${applicationId}).</p>
 
@@ -966,7 +966,7 @@ export async function createFullInstructionsEmail(data: {
   `
 
   return {
-    subject: `📚 Complete Instructions - ${serviceType} Application`,
+    subject: `Complete Instructions - ${serviceType} Application`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1473,7 +1473,7 @@ export async function createVisaBulletinUpdateEmail(data: {
     <div class="content">
       <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 24px;">
         <p style="margin: 0; font-weight: 600; color: #92400e;">
-          📋 ${month} ${year} Visa Bulletin Has Been Released!
+          ${month} ${year} Visa Bulletin Has Been Released!
         </p>
       </div>
 
@@ -1515,12 +1515,12 @@ export async function createVisaBulletinUpdateEmail(data: {
         
         <div style="display: flex; flex-direction: column; gap: 12px;">
           <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
-            <h4 style="margin: 0 0 4px; color: #111827;">📚 NCLEX Processing</h4>
+            <h4 style="margin: 0 0 4px; color: #111827;">NCLEX Processing</h4>
             <p style="margin: 0; color: #6b7280; font-size: 13px;">Complete application support from start to finish. We handle paperwork, scheduling, and tracking.</p>
           </div>
           
           <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
-            <h4 style="margin: 0 0 4px; color: #111827;">👨‍👩‍👧 EAD Applications for Dependents</h4>
+            <h4 style="margin: 0 0 4px; color: #111827;">EAD Applications for Dependents</h4>
             <p style="margin: 0; color: #6b7280; font-size: 13px;">Work authorization processing for your spouse and children. Keep your family together during the transition.</p>
           </div>
         </div>
@@ -1542,7 +1542,7 @@ export async function createVisaBulletinUpdateEmail(data: {
   `
 
   return {
-    subject: `📋 ${month} ${year} Visa Bulletin Update - Philippines EB3`,
+    subject: `${month} ${year} Visa Bulletin Update - Philippines EB3`,
     html: await createBaseTemplate(content, {})
   }
 }
