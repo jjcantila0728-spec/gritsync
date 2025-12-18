@@ -16,6 +16,10 @@ import testimonialsRoutes from './routes/testimonials';
 import settingsRoutes from './routes/settings';
 import dashboardRoutes from './routes/dashboard';
 import promoCodesRoutes from './routes/promo-codes';
+import servicesRoutes from './routes/services';
+import timelineStepsRoutes from './routes/timeline-steps';
+import partnerAgenciesRoutes from './routes/partner-agencies';
+import sponsorshipsRoutes from './routes/sponsorships';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,6 +64,10 @@ app.use('/api/testimonials', testimonialsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/promo-codes', promoCodesRoutes);
+app.use('/api/services', servicesRoutes);
+app.use('/api/timeline-steps', timelineStepsRoutes);
+app.use('/api/partner-agencies', partnerAgenciesRoutes);
+app.use('/api/sponsorships', sponsorshipsRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

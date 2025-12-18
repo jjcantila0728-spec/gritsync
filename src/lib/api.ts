@@ -96,22 +96,28 @@ export const applicationPaymentsAPI = {
 
 export const servicesAPI = {
   async getAll() {
-    return [];
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/services');
   },
-  async getById(_id: string) {
-    return null;
+  async getAllAdmin() {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/services/all');
   },
-  async create(_data: any) {
-    console.warn('Services API not implemented yet');
-    return null;
+  async getById(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any>(`/services/${id}`);
   },
-  async update(_id: string, _data: any) {
-    console.warn('Services API not implemented yet');
-    return null;
+  async create(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/services', data);
   },
-  async delete(_id: string) {
-    console.warn('Services API not implemented yet');
-    return null;
+  async update(id: string, data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.patch<any>(`/services/${id}`, data);
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/services/${id}`);
   }
 };
 
@@ -125,15 +131,21 @@ export const serviceRequiredDocumentsAPI = {
 };
 
 export const timelineStepsAPI = {
-  async getAll() {
-    return [];
+  async getByApplicationId(applicationId: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>(`/timeline-steps/application/${applicationId}`);
   },
-  async getByApplicationId(_applicationId: string) {
-    return [];
+  async create(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/timeline-steps', data);
   },
-  async update(_id: string, _data: any) {
-    console.warn('Timeline steps API not implemented yet');
-    return null;
+  async update(id: string, data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.patch<any>(`/timeline-steps/${id}`, data);
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/timeline-steps/${id}`);
   }
 };
 
@@ -165,18 +177,24 @@ export const clientsAPI = {
 
 export const sponsorshipsAPI = {
   async getAll() {
-    return [];
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/sponsorships');
   },
-  async getById(_id: string) {
-    return null;
+  async getById(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any>(`/sponsorships/${id}`);
   },
-  async create(_data: any) {
-    console.warn('Sponsorships API not implemented yet');
-    return null;
+  async create(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/sponsorships', data);
   },
-  async update(_id: string, _data: any) {
-    console.warn('Sponsorships API not implemented yet');
-    return null;
+  async update(id: string, data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.patch<any>(`/sponsorships/${id}`, data);
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/sponsorships/${id}`);
   }
 };
 
@@ -202,22 +220,28 @@ export const careerApplicationsAPI = {
 
 export const partnerAgenciesAPI = {
   async getAll() {
-    return [];
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/partner-agencies');
   },
-  async getById(_id: string) {
-    return null;
+  async getAllAdmin() {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any[]>('/partner-agencies/all');
   },
-  async create(_data: any) {
-    console.warn('Partner agencies API not implemented yet');
-    return null;
+  async getById(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.get<any>(`/partner-agencies/${id}`);
   },
-  async update(_id: string, _data: any) {
-    console.warn('Partner agencies API not implemented yet');
-    return null;
+  async create(data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.post<any>('/partner-agencies', data);
   },
-  async delete(_id: string) {
-    console.warn('Partner agencies API not implemented yet');
-    return null;
+  async update(id: string, data: any) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.patch<any>(`/partner-agencies/${id}`, data);
+  },
+  async delete(id: string) {
+    const { apiClient } = await import('./api-client');
+    return apiClient.delete(`/partner-agencies/${id}`);
   }
 };
 
