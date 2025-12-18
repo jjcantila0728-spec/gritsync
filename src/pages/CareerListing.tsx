@@ -117,7 +117,7 @@ export function CareerListing() {
         <section 
           className="relative overflow-hidden py-20"
           style={{
-            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.85), rgba(147, 51, 234, 0.85)), url('/attached_assets/generated_images/healthcare_team_professionals.png')`,
+            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.85), rgba(147, 51, 234, 0.85)), url('/healthcare_team_professionals.png')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}

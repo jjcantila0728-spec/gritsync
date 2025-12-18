@@ -253,7 +253,7 @@ export function Donate() {
         <section 
           className="relative overflow-hidden text-white py-16"
           style={{
-            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.85)), url('/attached_assets/generated_images/professional_office_building_exterior.png')`,
+            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.85)), url('/professional_office_building_exterior.png')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}

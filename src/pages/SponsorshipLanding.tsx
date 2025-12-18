@@ -47,7 +47,7 @@ export function SponsorshipLanding() {
         <section 
           className="relative overflow-hidden py-20"
           style={{
-            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.85)), url('/attached_assets/generated_images/filipino_nurse_studying_nclex.png')`,
+            backgroundImage: `linear-gradient(to bottom right, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.85)), url('/filipino_nurse_studying_nclex.png')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}

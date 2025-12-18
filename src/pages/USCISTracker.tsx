@@ -262,7 +262,7 @@ export function USCISTracker() {
       <div 
         className="relative py-20"
         style={{
-          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/attached_assets/generated_images/uscis_tracker_banner_image.png')`,
+          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/uscis_tracker_banner_image.png')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}

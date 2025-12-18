@@ -30,11 +30,11 @@ const FALLBACK_DATA: VisaBulletinData = {
   month: 'December',
   year: '2025',
   eb3Philippines: {
-    finalAction: 'January 01, 2018',
-    datesForFiling: 'January 01, 2019'
+    finalAction: 'April 15, 2023',
+    datesForFiling: 'October 01, 2024'
   },
   lastUpdated: new Date().toISOString(),
-  source: 'U.S. Department of State (Cached)',
+  source: 'U.S. Department of State - Visa Bulletin December 2025',
   nextBulletinDate: getNextBulletinReleaseDateFormatted()
 }
 

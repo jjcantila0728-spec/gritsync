@@ -50,7 +50,7 @@ export function AboutUs() {
       <section 
         className="relative overflow-hidden py-20"
         style={{
-          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/attached_assets/generated_images/about_us_banner_image.png')`,
+          backgroundImage: `linear-gradient(to bottom right, rgba(220, 38, 38, 0.75), rgba(153, 27, 27, 0.85)), url('/about_us_banner_image.png')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}

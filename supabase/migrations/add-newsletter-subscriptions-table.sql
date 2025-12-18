@@ -167,12 +167,14 @@ COMMENT ON TABLE visa_bulletin_cache IS 'Caches visa bulletin data to detect cha
 COMMENT ON TABLE visa_bulletin_email_log IS 'Tracks visa bulletin notification emails sent to subscribers';
 
 -- Seed initial visa bulletin data for Philippines EB3
+-- Data from U.S. Department of State Visa Bulletin December 2025
+-- Philippines EB3 Final Action Date: 15APR23 (April 15, 2023)
 INSERT INTO visa_bulletin_cache (bulletin_month, bulletin_year, category, country, final_action_date, dates_for_filing, source, fetched_at)
 VALUES 
-  ('December', 2025, 'EB3', 'Philippines', '2018-01-01', '2019-01-01', 'U.S. Department of State', NOW()),
-  ('November', 2025, 'EB3', 'Philippines', '2017-12-01', '2019-01-01', 'U.S. Department of State', NOW()),
-  ('October', 2025, 'EB3', 'Philippines', '2017-11-01', '2018-12-01', 'U.S. Department of State', NOW()),
-  ('September', 2025, 'EB3', 'Philippines', '2017-10-01', '2018-11-01', 'U.S. Department of State', NOW()),
-  ('August', 2025, 'EB3', 'Philippines', '2017-09-01', '2018-10-01', 'U.S. Department of State', NOW()),
-  ('July', 2025, 'EB3', 'Philippines', '2017-08-01', '2018-09-01', 'U.S. Department of State', NOW())
+  ('December', 2025, 'EB3', 'Philippines', '2023-04-15', '2024-10-01', 'U.S. Department of State - Visa Bulletin December 2025', NOW()),
+  ('November', 2025, 'EB3', 'Philippines', '2023-03-01', '2024-09-01', 'U.S. Department of State - Visa Bulletin November 2025', NOW()),
+  ('October', 2025, 'EB3', 'Philippines', '2023-02-01', '2024-08-01', 'U.S. Department of State - Visa Bulletin October 2025', NOW()),
+  ('September', 2025, 'EB3', 'Philippines', '2023-01-01', '2024-07-01', 'U.S. Department of State - Visa Bulletin September 2025', NOW()),
+  ('August', 2025, 'EB3', 'Philippines', '2022-12-01', '2024-06-01', 'U.S. Department of State - Visa Bulletin August 2025', NOW()),
+  ('July', 2025, 'EB3', 'Philippines', '2022-11-01', '2024-05-01', 'U.S. Department of State - Visa Bulletin July 2025', NOW())
 ON CONFLICT (bulletin_month, bulletin_year, category, country) DO NOTHING;
