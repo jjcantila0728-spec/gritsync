@@ -479,6 +479,26 @@ export function Header() {
     }
   }, [user])
 
+  // Listen for avatar update events from MyDetails page
+  useEffect(() => {
+    const handleAvatarUpdate = (event: CustomEvent<{ userId: string; url: string | null; path: string | null }>) => {
+      if (user && event.detail.userId === user.id) {
+        setAvatarUrl(event.detail.url)
+        avatarPathRef.current = event.detail.path
+        if (event.detail.url && event.detail.path) {
+          cacheAvatar(user.id, event.detail.url, event.detail.path)
+        } else {
+          clearAvatarCache(user.id)
+        }
+      }
+    }
+    
+    window.addEventListener('avatar-updated', handleAvatarUpdate as EventListener)
+    return () => {
+      window.removeEventListener('avatar-updated', handleAvatarUpdate as EventListener)
+    }
+  }, [user])
+
   // Fetch notifications
   const fetchNotifications = async () => {
     if (!user) return
