@@ -14,7 +14,7 @@ interface EmailAttachment {
   type?: string
 }
 
-interface EmailOptions {
+export interface EmailOptions {
   to: string
   subject: string
   html: string

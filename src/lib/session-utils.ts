@@ -43,7 +43,7 @@ export async function ensureValidSession(): Promise<Session | null> {
         return session
       }
       
-      return refreshedSession?.session || session
+      return refreshedSession || session
     }
     
     return session
@@ -122,7 +122,7 @@ export async function forceRefreshSession(): Promise<Session | null> {
       return null
     }
   
-    return session?.session || null
+    return session || null
   } catch (error) {
     console.error('Unexpected error forcing session refresh:', error)
     return null

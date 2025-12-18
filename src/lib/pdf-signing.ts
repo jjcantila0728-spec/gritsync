@@ -159,7 +159,7 @@ export function dataURLToUint8Array(dataURL: string): Uint8Array {
  * Convert Uint8Array to Blob
  */
 export function uint8ArrayToBlob(uint8Array: Uint8Array, mimeType: string = 'application/pdf'): Blob {
-  return new Blob([uint8Array], { type: mimeType })
+  return new Blob([uint8Array as BlobPart], { type: mimeType })
 }
 
 /**

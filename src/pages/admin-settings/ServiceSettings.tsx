@@ -678,7 +678,7 @@ function DocumentRequirementsManager() {
     setLoading(true)
     try {
       const data = await serviceRequiredDocumentsAPI.getAll()
-      setDocRequirements(data || [])
+      setDocRequirements((data || []) as unknown as DocumentRequirementEntry[])
     } catch (error: any) {
       showToast(error.message || 'Failed to load document requirements', 'error')
     } finally {
@@ -775,7 +775,7 @@ function DocumentRequirementsManager() {
     setSyncing(true)
     try {
       // Get existing requirements to check what needs updating vs creating
-      const existing = await serviceRequiredDocumentsAPI.getAll()
+      const existing = (await serviceRequiredDocumentsAPI.getAll()) as unknown as DocumentRequirementEntry[]
       const existingMap = new Map<string, DocumentRequirementEntry>()
       existing.forEach((doc: DocumentRequirementEntry) => {
         const key = `${doc.service_type}:${doc.document_type}`

@@ -4,7 +4,6 @@
  */
 
 import { supabase } from './supabase'
-import { Tables } from './database.types'
 
 export interface EmailQueueItem {
   id?: string
@@ -34,6 +33,7 @@ export interface EmailQueueItem {
   created_by_user_id?: string | null
   created_at?: string
   updated_at?: string
+  cancelled_at?: string | null
 }
 
 export interface EmailQueueFilters {

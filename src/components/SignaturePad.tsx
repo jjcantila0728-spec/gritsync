@@ -34,8 +34,9 @@ export function SignaturePad({ isOpen, onClose, onSave, applicationId, documentN
   useEffect(() => {
     if (isOpen && isMobile) {
       // Lock orientation to landscape on mobile
-      if (screen.orientation && screen.orientation.lock) {
-        screen.orientation.lock('landscape').catch(() => {
+      const orientation = screen.orientation as any
+      if (orientation && orientation.lock) {
+        orientation.lock('landscape').catch(() => {
           // Orientation lock may not be supported or allowed
           console.log('Orientation lock not available')
         })
@@ -44,8 +45,9 @@ export function SignaturePad({ isOpen, onClose, onSave, applicationId, documentN
 
     return () => {
       // Unlock orientation when component unmounts
-      if (screen.orientation && screen.orientation.unlock) {
-        screen.orientation.unlock()
+      const orientation = screen.orientation as any
+      if (orientation && orientation.unlock) {
+        orientation.unlock()
       }
     }
   }, [isOpen, isMobile])

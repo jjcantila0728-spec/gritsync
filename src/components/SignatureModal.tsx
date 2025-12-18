@@ -22,7 +22,7 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
   const [signatureUrl, setSignatureUrl] = useState<string>('')
   const [isLocalhost, setIsLocalhost] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [_isProcessing, setIsProcessing] = useState(false)
   const [signatureSessionId] = useState(() => `sign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const checkForSignatureRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -99,6 +99,7 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
           
           if (!error && supabaseSignature) {
             console.log('Signature found in Supabase:', signatureSessionId)
+            const sig = supabaseSignature as any
             // Mark as consumed
             const { error: updateError } = await supabase
               .from('temporary_signatures')
@@ -106,14 +107,14 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
                 is_consumed: true,
                 consumed_at: new Date().toISOString()
               })
-              .eq('id', supabaseSignature.id)
+              .eq('id', sig.id)
             
             if (updateError) {
               console.error('Error marking signature as consumed:', updateError)
               // Continue anyway - signature is still valid
             }
             
-            onSignatureComplete(supabaseSignature.signature_data_url)
+            onSignatureComplete(sig.signature_data_url)
             onClose()
             return true
           }

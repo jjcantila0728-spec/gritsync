@@ -2529,6 +2529,10 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
     return cached.url
   }
   
+  // Check if this is an avatar file (for silent error handling)
+  const isAvatar = normalizedPath.includes('avatar') || normalizedPath.includes('picture')
+  const shouldBeSilent = silent || isAvatar
+  
   // Check negative cache (files that don't exist) - avoid repeated API calls
   const negativeCached = negativeCache.get(normalizedPath)
   if (negativeCached && negativeCached.expiresAt > now) {
@@ -2544,10 +2548,6 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
   // Check if there's already an inflight request for this file
   const inflight = signedUrlInflight.get(cacheKey)
   if (inflight) return inflight
-  
-  // Check if this is an avatar file (for silent error handling)
-  const isAvatar = normalizedPath.includes('avatar') || normalizedPath.includes('picture')
-  const shouldBeSilent = silent || isAvatar
 
   const promise = (async (): Promise<string> => {
     // For silent mode (avatars), check negative cache first to avoid unnecessary API calls
@@ -3173,10 +3173,17 @@ export const processingAccountsAPI = {
     // GritSync accounts are now created via database triggers/functions
     // No need to generate email client-side - rely on server-side generation
     
+    // Extract names from application
+    const firstName = typedApplication.first_name
+    const lastName = typedApplication.last_name
+    
+    // Get gritsync email from existing account
+    const gritsyncEmail = (existingGritsync as any)?.email || ''
+    
     // Create Pearson Vue account if it doesn't exist (same email and password as GritSync)
     if (!existingPearson) {
       try {
-        if (password && firstName && lastName) {
+        if (password && firstName && lastName && gritsyncEmail) {
           // Generate security question answers
           const securityAnswers = generateSecurityAnswers(
             typedApplication.elementary_school || null,
@@ -3331,8 +3338,8 @@ export const processingAccountsAPI = {
           throw new Error('Unauthorized - You can only update accounts for your own applications')
         }
         
-        // For Gmail accounts, clients can only update status and password
-        if (isGmailAccount) {
+        // For GritSync accounts, clients can only update status and password
+        if (isGritsyncAccount) {
           const allowedFields = ['status', 'password']
           const updateKeys = Object.keys(updates)
           const disallowedFields = updateKeys.filter(key => !allowedFields.includes(key))
@@ -4517,7 +4524,7 @@ export const applicationPaymentsAPI = {
         const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
         
         // Get user_id from payment if not available
-        let receiptUserId = userId
+        let receiptUserId: string | undefined = userId ?? undefined
         if (!receiptUserId) {
           const typedPaymentWithUserId = paymentData as { user_id?: string }
           receiptUserId = typedPaymentWithUserId.user_id
@@ -4527,7 +4534,7 @@ export const applicationPaymentsAPI = {
         let receiptItems: Array<{ name: string; amount: number }> = [
           {
             name: `NCLEX Application Processing (${typedPayment.payment_type})`,
-            amount: typedPayment.amount,
+            amount: typedPayment.amount || 0,
           },
         ]
         
@@ -4623,7 +4630,7 @@ export const applicationPaymentsAPI = {
             const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
             sendPaymentReceiptEmailWithAttachments({
               receipt: receipt as any,
-              payment: payment as any,
+              payment: paymentData as any,
               application: applicationData,
               user: userData,
             }).catch((emailError) => {
@@ -4766,10 +4773,11 @@ export const applicationPaymentsAPI = {
           const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
           
           // Try to fetch service details for proper line items
+          const paymentAmount = typedPayment.amount || 0
           let receiptItems: Array<{ name: string; amount: number }> = [
             {
               name: `NCLEX Application Processing (${typedPayment.payment_type})`,
-              amount: typedPayment.amount,
+              amount: paymentAmount,
             },
           ]
           
@@ -4819,8 +4827,8 @@ export const applicationPaymentsAPI = {
                     const total = subtotal + tax
                     
                     // If total doesn't match payment amount, adjust the last item
-                    if (Math.abs(total - typedPayment.amount) > 0.01) {
-                      const difference = typedPayment.amount - total
+                    if (Math.abs(total - paymentAmount) > 0.01) {
+                      const difference = paymentAmount - total
                       if (receiptItems.length > 0) {
                         receiptItems[receiptItems.length - 1].amount += difference
                       }

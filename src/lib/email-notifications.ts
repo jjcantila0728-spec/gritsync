@@ -5,6 +5,7 @@
 
 import { sendEmail } from './email-service'
 import * as EmailTemplates from './email-templates'
+import { supabase } from './supabase'
 
 /**
  * Send Forgot Password Email
@@ -337,8 +338,9 @@ export async function checkAndSendDocumentReminders(
       const missingDocs = requiredDocs.filter(doc => !uploadedDocs.includes(doc.type))
 
       if (missingDocs.length > 0) {
-        await sendMissingDocumentEmail(app.users.email, {
-          userName: app.users.full_name || 'User',
+        const userInfo = (app.users as any)
+        await sendMissingDocumentEmail(userInfo?.email || '', {
+          userName: userInfo?.full_name || 'User',
           applicationId: app.id,
           missingDocuments: missingDocs.map(doc => ({
             name: doc.name,

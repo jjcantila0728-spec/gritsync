@@ -166,8 +166,8 @@ export const subscribersAPI = {
         return await this.update(existing.id!, {
           status: 'subscribed',
           subscribed_at: new Date().toISOString(),
-          unsubscribed_at: null,
-          unsubscribe_reason: null,
+          unsubscribed_at: undefined,
+          unsubscribe_reason: undefined,
         })
       }
       return existing

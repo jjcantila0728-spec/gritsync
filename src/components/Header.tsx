@@ -303,7 +303,6 @@ export function Header() {
       
       // Fetch avatar from users table (same source as MyDetails page)
       // Always check database to detect avatar changes, but use cache to prevent flicker
-      const cachedAvatarKey = `avatar_${user.id}`
       const cachedAvatarPathKey = `avatar_path_${user.id}`
       
       // Only fetch if we're not already fetching
@@ -462,12 +461,10 @@ export function Header() {
         .eq('is_primary', true)
         .maybeSingle() // Use maybeSingle() instead of single() to avoid 406 error
         .then(({ data, error }) => {
-          if (!error && data?.email_address) {
-            setGritsyncEmail(data.email_address)
+          const emailData = data as any
+          if (!error && emailData?.email_address) {
+            setGritsyncEmail(emailData.email_address)
           }
-        })
-        .catch(() => {
-          // Keep the current email if fetch fails
         })
     } else {
       // Only reset if user is actually null (logged out)

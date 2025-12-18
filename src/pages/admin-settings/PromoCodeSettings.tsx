@@ -49,7 +49,7 @@ export function PromoCodeSettings() {
         .order('created_at', { ascending: false })
       
       if (error) throw error
-      setPromoCodes(data || [])
+      setPromoCodes((data || []) as unknown as PromoCode[])
     } catch (error: any) {
       console.error('Error loading promo codes:', error)
       showToast('Failed to load promo codes', 'error')
@@ -92,7 +92,7 @@ export function PromoCodeSettings() {
     
     try {
       setSubmitting(true)
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('promo_codes')
         .insert({
           code: code.toUpperCase(),
@@ -359,8 +359,8 @@ export function PromoCodeSettings() {
       ) : (
         <div className="grid gap-3">
           {promoCodes.map((promo) => {
-            const isExpired = promo.valid_until && new Date(promo.valid_until) < new Date()
-            const isMaxedOut = promo.max_uses && promo.current_uses >= promo.max_uses
+            const isExpired = Boolean(promo.valid_until && new Date(promo.valid_until) < new Date())
+            const isMaxedOut = Boolean(promo.max_uses && promo.current_uses >= promo.max_uses)
             const isEffectivelyInactive = !promo.is_active || isExpired || isMaxedOut
             
             return (

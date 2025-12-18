@@ -7,12 +7,9 @@ import { Link } from 'react-router-dom'
 import { 
   FileText, 
   DollarSign, 
-  CheckCircle, 
   Clock, 
-  AlertCircle,
   Upload,
   MessageSquare,
-  XCircle,
   ArrowRight,
   Activity
 } from 'lucide-react'

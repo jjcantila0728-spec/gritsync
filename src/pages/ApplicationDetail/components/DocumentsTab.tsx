@@ -1,9 +1,16 @@
-﻿import { Card } from '@/components/ui/Card'
-import { FileText, ImageIcon } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { FileText, ImageIcon, Eye, GraduationCap, Upload, Loader2, Plus, X } from 'lucide-react'
 import { DocumentImagePreview } from '@/components/ui/DocumentImagePreview'
 import { DocumentPDFPreview } from './DocumentPDFPreview'
-import { getSignedFileUrl } from '@/lib/api'
+import { getSignedFileUrl, userDocumentsAPI } from '@/lib/api'
+import { toast } from '@/components/ui/Toast'
 import type { ApplicationData } from '../types'
+
+const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  toast[type](message)
+}
 
 interface DocumentsTabProps {
   application: ApplicationData
@@ -13,13 +20,36 @@ interface DocumentsTabProps {
     passport?: { file_path: string; file_name: string }
   }
   handleViewFile: (url: string, fileName: string) => void
+  isAdmin?: boolean
 }
 
 export function DocumentsTab({
   application,
   latestDocuments,
-  handleViewFile
+  handleViewFile,
+  isAdmin = false
 }: DocumentsTabProps) {
+  const [pictureUrl, setPictureUrl] = useState<string | null>(null)
+  const [pictureError, setPictureError] = useState(false)
+  const [uploadingCourseFile, setUploadingCourseFile] = useState(false)
+  const [mandatoryCourseFiles, setMandatoryCourseFiles] = useState<any[]>([])
+  const [viewingFile, setViewingFile] = useState<{url: string; name: string} | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  
+  useEffect(() => {
+    const loadPictureUrl = async () => {
+      const picturePath = latestDocuments.picture?.file_path || application.picture_path
+      if (picturePath && !picturePath.toLowerCase().includes('avatar')) {
+        try {
+          const url = await getSignedFileUrl(picturePath)
+          setPictureUrl(url)
+        } catch {
+          setPictureError(true)
+        }
+      }
+    }
+    loadPictureUrl()
+  }, [latestDocuments, application])
   return (
     <div className="space-y-6">
       <Card title={

@@ -49,6 +49,7 @@ async function getBrandingSettings(): Promise<{
   phoneNumber: string
   logoUrl: string
   primaryColor: string
+  primaryDark: string
   secondaryColor: string
   companyAddress: string
   companyDescription: string

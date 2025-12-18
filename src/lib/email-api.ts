@@ -470,7 +470,7 @@ export const emailLogsAPI = {
       to: log.recipient_email,
       subject: log.subject,
       html: log.body_html || '',
-      text: log.body_text,
+      text: log.body_text || undefined,
     })
 
     if (success) {
@@ -601,8 +601,4 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
   }
 }
 
-/**
- * Export for API consumers
- */
-export { EmailLog, EmailAnalytics, EmailStats, SendEmailOptions }
 

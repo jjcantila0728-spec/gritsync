@@ -6,7 +6,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
-  Lightbulb, 
   FileText, 
   DollarSign, 
   Clock, 
@@ -19,7 +18,6 @@ import {
   UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatDistanceToNow } from '@/lib/utils'
 import { applicationsAPI, userDocumentsAPI, applicationPaymentsAPI, userDetailsAPI } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -72,14 +70,22 @@ export function PersonalizedRecommendations({
         (doc: any) => !doc.file_path || doc.status === 'pending'
       )
 
-      // Get pending payments
-      const payments = await applicationPaymentsAPI.getAll()
-      const pendingPayments = payments.filter(
-        (payment: any) => payment.status === 'pending' || payment.status === 'processing'
-      )
+      // Get pending payments from applications
+      let pendingPayments: any[] = []
+      for (const app of applications) {
+        try {
+          const appPayments = await applicationPaymentsAPI.getByApplication(app.id)
+          const pending = appPayments.filter(
+            (payment: any) => payment.status === 'pending' || payment.status === 'processing'
+          )
+          pendingPayments = pendingPayments.concat(pending)
+        } catch {
+          // Ignore errors for individual applications
+        }
+      }
 
       // Recommendation 1: Complete profile if incomplete
-      const userDetails = await userDetailsAPI.get().catch(() => null)
+      const userDetails = (await userDetailsAPI.get().catch(() => null)) as any
       const profileComplete = userDetails?.first_name && 
                              userDetails?.last_name && 
                              userDetails?.date_of_birth &&
