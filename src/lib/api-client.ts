@@ -251,18 +251,30 @@ export const timelineStepsAPI = {
     return apiClient.patch<any>(`/timeline-steps/application/${applicationId}/${stepKey}`, { status, data });
   },
 
+  async updateById(id: string, data: { status?: string; data?: any; completed_at?: string }) {
+    return apiClient.patch<any>(`/timeline-steps/${id}`, data);
+  },
+
   async delete(id: string) {
     return apiClient.delete(`/timeline-steps/${id}`);
+  },
+
+  async generateForApplication(applicationId: string) {
+    return apiClient.post<{ success: boolean; steps: any[] }>(`/timeline-steps/generate/${applicationId}`, {});
+  },
+
+  async getTemplates(serviceType: string) {
+    return apiClient.get<any[]>(`/timeline-steps/templates/${encodeURIComponent(serviceType)}`);
   },
 };
 
 export const documentsAPI = {
   async getAll() {
-    return [] as any[];
+    return apiClient.get<any[]>('/documents');
   },
 
-  async getById(_id: string) {
-    return null;
+  async getById(id: string) {
+    return apiClient.get<any>(`/documents/${id}`);
   },
 
   async getByApplication(applicationId: string) {
@@ -285,15 +297,41 @@ export const documentsAPI = {
     return apiClient.delete(`/documents/${id}`);
   },
 
-  async upload(file: File, metadata?: any) {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (metadata) formData.append('metadata', JSON.stringify(metadata));
-    return apiClient.post<any>('/documents/upload', formData);
+  async upload(file: File, metadata?: { documentType?: string; applicationId?: string }) {
+    return new Promise<any>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = (reader.result as string).split(',')[1];
+          const result = await apiClient.post<any>('/documents/upload', {
+            filename: file.name,
+            mimeType: file.type,
+            fileData: base64Data,
+            documentType: metadata?.documentType,
+            applicationId: metadata?.applicationId,
+          });
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
   },
 
   async download(id: string) {
-    return apiClient.get<Blob>(`/documents/${id}/download`);
+    const response = await fetch(`/api/documents/${id}/download`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    return response.blob();
+  },
+
+  async getDownloadUrl(id: string) {
+    return apiClient.get<{ url: string }>(`/documents/${id}/url`);
   },
 };
 

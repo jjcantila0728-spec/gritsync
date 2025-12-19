@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { db } from '../db';
 import { applicationTimelineSteps, applications } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
+import { generateTimelineForApplication, getTimelineStepsForServiceType } from '../services/timeline-generator';
 
 const router = Router();
 
@@ -79,6 +80,69 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req: Authenticated
     const { id } = req.params;
     await db.delete(applicationTimelineSteps).where(eq(applicationTimelineSteps.id, id));
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/application/:applicationId/:stepKey', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { applicationId, stepKey } = req.params;
+    const { status, data } = req.body;
+    
+    const updateData: any = { updated_at: new Date() };
+    if (status !== undefined) updateData.status = status;
+    if (data !== undefined) updateData.data = data;
+    if (status === 'completed') updateData.completed_at = new Date();
+    
+    const [updated] = await db.update(applicationTimelineSteps)
+      .set(updateData)
+      .where(
+        and(
+          eq(applicationTimelineSteps.application_id, applicationId),
+          eq(applicationTimelineSteps.step_key, stepKey)
+        )
+      )
+      .returning();
+    
+    if (!updated) {
+      return res.status(404).json({ error: 'Timeline step not found' });
+    }
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/generate/:applicationId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { applicationId } = req.params;
+    
+    const [app] = await db.select()
+      .from(applications)
+      .where(eq(applications.id, applicationId));
+    
+    if (!app) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    
+    await generateTimelineForApplication(applicationId, app.service_type || 'NCLEX Processing');
+    
+    const steps = await db.select()
+      .from(applicationTimelineSteps)
+      .where(eq(applicationTimelineSteps.application_id, applicationId));
+    
+    res.json({ success: true, steps });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/templates/:serviceType', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { serviceType } = req.params;
+    const steps = getTimelineStepsForServiceType(decodeURIComponent(serviceType));
+    res.json(steps);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

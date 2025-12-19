@@ -3,6 +3,7 @@ import { db } from '../db';
 import { applications, applicationTimelineSteps, applicationPayments } from '../../shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
+import { generateTimelineForApplication } from '../services/timeline-generator';
 
 const router = Router();
 
@@ -94,25 +95,24 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
       ? `${first_name} ${last_name}` 
       : req.body.applicant_name || req.body.name || 'Unknown';
     
+    const serviceTypeValue = service_type || 'NCLEX Processing';
+    
     const [newApp] = await db.insert(applications).values({
       user_id: req.user?.id,
       applicant_name,
       email: email || req.user?.email || '',
       phone: phone || req.body.mobile_number,
-      service_type: service_type || 'NCLEX Processing',
+      service_type: serviceTypeValue,
       state_of_application: state_of_application || req.body.service_state,
       notes,
     }).returning();
 
-    await db.insert(applicationTimelineSteps).values({
-      application_id: newApp.id,
-      step_key: 'app_created',
-      step_name: 'Application Created',
-      status: 'completed',
-      completed_at: new Date(),
-    });
+    await generateTimelineForApplication(newApp.id, serviceTypeValue);
 
-    res.status(201).json(newApp);
+    const timeline = await db.select().from(applicationTimelineSteps)
+      .where(eq(applicationTimelineSteps.application_id, newApp.id));
+
+    res.status(201).json({ ...newApp, timeline_steps: timeline });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
