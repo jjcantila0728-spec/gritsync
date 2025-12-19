@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db } from '../db';
-import { users, userPreferences } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { users, userPreferences, passwordResetTokens } from '../../shared/schema';
+import { eq, and, gt } from 'drizzle-orm';
 import { generateToken, authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/email';
 
 const router = Router();
 
@@ -51,6 +53,12 @@ router.post('/signup', async (req: Request, res: Response) => {
       id: newUser.id,
       email: newUser.email,
       role: newUser.role,
+    });
+
+    // Send welcome email (don't block on email sending)
+    const userName = first_name || email.split('@')[0];
+    sendWelcomeEmail(normalizedEmail, userName).catch((err) => {
+      console.error('Failed to send welcome email:', err);
     });
 
     res.status(201).json({
@@ -171,9 +179,73 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     
     const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail));
     
+    if (user) {
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+      
+      // Save token to database
+      await db.insert(passwordResetTokens).values({
+        user_id: user.id,
+        token: resetToken,
+        expires_at: expiresAt,
+      });
+      
+      // Send password reset email
+      const userName = user.first_name || user.email.split('@')[0];
+      sendPasswordResetEmail(user.email, userName, resetToken).catch((err) => {
+        console.error('Failed to send password reset email:', err);
+      });
+    }
+    
+    // Always return success to prevent email enumeration
     res.json({ message: 'If an account exists with this email, a reset link will be sent.' });
   } catch (error: any) {
+    console.error('Forgot password error:', error);
     res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+    
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+    
+    // Find valid token
+    const [resetToken] = await db.select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, token),
+          eq(passwordResetTokens.used, false),
+          gt(passwordResetTokens.expires_at, new Date())
+        )
+      );
+    
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+    
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update user password
+    await db.update(users)
+      .set({ password_hash: hashedPassword, updated_at: new Date() })
+      .where(eq(users.id, resetToken.user_id));
+    
+    // Mark token as used
+    await db.update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.id, resetToken.id));
+    
+    res.json({ message: 'Password has been reset successfully' });
+  } catch (error: any) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

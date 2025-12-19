@@ -82,4 +82,45 @@ router.post('/unsubscribe', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/status', async (req: Request, res: Response) => {
+  try {
+    const email = req.query.email as string;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email query parameter is required' });
+    }
+
+    const [subscription] = await db.select().from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.email, email.toLowerCase()));
+
+    if (!subscription) {
+      return res.json({ is_active: false, subscribed: false });
+    }
+
+    res.json(subscription);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/subscribers', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const type = req.query.type as string;
+    
+    let subscriptions;
+    if (type) {
+      subscriptions = await db.select().from(newsletterSubscriptions)
+        .where(eq(newsletterSubscriptions.subscription_type, type))
+        .orderBy(desc(newsletterSubscriptions.created_at));
+    } else {
+      subscriptions = await db.select().from(newsletterSubscriptions)
+        .orderBy(desc(newsletterSubscriptions.created_at));
+    }
+    
+    res.json(subscriptions);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
