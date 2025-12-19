@@ -73,6 +73,7 @@ const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const USCISTracker = lazy(() => import('./pages/USCISTracker').then(m => ({ default: m.USCISTracker })))
 const SuccessStories = lazy(() => import('./pages/SuccessStories').then(m => ({ default: m.SuccessStories })))
 const AdminTestimonials = lazy(() => import('./pages/AdminTestimonials').then(m => ({ default: m.AdminTestimonials })))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 // Loading fallback component
 function PageLoader() {
@@ -716,6 +717,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      
+      {/* 404 Not Found - Catch all unmatched routes */}
+      <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   )

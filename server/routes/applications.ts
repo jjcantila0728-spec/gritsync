@@ -1,19 +1,11 @@
 import { Router, Response } from 'express';
 import { db } from '../db';
 import { applications, applicationTimelineSteps, applicationPayments } from '../../shared/schema';
-import { eq, desc, and, or, ilike } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
-function generateGritAppId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = 'APP-';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
 
 router.get('/service-types', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -67,16 +59,7 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     const { id } = req.params;
     const isAdmin = req.user?.role === 'admin';
 
-    let app;
-    
-    const [byId] = await db.select().from(applications).where(eq(applications.id, id));
-    
-    if (!byId) {
-      const [byGritId] = await db.select().from(applications).where(ilike(applications.grit_app_id, id));
-      app = byGritId;
-    } else {
-      app = byId;
-    }
+    const [app] = await db.select().from(applications).where(eq(applications.id, id));
 
     if (!app) {
       return res.status(404).json({ error: 'Application not found' });
@@ -105,12 +88,20 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 
 router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const gritAppId = generateGritAppId();
+    const { first_name, last_name, email, phone, service_type, state_of_application, notes } = req.body;
+    
+    const applicant_name = first_name && last_name 
+      ? `${first_name} ${last_name}` 
+      : req.body.applicant_name || req.body.name || 'Unknown';
     
     const [newApp] = await db.insert(applications).values({
-      ...req.body,
       user_id: req.user?.id,
-      grit_app_id: gritAppId,
+      applicant_name,
+      email: email || req.user?.email || '',
+      phone: phone || req.body.mobile_number,
+      service_type: service_type || 'NCLEX Processing',
+      state_of_application: state_of_application || req.body.service_state,
+      notes,
     }).returning();
 
     await db.insert(applicationTimelineSteps).values({

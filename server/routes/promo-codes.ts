@@ -1,9 +1,54 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { promoCodes } from '../../shared/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
+import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
+
+router.get('/', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const allPromoCodes = await db.select().from(promoCodes).orderBy(desc(promoCodes.created_at));
+    res.json(allPromoCodes);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const [promoCode] = await db.insert(promoCodes).values({
+      ...req.body,
+      code: req.body.code.toUpperCase(),
+    }).returning();
+    res.status(201).json(promoCode);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const [updated] = await db.update(promoCodes)
+      .set({ ...req.body, updated_at: new Date() })
+      .where(eq(promoCodes.id, id))
+      .returning();
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    await db.delete(promoCodes).where(eq(promoCodes.id, id));
+    res.json({ message: 'Promo code deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.post('/validate', async (req: Request, res: Response) => {
   try {

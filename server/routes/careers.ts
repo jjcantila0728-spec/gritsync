@@ -115,6 +115,31 @@ router.post('/:id/apply', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/apply', async (req: Request, res: Response) => {
+  try {
+    const { career_id, first_name, last_name, email, mobile_number } = req.body;
+
+    if (!first_name || !last_name || !email || !mobile_number) {
+      return res.status(400).json({ error: 'First name, last name, email, and mobile number are required' });
+    }
+
+    const [application] = await db.insert(careerApplications).values({
+      ...req.body,
+      career_id: career_id || null,
+    }).returning();
+
+    if (career_id) {
+      await db.update(careers)
+        .set({ applications_count: careers.applications_count })
+        .where(eq(careers.id, career_id));
+    }
+
+    res.status(201).json(application);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/applications', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const applications = await db.select().from(careerApplications).orderBy(desc(careerApplications.created_at));

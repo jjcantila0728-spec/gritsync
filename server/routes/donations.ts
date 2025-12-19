@@ -53,7 +53,25 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const [donation] = await db.insert(donations).values(req.body).returning();
+    const { first_name, last_name, email, phone, amount, currency, payment_method, is_anonymous, message, sponsorship_id } = req.body;
+    
+    const donor_name = first_name && last_name 
+      ? `${first_name} ${last_name}` 
+      : req.body.donor_name || req.body.name;
+    
+    const [donation] = await db.insert(donations).values({
+      donor_name: is_anonymous ? null : donor_name,
+      donor_email: is_anonymous ? null : (email || req.body.donor_email),
+      donor_phone: is_anonymous ? null : (phone || req.body.donor_phone),
+      is_anonymous: is_anonymous || false,
+      amount,
+      currency: currency || 'USD',
+      payment_method,
+      message,
+      sponsorship_id,
+      status: 'pending',
+    }).returning();
+    
     res.status(201).json(donation);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

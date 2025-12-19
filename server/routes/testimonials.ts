@@ -61,13 +61,18 @@ router.patch('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedR
   try {
     const { id } = req.params;
 
+    const updateData: any = {
+      ...req.body,
+      updated_at: new Date(),
+    };
+    
+    if (req.body.status === 'approved' || req.body.status === 'featured') {
+      updateData.approved_by = req.user?.id;
+      updateData.approved_at = new Date();
+    }
+
     const [updated] = await db.update(testimonials)
-      .set({
-        ...req.body,
-        reviewed_by: req.user?.id,
-        reviewed_at: new Date(),
-        updated_at: new Date(),
-      })
+      .set(updateData)
       .where(eq(testimonials.id, id))
       .returning();
 

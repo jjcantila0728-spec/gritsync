@@ -25,6 +25,7 @@ import sponsorshipsRoutes from './routes/sponsorships';
 import emailsRoutes from './routes/emails';
 import documentsRoutes from './routes/documents';
 import serviceRequiredDocumentsRoutes from './routes/service-required-documents';
+import newsletterRoutes from './routes/newsletter';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -76,6 +77,7 @@ app.use('/api/sponsorships', sponsorshipsRoutes);
 app.use('/api/emails', emailsRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/service-required-documents', serviceRequiredDocumentsRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
