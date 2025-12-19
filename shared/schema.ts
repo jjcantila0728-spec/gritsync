@@ -465,3 +465,6 @@ export type Testimonial = typeof testimonials.$inferSelect;
 export type InsertTestimonial = typeof testimonials.$inferInsert;
 export type UserDocument = typeof userDocuments.$inferSelect;
 export type InsertUserDocument = typeof userDocuments.$inferInsert;
+
+// Re-export chat schema for AI integrations
+export * from "./models/chat";

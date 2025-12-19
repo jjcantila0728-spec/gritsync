@@ -26,6 +26,8 @@ import emailsRoutes from './routes/emails';
 import documentsRoutes from './routes/documents';
 import serviceRequiredDocumentsRoutes from './routes/service-required-documents';
 import newsletterRoutes from './routes/newsletter';
+import newsletterGeneratorRoutes from './routes/newsletter-generator';
+import { registerImageRoutes } from './replit_integrations/image';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -78,6 +80,9 @@ app.use('/api/emails', emailsRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/service-required-documents', serviceRequiredDocumentsRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/newsletter-generator', newsletterGeneratorRoutes);
+
+registerImageRoutes(app);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
