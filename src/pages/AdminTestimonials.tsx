@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { SEO } from '@/components/SEO'
+import { testimonialsAPI } from '@/lib/api-client'
 import {
   Star,
   CheckCircle,
@@ -70,27 +71,11 @@ export function AdminTestimonials() {
   const fetchTestimonials = async () => {
     try {
       setLoading(true)
-      let query = supabase
-        .from('testimonials')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter)
-      }
-
-      const { data, error } = await query
-
-      if (error) {
-        console.error('Error fetching testimonials:', error)
-        showToast('Failed to load testimonials', 'error')
-        return
-      }
-
-      setTestimonials(data || [])
+      const data = await testimonialsAPI.getAll(statusFilter !== 'all' ? statusFilter : undefined)
+      setTestimonials((data || []) as Testimonial[])
     } catch (error) {
-      console.error('Error:', error)
-      showToast('An error occurred', 'error')
+      console.error('Error fetching testimonials:', error)
+      showToast('Failed to load testimonials', 'error')
     } finally {
       setLoading(false)
     }
@@ -105,72 +90,42 @@ export function AdminTestimonials() {
 
   const handleApprove = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('testimonials')
-        .update({
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-          approved_by: user?.id
-        })
-        .eq('id', id)
-
-      if (error) {
-        console.error('Error approving testimonial:', error)
-        showToast('Failed to approve testimonial', 'error')
-        return
-      }
-
+      await testimonialsAPI.update(id, {
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: user?.id
+      })
       showToast('Testimonial approved and published!', 'success')
       fetchTestimonials()
     } catch (error) {
-      console.error('Error:', error)
-      showToast('An error occurred', 'error')
+      console.error('Error approving testimonial:', error)
+      showToast('Failed to approve testimonial', 'error')
     }
   }
 
   const handleReject = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('testimonials')
-        .update({
-          status: 'rejected',
-          approved_at: new Date().toISOString(),
-          approved_by: user?.id
-        })
-        .eq('id', id)
-
-      if (error) {
-        console.error('Error rejecting testimonial:', error)
-        showToast('Failed to reject testimonial', 'error')
-        return
-      }
-
+      await testimonialsAPI.update(id, {
+        status: 'rejected',
+        approved_at: new Date().toISOString(),
+        approved_by: user?.id
+      })
       showToast('Testimonial rejected', 'info')
       fetchTestimonials()
     } catch (error) {
-      console.error('Error:', error)
-      showToast('An error occurred', 'error')
+      console.error('Error rejecting testimonial:', error)
+      showToast('Failed to reject testimonial', 'error')
     }
   }
 
   const handleToggleFeatured = async (id: string, currentFeatured: boolean) => {
     try {
-      const { error } = await supabase
-        .from('testimonials')
-        .update({ featured: !currentFeatured })
-        .eq('id', id)
-
-      if (error) {
-        console.error('Error updating featured status:', error)
-        showToast('Failed to update featured status', 'error')
-        return
-      }
-
+      await testimonialsAPI.update(id, { featured: !currentFeatured })
       showToast(currentFeatured ? 'Removed from featured' : 'Added to featured!', 'success')
       fetchTestimonials()
     } catch (error) {
-      console.error('Error:', error)
-      showToast('An error occurred', 'error')
+      console.error('Error updating featured status:', error)
+      showToast('Failed to update featured status', 'error')
     }
   }
 
@@ -180,23 +135,13 @@ export function AdminTestimonials() {
     }
 
     try {
-      const { error } = await supabase
-        .from('testimonials')
-        .delete()
-        .eq('id', id)
-
-      if (error) {
-        console.error('Error deleting testimonial:', error)
-        showToast('Failed to delete testimonial', 'error')
-        return
-      }
-
+      await testimonialsAPI.delete(id)
       showToast('Testimonial deleted', 'success')
       fetchTestimonials()
       setShowModal(false)
     } catch (error) {
-      console.error('Error:', error)
-      showToast('An error occurred', 'error')
+      console.error('Error deleting testimonial:', error)
+      showToast('Failed to delete testimonial', 'error')
     }
   }
 
@@ -224,305 +169,263 @@ export function AdminTestimonials() {
             Rejected
           </span>
         )
+      case 'pending':
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
             <Clock className="h-3 w-3" />
-            Pending Review
+            Pending
           </span>
         )
     }
   }
 
-  const pendingCount = testimonials.filter(t => t.status === 'pending').length
-  const approvedCount = testimonials.filter(t => t.status === 'approved').length
-  const rejectedCount = testimonials.filter(t => t.status === 'rejected').length
-  const featuredCount = testimonials.filter(t => t.status === 'approved' && t.featured).length
+  const renderStars = (rating: number) => {
+    return (
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`h-4 w-4 ${
+              star <= rating
+                ? 'text-yellow-400 fill-yellow-400'
+                : 'text-gray-300 dark:text-gray-600'
+            }`}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <SEO
-        title="Manage Success Stories - Admin | GritSync"
-        description="Review and manage success story submissions from clients."
+    <>
+      <SEO 
+        title="Manage Testimonials - Admin | GritSync"
+        description="Review and manage client testimonials"
+        noIndex={true}
       />
-      <Header />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-4 md:p-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
-                  Success Stories Management
-                </h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-1">
-                  Review and manage client testimonials
-                </p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header />
+        <div className="flex">
+          <Sidebar />
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 pt-20 sm:pt-24 lg:ml-64">
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    Testimonials
+                  </h1>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Review and manage client testimonials
+                  </p>
+                </div>
+                <Button
+                  onClick={handleRefresh}
+                  variant="outline"
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={refreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-                    <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{testimonials.length}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{pendingCount}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{approvedCount}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Published</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Award className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{featuredCount}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Featured</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">{rejectedCount}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Rejected</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            <Card className="mb-6">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="relative flex-1">
+              <Card className="mb-6 p-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
+                      type="text"
                       placeholder="Search testimonials..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={statusFilter === 'all' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setStatusFilter('all')}
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-gray-400" />
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as any)}
+                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      All
-                    </Button>
-                    <Button
-                      variant={statusFilter === 'pending' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setStatusFilter('pending')}
-                    >
-                      Pending
-                    </Button>
-                    <Button
-                      variant={statusFilter === 'approved' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setStatusFilter('approved')}
-                    >
-                      Approved
-                    </Button>
-                    <Button
-                      variant={statusFilter === 'rejected' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setStatusFilter('rejected')}
-                    >
-                      Rejected
-                    </Button>
+                      <option value="all">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
                   </div>
                 </div>
-              </div>
+              </Card>
 
               {loading ? (
-                <div className="p-8 text-center">
-                  <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary-600" />
-                  <p className="mt-2 text-gray-600 dark:text-gray-400">Loading testimonials...</p>
+                <div className="grid gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="p-6 animate-pulse">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                    </Card>
+                  ))}
                 </div>
               ) : filteredTestimonials.length === 0 ? (
-                <div className="p-8 text-center">
-                  <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">No testimonials found</p>
-                </div>
+                <Card className="p-8 text-center">
+                  <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No testimonials found
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    {searchQuery
+                      ? 'Try adjusting your search query'
+                      : 'Testimonials will appear here when clients submit them'}
+                  </p>
+                </Card>
               ) : (
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                <div className="grid gap-4">
                   {filteredTestimonials.map((testimonial) => (
-                    <div key={testimonial.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <div className="flex items-start gap-4">
-                        <div className="flex-shrink-0">
-                          {testimonial.image_url ? (
-                            <img
-                              src={testimonial.image_url}
-                              alt={testimonial.name}
-                              className="h-12 w-12 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                              <User className="h-6 w-6 text-gray-400" />
+                    <Card key={testimonial.id} className="p-6">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-start gap-4 mb-4">
+                            {testimonial.image_url ? (
+                              <img
+                                src={testimonial.image_url}
+                                alt={testimonial.name}
+                                className="w-12 h-12 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                                <User className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                                  {testimonial.name}
+                                </h3>
+                                {getStatusBadge(testimonial.status)}
+                                {testimonial.featured && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                    <Award className="h-3 w-3" />
+                                    Featured
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {testimonial.email}
+                              </p>
+                              <div className="flex items-center gap-4 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                {testimonial.location && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {testimonial.location}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {format(new Date(testimonial.created_at), 'MMM d, yyyy')}
+                                </span>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                              {testimonial.name}
-                            </h3>
-                            {getStatusBadge(testimonial.status)}
-                            {testimonial.featured && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
-                                <Award className="h-3 w-3" />
-                                Featured
-                              </span>
-                            )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                            <span>{testimonial.email}</span>
-                            {testimonial.location && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                {testimonial.location}
-                              </span>
-                            )}
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {format(new Date(testimonial.created_at), 'MMM d, yyyy')}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-2">
-                            {testimonial.testimony}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                            <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+
+                          <div className="mb-3">
+                            {renderStars(testimonial.rating)}
+                            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                               {testimonial.service}
                             </span>
-                            <div className="flex items-center gap-0.5">
-                              {[...Array(5)].map((_, i) => (
-                                <Star
-                                  key={i}
-                                  className={`h-3 w-3 ${i < testimonial.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
-                                />
-                              ))}
-                            </div>
                           </div>
+
+                          <p className="text-gray-700 dark:text-gray-300 line-clamp-3">
+                            "{testimonial.testimony}"
+                          </p>
                         </div>
-                        <div className="flex items-center gap-2">
+
+                        <div className="flex flex-wrap gap-2 lg:flex-col lg:items-end">
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => { setSelectedTestimonial(testimonial); setShowModal(true) }}
-                            title="View Details"
+                            onClick={() => {
+                              setSelectedTestimonial(testimonial)
+                              setShowModal(true)
+                            }}
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
                           </Button>
                           {testimonial.status === 'pending' && (
                             <>
                               <Button
-                                variant="ghost"
                                 size="sm"
                                 onClick={() => handleApprove(testimonial.id)}
-                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                title="Approve"
                               >
-                                <CheckCircle className="h-4 w-4" />
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Approve
                               </Button>
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
                                 onClick={() => handleReject(testimonial.id)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                title="Reject"
+                                className="text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
                               >
-                                <XCircle className="h-4 w-4" />
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Reject
                               </Button>
                             </>
                           )}
-                          {testimonial.status === 'approved' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleToggleFeatured(testimonial.id, testimonial.featured)}
-                              className={testimonial.featured ? 'text-purple-600' : 'text-gray-400'}
-                              title={testimonial.featured ? 'Remove from Featured' : 'Add to Featured'}
-                            >
-                              <Award className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleFeatured(testimonial.id, testimonial.featured)}
+                          >
+                            <Award className={`h-4 w-4 mr-1 ${testimonial.featured ? 'text-purple-600' : ''}`} />
+                            {testimonial.featured ? 'Unfeature' : 'Feature'}
+                          </Button>
                         </div>
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               )}
-            </Card>
-          </div>
-        </main>
+            </div>
+          </main>
+        </div>
       </div>
 
       {showModal && selectedTestimonial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
                   {selectedTestimonial.image_url ? (
                     <img
                       src={selectedTestimonial.image_url}
                       alt={selectedTestimonial.name}
-                      className="h-16 w-16 rounded-full object-cover"
+                      className="w-16 h-16 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="h-16 w-16 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                      <User className="h-8 w-8 text-gray-400" />
+                    <div className="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                      <User className="h-8 w-8 text-primary-600 dark:text-primary-400" />
                     </div>
                   )}
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                       {selectedTestimonial.name}
                     </h2>
-                    <p className="text-gray-600 dark:text-gray-400">{selectedTestimonial.email}</p>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      {selectedTestimonial.email}
+                    </p>
+                    {selectedTestimonial.location && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {selectedTestimonial.location}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <XCircle className="h-6 w-6" />
                 </button>
@@ -530,90 +433,69 @@ export function AdminTestimonials() {
 
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
+                  {renderStars(selectedTestimonial.rating)}
                   {getStatusBadge(selectedTestimonial.status)}
                   {selectedTestimonial.featured && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
                       <Award className="h-3 w-3" />
                       Featured
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Location:</span>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {selectedTestimonial.location || 'Not provided'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Service:</span>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {selectedTestimonial.service}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Submitted:</span>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {format(new Date(selectedTestimonial.created_at), 'MMMM d, yyyy h:mm a')}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Rating:</span>
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${i < selectedTestimonial.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400 text-sm">Testimony:</span>
-                  <p className="mt-2 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                    {selectedTestimonial.testimony}
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Service
+                  </p>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {selectedTestimonial.service}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Testimonial
+                  </p>
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    "{selectedTestimonial.testimony}"
+                  </p>
+                </div>
+
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Submitted on {format(new Date(selectedTestimonial.created_at), 'MMMM d, yyyy \'at\' h:mm a')}
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                   {selectedTestimonial.status === 'pending' && (
                     <>
-                      <Button
-                        onClick={() => { handleApprove(selectedTestimonial.id); setShowModal(false) }}
-                        className="flex-1"
-                      >
+                      <Button onClick={() => handleApprove(selectedTestimonial.id)}>
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Approve & Publish
+                        Approve
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => { handleReject(selectedTestimonial.id); setShowModal(false) }}
-                        className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleReject(selectedTestimonial.id)}
+                        className="text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
                         Reject
                       </Button>
                     </>
                   )}
-                  {selectedTestimonial.status === 'approved' && (
-                    <Button
-                      variant="outline"
-                      onClick={() => handleToggleFeatured(selectedTestimonial.id, selectedTestimonial.featured)}
-                      className="flex-1"
-                    >
-                      <Award className="h-4 w-4 mr-2" />
-                      {selectedTestimonial.featured ? 'Remove from Featured' : 'Add to Featured'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => handleToggleFeatured(selectedTestimonial.id, selectedTestimonial.featured)}
+                  >
+                    <Award className={`h-4 w-4 mr-2 ${selectedTestimonial.featured ? 'text-purple-600' : ''}`} />
+                    {selectedTestimonial.featured ? 'Remove from Featured' : 'Add to Featured'}
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => handleDelete(selectedTestimonial.id)}
-                    className="text-red-600 border-red-300 hover:bg-red-50"
+                    className="text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
                   </Button>
                 </div>
               </div>
@@ -621,6 +503,6 @@ export function AdminTestimonials() {
           </Card>
         </div>
       )}
-    </div>
+    </>
   )
 }

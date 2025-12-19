@@ -6,15 +6,26 @@ import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middle
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const approvedTestimonials = await db.select().from(testimonials)
-      .where(or(
-        eq(testimonials.status, 'approved'),
-        eq(testimonials.status, 'featured')
-      ))
-      .orderBy(desc(testimonials.created_at));
-    res.json(approvedTestimonials);
+    const { status } = req.query;
+    
+    let query;
+    if (status && typeof status === 'string') {
+      query = db.select().from(testimonials)
+        .where(eq(testimonials.status, status))
+        .orderBy(desc(testimonials.created_at));
+    } else {
+      query = db.select().from(testimonials)
+        .where(or(
+          eq(testimonials.status, 'approved'),
+          eq(testimonials.status, 'featured')
+        ))
+        .orderBy(desc(testimonials.created_at));
+    }
+    
+    const result = await query;
+    res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

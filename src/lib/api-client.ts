@@ -374,6 +374,10 @@ export const notificationsAPI = {
     return apiClient.get<any[]>('/notifications');
   },
 
+  async getAllAdmin() {
+    return apiClient.get<any[]>('/notifications/admin');
+  },
+
   async getUnread() {
     return apiClient.get<any[]>('/notifications/unread');
   },
@@ -537,8 +541,9 @@ export const careersApplicationsAPI = {
 };
 
 export const testimonialsAPI = {
-  async getAll() {
-    return apiClient.get<any[]>('/testimonials');
+  async getAll(status?: string) {
+    const params = status ? `?status=${status}` : '';
+    return apiClient.get<any[]>(`/testimonials${params}`);
   },
 
   async getAllAdmin() {

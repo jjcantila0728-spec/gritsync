@@ -1,10 +1,39 @@
 import { Router, Response } from 'express';
 import { db } from '../db';
-import { notifications } from '../../shared/schema';
+import { notifications, users } from '../../shared/schema';
 import { eq, desc, and } from 'drizzle-orm';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
+
+router.get('/admin', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const allNotifications = await db.select({
+      id: notifications.id,
+      user_id: notifications.user_id,
+      application_id: notifications.application_id,
+      type: notifications.type,
+      title: notifications.title,
+      message: notifications.message,
+      read: notifications.read,
+      created_at: notifications.created_at,
+      user: {
+        email: users.email,
+        full_name: users.full_name,
+        first_name: users.first_name,
+        last_name: users.last_name,
+      }
+    })
+    .from(notifications)
+    .leftJoin(users, eq(notifications.user_id, users.id))
+    .orderBy(desc(notifications.created_at))
+    .limit(100);
+
+    res.json(allNotifications);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
