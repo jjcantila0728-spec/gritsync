@@ -64,7 +64,6 @@ const AdminCareers = lazy(() => import('./pages/AdminCareers').then(m => ({ defa
 const AdminPartnerAgencies = lazy(() => import('./pages/AdminPartnerAgencies').then(m => ({ default: m.AdminPartnerAgencies })))
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const AdminEmails = lazy(() => import('./pages/AdminEmails').then(m => ({ default: m.AdminEmails })))
-const AdminEmailsPage = lazy(() => import('./pages/AdminEmailsPage'))
 const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics').then(m => ({ default: m.AdminAnalytics })))
 const AdminEmailAddresses = lazy(() => import('./pages/AdminEmailAddresses').then(m => ({ default: m.AdminEmailAddresses })))
 const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').then(m => ({ default: m.default })))
@@ -558,14 +557,6 @@ function AppRoutes() {
       />
       <Route
         path="/admin/emails"
-        element={
-          <AdminRoute>
-            <AdminEmailsPage />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails-legacy"
         element={
           <AdminRoute>
             <AdminEmails />
