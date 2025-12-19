@@ -4,6 +4,7 @@ import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import connectPgSimple from 'connect-pg-simple';
 import path from 'path';
+import fs from 'fs';
 import { pool } from './db';
 import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
@@ -85,17 +86,19 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(process.cwd(), 'dist');
+const distPath = path.join(process.cwd(), 'dist');
+const isProduction = process.env.NODE_ENV === 'production' || process.env.REPL_SLUG !== undefined && !process.env.npm_lifecycle_event?.includes('dev');
+
+if (isProduction && fs.existsSync(path.join(distPath, 'index.html'))) {
   app.use(express.static(distPath));
-  app.get('*', (_req: Request, res: Response) => {
+  app.use((_req: Request, res: Response) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
-const serverPort = process.env.NODE_ENV === 'production' ? 5000 : PORT;
+const serverPort = process.env.PORT ? parseInt(process.env.PORT) : PORT;
 
-app.listen(serverPort, () => {
+app.listen(serverPort, '0.0.0.0', () => {
   console.log(`Server running on port ${serverPort}`);
 });
 
