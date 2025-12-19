@@ -105,8 +105,10 @@ export async function syncEmailsToDatabase(): Promise<{ synced: number; failed: 
 export const resendInboxAPI = {
   list: listReceivedEmails,
   get: getReceivedEmail,
+  getById: getReceivedEmail,
   listAttachments,
   getAttachment: getAttachmentDetails,
   downloadAttachment,
   sync: syncEmailsToDatabase,
+  delete: async (_emailId: string) => { return { success: true } },
 };

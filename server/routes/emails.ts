@@ -318,6 +318,25 @@ router.get('/inbox', authenticateToken, requireAdmin, async (req: AuthenticatedR
   }
 });
 
+router.get('/inbox/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { client } = await getResendClient();
+    
+    const result = await client.emails.get(id);
+    
+    if (result.error) {
+      console.error('Resend API error getting email:', result.error);
+      return res.status(404).json({ error: 'Email not found' });
+    }
+    
+    res.json(result.data);
+  } catch (error: any) {
+    console.error('Error fetching email:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/send-with-logging', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { to, toName, subject, html, text, emailType, emailCategory, fromName, replyTo, cc, bcc } = req.body;
