@@ -91,17 +91,17 @@ export function ResetPassword() {
           structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
         />
         <Header />
-        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <Card className="w-full max-w-md border-0 shadow-xl">
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
-                <Lock className="h-8 w-8 text-red-600 dark:text-red-400" />
+        <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
+            <div className="p-4 sm:p-6 text-center">
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-3">
+                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-red-600 dark:text-red-400" />
               </div>
-              <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+              <h1 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-gray-100">
                 Invalid Reset Link
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                This password reset link is invalid or has expired. Please request a new password reset.
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                This link is invalid or expired. Please request a new reset.
               </p>
               <Link to="/forgot-password">
                 <Button className="w-full">
@@ -127,17 +127,17 @@ export function ResetPassword() {
           structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
         />
         <Header />
-        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <Card className="w-full max-w-md border-0 shadow-xl">
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+        <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
+            <div className="p-4 sm:p-6 text-center">
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-3">
+                <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
               </div>
-              <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+              <h1 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-gray-100">
                 Password Reset Successful!
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Your password has been successfully reset. You can now log in with your new password.
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                You can now log in with your new password.
               </p>
               <Link to="/login">
                 <Button className="w-full">
@@ -162,22 +162,22 @@ export function ResetPassword() {
         structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
       />
       <Header />
-      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Card className="w-full max-w-md border-0 shadow-xl">
-          <div className="p-8">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
-                <Lock className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
+          <div className="p-4 sm:p-6">
+            <div className="text-center mb-4 sm:mb-6">
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
+                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+              <h1 className="text-xl sm:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
                 Reset Password
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                Enter your new password below
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Enter your new password
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
               <div className="relative">
                 <Input
                   label="New Password"
@@ -227,12 +227,12 @@ export function ResetPassword() {
               </Button>
             </form>
 
-            <div className="mt-6">
+            <div className="mt-4">
               <Link
                 to="/login"
-                className="flex items-center justify-center gap-2 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                className="flex items-center justify-center gap-2 text-xs sm:text-sm text-primary-600 dark:text-primary-400 hover:underline"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
                 Back to Login
               </Link>
             </div>

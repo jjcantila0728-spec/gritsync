@@ -13,55 +13,6 @@
 }
 
 @layer utilities {
-  /* Compact design utilities */
-  .compact-card {
-    @apply p-4 sm:p-5;
-  }
-  
-  .compact-card-header {
-    @apply mb-4 sm:mb-5 text-center;
-  }
-  
-  .compact-icon {
-    @apply w-10 h-10 sm:w-12 sm:h-12;
-  }
-  
-  .compact-title {
-    @apply text-xl sm:text-2xl font-bold mb-1;
-  }
-  
-  .compact-subtitle {
-    @apply text-sm text-gray-600 dark:text-gray-400;
-  }
-  
-  .compact-form {
-    @apply space-y-3 sm:space-y-4;
-  }
-  
-  .compact-input {
-    @apply text-sm py-2;
-  }
-  
-  .compact-btn {
-    @apply py-2 text-sm;
-  }
-  
-  .compact-section {
-    @apply py-3 sm:py-4;
-  }
-  
-  .compact-grid {
-    @apply gap-3 sm:gap-4;
-  }
-  
-  .compact-tabs {
-    @apply p-1 gap-1;
-  }
-  
-  .compact-tab-content {
-    @apply p-3 sm:p-4;
-  }
-  
   .logo-container {
     @apply w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center bg-white dark:bg-gray-800 shadow-sm;
     border-radius: 12px;
