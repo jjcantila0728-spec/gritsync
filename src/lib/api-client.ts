@@ -421,6 +421,10 @@ export const donationsAPI = {
   async update(id: string, data: any) {
     return apiClient.patch<any>(`/donations/${id}`, data);
   },
+
+  async createPaymentIntent(donationId: string, amount: number) {
+    return apiClient.post<{ clientSecret: string }>(`/donations/${donationId}/payment-intent`, { amount });
+  },
 };
 
 export const clientsAPI = {

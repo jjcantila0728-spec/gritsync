@@ -59,6 +59,7 @@
     "react-router-dom": "^6.21.0",
     "recharts": "^3.6.0",
     "resend": "^6.6.0",
+    "stripe": "^20.1.0",
     "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
