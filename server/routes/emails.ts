@@ -284,17 +284,29 @@ router.get('/logs/:id', authenticateToken, requireAdmin, async (req: Authenticat
 
 router.get('/inbox', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { limit = '50' } = req.query;
-    const limitNum = parseInt(limit as string, 10);
-    
     const { client } = await getResendClient();
     
-    const emails = await (client.emails as any).list({ limit: limitNum });
+    // Resend SDK returns { data, error } structure
+    const result = await client.emails.list();
+    
+    console.log('Resend emails.list() response:', JSON.stringify(result, null, 2));
+    
+    if (result.error) {
+      console.error('Resend API error:', result.error);
+      return res.json({
+        object: 'list',
+        has_more: false,
+        data: []
+      });
+    }
+    
+    // Transform the data to match our expected format
+    const emails = result.data?.data || [];
     
     res.json({
       object: 'list',
-      has_more: false,
-      data: emails?.data || []
+      has_more: result.data?.has_more || false,
+      data: emails
     });
   } catch (error: any) {
     console.error('Error fetching inbox emails:', error);
