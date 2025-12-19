@@ -1,0 +1,84 @@
+[Service Worker] Serving from cache: https://gritsync.com/assets/SuccessStories-DgGhrl8X.js
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_nurse_headshot-TgYkLJ_L.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_nurse_headshot-CNtg1aDD.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_nurse_40s_headshot-ZwnijJxM.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/young_filipino_woman_professional-CIqGfn2D.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_doctor_headshot-C0CfQVpn.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_nurse_navy_scrubs-CfblVju2.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_green_scrubs-DT-LFMSY.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_burgundy_scrubs-PFx-ZfAb.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_purple_scrubs-C0SCfVij.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_dark_blue_scrubs-DcMAmvvO.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_coral_scrubs-Gz7C83aA.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_maroon_scrubs-D1Cuo7mX.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_seafoam_scrubs-BB4yu_bS.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_olive_scrubs-J7RVOwlu.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_gray_scrubs-BhK8tmRi.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_royal_blue-BsNkFxMf.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_white_coat-YM_fK_DC.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_lavender_scrubs-XMOw_qO2.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_man_hunter_green-eCCWIV9U.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/assets/images/filipino_woman_charcoal_scrubs-WJT0ttgj.png
+sw.js:82 [Service Worker] Serving from cache: https://gritsync.com/success_stories_page_banner.png
+index-BWO2f1y5.js:10  GET https://gritsync.com/api/settings 404 (Not Found)
+(anonymous) @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+request @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+get @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+getAll @ index-BWO2f1y5.js:10
+(anonymous) @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+Le @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+j @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+getPhoneNumber @ index-BWO2f1y5.js:11
+(anonymous) @ Footer-Cv4hAg_C.js:1
+(anonymous) @ Footer-Cv4hAg_C.js:1
+m @ Footer-Cv4hAg_C.js:1
+(anonymous) @ Footer-Cv4hAg_C.js:1
+gc @ react-vendor-BIMlpjqW.js:32
+ma @ react-vendor-BIMlpjqW.js:32
+(anonymous) @ react-vendor-BIMlpjqW.js:32
+P @ react-vendor-BIMlpjqW.js:17
+M @ react-vendor-BIMlpjqW.js:17Understand this error
+index-BWO2f1y5.js:11 Error fetching settings: Error: Request failed
+    at gt.<anonymous> (index-BWO2f1y5.js:10:1849)
+    at Generator.next (<anonymous>)
+    at d (index-BWO2f1y5.js:2:712)
+(anonymous) @ index-BWO2f1y5.js:11
+u @ index-BWO2f1y5.js:2
+Promise.then
+p @ index-BWO2f1y5.js:2
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+Le @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+j @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:11
+(anonymous) @ index-BWO2f1y5.js:2
+r @ index-BWO2f1y5.js:2
+getPhoneNumber @ index-BWO2f1y5.js:11
+(anonymous) @ Footer-Cv4hAg_C.js:1
+(anonymous) @ Footer-Cv4hAg_C.js:1
+m @ Footer-Cv4hAg_C.js:1
+(anonymous) @ Footer-Cv4hAg_C.js:1
+gc @ react-vendor-BIMlpjqW.js:32
+ma @ react-vendor-BIMlpjqW.js:32
+(anonymous) @ react-vendor-BIMlpjqW.js:32
+P @ react-vendor-BIMlpjqW.js:17
+M @ react-vendor-BIMlpjqW.js:17Understand this error

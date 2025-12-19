@@ -3,6 +3,7 @@ import cors from 'cors';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import connectPgSimple from 'connect-pg-simple';
+import path from 'path';
 import { pool } from './db';
 import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
@@ -84,8 +85,18 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+const serverPort = process.env.NODE_ENV === 'production' ? 5000 : PORT;
+
+app.listen(serverPort, () => {
+  console.log(`Server running on port ${serverPort}`);
 });
 
 export default app;

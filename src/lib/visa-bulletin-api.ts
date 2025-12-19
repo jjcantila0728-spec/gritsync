@@ -68,10 +68,14 @@ export async function refreshVisaBulletinCache(): Promise<VisaBulletinData | nul
   return FALLBACK_DATA
 }
 
-export function getBulletinReleaseSchedule(): { nextRelease: Date; formattedDate: string } {
-  const nextRelease = getNextBulletinReleaseDate()
+export function getBulletinReleaseSchedule(): { currentMonth: string; nextRelease: string; isNewBulletinExpected: boolean } {
+  const now = new Date()
+  const nextReleaseDate = getNextBulletinReleaseDate()
+  const daysUntilRelease = Math.ceil((nextReleaseDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  
   return {
-    nextRelease,
-    formattedDate: getNextBulletinReleaseDateFormatted()
+    currentMonth: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    nextRelease: getNextBulletinReleaseDateFormatted(),
+    isNewBulletinExpected: daysUntilRelease <= 7
   }
 }
