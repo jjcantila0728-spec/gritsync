@@ -202,7 +202,7 @@ export function AdminTestimonials() {
       <SEO 
         title="Manage Testimonials - Admin | GritSync"
         description="Review and manage client testimonials"
-        noIndex={true}
+        noindex={true}
       />
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Header />
