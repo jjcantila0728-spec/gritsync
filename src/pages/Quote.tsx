@@ -104,16 +104,19 @@ export function Quote() {
       
       try {
         const services = await servicesAPI.getAll()
-        // Get unique states for the selected service
+        // Get unique states for the selected service (filter out null/empty states)
         const statesForService = services
-          .filter((s: any) => s.service_name === formData.service)
+          .filter((s: any) => s.service_name === formData.service && s.state)
           .map((s: any) => s.state)
-        const uniqueStates = Array.from(new Set(statesForService))
+        const uniqueStates = Array.from(new Set(statesForService)).filter(Boolean)
         setAvailableStates(uniqueStates.sort())
         
         // If only one state is available, auto-select it
         if (uniqueStates.length === 1 && !formData.state) {
           setFormData(prev => ({ ...prev, state: uniqueStates[0] }))
+        } else if (uniqueStates.length === 0) {
+          // No states for this service (e.g., EAD) - set state to empty to allow proceeding
+          setFormData(prev => ({ ...prev, state: '' }))
         } else if (!uniqueStates.includes(formData.state)) {
           // Clear state if it's not available for selected service
           setFormData(prev => ({ ...prev, state: '' }))
@@ -130,15 +133,21 @@ export function Quote() {
   // Loads services dynamically based on selected service and state
   useEffect(() => {
     async function loadServices() {
-      // Only load services if both service and state are selected
-      if (!formData.service || !formData.state) {
+      // Only load services if service is selected
+      // State is required only for services that have states (e.g., NCLEX)
+      // Services without states (e.g., EAD) can proceed without state selection
+      const requiresState = availableStates.length > 0
+      if (!formData.service || (requiresState && !formData.state)) {
         setAvailablePaymentTypes([])
         return
       }
 
       try {
         // Fetch all services for the selected service and state (both staggered and full)
-        const services = await servicesAPI.getAllByServiceAndState(formData.service, formData.state)
+        // For services without states, pass null/undefined
+        const services = requiresState
+          ? await servicesAPI.getAllByServiceAndState(formData.service, formData.state)
+          : await servicesAPI.getByServiceName(formData.service)
         
         // Determine which payment types are available
         const paymentTypes = services
@@ -249,7 +258,7 @@ export function Quote() {
       }
     }
     loadServices()
-  }, [formData.service, formData.state])
+  }, [formData.service, formData.state, availableStates])
   
   // Check if quote is expired (30 days from creation or validity_date)
   // Quotes are saved in database until expiration - no automatic deletion
@@ -1907,7 +1916,7 @@ export function Quote() {
                               ))}
                             </select>
                           </div>
-                          {formData.service && (
+                          {formData.service && availableStates.length > 0 && (
                             <div>
                               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                                 State *
@@ -1921,7 +1930,6 @@ export function Quote() {
                                   updateFormField('paymentType', null)
                                 }}
                                 className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                disabled={availableStates.length === 0}
                               >
                                 <option value="">Select a state...</option>
                                 {availableStates.map((state) => (

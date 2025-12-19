@@ -46,6 +46,26 @@ router.get('/by-service-state', async (req, res: Response) => {
   }
 });
 
+router.get('/by-name', async (req, res: Response) => {
+  try {
+    const { service_name } = req.query;
+    
+    if (!service_name) {
+      return res.status(400).json({ error: 'service_name is required' });
+    }
+    
+    const result = await db.execute(sql`
+      SELECT * FROM services 
+      WHERE service_name = ${service_name as string}
+      AND is_active = true
+    `);
+    
+    res.json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/by-type', async (req, res: Response) => {
   try {
     const { serviceType, serviceState, paymentType } = req.query;

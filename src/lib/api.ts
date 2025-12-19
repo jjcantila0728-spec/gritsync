@@ -335,6 +335,14 @@ export const servicesAPI = {
       return [];
     }
   },
+  async getByServiceName(serviceName: string) {
+    const { apiClient } = await import('./api-client');
+    try {
+      return await apiClient.get<any[]>(`/services/by-name?service_name=${encodeURIComponent(serviceName)}`);
+    } catch {
+      return [];
+    }
+  },
   async getByServiceStateAndPaymentType(serviceType: string, serviceState: string, paymentType: string) {
     const { apiClient } = await import('./api-client');
     try {
