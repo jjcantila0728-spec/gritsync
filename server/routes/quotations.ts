@@ -1,10 +1,25 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { quotations } from '../../shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
+
+// Public endpoint for creating quotations (no auth required)
+router.post('/public', async (req: Request, res: Response) => {
+  try {
+    const [quotation] = await db.insert(quotations).values({
+      ...req.body,
+      status: 'pending',
+    }).returning();
+
+    res.status(201).json(quotation);
+  } catch (error: any) {
+    console.error('Public quotation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
