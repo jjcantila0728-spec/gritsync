@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { applicationTimelineSteps } from '../../shared/schema';
+import { eq } from 'drizzle-orm';
 
 export interface TimelineStep {
   step_key: string;
@@ -86,7 +87,7 @@ export async function generateTimelineForApplication(
   const existingSteps = await db
     .select()
     .from(applicationTimelineSteps)
-    .where(require('drizzle-orm').eq(applicationTimelineSteps.application_id, applicationId));
+    .where(eq(applicationTimelineSteps.application_id, applicationId));
   
   const existingKeys = new Set(existingSteps.map(s => s.step_key));
   
