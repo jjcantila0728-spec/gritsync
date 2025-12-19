@@ -154,22 +154,22 @@ export function Login() {
         structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
       />
       <Header />
-      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Card className="w-full max-w-md border-0 shadow-xl">
-          <div className="p-8">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
-                <Lock className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
+          <div className="p-4 sm:p-6">
+            <div className="text-center mb-4 sm:mb-6">
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
+                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+              <h1 className="text-xl sm:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
                 Welcome Back
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">
-                Sign in to your account to continue
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Sign in to your account
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 space-y-2">
                   <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
@@ -257,18 +257,18 @@ export function Login() {
               </Button>
             </form>
 
-            <div className="mt-6">
+            <div className="mt-4 sm:mt-5">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
                 </div>
-                <div className="relative flex justify-center text-sm">
+                <div className="relative flex justify-center text-xs sm:text-sm">
                   <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                     New to GritSync?
                   </span>
                 </div>
               </div>
-              <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-4 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                 Don't have an account?{' '}
                 <Link
                   to="/register"

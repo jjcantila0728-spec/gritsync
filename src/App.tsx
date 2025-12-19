@@ -260,38 +260,10 @@ function AppRoutes() {
         <Route path="/test-upload" element={<TestProofOfPaymentUpload />} />
         <Route path="/sign" element={<SignaturePage />} />
       
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new"
-        element={
-          <ProtectedRoute>
-            <ApplicationServiceSelection />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new/nclex"
-        element={
-          <ProtectedRoute>
-            <NCLEXApplication />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new/ead"
-        element={
-          <ProtectedRoute>
-            <EADApplication />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/application/new" element={<ApplicationServiceSelection />} />
+      <Route path="/application/new/nclex" element={<NCLEXApplication />} />
+      <Route path="/application/new/ead" element={<EADApplication />} />
       <Route
         path="/sponsorship/apply"
         element={<NCLEXSponsorship />}
@@ -316,50 +288,12 @@ function AppRoutes() {
         path="/applications/:id"
         element={<Navigate to="timeline" replace />}
       />
-      <Route
-        path="/applications/:id/payments"
-        element={
-          <ProtectedRoute>
-            <ApplicationPayments />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/checkout"
-        element={<ApplicationCheckout />}
-      />
-      <Route
-        path="/applications/:id/details/:subTab"
-        element={
-          <ProtectedRoute>
-            <ApplicationDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/details"
-        element={
-          <ProtectedRoute>
-            <Navigate to="personal" replace />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/:tab"
-        element={
-          <ProtectedRoute>
-            <ApplicationDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:applicationId/payment"
-        element={
-          <ProtectedRoute>
-            <ApplicationPayment />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/applications/:id/payments" element={<ApplicationPayments />} />
+      <Route path="/applications/:id/checkout" element={<ApplicationCheckout />} />
+      <Route path="/applications/:id/details/:subTab" element={<ApplicationDetail />} />
+      <Route path="/applications/:id/details" element={<Navigate to="personal" replace />} />
+      <Route path="/applications/:id/:tab" element={<ApplicationDetail />} />
+      <Route path="/applications/:applicationId/payment" element={<ApplicationPayment />} />
       <Route
         path="/quote"
         element={<Quote />}
@@ -376,110 +310,20 @@ function AppRoutes() {
         path="/quotations/:id"
         element={<Quote />}
       />
-      <Route
-        path="/quotations/new"
-        element={
-          <ProtectedRoute>
-            <NewQuotation />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quotations/:id/pay"
-        element={
-          <ProtectedRoute>
-            <Payment />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-details"
-        element={
-          <ProtectedRoute>
-            <MyDetails />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/account-settings"
-        element={
-          <ProtectedRoute>
-            <AccountSettings />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/documents/:serviceType?"
-        element={
-          <ProtectedRoute>
-            <Documents />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <ProtectedRoute>
-            <Notifications />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/dashboard"
-        element={
-          <AdminRoute>
-            <Dashboard />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications"
-        element={
-          <AdminRoute>
-            <Tracking />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id"
-        element={<AdminRedirect to="timeline" />}
-      />
-      <Route
-        path="/admin/applications/:id/payments"
-        element={
-          <AdminRoute>
-            <AdminApplicationPayments />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id/details/:subTab"
-        element={
-          <AdminRoute>
-            <ApplicationDetail />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id/details"
-        element={<AdminRedirect to="personal" />}
-      />
-      <Route
-        path="/admin/applications/:id/:tab"
-        element={
-          <AdminRoute>
-            <ApplicationDetail />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/clients"
-        element={
-          <AdminRoute>
-            <AdminClients />
-          </AdminRoute>
-        }
-      />
+      <Route path="/quotations/new" element={<NewQuotation />} />
+      <Route path="/quotations/:id/pay" element={<Payment />} />
+      <Route path="/my-details" element={<MyDetails />} />
+      <Route path="/account-settings" element={<AccountSettings />} />
+      <Route path="/documents/:serviceType?" element={<Documents />} />
+      <Route path="/notifications" element={<Notifications />} />
+      <Route path="/admin/dashboard" element={<Dashboard />} />
+      <Route path="/admin/applications" element={<Tracking />} />
+      <Route path="/admin/applications/:id" element={<Navigate to="timeline" replace />} />
+      <Route path="/admin/applications/:id/payments" element={<AdminApplicationPayments />} />
+      <Route path="/admin/applications/:id/details/:subTab" element={<ApplicationDetail />} />
+      <Route path="/admin/applications/:id/details" element={<Navigate to="personal" replace />} />
+      <Route path="/admin/applications/:id/:tab" element={<ApplicationDetail />} />
+      <Route path="/admin/clients" element={<AdminClients />} />
       <Route
         path="/admin/quotations"
         element={
