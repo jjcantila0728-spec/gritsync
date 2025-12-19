@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { Plus, Trash2, Copy, Loader2, Tag, Info } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { apiClient } from '@/lib/api-client'
 
 interface PromoCode {
   id: string
@@ -30,7 +31,6 @@ export function PromoCodeSettings() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   
-  // Form state
   const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage')
@@ -42,13 +42,8 @@ export function PromoCodeSettings() {
   const loadPromoCodes = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('promo_codes')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      setPromoCodes((data || []) as unknown as PromoCode[])
+      const data = await apiClient.get<PromoCode[]>('/promo-codes')
+      setPromoCodes(data || [])
     } catch (error: any) {
       console.error('Error loading promo codes:', error)
       showToast('Failed to load promo codes', 'error')
@@ -71,7 +66,6 @@ export function PromoCodeSettings() {
   }
   
   const createPromoCode = async () => {
-    // Validation
     if (!code.trim()) {
       showToast('Please enter a promo code', 'error')
       return
@@ -91,21 +85,15 @@ export function PromoCodeSettings() {
     
     try {
       setSubmitting(true)
-      const { error } = await supabase
-        .from('promo_codes')
-        .insert({
-          code: code.toUpperCase(),
-          description,
-          discount_type: discountType,
-          discount_value: parseFloat(discountValue),
-          application_type: applicationType,
-          max_uses: maxUses ? parseInt(maxUses) : null,
-          valid_until: validUntil || null
-        })
-        .select()
-        .single()
-      
-      if (error) throw error
+      await apiClient.post('/promo-codes', {
+        code: code.toUpperCase(),
+        description,
+        discount_type: discountType,
+        discount_value: parseFloat(discountValue),
+        application_type: applicationType,
+        max_uses: maxUses ? parseInt(maxUses) : null,
+        valid_until: validUntil || null
+      })
       
       showToast('Promo code created successfully', 'success')
       setShowForm(false)
@@ -113,7 +101,7 @@ export function PromoCodeSettings() {
       loadPromoCodes()
     } catch (error: any) {
       console.error('Error creating promo code:', error)
-      if (error.code === '23505') {
+      if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
         showToast('This promo code already exists', 'error')
       } else {
         showToast(error.message || 'Failed to create promo code', 'error')
@@ -125,13 +113,7 @@ export function PromoCodeSettings() {
   
   const togglePromoCode = async (id: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('promo_codes')
-        .update({ is_active: !isActive })
-        .eq('id', id)
-      
-      if (error) throw error
-      
+      await apiClient.patch(`/promo-codes/${id}`, { is_active: !isActive })
       showToast(`Promo code ${!isActive ? 'activated' : 'deactivated'}`, 'success')
       loadPromoCodes()
     } catch (error: any) {
@@ -140,17 +122,11 @@ export function PromoCodeSettings() {
     }
   }
   
-  const deletePromoCode = async (id: string, code: string) => {
-    if (!confirm(`Are you sure you want to delete the promo code "${code}"?`)) return
+  const deletePromoCode = async (id: string, promoCode: string) => {
+    if (!confirm(`Are you sure you want to delete the promo code "${promoCode}"?`)) return
     
     try {
-      const { error } = await supabase
-        .from('promo_codes')
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
-      
+      await apiClient.delete(`/promo-codes/${id}`)
       showToast('Promo code deleted', 'success')
       loadPromoCodes()
     } catch (error: any) {
@@ -192,7 +168,6 @@ export function PromoCodeSettings() {
         </Button>
       </div>
 
-      {/* Info Card: Promo Code Application Rules */}
       <Card className="p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
         <div className="flex items-start gap-2 sm:gap-3">
           <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -336,7 +311,6 @@ export function PromoCodeSettings() {
         </div>
       </Modal>
       
-      {/* Promo Code List */}
       {loading ? (
         <div className="flex items-center justify-center py-6 sm:py-8">
           <Loader2 className="h-6 w-6 animate-spin text-primary-600 dark:text-primary-400" />
@@ -462,4 +436,3 @@ export function PromoCodeSettings() {
     </div>
   )
 }
-
