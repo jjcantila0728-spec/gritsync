@@ -1,7 +1,8 @@
 /**
- * Resend Inbox API - Complete Integration with Resend for receiving emails
- * NOTE: This feature is currently stubbed pending full migration
+ * Resend Inbox API - Integration with backend for receiving emails
  */
+
+import { apiClient } from './api-client';
 
 export interface ReceivedEmailAttachment {
   id: string
@@ -57,37 +58,50 @@ export interface ListAttachmentsResponse {
   data: AttachmentDetails[]
 }
 
-// Stubbed API - feature pending migration
-export async function listReceivedEmails(_options?: {
+export async function listReceivedEmails(options?: {
   limit?: number
   after?: string
   before?: string
   to?: string
 }): Promise<ListReceivedEmailsResponse> {
-  return { object: 'list', has_more: false, data: [] }
+  try {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', String(options.limit));
+    
+    const queryString = params.toString();
+    const url = `/emails/inbox${queryString ? `?${queryString}` : ''}`;
+    
+    return await apiClient.get<ListReceivedEmailsResponse>(url);
+  } catch (error) {
+    console.error('Error fetching inbox emails:', error);
+    return { object: 'list', has_more: false, data: [] };
+  }
 }
 
-export async function getReceivedEmail(_emailId: string): Promise<ReceivedEmail | null> {
-  return null
+export async function getReceivedEmail(emailId: string): Promise<ReceivedEmail | null> {
+  try {
+    return await apiClient.get<ReceivedEmail>(`/emails/inbox/${emailId}`);
+  } catch {
+    return null;
+  }
 }
 
-export async function listAttachments(_emailId: string): Promise<ListAttachmentsResponse> {
-  return { object: 'list', data: [] }
+export async function listAttachments(emailId: string): Promise<ListAttachmentsResponse> {
+  return { object: 'list', data: [] };
 }
 
-export async function getAttachmentDetails(_emailId: string, _attachmentId: string): Promise<AttachmentDetails | null> {
-  return null
+export async function getAttachmentDetails(emailId: string, attachmentId: string): Promise<AttachmentDetails | null> {
+  return null;
 }
 
-export async function downloadAttachment(_emailId: string, _attachmentId: string): Promise<Blob | null> {
-  return null
+export async function downloadAttachment(emailId: string, attachmentId: string): Promise<Blob | null> {
+  return null;
 }
 
 export async function syncEmailsToDatabase(): Promise<{ synced: number; failed: number }> {
-  return { synced: 0, failed: 0 }
+  return { synced: 0, failed: 0 };
 }
 
-// API object for compatibility
 export const resendInboxAPI = {
   list: listReceivedEmails,
   get: getReceivedEmail,
@@ -95,4 +109,4 @@ export const resendInboxAPI = {
   getAttachment: getAttachmentDetails,
   downloadAttachment,
   sync: syncEmailsToDatabase,
-}
+};

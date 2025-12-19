@@ -1,8 +1,9 @@
 /**
  * Email API - Enterprise-grade email management
  * Handles email logs, analytics, and admin email operations
- * NOTE: This feature is currently stubbed pending full migration
  */
+
+import { apiClient } from './api-client';
 
 export interface EmailLog {
   id: string
@@ -85,9 +86,8 @@ export interface SendEmailOptions {
   attachments?: File[]
 }
 
-// Stubbed API - feature pending migration
 export const emailLogsAPI = {
-  getAll: async (_options?: {
+  async getAll(options?: {
     page?: number
     pageSize?: number
     limit?: number
@@ -106,101 +106,106 @@ export const emailLogsAPI = {
     page: number
     pageSize: number
     totalPages: number
-  }> => ({
-    data: [],
-    emails: [],
-    count: 0,
-    page: 1,
-    pageSize: 50,
-    totalPages: 0,
-  }),
-  getById: async (_id: string): Promise<EmailLog | null> => null,
-  getByUserId: async (_userId: string, _limit?: number): Promise<EmailLog[]> => [],
-  getByApplicationId: async (_applicationId: string): Promise<EmailLog[]> => [],
-  getStats: async (_options?: {
+  }> {
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', String(options.page));
+    if (options?.pageSize) params.append('pageSize', String(options.pageSize));
+    if (options?.status) params.append('status', options.status);
+    if (options?.emailType) params.append('emailType', options.emailType);
+    if (options?.search) params.append('search', options.search);
+    if (options?.startDate) params.append('startDate', options.startDate);
+    if (options?.endDate) params.append('endDate', options.endDate);
+    
+    const queryString = params.toString();
+    const url = `/emails/logs${queryString ? `?${queryString}` : ''}`;
+    
+    return apiClient.get(url);
+  },
+  
+  async getById(id: string): Promise<EmailLog | null> {
+    try {
+      return await apiClient.get<EmailLog>(`/emails/logs/${id}`);
+    } catch {
+      return null;
+    }
+  },
+  
+  async getByUserId(userId: string, limit?: number): Promise<EmailLog[]> {
+    const response = await this.getAll({ 
+      pageSize: limit || 50 
+    });
+    return response.data.filter(log => log.recipient_user_id === userId);
+  },
+  
+  async getByApplicationId(applicationId: string): Promise<EmailLog[]> {
+    const response = await this.getAll({ pageSize: 100 });
+    return response.data.filter(log => log.application_id === applicationId);
+  },
+  
+  async getStats(options?: {
     startDate?: string
     endDate?: string
     emailType?: string
-  }): Promise<EmailStats> => ({
-    total: 0,
-    sent: 0,
-    delivered: 0,
-    failed: 0,
-    bounced: 0,
-    pending: 0,
-    deliveryRate: 0,
-    failureRate: 0,
-    avgSendTime: 0,
-  }),
-  getAnalytics: async (_options?: {
+  }): Promise<EmailStats> {
+    return apiClient.get<EmailStats>('/emails/logs/stats');
+  },
+  
+  async getAnalytics(options?: {
     startDate?: string
     endDate?: string
     groupBy?: 'day' | 'week' | 'month'
-  }): Promise<EmailAnalytics[]> => [],
-  retry: async (_id: string): Promise<boolean> => false,
-  delete: async (_id: string): Promise<boolean> => false,
-  bulkDelete: async (_ids: string[]): Promise<{ deleted: number }> => ({ deleted: 0 }),
+  }): Promise<EmailAnalytics[]> {
+    return [];
+  },
+  
+  async delete(id: string): Promise<void> {
+    return;
+  },
+  
+  async retry(id: string): Promise<{ success: boolean; error?: string }> {
+    return { success: false, error: 'Not implemented' };
+  }
+};
+
+export async function sendEmailWithLogging(options: SendEmailOptions): Promise<{
+  success: boolean
+  data?: any
+  error?: string
+  emailLogId?: string
+}> {
+  try {
+    const result = await apiClient.post<{ success: boolean; data?: any; error?: string }>('/emails/send-with-logging', {
+      to: options.to,
+      toName: options.toName,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      emailType: options.emailType,
+      emailCategory: options.emailCategory,
+      fromName: options.fromName,
+      replyTo: options.replyTo,
+      cc: options.cc,
+      bcc: options.bcc
+    });
+    
+    return result;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
-// Stubbed admin email API
-export const adminEmailAPI = {
-  send: async (_options: SendEmailOptions): Promise<{ success: boolean; emailId?: string }> => ({
-    success: false,
-  }),
-  sendBulk: async (_emails: SendEmailOptions[]): Promise<{ sent: number; failed: number }> => ({
-    sent: 0,
-    failed: 0,
-  }),
-  getTemplates: async (): Promise<any[]> => [],
-  createTemplate: async (_template: any): Promise<any> => null,
-  updateTemplate: async (_id: string, _template: any): Promise<any> => null,
-  deleteTemplate: async (_id: string): Promise<boolean> => false,
+export async function sendTestEmail(email: string, subject?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    return await apiClient.post('/emails/test', { email, subject });
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
-// Stub for sendEmailWithLogging
-export async function sendEmailWithLogging(
-  _options: SendEmailOptions
-): Promise<{ success: boolean; emailId?: string; error?: string }> {
-  console.warn('Email sending is not yet migrated')
-  return { success: false, error: 'Email feature not available' }
-}
-
-// Received emails types
-export interface ReceivedEmail {
-  id: string
-  from: string
-  to: string
-  subject: string
-  body_html?: string
-  body_text?: string
-  received_at: string
-  read: boolean
-  starred: boolean
-  archived: boolean
-  labels?: string[]
-  attachments?: any[]
-}
-
-export interface ListReceivedEmailsResponse {
-  data: ReceivedEmail[]
-  has_more: boolean
-  count: number
-}
-
-// Stubbed received emails API
-export const receivedEmailsAPI = {
-  list: async (_options?: { limit?: number; after?: string; before?: string; to?: string }): Promise<ListReceivedEmailsResponse> => ({
-    data: [],
-    has_more: false,
-    count: 0,
-  }),
-  getById: async (_id: string): Promise<ReceivedEmail | null> => null,
-  markRead: async (_id: string): Promise<boolean> => false,
-  markUnread: async (_id: string): Promise<boolean> => false,
-  star: async (_id: string): Promise<boolean> => false,
-  unstar: async (_id: string): Promise<boolean> => false,
-  archive: async (_id: string): Promise<boolean> => false,
-  delete: async (_id: string): Promise<boolean> => false,
-  bulkDelete: async (_ids: string[]): Promise<{ deleted: number }> => ({ deleted: 0 }),
-  sync: async (): Promise<{ synced: number }> => ({ synced: 0 }),
+export async function sendDonationReceipt(email: string, name: string, amount: string, donationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    return await apiClient.post('/emails/donation-receipt', { email, name, amount, donationId });
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }

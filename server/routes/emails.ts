@@ -1,9 +1,9 @@
 import { Router, Response } from 'express';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
-import { sendEmail, sendWelcomeEmail, sendApplicationStatusEmail, sendPaymentConfirmationEmail, sendQuotationEmail, sendTestEmail, sendNewsletterEmail, sendDonationReceiptEmail } from '../services/email';
+import { sendEmail, sendWelcomeEmail, sendApplicationStatusEmail, sendPaymentConfirmationEmail, sendQuotationEmail, sendTestEmail, sendNewsletterEmail, sendDonationReceiptEmail, getResendClient, logSentEmail } from '../services/email';
 import { db } from '../db';
-import { newsletterSubscriptions } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { newsletterSubscriptions, emailLogs } from '../../shared/schema';
+import { eq, desc, sql, and, ilike, or } from 'drizzle-orm';
 
 const router = Router();
 
@@ -169,6 +169,172 @@ router.post('/newsletter/send', authenticateToken, requireAdmin, async (req: Aut
       message: `Newsletter sent to ${successCount} recipients. ${failCount > 0 ? `${failCount} failed.` : ''}`,
       results
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { page = '1', pageSize = '50', status, emailType, search, startDate, endDate } = req.query;
+    const pageNum = parseInt(page as string, 10);
+    const limit = parseInt(pageSize as string, 10);
+    const offset = (pageNum - 1) * limit;
+    
+    let whereConditions: any[] = [];
+    
+    if (status && status !== 'all') {
+      whereConditions.push(eq(emailLogs.status, status as string));
+    }
+    if (emailType && emailType !== 'all') {
+      whereConditions.push(eq(emailLogs.email_type, emailType as string));
+    }
+    if (search) {
+      const searchTerm = `%${search}%`;
+      whereConditions.push(
+        or(
+          ilike(emailLogs.recipient_email, searchTerm),
+          ilike(emailLogs.subject, searchTerm),
+          ilike(emailLogs.recipient_name, searchTerm)
+        )
+      );
+    }
+    if (startDate) {
+      whereConditions.push(sql`${emailLogs.created_at} >= ${startDate}::timestamp`);
+    }
+    if (endDate) {
+      whereConditions.push(sql`${emailLogs.created_at} <= ${endDate}::timestamp`);
+    }
+    
+    const whereClause = whereConditions.length > 0 ? and(...whereConditions) : sql`true`;
+    
+    const [logs, countResult] = await Promise.all([
+      db.select().from(emailLogs)
+        .where(whereClause)
+        .orderBy(desc(emailLogs.created_at))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(emailLogs).where(whereClause)
+    ]);
+    
+    const totalCount = Number(countResult[0]?.count || 0);
+    const totalPages = Math.ceil(totalCount / limit);
+    
+    res.json({
+      data: logs,
+      emails: logs,
+      count: totalCount,
+      page: pageNum,
+      pageSize: limit,
+      totalPages
+    });
+  } catch (error: any) {
+    console.error('Error fetching email logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/logs/stats', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const statsResult = await db.select({
+      total: sql<number>`count(*)`,
+      sent: sql<number>`count(*) filter (where status = 'sent')`,
+      delivered: sql<number>`count(*) filter (where status = 'delivered')`,
+      failed: sql<number>`count(*) filter (where status = 'failed')`,
+      bounced: sql<number>`count(*) filter (where status = 'bounced')`,
+      pending: sql<number>`count(*) filter (where status = 'pending')`,
+    }).from(emailLogs);
+    
+    const stats = statsResult[0];
+    const total = Number(stats?.total || 0);
+    const delivered = Number(stats?.delivered || 0);
+    const failed = Number(stats?.failed || 0);
+    
+    res.json({
+      total,
+      sent: Number(stats?.sent || 0),
+      delivered,
+      failed,
+      bounced: Number(stats?.bounced || 0),
+      pending: Number(stats?.pending || 0),
+      deliveryRate: total > 0 ? (delivered / total) * 100 : 0,
+      failureRate: total > 0 ? (failed / total) * 100 : 0,
+      avgSendTime: 0
+    });
+  } catch (error: any) {
+    console.error('Error fetching email stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/logs/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const log = await db.select().from(emailLogs).where(eq(emailLogs.id, id)).limit(1);
+    
+    if (log.length === 0) {
+      return res.status(404).json({ error: 'Email log not found' });
+    }
+    
+    res.json(log[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/inbox', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { limit = '50' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+    
+    const { client } = await getResendClient();
+    
+    const emails = await (client.emails as any).list({ limit: limitNum });
+    
+    res.json({
+      object: 'list',
+      has_more: false,
+      data: emails?.data || []
+    });
+  } catch (error: any) {
+    console.error('Error fetching inbox emails:', error);
+    res.json({
+      object: 'list',
+      has_more: false,
+      data: []
+    });
+  }
+});
+
+router.post('/send-with-logging', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { to, toName, subject, html, text, emailType, emailCategory, fromName, replyTo, cc, bcc } = req.body;
+    
+    if (!to || !subject) {
+      return res.status(400).json({ error: 'Missing required fields: to, subject' });
+    }
+    
+    const result = await sendEmail({ to, subject, html, text });
+    
+    if (result.success) {
+      await logSentEmail({
+        recipientEmail: to,
+        recipientName: toName,
+        subject,
+        bodyHtml: html,
+        bodyText: text,
+        senderEmail: fromName,
+        sentByUserId: req.user?.id,
+        emailType: emailType || 'manual',
+        emailCategory,
+        status: 'sent',
+        emailProvider: 'resend'
+      });
+      
+      res.json(result);
+    } else {
+      res.status(502).json(result);
+    }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

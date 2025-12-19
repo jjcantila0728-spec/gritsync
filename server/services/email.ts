@@ -358,3 +358,59 @@ export async function sendDonationReceiptEmail(email: string, name: string, amou
     html: getBaseEmailTemplate(content, `Thank you for your ${amount} donation!`)
   });
 }
+
+export async function getResendClient() {
+  return getUncachableResendClient();
+}
+
+export interface LogEmailOptions {
+  recipientEmail: string;
+  recipientName?: string;
+  recipientUserId?: string;
+  subject: string;
+  bodyHtml?: string;
+  bodyText?: string;
+  senderEmail?: string;
+  senderName?: string;
+  sentByUserId?: string;
+  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated';
+  emailCategory?: string;
+  status?: 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced';
+  emailProvider?: string;
+  applicationId?: string;
+  quotationId?: string;
+  donationId?: string;
+  sponsorshipId?: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+}
+
+export async function logSentEmail(options: LogEmailOptions): Promise<{ id: string }> {
+  const { db } = await import('../db');
+  const { emailLogs } = await import('../../shared/schema');
+  
+  const result = await db.insert(emailLogs).values({
+    recipient_email: options.recipientEmail,
+    recipient_name: options.recipientName || null,
+    recipient_user_id: options.recipientUserId || null,
+    subject: options.subject,
+    body_html: options.bodyHtml || null,
+    body_text: options.bodyText || null,
+    sender_email: options.senderEmail || null,
+    sender_name: options.senderName || null,
+    sent_by_user_id: options.sentByUserId || null,
+    email_type: options.emailType || 'manual',
+    email_category: options.emailCategory || null,
+    status: options.status || 'sent',
+    email_provider: options.emailProvider || 'resend',
+    application_id: options.applicationId || null,
+    quotation_id: options.quotationId || null,
+    donation_id: options.donationId || null,
+    sponsorship_id: options.sponsorshipId || null,
+    metadata: options.metadata || {},
+    tags: options.tags || [],
+    sent_at: new Date(),
+  }).returning({ id: emailLogs.id });
+  
+  return { id: result[0].id };
+}
