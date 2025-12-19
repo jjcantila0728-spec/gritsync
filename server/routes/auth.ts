@@ -74,19 +74,26 @@ router.post('/signup', async (req: Request, res: Response) => {
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+    
+    console.log('Login attempt:', { email, hasPassword: !!password, body: req.body });
 
     if (!email || !password) {
+      console.log('Missing email or password');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
     const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail));
 
+    console.log('User lookup result:', { found: !!user, email: normalizedEmail });
+
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
+    console.log('Password validation:', { valid: validPassword });
+    
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
