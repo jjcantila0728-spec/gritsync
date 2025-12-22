@@ -1065,21 +1065,25 @@ export function Quote() {
       
       const clientName = `${formData.firstName} ${formData.lastName}`
       
-      const quote = await quotationsAPI.createPublic(
-        formData.total,
+      const quote = await quotationsAPI.createPublic({
+        amount: formData.total,
         description,
-        formData.email,
-        clientName,
-        formData.service,
-        formData.state,
-        formData.paymentType || undefined,
-        formData.lineItems,
-        formData.firstName,
-        formData.lastName,
-        formData.email,
-        formData.mobileNumber,
-        formData.takerType || undefined
-      )
+        user_id: formData.email,
+        client_name: clientName,
+        service: formData.service,
+        state: formData.state || null,
+        payment_type: formData.paymentType || undefined,
+        line_items: {
+          items: formData.lineItems,
+          metadata: {
+            taker_type: formData.takerType || undefined
+          }
+        },
+        client_first_name: formData.firstName,
+        client_last_name: formData.lastName,
+        client_email: formData.email,
+        client_mobile: formData.mobileNumber
+      })
       // Check expiration for new quote (should be false for new quotes)
       const typedNewQuote = quote as { id?: string; created_at?: string } | null
       if (!typedNewQuote) return
