@@ -72,6 +72,8 @@ Integrations:
 - Signup fields: First name, Middle name (optional), Last name, Mobile, Password
 - Database updated with: middle_name, mobile, gritsync_email fields on users table
 - Mobile number normalization handles various input formats (spaces, dashes, etc.)
+- Phone verification: Skipped for now - users can login without verifying their mobile number
+- Future: Twilio SMS integration can be added later for OTP verification (store TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER as secrets)
 
 ## Recent Changes (Dec 18, 2024)
 **TypeScript Build Errors Resolution:**
