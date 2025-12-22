@@ -1068,8 +1068,6 @@ export function Quote() {
       const quote = await quotationsAPI.createPublic({
         amount: formData.total,
         description,
-        user_id: formData.email,
-        client_name: clientName,
         service: formData.service,
         state: formData.state || null,
         payment_type: formData.paymentType || undefined,

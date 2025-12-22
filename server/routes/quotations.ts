@@ -9,14 +9,35 @@ const router = Router();
 // Public endpoint for creating quotations (no auth required)
 router.post('/public', async (req: Request, res: Response) => {
   try {
+    // Calculate validity date (30 days from now)
+    const validityDate = new Date();
+    validityDate.setDate(validityDate.getDate() + 30);
+    
     const [quotation] = await db.insert(quotations).values({
       ...req.body,
       status: 'pending',
+      validity_date: validityDate.toISOString(),
     }).returning();
 
     res.status(201).json(quotation);
   } catch (error: any) {
     console.error('Public quotation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Public endpoint for viewing quotations by ID (no auth required)
+router.get('/:id/public', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const [quotation] = await db.select().from(quotations).where(eq(quotations.id, id));
+
+    if (!quotation) {
+      return res.status(404).json({ error: 'Quotation not found' });
+    }
+
+    res.json(quotation);
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

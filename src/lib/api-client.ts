@@ -446,8 +446,11 @@ export const quotationsAPI = {
     return apiClient.delete(`/quotations/${id}`);
   },
 
-  async generateGQId() {
-    return apiClient.get<{ gqId: string }>('/quotations/generate-id');
+  generateGQId(id: string): string {
+    if (!id) return 'N/A';
+    // Format UUID to GQ-XXXXXX format using first 6 chars of UUID
+    const shortId = id.replace(/-/g, '').substring(0, 6).toUpperCase();
+    return `GQ-${shortId}`;
   },
 };
 
