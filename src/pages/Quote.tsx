@@ -492,8 +492,9 @@ export function Quote() {
   // - Other services (like EAD Processing): All items in full payment
   // Tax is calculated on taxable items only (12% rate)
   useEffect(() => {
-    // Only calculate if service and state are selected
-    if (!formData.service || !formData.state || serviceConfig.step1.items.length === 0) {
+    // Only calculate if service is selected and line items are available
+    // State is only required for services that have states (e.g., NCLEX has states, EAD doesn't)
+    if (!formData.service || serviceConfig.step1.items.length === 0) {
       return
     }
 
@@ -990,7 +991,8 @@ export function Quote() {
         showToast('Please select a service', 'error')
         return
       }
-      if (!formData.state) {
+      // Only require state if the service has states available (e.g., NCLEX has states, EAD doesn't)
+      if (availableStates.length > 0 && !formData.state) {
         showToast('Please select a state', 'error')
         return
       }
