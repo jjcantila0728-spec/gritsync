@@ -3,46 +3,84 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '../db';
 import { users, userPreferences, passwordResetTokens } from '../../shared/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, or } from 'drizzle-orm';
 import { generateToken, authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/email';
 
 const router = Router();
 
 function generateGritId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = 'GRIT-';
+  const digits = '0123456789';
+  let result = 'GRIT';
   for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += digits.charAt(Math.floor(Math.random() * digits.length));
   }
   return result;
 }
 
+function generateGritSyncEmail(firstName: string, lastName: string): string {
+  const cleanFirst = firstName.toLowerCase().trim().replace(/[^a-z]/g, '');
+  const cleanLast = lastName.toLowerCase().trim().replace(/[^a-z]/g, '');
+  
+  if (!cleanFirst || !cleanLast) {
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const localPart = cleanFirst || cleanLast || 'user';
+    return `${localPart}.${randomSuffix}@gritsync.com`;
+  }
+  
+  return `${cleanFirst}.${cleanLast}@gritsync.com`;
+}
+
+async function ensureUniqueGritSyncEmail(baseEmail: string): Promise<string> {
+  let email = baseEmail;
+  let counter = 1;
+  
+  while (true) {
+    const existing = await db.select().from(users).where(eq(users.gritsync_email, email));
+    if (existing.length === 0) {
+      return email;
+    }
+    const parts = baseEmail.split('@');
+    email = `${parts[0]}${counter}@${parts[1]}`;
+    counter++;
+  }
+}
+
+function normalizeMobile(mobile: string): string {
+  return mobile.replace(/[\s\-\(\)\.]/g, '');
+}
+
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { email, password, first_name, last_name, role = 'client' } = req.body;
+    const { first_name, middle_name, last_name, mobile, password, role = 'client' } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!first_name || !last_name || !mobile || !password) {
+      return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingUser = await db.select().from(users).where(eq(users.email, normalizedEmail));
+    const normalizedMobile = normalizeMobile(mobile.trim());
+    
+    const existingUser = await db.select().from(users).where(eq(users.mobile, normalizedMobile));
     
     if (existingUser.length > 0) {
-      return res.status(409).json({ error: 'This email address is already registered' });
+      return res.status(409).json({ error: 'This mobile number is already registered' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const gritId = generateGritId();
+    const baseGritSyncEmail = generateGritSyncEmail(first_name, last_name);
+    const gritsyncEmail = await ensureUniqueGritSyncEmail(baseGritSyncEmail);
 
     const [newUser] = await db.insert(users).values({
-      email: normalizedEmail,
+      email: gritsyncEmail,
       password_hash: hashedPassword,
-      first_name,
-      last_name,
+      first_name: first_name.trim(),
+      middle_name: middle_name?.trim() || null,
+      last_name: last_name.trim(),
+      mobile: normalizedMobile,
       role,
       grit_id: gritId,
+      gritsync_email: gritsyncEmail,
     }).returning();
 
     await db.insert(userPreferences).values({
@@ -55,9 +93,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       role: newUser.role,
     });
 
-    // Send welcome email (don't block on email sending)
-    const userName = first_name || email.split('@')[0];
-    sendWelcomeEmail(normalizedEmail, userName).catch((err) => {
+    sendWelcomeEmail(gritsyncEmail, first_name).catch((err) => {
       console.error('Failed to send welcome email:', err);
     });
 
@@ -67,8 +103,11 @@ router.post('/signup', async (req: Request, res: Response) => {
         email: newUser.email,
         role: newUser.role,
         first_name: newUser.first_name,
+        middle_name: newUser.middle_name,
         last_name: newUser.last_name,
+        mobile: newUser.mobile,
         grit_id: newUser.grit_id,
+        gritsync_email: newUser.gritsync_email,
         created_at: newUser.created_at,
       },
       token,
@@ -81,29 +120,32 @@ router.post('/signup', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    
-    console.log('Login attempt:', { email, hasPassword: !!password, body: req.body });
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
-      console.log('Missing email or password');
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Login identifier and password are required' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail));
-
-    console.log('User lookup result:', { found: !!user, email: normalizedEmail });
+    const normalizedIdentifier = identifier.trim();
+    const normalizedMobile = normalizeMobile(normalizedIdentifier);
+    
+    const [user] = await db.select().from(users).where(
+      or(
+        eq(users.mobile, normalizedMobile),
+        eq(users.grit_id, normalizedIdentifier.toUpperCase()),
+        eq(users.gritsync_email, normalizedIdentifier.toLowerCase()),
+        eq(users.email, normalizedIdentifier.toLowerCase())
+      )
+    );
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    console.log('Password validation:', { valid: validPassword });
     
     if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const token = generateToken({
@@ -122,8 +164,11 @@ router.post('/login', async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         first_name: user.first_name,
+        middle_name: user.middle_name,
         last_name: user.last_name,
+        mobile: user.mobile,
         grit_id: user.grit_id,
+        gritsync_email: user.gritsync_email,
         avatar_path: user.avatar_path,
         created_at: user.created_at,
       },
@@ -161,8 +206,11 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
       email: user.email,
       role: user.role,
       first_name: user.first_name,
+      middle_name: user.middle_name,
       last_name: user.last_name,
+      mobile: user.mobile,
       grit_id: user.grit_id,
+      gritsync_email: user.gritsync_email,
       avatar_path: user.avatar_path,
       created_at: user.created_at,
     });

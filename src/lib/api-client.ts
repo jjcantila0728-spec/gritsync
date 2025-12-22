@@ -80,8 +80,11 @@ export interface User {
   email: string;
   role: 'client' | 'admin';
   first_name?: string | null;
+  middle_name?: string | null;
   last_name?: string | null;
+  mobile?: string | null;
   grit_id?: string;
+  gritsync_email?: string | null;
   avatar_path?: string | null;
   created_at?: string;
 }
@@ -91,21 +94,31 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface SignUpData {
+  first_name: string;
+  middle_name?: string | null;
+  last_name: string;
+  mobile: string;
+  password: string;
+  role?: string;
+}
+
 export const authAPI = {
-  async signUp(email: string, password: string, firstName: string, lastName: string, role: string = 'client'): Promise<AuthResponse> {
+  async signUp(data: SignUpData): Promise<AuthResponse> {
     const response = await apiClient.post<AuthResponse>('/auth/signup', {
-      email,
-      password,
-      first_name: firstName,
-      last_name: lastName,
-      role,
+      first_name: data.first_name,
+      middle_name: data.middle_name || null,
+      last_name: data.last_name,
+      mobile: data.mobile,
+      password: data.password,
+      role: data.role || 'client',
     });
     apiClient.setToken(response.token);
     return response;
   },
 
-  async signIn(email: string, password: string): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/login', { email, password });
+  async signIn(identifier: string, password: string): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>('/auth/login', { identifier, password });
     apiClient.setToken(response.token);
     return response;
   },

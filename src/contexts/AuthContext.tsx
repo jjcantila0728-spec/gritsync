@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { authAPI, apiClient, User } from '@/lib/api-client'
+import { authAPI, apiClient, User, SignUpData } from '@/lib/api-client'
 
 type UserRole = 'client' | 'admin'
 
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (firstName: string, lastName: string, email: string, password: string, role?: UserRole) => Promise<void>
+  signIn: (identifier: string, password: string) => Promise<void>
+  signUp: (data: SignUpData) => Promise<void>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
@@ -46,13 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signIn(email: string, password: string) {
-    const response = await authAPI.signIn(email, password)
+  async function signIn(identifier: string, password: string) {
+    const response = await authAPI.signIn(identifier, password)
     setUser(response.user)
   }
 
-  async function signUp(firstName: string, lastName: string, email: string, password: string, role: UserRole = 'client') {
-    const response = await authAPI.signUp(email, password, firstName, lastName, role)
+  async function signUp(data: SignUpData) {
+    const response = await authAPI.signUp(data)
     setUser(response.user)
   }
 

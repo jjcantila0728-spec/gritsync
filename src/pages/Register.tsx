@@ -8,19 +8,21 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
-import { isValidEmail, validatePassword } from '@/lib/utils'
+import { Eye, EyeOff, Lock, User, Phone, CheckCircle } from 'lucide-react'
+import { validatePassword } from '@/lib/utils'
 
 export function Register() {
   const [firstName, setFirstName] = useState('')
+  const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState<{ gritId: string; gritsyncEmail: string } | null>(null)
   const { signUp } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -29,7 +31,6 @@ export function Register() {
     e.preventDefault()
     setError('')
 
-    // Validation
     if (!firstName.trim()) {
       setError('First name is required')
       return
@@ -50,18 +51,16 @@ export function Register() {
       return
     }
 
-    if (!email.trim()) {
-      setError('Email is required')
+    if (!mobile.trim()) {
+      setError('Mobile number is required')
       return
     }
 
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address')
+    const mobileClean = mobile.replace(/\s+/g, '').replace(/[^0-9+]/g, '')
+    if (mobileClean.length < 10) {
+      setError('Please enter a valid mobile number')
       return
     }
-
-    // Email validation will be done in signUp, but we can add a check here too
-    // The actual check happens in AuthContext.signUp before attempting registration
 
     const passwordValidation = await validatePassword(password)
     if (!passwordValidation.valid) {
@@ -77,8 +76,15 @@ export function Register() {
     setLoading(true)
 
     try {
-      await signUp(firstName, lastName, email, password, 'client')
-      showToast('Account created successfully! Welcome!', 'success')
+      await signUp({
+        first_name: firstName.trim(),
+        middle_name: middleName.trim() || null,
+        last_name: lastName.trim(),
+        mobile: mobileClean,
+        password,
+        role: 'client',
+      })
+      showToast('Account created successfully!', 'success')
       navigate('/dashboard')
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to create account'
@@ -139,9 +145,15 @@ export function Register() {
                 Create Account
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Sign up to get started
+                Sign up with your mobile number
               </p>
             </div>
+
+            {error && (
+              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
               <div className="grid grid-cols-2 gap-2 sm:gap-4">
@@ -152,7 +164,7 @@ export function Register() {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     required
-                    placeholder="John"
+                    placeholder="Juan"
                     className="pl-10"
                   />
                   <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
@@ -166,7 +178,7 @@ export function Register() {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     required
-                    placeholder="Doe"
+                    placeholder="Dela Cruz"
                     className="pl-10"
                   />
                   <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
@@ -177,17 +189,37 @@ export function Register() {
 
               <div className="relative">
                 <Input
-                  label="Email Address"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="john.doe@example.com"
+                  label="Middle Name (Optional)"
+                  type="text"
+                  value={middleName}
+                  onChange={(e) => setMiddleName(e.target.value)}
+                  placeholder="Santos"
                   className="pl-10"
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
-                  <Mail className="h-5 w-5" />
+                  <User className="h-5 w-5" />
                 </div>
+              </div>
+
+              <div className="relative">
+                <Input
+                  label="Mobile Number"
+                  type="tel"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  required
+                  placeholder="09171234567"
+                  className="pl-10"
+                />
+                <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
+                  <Phone className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <strong>Note:</strong> Your GritSync ID and GritSync email will be automatically generated after registration.
+                </p>
               </div>
 
               <div className="relative">
@@ -197,7 +229,7 @@ export function Register() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  placeholder="••••••••"
+                  placeholder="Min. 8 characters"
                   className="pl-10"
                   rightIcon={showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowPassword(!showPassword)}
@@ -214,40 +246,14 @@ export function Register() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  placeholder="••••••••"
+                  placeholder="Re-enter password"
                   className="pl-10"
                   rightIcon={showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  error={error}
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
                   <Lock className="h-5 w-5" />
                 </div>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                </div>
-              )}
-
-              <div className="flex items-start">
-                <input
-                  type="checkbox"
-                  id="terms"
-                  className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  required
-                />
-                <label htmlFor="terms" className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                  I agree to the{' '}
-                  <Link to="/terms" className="text-primary-600 dark:text-primary-400 hover:underline">
-                    Terms of Service
-                  </Link>{' '}
-                  and{' '}
-                  <Link to="/privacy" className="text-primary-600 dark:text-primary-400 hover:underline">
-                    Privacy Policy
-                  </Link>
-                </label>
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
@@ -260,7 +266,7 @@ export function Register() {
                     Creating account...
                   </>
                 ) : (
-                  'Sign Up'
+                  'Create Account'
                 )}
               </Button>
             </form>
@@ -277,12 +283,11 @@ export function Register() {
                 </div>
               </div>
               <p className="mt-4 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                Already have an account?{' '}
                 <Link
                   to="/login"
                   className="font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 transition-colors"
                 >
-                  Sign in
+                  Sign in instead
                 </Link>
               </p>
             </div>

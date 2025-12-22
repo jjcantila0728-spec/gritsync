@@ -8,11 +8,10 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
-import { isValidEmail } from '@/lib/utils'
+import { Eye, EyeOff, User, Lock } from 'lucide-react'
 
 export function Login() {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -36,14 +35,8 @@ export function Login() {
     e.preventDefault()
     setError('')
     
-    // Validation
-    if (!email.trim()) {
-      setError('Email is required')
-      return
-    }
-
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address')
+    if (!identifier.trim()) {
+      setError('Please enter your mobile number, GritSync ID, or GritSync email')
       return
     }
 
@@ -60,10 +53,8 @@ export function Login() {
     setMinutesRemaining(null)
 
     try {
-      await signIn(email, password)
+      await signIn(identifier, password)
       showToast('Welcome back!', 'success')
-      // The useEffect will handle the redirect when user state updates via onAuthStateChange
-      // No need to navigate here - the useEffect will catch the user state change
     } catch (err: any) {
       // Use enhanced error handling
       const { getUserFriendlyMessage } = await import('@/lib/error-handler')
@@ -194,16 +185,16 @@ export function Login() {
 
               <div className="relative">
                 <Input
-                  label="Email Address"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
+                  label="Mobile / GritSync ID / Email"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="e.g., 09171234567 or GRIT502145"
                   required
                   className="pl-10"
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
-                  <Mail className="h-5 w-5" />
+                  <User className="h-5 w-5" />
                 </div>
               </div>
 
