@@ -449,9 +449,10 @@ export function Quote() {
         const total = subtotal + tax
         
         // Load client details from quote (these should be saved when quote is created)
+        // For EAD Processing, state can be null/empty - don't default to 'New York'
         setFormData({
           service: typedQuote.service || 'NCLEX Processing',
-          state: typedQuote.state || 'New York',
+          state: typedQuote.state || '',
           takerType: takerTypeFromMetadata,
           firstName: typedQuote.client_first_name || '',
           lastName: typedQuote.client_last_name || '',
@@ -461,23 +462,24 @@ export function Quote() {
           lineItems: items,
           subtotal,
           tax,
-          total: typedQuote.amount || total // Use quote amount if available, otherwise calculated total
+          total: parseFloat(String(typedQuote.amount)) || total // Use quote amount if available, otherwise calculated total
         })
         setGeneratedQuote(typedQuote as any)
         
-        // Show preloader for 3 seconds before displaying quote
-        setTimeout(() => {
-          setShowPreloader(false)
-        }, 3000)
+        // Hide preloader immediately after quote loads
+        setShowPreloader(false)
       } else {
         setShowPreloader(false)
         showToast('Quotation not found', 'error')
         navigate('/quote')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching quote:', error)
+      console.error('Error message:', error?.message)
+      console.error('Error stack:', error?.stack)
       setShowPreloader(false)
-      showToast('Failed to load quotation', 'error')
+      const errorMsg = error?.message || 'Failed to load quotation'
+      showToast(errorMsg, 'error')
       navigate('/quote')
     } finally {
       setLoadingQuote(false)
