@@ -62,6 +62,17 @@ Integrations:
 - Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)
 - File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)
 
+## Recent Changes (Dec 22, 2024)
+**Mobile-Based Authentication System:**
+- Users now register using mobile number instead of email
+- Auto-generated credentials on signup:
+  - GritSync ID: GRIT + 6 random digits (e.g., GRIT502145)
+  - GritSync email: firstname.lastname@gritsync.com (with uniqueness handling)
+- Login accepts: mobile number, GritSync ID, or GritSync email + password
+- Signup fields: First name, Middle name (optional), Last name, Mobile, Password
+- Database updated with: middle_name, mobile, gritsync_email fields on users table
+- Mobile number normalization handles various input formats (spaces, dashes, etc.)
+
 ## Recent Changes (Dec 18, 2024)
 **TypeScript Build Errors Resolution:**
 - Fixed 235+ TypeScript errors to achieve successful build
