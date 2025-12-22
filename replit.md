@@ -63,6 +63,18 @@ Integrations:
 - File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)
 
 ## Recent Changes (Dec 22, 2024)
+**Donation Payment Flow Fixes:**
+- Fixed DonateCheckout.tsx to use correct `clientSecret` property (was using snake_case `client_secret`)
+- Verified donation creation API returns correct camelCase properties
+- Verified payment intent creation works correctly with Stripe
+- API returns `{"clientSecret":"..."}` - frontend now properly reads this
+
+**Quote Page Fixes:**
+- Removed 3-second preloader delay for immediate display
+- Fixed EAD quotation state handling (null/empty state now properly preserved, not defaulting to 'New York')
+- Improved error logging in quote fetching with detailed error messages
+- Confirmed `generateGQId` as synchronous UUID formatter (GQ-XXXXXX format)
+
 **Mobile-Based Authentication System:**
 - Users now register using mobile number instead of email
 - Auto-generated credentials on signup:

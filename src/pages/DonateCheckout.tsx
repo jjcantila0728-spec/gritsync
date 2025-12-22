@@ -193,8 +193,8 @@ export function DonateCheckout() {
       try {
         // Create payment intent - this works for anonymous users
         const paymentIntent = await donationsAPI.createPaymentIntent(id, donationAmount)
-        if (paymentIntent.client_secret) {
-          setClientSecret(paymentIntent.client_secret)
+        if (paymentIntent.clientSecret) {
+          setClientSecret(paymentIntent.clientSecret)
         } else {
           throw new Error('Failed to create payment intent')
         }
