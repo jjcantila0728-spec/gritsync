@@ -192,16 +192,21 @@ export function DonateCheckout() {
     const createPaymentIntent = async () => {
       try {
         // Create payment intent - this works for anonymous users
+        console.log('Creating payment intent for donation:', id, 'amount:', donationAmount)
         const paymentIntent = await donationsAPI.createPaymentIntent(id, donationAmount)
-        if (paymentIntent.clientSecret) {
+        console.log('Payment intent response:', JSON.stringify(paymentIntent))
+        if (paymentIntent && paymentIntent.clientSecret) {
           setClientSecret(paymentIntent.clientSecret)
         } else {
-          throw new Error('Failed to create payment intent')
+          console.error('Invalid payment intent response:', paymentIntent)
+          throw new Error('Payment service returned an invalid response. Please try again.')
         }
       } catch (error: any) {
         console.error('Error creating payment intent:', error)
-        showToast(error.message || 'Failed to initialize payment. Please try again.', 'error')
-        navigate('/donate')
+        const errorMessage = error.message || 'Failed to initialize payment. Please try again.'
+        showToast(errorMessage, 'error')
+        // Don't navigate away immediately - give user time to see the error
+        setTimeout(() => navigate('/donate'), 2000)
       } finally {
         setLoading(false)
       }

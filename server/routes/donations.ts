@@ -6,7 +6,7 @@ import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middle
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-11-20.acacia',
+  apiVersion: '2025-12-15.clover',
 });
 
 const router = Router();
@@ -131,23 +131,39 @@ router.post('/:id/payment-intent', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { amount } = req.body;
 
+    console.log('Creating payment intent for donation:', id, 'amount:', amount);
+
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('STRIPE_SECRET_KEY is not configured');
+      return res.status(500).json({ error: 'Payment service is not configured' });
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: 'usd',
+      automatic_payment_methods: {
+        enabled: true,
+      },
       metadata: {
         donation_id: id,
         type: 'donation',
       },
     });
 
+    if (!paymentIntent.client_secret) {
+      console.error('Stripe did not return a client secret');
+      return res.status(500).json({ error: 'Payment service error - no client secret returned' });
+    }
+
+    console.log('Payment intent created successfully:', paymentIntent.id);
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error: any) {
     console.error('Error creating payment intent:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'Failed to create payment intent' });
   }
 });
 
