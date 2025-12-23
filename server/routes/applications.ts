@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../db';
-import { applications, applicationTimelineSteps, applicationPayments } from '../../shared/schema';
+import { applications, applicationTimelineSteps, applicationPayments, userDetails, users } from '../../shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { generateTimelineForApplication } from '../services/timeline-generator';
@@ -89,7 +89,10 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 
 router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
     const { first_name, last_name, email, phone, service_type, state_of_application, notes } = req.body;
+    
+    console.log('POST /applications - Request body keys:', Object.keys(req.body));
     
     const applicant_name = first_name && last_name 
       ? `${first_name} ${last_name}` 
@@ -97,8 +100,9 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     
     const serviceTypeValue = service_type || 'NCLEX Processing';
     
+    // Create the application
     const [newApp] = await db.insert(applications).values({
-      user_id: req.user?.id,
+      user_id: userId,
       applicant_name,
       email: email || req.user?.email || '',
       phone: phone || req.body.mobile_number,
@@ -107,6 +111,87 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
       notes,
     }).returning();
 
+    // Also save/update user details with the personal info from the application
+    if (userId) {
+      const filterDefined = (obj: Record<string, any>) => {
+        const result: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          if (value !== undefined) {
+            result[key] = value;
+          }
+        }
+        return result;
+      };
+
+      // Update users table with name
+      if (first_name || last_name) {
+        await db.update(users)
+          .set(filterDefined({ 
+            first_name: req.body.first_name, 
+            last_name: req.body.last_name,
+            updated_at: new Date() 
+          }))
+          .where(eq(users.id, userId));
+      }
+
+      // Prepare user details from application data
+      const detailsData = filterDefined({
+        middle_name: req.body.middle_name,
+        gender: req.body.gender,
+        marital_status: req.body.marital_status,
+        single_full_name: req.body.single_full_name,
+        date_of_birth: req.body.date_of_birth,
+        birth_place: req.body.birth_place,
+        mobile_number: req.body.mobile_number,
+        house_number: req.body.house_number,
+        street_name: req.body.street_name,
+        city: req.body.city,
+        province: req.body.province,
+        country: req.body.country,
+        zipcode: req.body.zipcode,
+        elementary_school: req.body.elementary_school,
+        elementary_city: req.body.elementary_city,
+        elementary_province: req.body.elementary_province,
+        elementary_country: req.body.elementary_country,
+        elementary_years_attended: req.body.elementary_years_attended,
+        elementary_start_date: req.body.elementary_start_date,
+        elementary_end_date: req.body.elementary_end_date,
+        high_school: req.body.high_school,
+        high_school_city: req.body.high_school_city,
+        high_school_province: req.body.high_school_province,
+        high_school_country: req.body.high_school_country,
+        high_school_years_attended: req.body.high_school_years_attended,
+        high_school_start_date: req.body.high_school_start_date,
+        high_school_end_date: req.body.high_school_end_date,
+        nursing_school: req.body.nursing_school,
+        nursing_school_city: req.body.nursing_school_city,
+        nursing_school_province: req.body.nursing_school_province,
+        nursing_school_country: req.body.nursing_school_country,
+        nursing_school_years_attended: req.body.nursing_school_years_attended,
+        nursing_school_start_date: req.body.nursing_school_start_date,
+        nursing_school_end_date: req.body.nursing_school_end_date,
+        nursing_school_major: req.body.nursing_school_major,
+        nursing_school_diploma_date: req.body.nursing_school_diploma_date,
+        signature: req.body.signature,
+        payment_type: req.body.payment_type,
+      });
+
+      if (Object.keys(detailsData).length > 0) {
+        const [existingDetails] = await db.select().from(userDetails).where(eq(userDetails.user_id, userId));
+        
+        if (existingDetails) {
+          await db.update(userDetails)
+            .set({ ...detailsData, updated_at: new Date() })
+            .where(eq(userDetails.user_id, userId));
+          console.log('Updated user_details from application');
+        } else {
+          await db.insert(userDetails)
+            .values({ user_id: userId, ...detailsData, updated_at: new Date() });
+          console.log('Created user_details from application');
+        }
+      }
+    }
+
     await generateTimelineForApplication(newApp.id, serviceTypeValue);
 
     const timeline = await db.select().from(applicationTimelineSteps)
@@ -114,6 +199,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 
     res.status(201).json({ ...newApp, timeline_steps: timeline });
   } catch (error: any) {
+    console.error('Error creating application:', error);
     res.status(500).json({ error: error.message });
   }
 });
