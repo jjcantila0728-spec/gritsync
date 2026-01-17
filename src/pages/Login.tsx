@@ -191,6 +191,7 @@ export function Login() {
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="e.g., 09171234567 or GRIT502145"
                   required
+                  autoComplete="username"
                   className="pl-10"
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
@@ -206,6 +207,7 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
+                  autoComplete="current-password"
                   className="pl-10"
                   rightIcon={showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowPassword(!showPassword)}

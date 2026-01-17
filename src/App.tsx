@@ -245,6 +245,9 @@ function AppRoutes() {
             </PublicRoute>
           } 
         />
+        <Route path="/signup" element={<Navigate to="/register" replace />} />
+        <Route path="/about" element={<Navigate to="/about-us" replace />} />
+        <Route path="/careers" element={<Navigate to="/career" replace />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/preferences/:token" element={<EmailPreferences />} />

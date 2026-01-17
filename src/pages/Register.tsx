@@ -208,6 +208,7 @@ export function Register() {
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value)}
                   required
+                  autoComplete="tel"
                   placeholder="09171234567"
                   className="pl-10"
                 />
@@ -229,6 +230,7 @@ export function Register() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="new-password"
                   placeholder="Min. 8 characters"
                   className="pl-10"
                   rightIcon={showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -246,6 +248,7 @@ export function Register() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  autoComplete="new-password"
                   placeholder="Re-enter password"
                   className="pl-10"
                   rightIcon={showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
