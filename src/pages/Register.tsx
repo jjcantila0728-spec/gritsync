@@ -87,7 +87,8 @@ export function Register() {
       showToast('Account created successfully!', 'success')
       navigate('/dashboard')
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to create account'
+      const { getErrorMessage } = await import('@/lib/api-client')
+      const errorMessage = getErrorMessage(err)
       setError(errorMessage)
       showToast(errorMessage, 'error')
     } finally {

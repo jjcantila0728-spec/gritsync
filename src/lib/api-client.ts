@@ -1,9 +1,69 @@
+import { AppError, classifyError, ErrorType, ErrorSeverity, logError } from './error-handler';
+
 const API_BASE = '/api';
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: any;
   headers?: Record<string, string>;
+}
+
+export class ApiError extends AppError {
+  public readonly status: number;
+  public readonly details?: any;
+  public readonly endpoint?: string;
+  private readonly _userMessage: string;
+
+  constructor(
+    message: string, 
+    status: number, 
+    details?: any,
+    endpoint?: string,
+    method?: string
+  ) {
+    const classification = classifyError({ message, status, code: status });
+    
+    super(
+      message,
+      classification.type,
+      classification.severity,
+      classification.retryable,
+      { message, status, details },
+      { endpoint, method, status, details }
+    );
+    this.name = 'ApiError';
+    this.status = status;
+    this.details = details;
+    this.endpoint = endpoint;
+    this._userMessage = classification.userMessage;
+  }
+
+  get userMessage(): string {
+    if (this.type === ErrorType.VALIDATION || 
+        this.type === ErrorType.NOT_FOUND ||
+        this.status === 409 || 
+        this.status === 422) {
+      return this.message;
+    }
+    return this._userMessage;
+  }
+}
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.userMessage;
+  }
+  if (error instanceof AppError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
 }
 
 class ApiClient {
@@ -37,16 +97,53 @@ class ApiClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method,
-      headers,
-      credentials: 'include',
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}${endpoint}`, {
+        method,
+        headers,
+        credentials: 'include',
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (networkError) {
+      const error = new ApiError(
+        'Failed to fetch',
+        0,
+        undefined,
+        endpoint,
+        method
+      );
+      logError(error, { endpoint, method, networkError: true });
+      throw error;
+    }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || error.message || 'Request failed');
+      let errorData: any = { error: 'Request failed' };
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { error: response.statusText || 'Request failed' };
+      }
+      
+      const errorMessage = errorData.error || errorData.message || 'Request failed';
+      const error = new ApiError(
+        errorMessage, 
+        response.status, 
+        errorData.details,
+        endpoint,
+        method
+      );
+      
+      if (response.status >= 500 || response.status === 0) {
+        logError(error, { endpoint, method, status: response.status });
+      }
+      
+      throw error;
+    }
+
+    // Handle empty responses (204 No Content)
+    if (response.status === 204) {
+      return {} as T;
     }
 
     return response.json();

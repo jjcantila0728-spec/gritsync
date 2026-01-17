@@ -99,9 +99,26 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Server error:', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+interface AppError extends Error {
+  status?: number;
+  statusCode?: number;
+  code?: string;
+}
+
+app.use((err: AppError, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || 'Internal server error';
+  
+  if (status >= 500) {
+    console.error('Server error:', err);
+  } else {
+    console.warn('Client error:', message);
+  }
+  
+  res.status(status).json({ 
+    error: message,
+    code: err.code
+  });
 });
 
 const distPath = path.join(process.cwd(), 'dist');

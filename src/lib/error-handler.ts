@@ -181,6 +181,28 @@ export function classifyError(error: any): ErrorClassification {
     }
   }
 
+  // Conflict errors (409)
+  if (errorCode === 409 || error?.status === 409) {
+    return {
+      type: ErrorType.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: errorMessage || 'A conflict occurred. The resource may already exist.',
+      retryable: false,
+      logLevel: 'warn',
+    }
+  }
+
+  // Unprocessable entity (422)
+  if (errorCode === 422 || error?.status === 422) {
+    return {
+      type: ErrorType.VALIDATION,
+      severity: ErrorSeverity.LOW,
+      userMessage: errorMessage || 'The provided data could not be processed.',
+      retryable: false,
+      logLevel: 'info',
+    }
+  }
+
   // Rate limit errors
   if (
     errorMessage.includes('rate limit') ||
