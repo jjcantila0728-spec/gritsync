@@ -90,22 +90,68 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { first_name, last_name, email, phone, service_type, state_of_application, notes } = req.body;
+    const { service_type, state_of_application, notes } = req.body;
     
     console.log('POST /applications - Request body keys:', Object.keys(req.body));
     
-    const applicant_name = first_name && last_name 
-      ? `${first_name} ${last_name}` 
-      : req.body.applicant_name || req.body.name || 'Unknown';
+    const filterDefined = (obj: Record<string, any>) => {
+      const result: Record<string, any> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (value !== undefined && value !== null && value !== '') {
+          result[key] = value;
+        }
+      }
+      return result;
+    };
+    
+    // Step 1: Update users table first with any new data from request (single source of truth)
+    if (userId) {
+      const userUpdates = filterDefined({
+        first_name: req.body.first_name,
+        last_name: req.body.last_name,
+        middle_name: req.body.middle_name,
+        mobile: req.body.phone || req.body.mobile_number,
+        updated_at: new Date()
+      });
+      
+      if (Object.keys(userUpdates).length > 1) { // More than just updated_at
+        await db.update(users)
+          .set(userUpdates)
+          .where(eq(users.id, userId));
+      }
+    }
+    
+    // Step 2: Fetch user details from users table to use for application
+    let applicant_name = 'Unknown';
+    let applicantEmail = req.user?.email || '';
+    let applicantPhone = '';
+    
+    if (userId) {
+      const [userData] = await db.select({
+        first_name: users.first_name,
+        last_name: users.last_name,
+        middle_name: users.middle_name,
+        email: users.email,
+        mobile: users.mobile,
+      }).from(users).where(eq(users.id, userId));
+      
+      if (userData) {
+        // Build applicant name from user's first and last name
+        const nameParts = [userData.first_name, userData.middle_name, userData.last_name].filter(Boolean);
+        applicant_name = nameParts.length > 0 ? nameParts.join(' ') : 'Unknown';
+        applicantEmail = userData.email || applicantEmail;
+        applicantPhone = userData.mobile || '';
+      }
+    }
     
     const serviceTypeValue = service_type || 'NCLEX Processing';
     
-    // Create the application
+    // Step 3: Create the application with user data from users table
     const [newApp] = await db.insert(applications).values({
       user_id: userId,
       applicant_name,
-      email: email || req.user?.email || '',
-      phone: phone || req.body.mobile_number,
+      email: applicantEmail,
+      phone: applicantPhone,
       service_type: serviceTypeValue,
       state_of_application: state_of_application || req.body.service_state,
       notes,
@@ -113,26 +159,6 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 
     // Also save/update user details with the personal info from the application
     if (userId) {
-      const filterDefined = (obj: Record<string, any>) => {
-        const result: Record<string, any> = {};
-        for (const [key, value] of Object.entries(obj)) {
-          if (value !== undefined) {
-            result[key] = value;
-          }
-        }
-        return result;
-      };
-
-      // Update users table with name
-      if (first_name || last_name) {
-        await db.update(users)
-          .set(filterDefined({ 
-            first_name: req.body.first_name, 
-            last_name: req.body.last_name,
-            updated_at: new Date() 
-          }))
-          .where(eq(users.id, userId));
-      }
 
       // Prepare user details from application data
       const detailsData = filterDefined({
