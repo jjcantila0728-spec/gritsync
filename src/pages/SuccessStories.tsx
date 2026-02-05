@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useToast } from '@/components/ui/Toast'
 import { SEO } from '@/components/SEO'
+import { supabase } from '@/lib/api'
 import {
   Star,
   Quote,

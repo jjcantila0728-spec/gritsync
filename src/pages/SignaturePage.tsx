@@ -37,8 +37,8 @@ export function SignaturePage() {
         setApplicationId(storedApp || '')
         setDocumentName(storedDoc || 'document')
       } else {
-        // No session found, redirect back
-        navigate(-1)
+        // No session found, redirect to home
+        navigate('/')
       }
     }
   }, [searchParams, navigate])
@@ -47,29 +47,7 @@ export function SignaturePage() {
     setIsProcessing(true)
     
     try {
-      // Store signature in Supabase for cross-device access
-      const { error: supabaseError } = await supabase
-        .from('temporary_signatures')
-        .insert({
-          session_id: sessionId,
-          application_id: applicationId || null,
-          document_name: documentName || null,
-          signature_data_url: signatureDataUrl,
-          is_consumed: false,
-          expires_at: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
-        })
-      
-      if (supabaseError) {
-        console.error('Error saving signature to Supabase:', supabaseError)
-        // Fallback to localStorage if Supabase fails
-        sessionStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
-        localStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
-        sessionStorage.setItem('signature_session', sessionId)
-      } else {
-        console.log('Signature saved to Supabase successfully')
-      }
-      
-      // Also store in localStorage/sessionStorage as backup
+      // Store signature in localStorage/sessionStorage for cross-device access
       sessionStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
       localStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
       sessionStorage.setItem('signature_session', sessionId)
@@ -78,17 +56,8 @@ export function SignaturePage() {
       setShowSuccess(true)
     } catch (error) {
       console.error('Error saving signature:', error)
-      // Fallback to localStorage
-      try {
-        sessionStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
-        localStorage.setItem(`signature_${sessionId}`, signatureDataUrl)
-        sessionStorage.setItem('signature_session', sessionId)
-        setShowSuccess(true)
-      } catch (fallbackError) {
-        console.error('Fallback save also failed:', fallbackError)
-        alert('Failed to save signature. Please try again.')
-        setIsProcessing(false)
-      }
+      alert('Failed to save signature. Please try again.')
+      setIsProcessing(false)
     }
   }
 
