@@ -256,7 +256,7 @@ export function USCISTracker() {
       <SEO
         title="USCIS Case Status Tracker & Philippines EB3 Visa Bulletin | GritSync"
         description="Free USCIS case status tracker for Filipino nurses. Monitor your I-140, I-485, I-765 applications. Live Philippines EB3 Visa Bulletin updates, priority dates, and Final Action dates for employment-based green cards."
-        keywords="USCIS case status tracker, Philippines EB3 visa bulletin, I-140 status check, I-485 tracking, Filipino nurse green card, employment-based immigration, priority date Philippines, retrogression EB3, USCIS receipt number lookup, immigration case check, EAD I-765 status, nurse immigration USA, USRN green card process"
+        keywords="USCIS case status tracker, Philippines EB3 visa bulletin, I-140 status check, I-485 tracking, Filipino nurse green card, employment-based immigration, priority date Philippines, retrogression EB3, USCIS receipt number lookup, immigration case check, I-765 status, nurse immigration USA, USRN green card process"
         canonicalUrl={`${baseUrl}/uscis-tracker`}
         ogTitle="USCIS Case Status Tracker & Philippines EB3 Visa Bulletin | GritSync"
         ogDescription="Free USCIS case status tracker for Filipino nurses. Monitor I-140, I-485 applications and Philippines EB3 Visa Bulletin updates."

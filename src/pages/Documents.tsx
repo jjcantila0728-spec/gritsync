@@ -95,37 +95,6 @@ export function Documents() {
 
   // Helper function to get display name for document types
   const getDocumentDisplayName = (type: string): string => {
-    // Handle EAD document types
-    if (type.startsWith('ead_')) {
-      switch (type) {
-        case 'ead_2x2_picture':
-        case 'ead_photos': // Backward compatibility with old document type
-          return '2X2 Picture'
-        case 'ead_passport':
-          return 'Passport'
-        case 'ead_h4_visa':
-          return 'H-4 Visa'
-        case 'ead_i94':
-          return 'I-94 Record'
-        case 'ead_marriage_certificate':
-          return 'Marriage Certificate'
-        case 'ead_spouse_i797':
-          return 'Spouse I-797'
-        case 'ead_spouse_i140':
-          return 'Spouse I-140'
-        case 'ead_employer_letter':
-          return 'Employer Letter'
-        case 'ead_paystub':
-          return 'Paystub'
-        default:
-          // For other EAD types, format them nicely
-          const eadName = type.replace('ead_', '').replace(/_/g, ' ')
-          return eadName.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join(' ')
-      }
-    }
-    
     // Handle mandatory course documents
     if (type === 'mandatory_course_infection_control') {
       return 'Infection Control Course'
@@ -141,13 +110,7 @@ export function Documents() {
       ).join(' ') + ' Course'
     }
     
-    // Handle additional document types (EAD forms)
-    if (type === 'additional_g1145') {
-      return 'Form G-1145'
-    }
-    if (type === 'additional_i765') {
-      return 'Form I-765'
-    }
+    // Handle additional document types
     if (type === 'additional_cover_letter') {
       return 'Cover Letter'
     }
@@ -421,7 +384,6 @@ export function Documents() {
       // Map route parameter to service type
       const routeToServiceTypeMap: Record<string, string> = {
         'nclex': 'NCLEX',
-        'ead': 'EAD',
         'additional': 'Additional',
       }
       
@@ -440,7 +402,6 @@ export function Documents() {
         const firstServiceType = availableServiceTypes[0]
         const serviceTypeToRouteMap: Record<string, string> = {
           'NCLEX': '/documents/nclex',
-          'EAD': '/documents/ead',
           'Additional': '/documents/additional',
         }
         const firstRoute = serviceTypeToRouteMap[firstServiceType]
@@ -753,7 +714,7 @@ export function Documents() {
               Documents
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload and manage the documents required for the services you applied for (NCLEX, EAD, etc.).
+              Upload and manage the documents required for your NCLEX application.
             </p>
           </div>
 
@@ -805,7 +766,6 @@ export function Documents() {
               // Map route parameter to service type ID (normalize case)
               const routeToServiceTypeMap: Record<string, string> = {
                 'nclex': 'NCLEX',
-                'ead': 'EAD',
                 'additional': 'Additional',
               }
               
@@ -819,9 +779,6 @@ export function Documents() {
               
               if (serviceTypesInDocuments.includes('NCLEX')) {
                 availableTabs.push({ id: 'NCLEX', label: 'NCLEX', icon: GraduationCap, routePath: '/documents/nclex' })
-              }
-              if (serviceTypesInDocuments.includes('EAD')) {
-                availableTabs.push({ id: 'EAD', label: 'EAD (I-765)', icon: Briefcase, routePath: '/documents/ead' })
               }
               if (serviceTypesInDocuments.includes('Additional')) {
                 availableTabs.push({ id: 'Additional', label: 'Additional', icon: FileText, routePath: '/documents/additional' })
@@ -1188,23 +1145,14 @@ export function Documents() {
             {(() => {
               const routeToServiceTypeMap: Record<string, string> = {
                 'nclex': 'NCLEX',
-                'ead': 'EAD',
                 'additional': 'Additional',
               }
               const normalizedRouteServiceType = routeServiceType 
                 ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
                 : null
               
-              let message = 'Once all documents are uploaded, you can proceed with your application.'
-              let applicationLink = '/application/new'
-              
-              if (normalizedRouteServiceType === 'EAD') {
-                message = 'Once all documents are uploaded, you can proceed with your EAD application.'
-                applicationLink = '/application/new/ead'
-              } else if (normalizedRouteServiceType === 'NCLEX') {
-                message = 'Once all documents are uploaded, you can proceed with your NCLEX application.'
-                applicationLink = '/application/new/nclex'
-              }
+              let message = 'Once all documents are uploaded, you can proceed with your NCLEX application.'
+              let applicationLink = '/application/new/nclex'
               
               return (
                 <Card className="border-0 shadow-md bg-primary-50/50 dark:bg-primary-900/10">

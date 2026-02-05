@@ -115,7 +115,7 @@ export function Quote() {
         if (uniqueStates.length === 1 && !formData.state) {
           setFormData(prev => ({ ...prev, state: uniqueStates[0] }))
         } else if (uniqueStates.length === 0) {
-          // No states for this service (e.g., EAD) - set state to empty to allow proceeding
+          // No states for this service - set state to empty to allow proceeding
           setFormData(prev => ({ ...prev, state: '' }))
         } else if (!uniqueStates.includes(formData.state)) {
           // Clear state if it's not available for selected service
@@ -135,7 +135,6 @@ export function Quote() {
     async function loadServices() {
       // Only load services if service is selected
       // State is required only for services that have states (e.g., NCLEX)
-      // Services without states (e.g., EAD) can proceed without state selection
       const requiresState = availableStates.length > 0
       if (!formData.service || (requiresState && !formData.state)) {
         setAvailablePaymentTypes([])
@@ -449,7 +448,6 @@ export function Quote() {
         const total = subtotal + tax
         
         // Load client details from quote (these should be saved when quote is created)
-        // For EAD Processing, state can be null/empty - don't default to 'New York'
         setFormData({
           service: typedQuote.service || 'NCLEX Processing',
           state: typedQuote.state || '',
@@ -491,11 +489,11 @@ export function Quote() {
   // This handles both Full Payment and Staggered Payment based on service configuration:
   // - First Time Taker: Full Payment includes Step 1 + Step 2, Staggered includes both steps
   // - Retaker: Only Step 2, Full Payment only
-  // - Other services (like EAD Processing): All items in full payment
+  // - Other services: All items in full payment
   // Tax is calculated on taxable items only (12% rate)
   useEffect(() => {
     // Only calculate if service is selected and line items are available
-    // State is only required for services that have states (e.g., NCLEX has states, EAD doesn't)
+    // State is only required for services that have states (e.g., NCLEX has states)
     if (!formData.service || serviceConfig.step1.items.length === 0) {
       return
     }
@@ -510,7 +508,7 @@ export function Quote() {
       return { subtotal, tax, total }
     }
 
-    // For services without taker types (like EAD Processing), use all items based on available payment types
+    // For services without taker types, use all items based on available payment types
     if (formData.service !== 'NCLEX Processing') {
       if (formData.paymentType === 'full') {
         // For full payment, use all items from step1 (for full-only services, all items are in step1)
@@ -993,7 +991,7 @@ export function Quote() {
         showToast('Please select a service', 'error')
         return
       }
-      // Only require state if the service has states available (e.g., NCLEX has states, EAD doesn't)
+      // Only require state if the service has states available (e.g., NCLEX has states)
       if (availableStates.length > 0 && !formData.state) {
         showToast('Please select a state', 'error')
         return

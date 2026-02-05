@@ -133,11 +133,9 @@ export function ApplicationCheckout() {
   }
 
   async function loadServiceDetails(appData: any, targetPayment: any) {
-    const applicationType = appData?.application_type || 'NCLEX'
-    const isEAD = applicationType === 'EAD'
-    const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
-    const serviceState = isEAD ? 'All States' : (appData?.state || appData?.province || 'New York')
-    const paymentType = isEAD ? 'full' : (targetPayment.payment_type === 'full' ? 'full' : 'staggered')
+    const serviceName = 'NCLEX Processing'
+    const serviceState = appData?.state || appData?.province || 'New York'
+    const paymentType = targetPayment.payment_type === 'full' ? 'full' : 'staggered'
 
     try {
       const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, paymentType as 'full' | 'staggered')
@@ -264,7 +262,7 @@ export function ApplicationCheckout() {
                       <div className="flex flex-col">
                         <span className="text-xs text-gray-500 dark:text-gray-400">Availed Service</span>
                         <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          {serviceDetails?.service_name || (application.application_type === 'EAD' ? 'EAD Processing' : 'NCLEX Processing')}
+                          {serviceDetails?.service_name || 'NCLEX Processing'}
                         </span>
                       </div>
                       <div className="flex flex-col">
@@ -279,7 +277,7 @@ export function ApplicationCheckout() {
                       <div className="flex flex-col">
                         <span className="text-xs text-gray-500 dark:text-gray-400">State</span>
                         <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          {serviceDetails?.state || (application.application_type === 'EAD' ? 'All States' : 'New York')}
+                          {serviceDetails?.state || 'New York'}
                         </span>
                       </div>
                     </div>
@@ -365,7 +363,7 @@ export function ApplicationCheckout() {
                       <StripePaymentForm
                         amount={payment.amount || 0}
                         serviceFeeAmount={payment.service_fee_amount}
-                        applicationType={application?.application_type as 'NCLEX' | 'EAD' | undefined}
+                        applicationType={application?.application_type as 'NCLEX' | undefined}
                         onSuccess={handlePaymentSuccess}
                         onError={handlePaymentError}
                         paymentIntentId={paymentIntentId || undefined}

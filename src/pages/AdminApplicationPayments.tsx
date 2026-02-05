@@ -354,10 +354,8 @@ export function AdminApplicationPayments() {
     
     try {
       setLoadingServices(true)
-      const applicationType = application?.application_type || 'NCLEX'
-      const isEAD = applicationType === 'EAD'
-      const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
-      const serviceState = isEAD ? 'All States' : 'New York'
+      const serviceName = 'NCLEX Processing'
+      const serviceState = 'New York'
       
       // Fetch all services from admin settings (same source as /admin/settings/services)
       const allServices = await servicesAPI.getAll()
@@ -367,49 +365,35 @@ export function AdminApplicationPayments() {
         return
       }
       
-      if (isEAD) {
-        // Find EAD full payment service
-        const service = allServices.find((s: any) => 
-          s.service_name === serviceName && 
-          s.state === serviceState && 
-          s.payment_type === 'full'
-        )
-        if (service) {
-          setFullService(service)
-          setStaggeredService(null)
-          setRetakeService(null)
-        }
-      } else {
-        // Find NCLEX staggered service
-        const staggered = allServices.find((s: any) => 
-          s.service_name === serviceName && 
+      // Find NCLEX staggered service
+      const staggered = allServices.find((s: any) => 
+        s.service_name === serviceName && 
+        s.state === serviceState && 
+        s.payment_type === 'staggered'
+      )
+      if (staggered) {
+        setStaggeredService(staggered)
+      }
+      
+      // Find NCLEX full service
+      const full = allServices.find((s: any) => 
+        s.service_name === serviceName && 
+        s.state === serviceState && 
+        s.payment_type === 'full'
+      )
+      if (full) {
+        setFullService(full)
+      }
+      
+      // Load retake service (if application is retake)
+      if (application?.payment_type === 'retake') {
+        const retake = allServices.find((s: any) => 
+          s.service_name === 'NCLEX Retake Processing' && 
           s.state === serviceState && 
           s.payment_type === 'staggered'
         )
-        if (staggered) {
-          setStaggeredService(staggered)
-        }
-        
-        // Find NCLEX full service
-        const full = allServices.find((s: any) => 
-          s.service_name === serviceName && 
-          s.state === serviceState && 
-          s.payment_type === 'full'
-        )
-        if (full) {
-          setFullService(full)
-        }
-        
-        // Load retake service (if application is retake)
-        if (application?.payment_type === 'retake') {
-          const retake = allServices.find((s: any) => 
-            s.service_name === 'NCLEX Retake Processing' && 
-            s.state === serviceState && 
-            s.payment_type === 'staggered'
-          )
-          if (retake) {
-            setRetakeService(retake)
-          }
+        if (retake) {
+          setRetakeService(retake)
         }
       }
     } catch (error) {
@@ -427,19 +411,13 @@ export function AdminApplicationPayments() {
     }
 
     // Don't analyze if services haven't loaded yet
-    const applicationType = application?.application_type || 'NCLEX'
-    const isEAD = applicationType === 'EAD'
     const isRetake = application?.payment_type === 'retake'
     
-    if (isEAD && !fullService) {
-      setMissingPayments([])
-      return
-    }
     if (isRetake && !retakeService) {
       setMissingPayments([])
       return
     }
-    if (!isEAD && !isRetake && !staggeredService && !fullService) {
+    if (!isRetake && !staggeredService && !fullService) {
       setMissingPayments([])
       return
     }
@@ -452,17 +430,7 @@ export function AdminApplicationPayments() {
     const hasStep2 = paidPayments.some(p => p.payment_type === 'step2')
     const hasFull = paidPayments.some(p => p.payment_type === 'full')
 
-    if (isEAD) {
-      // EAD only needs full payment
-      if (!hasFull && fullService?.total_full) {
-        missing.push({
-          type: 'full',
-          label: 'Full Payment',
-          amount: fullService.total_full,
-          reason: 'Required for EAD Processing'
-        })
-      }
-    } else if (isRetake) {
+    if (isRetake) {
       // Retake only needs step2 (as full payment)
       if (!hasStep2 && retakeService) {
         const amount = retakeService.total_step2 || retakeService.total_full || 0

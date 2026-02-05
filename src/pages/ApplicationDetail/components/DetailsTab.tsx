@@ -31,16 +31,11 @@ export function DetailsTab({
       {/* Sub-tabs for Details */}
       <div className="mb-4 border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-1" aria-label="Detail Sections">
-          {(isEADApplication ? [
-            { id: 'personal', label: 'Personal', icon: User },
-            { id: 'contact', label: 'Contact', icon: Mail },
-            { id: 'ead-info', label: 'EAD Information', icon: FileText },
-            { id: 'immigration', label: 'Immigration', icon: MapPin }
-          ] : [
+          {[
             { id: 'personal', label: 'Personal', icon: User },
             { id: 'contact', label: 'Contact', icon: Mail },
             { id: 'education', label: 'Education', icon: GraduationCap }
-          ]).map((subTab) => {
+          ].map((subTab) => {
             const Icon = subTab.icon
             const isActive = detailsSubTab === subTab.id
             const basePath = isAdmin ? '/admin/applications' : '/applications'
@@ -414,7 +409,7 @@ export function DetailsTab({
       )}
 
       {/* Education Information (NCLEX only) */}
-      {detailsSubTab === 'education' && !isEADApplication && (
+      {detailsSubTab === 'education' && (
         <div className="space-y-3">
           {/* Elementary School */}
           <Card>

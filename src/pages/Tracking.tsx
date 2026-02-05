@@ -394,7 +394,7 @@ export function Tracking() {
       })
     }
 
-    // Apply type filter (NCLEX/EAD)
+    // Apply type filter (NCLEX)
     if (typeFilter !== 'all') {
       filtered = filtered.filter((app) => {
         const appType = app.application_type || 'NCLEX' // Default to NCLEX for backward compatibility
