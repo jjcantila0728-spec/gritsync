@@ -71,7 +71,7 @@ const steps: OnboardingStep[] = [
     id: 'applications',
     icon: <FileText className="h-12 w-12 text-primary-500" />,
     title: 'Manage Applications',
-    description: 'Click "Applications" to view, track, and manage all your NCLEX and EAD applications. Each application shows real-time status updates.',
+    description: 'Click "Applications" to view, track, and manage all your NCLEX applications. Each application shows real-time status updates.',
     highlight: 'applications-link',
     position: 'top-left',
     animationType: 'fade'

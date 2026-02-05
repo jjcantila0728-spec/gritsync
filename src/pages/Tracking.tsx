@@ -22,7 +22,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 interface Application {
   id: string
   grit_app_id?: string
-  application_type?: 'NCLEX' | 'EAD'
+  application_type?: 'NCLEX'
   first_name: string
   last_name: string
   status: string
@@ -1280,7 +1280,6 @@ export function Tracking() {
                     options={[
                       { value: 'all', label: 'All Types' },
                       { value: 'NCLEX', label: 'NCLEX' },
-                      { value: 'EAD', label: 'EAD (I-765)' },
                     ]}
                   />
                 </div>
@@ -1398,20 +1397,16 @@ export function Tracking() {
                                 </h3>
                                 <span className="text-base font-semibold text-gray-400 dark:text-gray-500">-</span>
                                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                  {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
+                                  {app.service_type || 'NCLEX Processing'}
                                 </h3>
                               </>
                             ) : (
                               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
+                                {app.service_type || 'NCLEX Processing'}
                               </h3>
                             )}
                             {app.application_type && (
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                app.application_type === 'EAD'
-                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                              }`}>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                                 {app.application_type}
                               </span>
                             )}

@@ -20,7 +20,6 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ de
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
 const ApplicationServiceSelection = lazy(() => import('./pages/ApplicationServiceSelection').then(m => ({ default: m.ApplicationServiceSelection })))
 const NCLEXApplication = lazy(() => import('./pages/NCLEXApplication').then(m => ({ default: m.NCLEXApplication })))
-const EADApplication = lazy(() => import('./pages/EADApplication').then(m => ({ default: m.EADApplication })))
 const Tracking = lazy(() => import('./pages/Tracking').then(m => ({ default: m.Tracking })))
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })))
 const Quote = lazy(() => import('./pages/Quote').then(m => ({ default: m.Quote })))
@@ -264,9 +263,8 @@ function AppRoutes() {
         <Route path="/sign" element={<SignaturePage />} />
       
       <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/application/new" element={<ApplicationServiceSelection />} />
+      <Route path="/application/new" element={<NCLEXApplication />} />
       <Route path="/application/new/nclex" element={<NCLEXApplication />} />
-      <Route path="/application/new/ead" element={<EADApplication />} />
       <Route
         path="/sponsorship/apply"
         element={<NCLEXSponsorship />}

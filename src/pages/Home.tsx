@@ -147,8 +147,8 @@ export function Home() {
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
         title="GritSync - NCLEX Processing Agency | Filipino Nurses' Path to US Nursing Licensure"
-        description="Expert NCLEX application processing for Filipino nurses pursuing the American Dream. Complete USRN licensing support, EAD applications, Visa Bulletin tracking, and dedicated document management. Fast, secure, and affordable."
-        keywords="NCLEX processing Philippines, Filipino nurse USA, USRN application, NCLEX exam registration, Philippine nursing US license, EB3 visa bulletin Philippines, nursing abroad USA, CGFNS application, VisaScreen, NCLEX-RN exam, international nurse licensure, EAD work permit, green card nursing, immigration Filipino nurses"
+        description="Expert NCLEX application processing for Filipino nurses pursuing the American Dream. Complete USRN licensing support, Visa Bulletin tracking, and dedicated document management. Fast, secure, and affordable."
+        keywords="NCLEX processing Philippines, Filipino nurse USA, USRN application, NCLEX exam registration, Philippine nursing US license, EB3 visa bulletin Philippines, nursing abroad USA, CGFNS application, VisaScreen, NCLEX-RN exam, international nurse licensure, green card nursing, immigration Filipino nurses"
         canonicalUrl={currentUrl}
         ogTitle="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
         ogDescription="Professional NCLEX application processing service. Helping Filipino nurses achieve their American Dream."
@@ -247,50 +247,6 @@ export function Home() {
               </div>
             </div>
 
-            {/* EAD Application - Secondary */}
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity" />
-              <div className="relative p-8 rounded-2xl border-2 border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:shadow-xl">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                    <Briefcase className="h-8 w-8 text-white" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Family Service</span>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                      EAD Application
-                    </h3>
-                  </div>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">
-                  Help your dependents work legally in the USA with our streamlined Employment Authorization Document (EAD) application service. Keep your family together on your American journey.
-                </p>
-                <ul className="space-y-3 mb-6">
-                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                    <span>I-765 form preparation & filing</span>
-                  </li>
-                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                    <span>Dependent visa work authorization</span>
-                  </li>
-                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                    <span>USCIS correspondence handling</span>
-                  </li>
-                  <li className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                    <span>Renewal & extension assistance</span>
-                  </li>
-                </ul>
-                <Link to="/ead-application">
-                  <Button size="lg" variant="outline" className="w-full border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                    Start EAD Application
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
           </div>
         </div>
       </section>

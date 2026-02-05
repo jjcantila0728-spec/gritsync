@@ -25,7 +25,7 @@ interface RecentActivity {
   date: string
   link: string
   service_type?: string
-  application_type?: 'NCLEX' | 'EAD'
+  application_type?: 'NCLEX'
   grit_app_id?: string
 }
 
@@ -38,7 +38,7 @@ interface PendingItem {
   link: string
   priority?: 'high' | 'medium' | 'low'
   service_type?: string
-  application_type?: 'NCLEX' | 'EAD'
+  application_type?: 'NCLEX'
   grit_app_id?: string
 }
 
@@ -57,7 +57,6 @@ export function Dashboard() {
     rejectedApplications: 0,
     paidQuotations: 0,
     nclexApplications: 0,
-    eadApplications: 0,
   })
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([])
@@ -295,18 +294,14 @@ export function Dashboard() {
       const results = await Promise.all(promises)
       const [statsData, applications, , pendingPaymentsData] = results
       
-      // Calculate NCLEX and EAD application counts
+      // Calculate NCLEX application counts
       const nclexCount = Array.isArray(applications) 
         ? applications.filter((app: any) => (app.application_type || 'NCLEX') === 'NCLEX').length 
-        : 0
-      const eadCount = Array.isArray(applications) 
-        ? applications.filter((app: any) => app.application_type === 'EAD').length 
         : 0
       
       setStats({
         ...statsData,
         nclexApplications: nclexCount,
-        eadApplications: eadCount,
       })
       
       // Set pending payments for admin
@@ -336,7 +331,7 @@ export function Dashboard() {
             status: app.status,
             date: app.created_at,
             link: isAdmin() ? `/admin/applications/${routeId}/timeline` : `/applications/${routeId}`,
-            service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
+            service_type: app.service_type || 'NCLEX Processing',
             application_type: appType,
             grit_app_id: app.grit_app_id,
           })
@@ -404,7 +399,7 @@ export function Dashboard() {
               date: app.created_at,
               link: `/admin/applications/${routeId}/timeline`,
               priority: 'high',
-              service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
+              service_type: app.service_type || 'NCLEX Processing',
               application_type: appType,
               grit_app_id: app.grit_app_id,
             })
@@ -562,11 +557,6 @@ export function Dashboard() {
                   <div className="flex-1">
                     <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
                     <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                      <span>NCLEX: {stats.nclexApplications || 0}</span>
-                      <span>•</span>
-                      <span>EAD: {stats.eadApplications || 0}</span>
-                    </div>
                   </div>
                   <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20">
                     <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
@@ -921,17 +911,13 @@ export function Dashboard() {
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors truncate">
                                 {activity.type === 'application' 
-                                  ? `${activity.service_type || (activity.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')} - ${activity.grit_app_id || activity.id}`
+                                  ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
                                   : activity.title}
                               </p>
                               {activity.type === 'application' && (
                                 <>
                                   {activity.application_type && (
-                                    <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${
-                                      activity.application_type === 'EAD'
-                                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                    }`}>
+                                    <span className="px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                                       {activity.application_type}
                                     </span>
                                   )}
@@ -999,11 +985,6 @@ export function Dashboard() {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">Total Applications</p>
                   <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                    <span>NCLEX: {stats.nclexApplications || 0}</span>
-                    <span>•</span>
-                    <span>EAD: {stats.eadApplications || 0}</span>
-                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-primary-500/10 dark:bg-primary-400/20">
                   <FileText className="h-6 w-6 text-primary-600 dark:text-primary-400" />

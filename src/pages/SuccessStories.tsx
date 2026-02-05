@@ -83,7 +83,7 @@ const testimonials: Testimonial[] = [
     rating: 5,
     testimony: 'After 15 years of being a nurse sa Pilipinas, finally natupad din ang pangarap ko! GritSync helped me and my family. Kasama ko na ngayon ang mga anak ko dito sa US. Thank you for making dreams come true!',
     date: 'September 2025',
-    service: 'NCLEX + EAD for Dependents'
+    service: 'NCLEX Processing'
   },
   {
     id: 4,
@@ -111,9 +111,9 @@ const testimonials: Testimonial[] = [
     location: 'Iloilo to New Jersey',
     image: testimonial6,
     rating: 5,
-    testimony: 'Sobrang dami kong questions at concerns, pero ang patient ng GritSync team. They answered everything, kahit paulit-ulit ako magtanong. Now I\'m here sa US with my husband! The EAD processing for him was smooth too!',
+    testimony: 'Sobrang dami kong questions at concerns, pero ang patient ng GritSync team. They answered everything, kahit paulit-ulit ako magtanong. Now I\'m here sa US with my husband! The processing was smooth!',
     date: 'October 2025',
-    service: 'NCLEX + EAD Processing'
+    service: 'NCLEX Processing'
   },
   {
     id: 7,
@@ -163,7 +163,7 @@ const testimonials: Testimonial[] = [
     rating: 5,
     testimony: 'Hesitant ako at first kasi maraming horror stories about processing agencies. Pero GritSync is different! Lahat ng sinabi nila, natupad. Now I\'m here sa Detroit with my family. Maraming salamat po!',
     date: 'September 2025',
-    service: 'NCLEX + EAD Processing'
+    service: 'NCLEX Processing'
   },
   {
     id: 12,
@@ -211,9 +211,9 @@ const testimonials: Testimonial[] = [
     location: 'Cavite to Massachusetts',
     image: testimonial16,
     rating: 5,
-    testimony: 'GritSync is a blessing! Akala ko di na ako makakaalis ng Pilipinas, pero they made it happen. Yung EAD processing for my husband was quick too. Now we\'re in Boston together! Salamat talaga!',
+    testimony: 'GritSync is a blessing! Akala ko di na ako makakaalis ng Pilipinas, pero they made it happen. The processing was quick too. Now we\'re in Boston together! Salamat talaga!',
     date: 'October 2025',
-    service: 'NCLEX + EAD Processing'
+    service: 'NCLEX Processing'
   },
   {
     id: 17,
@@ -253,7 +253,7 @@ const testimonials: Testimonial[] = [
     rating: 5,
     testimony: 'From province ako, walang connections sa Manila. Pero dahil sa GritSync, nakarating din ako ng US! Lahat online na, walang hassle. Now I\'m in Baltimore with my kids! Dreams do come true!',
     date: 'November 2025',
-    service: 'NCLEX + EAD Processing'
+    service: 'NCLEX Processing'
   }
 ]
 
@@ -570,8 +570,6 @@ export function SuccessStories() {
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     >
                       <option value="NCLEX Processing">NCLEX Processing</option>
-                      <option value="EAD Processing">EAD Processing</option>
-                      <option value="NCLEX + EAD Processing">NCLEX + EAD Processing</option>
                       <option value="Other Services">Other Services</option>
                     </select>
                   </div>

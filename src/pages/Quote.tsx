@@ -1143,8 +1143,8 @@ export function Quote() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <SEO
         title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | Professional Processing Services` : 'Get a Quote - Professional Processing Services | GritSync'}
-        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing, EAD Processing, and more.` : 'Get instant, transparent quotes for NCLEX Processing, EAD Processing, and other professional services. No hidden fees, clear pricing upfront.'}
-        keywords="quote, quotation, NCLEX quote, EAD processing quote, service pricing, processing services, transparent pricing"
+        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing and more.` : 'Get instant, transparent quotes for NCLEX Processing and other professional services. No hidden fees, clear pricing upfront.'}
+        keywords="quote, quotation, NCLEX quote, service pricing, processing services, transparent pricing"
         canonicalUrl={currentUrl}
         ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - Professional Processing Services | GritSync'}
         ogDescription={quoteId ? `View your quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for professional processing services. No hidden fees.'}
@@ -1152,7 +1152,7 @@ export function Quote() {
         ogUrl={currentUrl}
         structuredData={[
           generateBreadcrumbSchema(breadcrumbs),
-          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing, EAD Processing, and other professional services with transparent pricing'),
+          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing and other professional services with transparent pricing'),
         ]}
       />
       <Header />
@@ -1178,7 +1178,7 @@ export function Quote() {
                   Get Your Service Quotation
                 </h1>
                 <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
-                  Get transparent, instant quotes for NCLEX Processing, EAD Processing, and more. No hidden fees, clear pricing upfront.
+                  Get transparent, instant quotes for NCLEX Processing and more. No hidden fees, clear pricing upfront.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">

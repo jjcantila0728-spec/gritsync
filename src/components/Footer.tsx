@@ -116,7 +116,7 @@ export function Footer() {
             </div>
             <p className="text-sm mb-6 leading-relaxed">
               Helping Filipino nurses achieve their USRN dreams. We provide comprehensive NCLEX application processing, 
-              EAD applications for dependents, real-time visa bulletin tracking, and dedicated support throughout your journey.
+              real-time visa bulletin tracking, and dedicated support throughout your journey.
             </p>
             <div className="flex flex-col gap-3 text-sm mb-6">
               <a 
@@ -178,12 +178,6 @@ export function Footer() {
               <li>
                 <Link to="/quote" className="hover:text-red-400 transition-colors flex items-center gap-2 group">
                   <span>NCLEX Processing</span>
-                  <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </li>
-              <li>
-                <Link to="/quote" className="hover:text-red-400 transition-colors flex items-center gap-2 group">
-                  <span>EAD Applications</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Link>
               </li>

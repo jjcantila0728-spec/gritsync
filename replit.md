@@ -1,7 +1,7 @@
 # GritSync - NCLEX Processing Agency
 
 ## Overview
-GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process. It offers features for quotation generation, application tracking, and payment processing for aspiring nurses, particularly focusing on assisting Filipino nurses with their US nursing career aspirations. The platform aims to provide a robust, scalable, and secure solution for managing the entire application lifecycle, from initial inquiry to successful placement.
+GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses pursuing US nursing careers. The application focuses exclusively on NCLEX processing services, offering features for quotation generation, application tracking, and payment processing. The platform aims to provide a robust, scalable, and secure solution for managing the entire NCLEX application lifecycle, from initial inquiry to successful licensing.
 
 ## User Preferences
 I prefer clear and concise explanations.
@@ -61,6 +61,15 @@ Core functionality working:
 Integrations:
 - Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)
 - File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)
+
+## Recent Changes (Feb 2026)
+**EAD Service Removal:**
+- Removed all EAD (Employment Authorization Document) services from the application
+- Application now focuses exclusively on NCLEX processing services
+- Removed EAD routes, pages, and UI references throughout the application
+- Updated testimonials, success stories, and marketing content to remove EAD mentions
+- Updated Dashboard, Quote, Documents, Tracking, Footer, Home, HeroSlider components
+- Simplified application service selection to redirect directly to NCLEX application form
 
 ## Recent Changes (Dec 22, 2024)
 **Donation Payment Flow Fixes:**

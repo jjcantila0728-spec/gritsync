@@ -6,7 +6,6 @@ import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import slide1 from '@assets/generated_images/filipino_nurse_american_dream.png'
 import slide2 from '@assets/generated_images/filipino_nurses_team_usa.png'
 import slide3 from '@assets/generated_images/nclex_study_success.png'
-import slide4 from '@assets/generated_images/filipino_family_ead_success.png'
 
 interface SlideData {
   id: number
@@ -62,19 +61,6 @@ const slides: SlideData[] = [
       link: '/tracking'
     }
   },
-  {
-    id: 4,
-    image: slide4,
-    title: 'EAD Processing for',
-    highlight: 'Your Family',
-    description: 'Help your dependents work legally in the USA with our streamlined EAD application service. Keep your family together on your American journey.',
-    ctaText: 'EAD Application',
-    ctaLink: '/ead-application',
-    secondaryCta: {
-      text: 'Get a Quote',
-      link: '/quote'
-    }
-  }
 ]
 
 export function HeroSlider() {
