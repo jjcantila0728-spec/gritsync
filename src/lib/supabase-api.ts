@@ -1640,7 +1640,7 @@ export const serviceRequiredDocumentsAPI = {
       .select('*')
       .order('service_type', { ascending: true })
       .order('sort_order', { ascending: true })
-      .order('name', { ascending: true })
+      .order('document_name', { ascending: true })
 
     if (error) throw new Error(error.message)
     return data || []
@@ -1652,7 +1652,7 @@ export const serviceRequiredDocumentsAPI = {
       .select('*')
       .order('service_type', { ascending: true })
       .order('sort_order', { ascending: true })
-      .order('name', { ascending: true })
+      .order('document_name', { ascending: true })
 
     if (serviceTypes && serviceTypes.length > 0) {
       query.in('service_type', serviceTypes)
@@ -2164,7 +2164,7 @@ export const userDocumentsAPI = {
       .from('user_documents')
       .select('*')
       .eq('user_id', userId)
-      .order('uploaded_at', { ascending: false })
+      .order('created_at', { ascending: false })
     
     if (error) throw new Error(error.message)
     return data || []
@@ -2183,7 +2183,7 @@ export const userDocumentsAPI = {
       .from('user_documents')
       .select('*')
       .eq('user_id', userId)
-      .order('uploaded_at', { ascending: false })
+      .order('created_at', { ascending: false })
     
     if (error) throw new Error(error.message)
     return data || []
@@ -3939,6 +3939,27 @@ const calculateServiceFee = (paymentType: 'step1' | 'step2' | 'full'): number =>
 }
 
 export const applicationPaymentsAPI = {
+  getAll: async () => {
+    const { userId, isAdmin: admin } = await getCurrentUserInfo()
+    const query = supabase
+      .from('application_payments')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (!admin) {
+      // Join through applications to filter by user
+      const { data: apps } = await supabase
+        .from('applications')
+        .select('id')
+        .eq('user_id', userId)
+      const appIds = (apps || []).map((a: any) => a.id)
+      if (appIds.length === 0) return []
+      query.in('application_id', appIds)
+    }
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
   checkRetaker: async () => {
     const userId = await getCurrentUserId()
     const { data, error } = await supabase

@@ -20,6 +20,7 @@ const ALLOWED_TABLES = new Set([
   'conversations', 'messages', 'email_addresses', 'email_logs', 'email_templates',
   'sessions', 'exchange_rates', 'visa_bulletin_cache', 'visa_bulletin_email_log',
   'newsletter_subscriptions', 'password_reset_tokens',
+  'email_signatures', 'business_logos',
 ])
 
 function buildWhereClause(filters: Record<string, any>): { sql: string; values: any[] } {

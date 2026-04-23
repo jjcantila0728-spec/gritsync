@@ -71,6 +71,15 @@ gritsync/
 └── package.json         # scripts: dev, build, server
 ```
 
+## Database Schema Notes (Important for Queries)
+The PostgreSQL database has specific column names that differ from common naming conventions:
+- `service_required_documents`: use `document_name` (not `name`) for ordering/selection
+- `user_documents`: columns are `filename`, `storage_path`, `created_at` (original) PLUS added `file_name`, `file_path`, `uploaded_at` (aliases for compatibility)
+- `email_addresses`: has `user_id` FK, `is_system_address`, `department`, `forward_to_email`, `auto_reply_enabled`, `auto_reply_message`, `notes`, `metadata`, `verified_at`
+- `email_signatures`: full table exists with user_id, signature_html, signature_type, logo fields etc.
+- `business_logos`: full table for company logo management
+- Allowed query tables (server/routes/query.ts): includes `email_signatures` and `business_logos`
+
 ## Key Features
 - User Authentication with role-based access control (admin / client)
 - NCLEX application form with complete field validation

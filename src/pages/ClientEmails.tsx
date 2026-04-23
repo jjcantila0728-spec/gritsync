@@ -264,7 +264,8 @@ export function ClientEmails() {
       }
     } catch (error: any) {
       console.error('Error loading client email address:', error)
-      const errorMessage = error?.message || 'Failed to load email address'
+      const rawMsg = error?.message
+      const errorMessage = typeof rawMsg === 'string' ? rawMsg : (typeof rawMsg?.message === 'string' ? rawMsg.message : 'Failed to load email address')
       
       if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
         showToast('❌ Permission denied. Please contact support.', 'error')

@@ -100,10 +100,24 @@ export const emailAddressesAPI = {
    */
   getUserPrimaryEmail: async (userId: string) => {
     const { data, error } = await supabase
-      .rpc('get_user_primary_email', { p_user_id: userId })
+      .from('email_addresses')
+      .select('email_address')
+      .eq('user_id', userId)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .maybeSingle()
 
     if (error) throw error
-    return data as string
+    if (data) return (data as any).email_address as string
+
+    // Fallback: look up the user's actual email
+    const { data: userData } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle()
+
+    return userData ? (userData as any).email as string : null
   },
 
   /**
@@ -183,11 +197,55 @@ export const emailAddressesAPI = {
    * Generate client email address for user
    */
   generateClientEmail: async (userId: string) => {
-    const { data, error } = await supabase
-      .rpc('create_client_email_address', { p_user_id: userId })
+    // Get user's name to create email
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('first_name, last_name, email, grit_id')
+      .eq('id', userId)
+      .maybeSingle()
 
-    if (error) throw error
-    return data as string
+    if (userError) throw userError
+    if (!userData) throw new Error('User not found')
+
+    const user = userData as any
+    const firstName = (user.first_name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const lastName = (user.last_name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const baseEmail = firstName && lastName
+      ? `${firstName}.${lastName}@gritsync.com`
+      : `client.${(user.grit_id || userId.slice(0, 8)).toLowerCase()}@gritsync.com`
+
+    // Check if this email already exists; if so, add a number suffix
+    let emailAddress = baseEmail
+    let suffix = 1
+    while (true) {
+      const { data: existing } = await supabase
+        .from('email_addresses')
+        .select('id')
+        .eq('email_address', emailAddress)
+        .maybeSingle()
+      if (!existing) break
+      emailAddress = baseEmail.replace('@', `${suffix}@`)
+      suffix++
+    }
+
+    // Insert the new email address
+    const { data: created, error: createError } = await supabase
+      .from('email_addresses')
+      .insert({
+        email_address: emailAddress,
+        display_name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Client',
+        user_id: userId,
+        address_type: 'client',
+        is_active: true,
+        is_primary: true,
+        can_send: true,
+        can_receive: true,
+      })
+      .select()
+      .single()
+
+    if (createError) throw createError
+    return (created as any).email_address as string
   },
 
   /**
