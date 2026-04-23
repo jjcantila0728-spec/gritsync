@@ -93,6 +93,19 @@ export function Dashboard() {
   const { showToast } = useToast()
   const channelsRef = useRef<RealtimeChannel[]>([])
 
+  // Welcome banner for newly registered accounts
+  // State initializer only READS (does not clear) so StrictMode double-invocation gets the same value
+  const [newAccountInfo, setNewAccountInfo] = useState<{ grit_id: string; gritsync_email: string } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('gritsync_new_account')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+  // Clear sessionStorage in an effect (runs after both StrictMode effect cycles)
+  useEffect(() => {
+    sessionStorage.removeItem('gritsync_new_account')
+  }, [])
+
   // Helper to set firstName and cache it
   const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
     setFirstName(name)
@@ -1151,6 +1164,35 @@ export function Dashboard() {
               Welcome back! Here's what's happening with your applications.
             </p>
           </div>
+
+          {/* New account welcome banner */}
+          {newAccountInfo && (
+            <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-5 relative">
+              <button
+                onClick={() => setNewAccountInfo(null)}
+                className="absolute top-3 right-3 text-green-500 hover:text-green-700 dark:hover:text-green-300 transition-colors"
+                aria-label="Dismiss"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-green-800 dark:text-green-200 mb-2">Account created successfully! Save your login details.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-white/60 dark:bg-green-900/30 rounded-lg px-4 py-2">
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide mb-0.5">Your GRIT ID</p>
+                      <p className="font-mono font-bold text-green-900 dark:text-green-100">{newAccountInfo.grit_id}</p>
+                    </div>
+                    <div className="bg-white/60 dark:bg-green-900/30 rounded-lg px-4 py-2">
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide mb-0.5">Your GritSync Email</p>
+                      <p className="font-medium text-green-900 dark:text-green-100 break-all text-sm">{newAccountInfo.gritsync_email}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">

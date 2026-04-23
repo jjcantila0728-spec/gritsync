@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
-import { isValidEmail } from '@/lib/utils'
+
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -38,12 +38,7 @@ export function Login() {
     
     // Validation
     if (!email.trim()) {
-      setError('Email is required')
-      return
-    }
-
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address')
+      setError('Please enter your email, mobile number, or GRIT ID')
       return
     }
 

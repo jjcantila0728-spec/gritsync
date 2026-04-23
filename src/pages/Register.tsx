@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Lock, User, Phone, CheckCircle } from 'lucide-react'
-import { validatePassword } from '@/lib/utils'
+import { Eye, EyeOff, Lock, User, Phone } from 'lucide-react'
+import { validatePasswordSync } from '@/lib/utils'
 
 export function Register() {
   const [firstName, setFirstName] = useState('')
@@ -21,8 +21,6 @@ export function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [gritId, setGritId] = useState('')
-  const [gritEmail, setGritEmail] = useState('')
   const { signUp } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -51,7 +49,7 @@ export function Register() {
       return
     }
 
-    const passwordValidation = await validatePassword(password)
+    const passwordValidation = validatePasswordSync(password)
     if (!passwordValidation.valid) {
       setError(passwordValidation.message || 'Invalid password')
       return
@@ -67,12 +65,13 @@ export function Register() {
     try {
       const result = await signUp(firstName, lastName, mobile, password, 'client')
       if (result?.grit_id) {
-        setGritId(result.grit_id)
-        setGritEmail(result.gritsync_email || `${result.grit_id.toLowerCase()}@gritsync.com`)
-      } else {
-        showToast('Account created successfully! Welcome!', 'success')
-        navigate('/dashboard')
+        // Store new account info for the dashboard welcome banner
+        sessionStorage.setItem('gritsync_new_account', JSON.stringify({
+          grit_id: result.grit_id,
+          gritsync_email: result.gritsync_email || `${result.grit_id.toLowerCase()}@gritsync.com`,
+        }))
       }
+      // Auth state change will redirect to /dashboard automatically
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to create account'
       setError(errorMessage)
@@ -88,49 +87,6 @@ export function Register() {
     { name: 'Home', url: baseUrl },
     { name: 'Register', url: currentUrl },
   ]
-
-  if (gritId) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
-        <Header />
-        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <Card className="w-full max-w-md border-0 shadow-xl">
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-              </div>
-              <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                Account Created!
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Your GritSync account is ready. Save your login details below.
-              </p>
-
-              <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-5 mb-6 text-left space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Your GRIT ID</p>
-                  <p className="text-xl font-bold text-primary-700 dark:text-primary-300 font-mono">{gritId}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Your GritSync Email</p>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 break-all">{gritEmail}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Use this email address to log in to your account.</p>
-                </div>
-              </div>
-
-              <Button
-                className="w-full"
-                onClick={() => navigate('/dashboard')}
-              >
-                Go to Dashboard
-              </Button>
-            </div>
-          </Card>
-        </main>
-        <Footer />
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
@@ -255,12 +211,6 @@ export function Register() {
                   <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                 </div>
               )}
-
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  A GritSync email address will be automatically assigned to your account upon registration.
-                </p>
-              </div>
 
               <div className="flex items-start">
                 <input
