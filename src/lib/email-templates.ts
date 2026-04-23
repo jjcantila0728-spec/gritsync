@@ -49,7 +49,6 @@ async function getBrandingSettings(): Promise<{
   phoneNumber: string
   logoUrl: string
   primaryColor: string
-  primaryDark: string
   secondaryColor: string
   companyAddress: string
   companyDescription: string
@@ -152,56 +151,17 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
   if (socialMedia.linkedin) socialLinks.push(`<a href="${socialMedia.linkedin}" class="social-link" style="color: ${colors.primary};">LinkedIn</a>`)
   if (socialMedia.instagram) socialLinks.push(`<a href="${socialMedia.instagram}" class="social-link" style="color: ${colors.primary};">Instagram</a>`)
 
-  // Logo HTML - use text-based logo for better email client compatibility
-  // Many email clients block images by default, so we use a text fallback with styled appearance
+  // Logo HTML
   const logoHtml = logoUrl
-    ? `<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
-        <tr>
-          <td style="padding: 0;">
-            <a href="${siteUrl}" style="display: inline-block; text-decoration: none;">
-              <img src="${logoUrl}" alt="${siteName}" width="180" height="50" style="display: block; max-width: 180px; height: auto; border: 0; outline: none;" />
-            </a>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding-top: 8px; text-align: center;">
-            <span style="font-size: 14px; color: rgba(255,255,255,0.9); font-weight: 500;">Your NCLEX Journey Partner</span>
-          </td>
-        </tr>
-      </table>`
-    : `<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
-        <tr>
-          <td style="padding: 0;">
-            <a href="${siteUrl}" style="font-size: 32px; font-weight: bold; color: #ffffff; text-decoration: none; letter-spacing: 2px;">GRIT<span style="color: rgba(255,255,255,0.85);">SYNC</span></a>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding-top: 8px; text-align: center;">
-            <span style="font-size: 14px; color: rgba(255,255,255,0.9); font-weight: 500;">Your NCLEX Journey Partner</span>
-          </td>
-        </tr>
-      </table>`
+    ? `<img src="${logoUrl}" alt="${siteName}" style="max-height: 60px; max-width: 200px; margin-bottom: 10px;" />`
+    : `<a href="${siteUrl}" class="email-logo" style="font-size: 32px; font-weight: bold; color: #ffffff; text-decoration: none; letter-spacing: 1px;">${siteName}</a>`
 
   return `
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-  <meta name="x-apple-disable-message-reformatting">
-  <!--[if mso]>
-  <noscript>
-    <xml>
-      <o:OfficeDocumentSettings>
-        <o:AllowPNG/>
-        <o:PixelsPerInch>96</o:PixelsPerInch>
-      </o:OfficeDocumentSettings>
-    </xml>
-  </noscript>
-  <![endif]-->
   <title>${siteName}</title>
   <style>
     * {
@@ -426,8 +386,8 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
       ${companyAddress ? `<p class="footer-text" style="margin-bottom: 10px;">${companyAddress.replace(/\n/g, '<br>')}</p>` : ''}
       <p class="footer-text">
         <strong>Contact Us:</strong><br>
-        Email: <a href="mailto:${supportEmail}" style="color: ${colors.primary}; text-decoration: none;">${supportEmail}</a>
-        ${phoneNumber ? `<br>Phone: <a href="tel:${phoneNumber.replace(/[^\d+]/g, '')}" style="color: ${colors.primary}; text-decoration: none;">${phoneNumber}</a>` : ''}
+        📧 <a href="mailto:${supportEmail}" style="color: ${colors.primary}; text-decoration: none;">${supportEmail}</a>
+        ${phoneNumber ? `<br>📞 <a href="tel:${phoneNumber.replace(/[^\d+]/g, '')}" style="color: ${colors.primary}; text-decoration: none;">${phoneNumber}</a>` : ''}
       </p>
       ${socialLinks.length > 0 ? `
         <div class="social-links">
@@ -443,11 +403,6 @@ async function createBaseTemplate(content: string, data?: Partial<BaseEmailData>
       <p class="footer-text" style="margin-top: 20px; color: ${colors.gray}; font-size: 12px;">
         © ${new Date().getFullYear()} ${siteName}. All rights reserved.<br>
         This email was sent by ${siteName}. If you have any questions, please contact us at ${supportEmail}.
-      </p>
-      <p style="margin-top: 15px; font-size: 11px; color: #999999; text-align: center;">
-        You received this email because you have an account with ${siteName} or subscribed to our services.<br>
-        <a href="${siteUrl}/unsubscribe" style="color: ${colors.primary}; text-decoration: underline;">Unsubscribe</a> | 
-        <a href="${siteUrl}/email-preferences" style="color: ${colors.primary}; text-decoration: underline;">Update Preferences</a>
       </p>
     </div>
   </div>
@@ -475,7 +430,7 @@ export async function createForgotPasswordEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Password Reset Request</h1>
+      <h1>🔐 Password Reset Request</h1>
       <p>Hi ${userName},</p>
       <p>We received a request to reset your password. Click the button below to create a new password:</p>
       
@@ -484,7 +439,7 @@ export async function createForgotPasswordEmail(data: {
       </div>
 
       <div class="warning-box">
-        <p style="margin: 0;"><strong>Important:</strong> This link will expire in ${expiryTime} for security reasons.</p>
+        <p style="margin: 0;"><strong>⏰ Important:</strong> This link will expire in ${expiryTime} for security reasons.</p>
       </div>
 
       <p><strong>If you didn't request this password reset,</strong> please ignore this email. Your password will remain unchanged.</p>
@@ -509,7 +464,7 @@ export async function createForgotPasswordEmail(data: {
   `
 
   return {
-    subject: 'Reset Your Password - GritSync',
+    subject: '🔐 Reset Your Password',
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -564,7 +519,7 @@ export async function createPaymentReceiptEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Payment Received</h1>
+      <h1>✅ Payment Received</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for your payment! Your transaction has been completed successfully.</p>
 
@@ -609,7 +564,7 @@ export async function createPaymentReceiptEmail(data: {
   `
 
   return {
-    subject: `Payment Receipt - ${formatCurrency(amount)} - GritSync`,
+    subject: `✅ Payment Receipt - ${formatCurrency(amount)}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -659,7 +614,7 @@ export async function createTimelineUpdateEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Application Update</h1>
+      <h1>📋 Application Update</h1>
       <p>Hi ${userName},</p>
       <p>There's an update on your application <strong>#${applicationId}</strong>:</p>
 
@@ -682,7 +637,7 @@ export async function createTimelineUpdateEmail(data: {
   `
 
   return {
-    subject: `Application Update: ${updateTitle}`,
+    subject: `📋 Update: ${updateTitle}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -708,13 +663,13 @@ export async function createMissingDocumentEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Document Upload Required</h1>
+      <h1>📄 Document Upload Required</h1>
       <p>Hi ${userName},</p>
       <p>We noticed that some documents are still missing from your application <strong>#${applicationId}</strong>.</p>
 
       ${deadline ? `
         <div class="warning-box">
-          <p style="margin: 0;"><strong>Deadline:</strong> Please upload the required documents by <strong>${deadline}</strong> to avoid delays in processing your application.</p>
+          <p style="margin: 0;"><strong>⏰ Deadline:</strong> Please upload the required documents by <strong>${deadline}</strong> to avoid delays in processing your application.</p>
         </div>
       ` : ''}
 
@@ -750,7 +705,7 @@ export async function createMissingDocumentEmail(data: {
   `
 
   return {
-    subject: `Action Required: Upload Missing Documents`,
+    subject: `📄 Action Required: Upload Missing Documents`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -777,13 +732,13 @@ export async function createMissingDetailsEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Complete Your Profile</h1>
+      <h1>✏️ Complete Your Profile</h1>
       <p>Hi ${userName},</p>
       <p>We need some additional information to complete your profile and process your application.</p>
 
       <div class="${boxClass}">
         <p style="margin: 0;">
-          <strong>${isUrgent ? 'URGENT:' : 'Action Required:'}</strong> 
+          <strong>${isUrgent ? '🚨 Urgent:' : '⚠️ Action Required:'}</strong> 
           Please update the following information in your profile.
         </p>
       </div>
@@ -807,13 +762,13 @@ export async function createMissingDetailsEmail(data: {
       <p>Completing your profile helps us serve you better and speeds up the processing of your application.</p>
 
       <div class="info-box">
-        <p style="margin: 0;"><strong>Tip:</strong> Having all your information ready before you start will make the process faster. You can save your progress and come back later if needed.</p>
+        <p style="margin: 0;"><strong>💡 Tip:</strong> Having all your information ready before you start will make the process faster. You can save your progress and come back later if needed.</p>
       </div>
     </div>
   `
 
   return {
-    subject: isUrgent ? 'URGENT: Complete Your Profile' : 'Action Required: Complete Your Profile',
+    subject: isUrgent ? '🚨 Urgent: Complete Your Profile' : '✏️ Action Required: Complete Your Profile',
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -839,7 +794,7 @@ export async function createSchoolLetterEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Your School Letter is Ready</h1>
+      <h1>🎓 Your School Letter is Ready</h1>
       <p>Hi ${userName},</p>
       <p>Great news! Your verification letter for <strong>${schoolName}</strong> has been generated and is ready for download.</p>
 
@@ -872,7 +827,7 @@ export async function createSchoolLetterEmail(data: {
       `}
 
       <div class="warning-box">
-        <p style="margin: 0;"><strong>Important:</strong> This letter is valid for 90 days from the date of issue. Please ensure you submit it within this timeframe.</p>
+        <p style="margin: 0;"><strong>⚠️ Important:</strong> This letter is valid for 90 days from the date of issue. Please ensure you submit it within this timeframe.</p>
       </div>
 
       <p>If you need any changes or have questions about the letter, please contact our support team.</p>
@@ -880,7 +835,7 @@ export async function createSchoolLetterEmail(data: {
   `
 
   return {
-    subject: `Your School Letter for ${schoolName}`,
+    subject: `🎓 Your School Letter for ${schoolName}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -906,7 +861,7 @@ export async function createFullInstructionsEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Complete Instructions for Your Application</h1>
+      <h1>📚 Complete Instructions for Your Application</h1>
       <p>Hi ${userName},</p>
       <p>Welcome! Here are the complete instructions for your <strong>${serviceType}</strong> application (#${applicationId}).</p>
 
@@ -954,10 +909,10 @@ export async function createFullInstructionsEmail(data: {
         <h3 style="margin-top: 0;">Need Help?</h3>
         <p>Our support team is ready to assist you:</p>
         <ul style="margin: 10px 0 0;">
-          <li>Email: support@gritsync.com</li>
-          <li>Phone: Available in your dashboard</li>
-          <li>Live Chat: Available on our website</li>
-          <li>Help Center: Comprehensive guides and FAQs</li>
+          <li>📧 Email: support@gritsync.com</li>
+          <li>📞 Phone: Available in your dashboard</li>
+          <li>💬 Live Chat: Available on our website</li>
+          <li>📖 Help Center: Comprehensive guides and FAQs</li>
         </ul>
       </div>
 
@@ -966,7 +921,7 @@ export async function createFullInstructionsEmail(data: {
   `
 
   return {
-    subject: `Complete Instructions - ${serviceType} Application`,
+    subject: `📚 Complete Instructions - ${serviceType} Application`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -990,7 +945,7 @@ export async function createWelcomeEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Welcome to GritSync!</h1>
+      <h1>🎉 Welcome to GritSync!</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for joining GritSync! We're thrilled to have you on board.</p>
 
@@ -1028,7 +983,7 @@ export async function createWelcomeEmail(data: {
   `
 
   return {
-    subject: 'Welcome to GritSync - Get Started Today',
+    subject: '🎉 Welcome to GritSync!',
     html: await createBaseTemplate(content, { userName, userEmail })
   }
 }
@@ -1053,7 +1008,7 @@ export async function createEmailVerificationEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Verify Your Email Address</h1>
+      <h1>✉️ Verify Your Email Address</h1>
       <p>Hi ${userName},</p>
       <p>Thank you for signing up! Please verify your email address to complete your account setup.</p>
       
@@ -1062,7 +1017,7 @@ export async function createEmailVerificationEmail(data: {
       </div>
 
       <div class="info-box">
-        <p style="margin: 0;"><strong>Important:</strong> This verification link will expire in ${expiryTime}.</p>
+        <p style="margin: 0;"><strong>⏰ Important:</strong> This verification link will expire in ${expiryTime}.</p>
       </div>
 
       <p><strong>If you didn't create an account,</strong> please ignore this email.</p>
@@ -1124,7 +1079,7 @@ export async function createApplicationApprovedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Congratulations! Your Application Has Been Approved</h1>
+      <h1>🎉 Congratulations! Your Application Has Been Approved</h1>
       <p>Hi ${userName},</p>
       <p>We're thrilled to inform you that your <strong>${serviceType}</strong> application has been <strong>approved</strong>!</p>
 
@@ -1146,7 +1101,7 @@ export async function createApplicationApprovedEmail(data: {
           <tr>
             <td style="border: none; padding: 8px 0;"><strong>Status:</strong></td>
             <td style="border: none; padding: 8px 0; text-align: right;">
-              <span class="badge badge-success">Approved</span>
+              <span class="badge badge-success">Approved ✅</span>
             </td>
           </tr>
         </table>
@@ -1165,7 +1120,7 @@ export async function createApplicationApprovedEmail(data: {
       </div>
 
       <div class="card" style="background-color: #f0fdf4;">
-        <p style="margin: 0;"><strong>What's Next?</strong></p>
+        <p style="margin: 0;"><strong>🎊 What's Next?</strong></p>
         <p style="margin: 10px 0 0;">Your application has been successfully processed. You can now proceed with the next steps in your journey. If you have any questions, our support team is here to help!</p>
       </div>
 
@@ -1174,7 +1129,7 @@ export async function createApplicationApprovedEmail(data: {
   `
 
   return {
-    subject: `Application Approved - ${serviceType} - GritSync`,
+    subject: `🎉 Application Approved - ${serviceType}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1255,7 +1210,7 @@ export async function createApplicationRejectedEmail(data: {
         ${supportContact ? `
           <p style="margin: 10px 0 0;">
             <strong>Contact Support:</strong><br>
-            Email: <a href="mailto:${supportContact}" style="color: ${colors.primary}; text-decoration: none;">${supportContact}</a>
+            📧 <a href="mailto:${supportContact}" style="color: ${colors.primary}; text-decoration: none;">${supportContact}</a>
           </p>
         ` : ''}
       </div>
@@ -1293,7 +1248,7 @@ export async function createDocumentApprovedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Document Approved</h1>
+      <h1>✅ Document Approved</h1>
       <p>Hi ${userName},</p>
       <p>Great news! Your document has been reviewed and <strong>approved</strong>.</p>
 
@@ -1321,7 +1276,7 @@ export async function createDocumentApprovedEmail(data: {
           <tr>
             <td style="border: none; padding: 8px 0;"><strong>Status:</strong></td>
             <td style="border: none; padding: 8px 0; text-align: right;">
-              <span class="badge badge-success">Approved</span>
+              <span class="badge badge-success">Approved ✅</span>
             </td>
           </tr>
         </table>
@@ -1343,7 +1298,7 @@ export async function createDocumentApprovedEmail(data: {
   `
 
   return {
-    subject: `Document Approved: ${documentName} - GritSync`,
+    subject: `✅ Document Approved: ${documentName}`,
     html: await createBaseTemplate(content, { userName })
   }
 }
@@ -1381,7 +1336,7 @@ export async function createDocumentRejectedEmail(data: {
 
   const content = `
     <div class="email-content">
-      <h1>Document Needs Revision</h1>
+      <h1>⚠️ Document Needs Revision</h1>
       <p>Hi ${userName},</p>
       <p>We've reviewed your document, but it needs some revisions before it can be approved.</p>
 
@@ -1442,108 +1397,8 @@ export async function createDocumentRejectedEmail(data: {
   `
 
   return {
-    subject: `Action Required: Revise ${documentName} - GritSync`,
+    subject: `⚠️ Action Required: Revise ${documentName}`,
     html: await createBaseTemplate(content, { userName })
-  }
-}
-
-/**
- * Visa Bulletin Update Email Template
- */
-export async function createVisaBulletinUpdateEmail(data: {
-  month: string
-  year: string
-  eb3PhilippinesFinalAction: string
-  eb3PhilippinesDatesForFiling: string
-  previousFinalAction?: string
-  previousDatesForFiling?: string
-}): Promise<{ subject: string; html: string }> {
-  const {
-    month,
-    year,
-    eb3PhilippinesFinalAction,
-    eb3PhilippinesDatesForFiling,
-    previousFinalAction,
-  } = data
-
-  const hasMovement = previousFinalAction && eb3PhilippinesFinalAction !== previousFinalAction
-  const branding = await getBrandingSettings()
-
-  const content = `
-    <div class="content">
-      <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 24px;">
-        <p style="margin: 0; font-weight: 600; color: #92400e;">
-          ${month} ${year} Visa Bulletin Has Been Released!
-        </p>
-      </div>
-
-      <h2 style="color: #111827; margin: 0 0 16px;">Philippines EB3 Category Update</h2>
-      
-      <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="border: none; padding: 12px 0; border-bottom: 1px solid #bbf7d0;">
-              <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Final Action Date</p>
-              <p style="margin: 4px 0 0; color: #15803d; font-size: 24px; font-weight: bold;">${eb3PhilippinesFinalAction}</p>
-              ${hasMovement ? `<p style="margin: 4px 0 0; color: #16a34a; font-size: 12px;">↑ Changed from ${previousFinalAction}</p>` : ''}
-            </td>
-          </tr>
-          <tr>
-            <td style="border: none; padding: 12px 0;">
-              <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase;">Dates for Filing</p>
-              <p style="margin: 4px 0 0; color: #2563eb; font-size: 24px; font-weight: bold;">${eb3PhilippinesDatesForFiling}</p>
-            </td>
-          </tr>
-        </table>
-      </div>
-
-      <p style="color: #4b5563; line-height: 1.6; margin: 24px 0;">
-        The ${month} ${year} Visa Bulletin has been released by the U.S. Department of State. 
-        ${hasMovement 
-          ? 'Great news! There has been movement in the Final Action Date for Philippines EB3 category.' 
-          : 'The dates remain steady this month. We continue to monitor for any changes.'}
-      </p>
-
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${branding.siteUrl}/uscis-tracker" class="button">View Full Details</a>
-      </div>
-
-      <div style="background-color: #fef2f2; padding: 24px; border-radius: 12px; margin: 32px 0;">
-        <h3 style="color: ${branding.primaryColor}; margin: 0 0 16px; text-align: center;">
-          GritSync Services for Filipino Nurses
-        </h3>
-        
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
-            <h4 style="margin: 0 0 4px; color: #111827;">NCLEX Processing</h4>
-            <p style="margin: 0; color: #6b7280; font-size: 13px;">Complete application support from start to finish. We handle paperwork, scheduling, and tracking.</p>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 16px; border-radius: 8px;">
-            <h4 style="margin: 0 0 4px; color: #111827;">EAD Applications for Dependents</h4>
-            <p style="margin: 0; color: #6b7280; font-size: 13px;">Work authorization processing for your spouse and children. Keep your family together during the transition.</p>
-          </div>
-        </div>
-
-        <div style="text-align: center; margin-top: 20px;">
-          <a href="${branding.siteUrl}/quote" style="display: inline-block; background-color: #ffffff; color: ${branding.primaryColor}; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 2px solid ${branding.primaryColor};">
-            Get a Free Quote Today
-          </a>
-        </div>
-      </div>
-
-      <div class="info-box">
-        <p style="margin: 0; font-size: 12px; color: #6b7280;">
-          <strong>Source:</strong> U.S. Department of State. Always verify with the official 
-          <a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html" style="color: ${branding.primaryColor};">Visa Bulletin</a>.
-        </p>
-      </div>
-    </div>
-  `
-
-  return {
-    subject: `${month} ${year} Visa Bulletin Update - Philippines EB3`,
-    html: await createBaseTemplate(content, {})
   }
 }
 

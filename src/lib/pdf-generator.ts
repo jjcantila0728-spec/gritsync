@@ -478,7 +478,7 @@ export function pdfToBase64(pdfData: Uint8Array): string {
  * Convert PDF Uint8Array to File object
  */
 export function pdfToFile(pdfData: Uint8Array, filename: string): File {
-  const blob = new Blob([pdfData as BlobPart], { type: 'application/pdf' })
+  const blob = new Blob([pdfData], { type: 'application/pdf' })
   return new File([blob], filename, { type: 'application/pdf' })
 }
 

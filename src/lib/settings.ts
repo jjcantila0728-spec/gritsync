@@ -3,47 +3,63 @@
  * Provides easy access to admin settings throughout the application
  */
 
-import { settingsAPI } from './api-client'
+import { supabase } from './supabase'
 
-let settingsCache: Record<string, string | null> | null = null
+// Cache for settings to avoid repeated database queries
+let settingsCache: Record<string, string> | null = null
 let cacheTimestamp: number = 0
-const CACHE_DURATION = 5 * 60 * 1000
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
+/**
+ * Get all settings from the database
+ * Uses caching to reduce database queries
+ */
 async function getAllSettings(): Promise<Record<string, string>> {
   const now = Date.now()
   
+  // Return cached settings if still valid
   if (settingsCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    const result: Record<string, string> = {}
-    for (const [key, value] of Object.entries(settingsCache)) {
-      if (value !== null) result[key] = value
-    }
-    return result
+    return settingsCache
   }
   
   try {
-    const data = await settingsAPI.getAll()
+    const { data, error } = await supabase
+      .from('settings')
+      .select('*')
     
-    const settings: Record<string, string> = {}
-    if (data && typeof data === 'object') {
-      for (const [key, value] of Object.entries(data)) {
-        if (value !== null) settings[key] = value
+    if (error) {
+      console.error('Error fetching settings:', error)
+      
+      // Check if it's a CORS error
+      if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+        console.error(
+          'CORS Error: Please ensure http://localhost:5000 is added to your Supabase project\'s allowed origins.\n' +
+          'Go to: Supabase Dashboard > Settings > API > Allowed Origins'
+        )
       }
+      
+      // Return cached settings if available, even if expired
+      return settingsCache || {}
     }
     
-    settingsCache = data
+    // Convert array to object
+    const settings: Record<string, string> = {}
+    if (data && Array.isArray(data) && !('error' in data)) {
+      data.forEach((setting: any) => {
+        if (setting && typeof setting === 'object' && 'key' in setting && 'value' in setting) {
+          settings[setting.key] = setting.value
+        }
+      })
+    }
+    
+    // Update cache
+    settingsCache = settings
     cacheTimestamp = now
     
     return settings
   } catch (error) {
     console.error('Error fetching settings:', error)
-    if (settingsCache) {
-      const result: Record<string, string> = {}
-      for (const [key, value] of Object.entries(settingsCache)) {
-        if (value !== null) result[key] = value
-      }
-      return result
-    }
-    return {}
+    return settingsCache || {}
   }
 }
 

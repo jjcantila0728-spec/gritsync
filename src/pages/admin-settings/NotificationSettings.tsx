@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Bell, Save, Mail, Settings as SettingsIcon, Send, Plus, Edit2, Trash2, Power, PowerOff } from 'lucide-react'

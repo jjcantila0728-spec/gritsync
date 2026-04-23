@@ -44,6 +44,7 @@ interface DocumentRequirementForm {
 
 const SERVICE_TYPE_OPTIONS = [
   { value: 'NCLEX', label: 'NCLEX Processing' },
+  { value: 'EAD', label: 'EAD (I-765)' },
 ]
 
 const DEFAULT_DOC_FORM: DocumentRequirementForm = {
@@ -579,6 +580,79 @@ const CURRENT_REQUIRED_DOCUMENTS: Omit<DocumentRequirementEntry, 'id'>[] = [
     required: true,
     sort_order: 2,
   },
+  // EAD Documents
+  {
+    service_type: 'EAD',
+    document_type: 'ead_2x2_picture',
+    name: '2X2 Picture',
+    accepted_formats: ['image/*'],
+    required: true,
+    sort_order: 0,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_passport',
+    name: 'Passport',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 1,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_h4_visa',
+    name: 'H-4 Visa',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 2,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_i94',
+    name: 'I-94 Record',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 3,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_marriage_certificate',
+    name: 'Marriage Certificate',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 4,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_spouse_i797',
+    name: 'Spouse I-797',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 5,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_spouse_i140',
+    name: 'Spouse I-140',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 6,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_employer_letter',
+    name: 'Employer Letter',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 7,
+  },
+  {
+    service_type: 'EAD',
+    document_type: 'ead_paystub',
+    name: 'Paystub',
+    accepted_formats: ['.pdf', '.jpg', '.jpeg', '.png'],
+    required: true,
+    sort_order: 8,
+  },
 ]
 
 function DocumentRequirementsManager() {
@@ -604,7 +678,7 @@ function DocumentRequirementsManager() {
     setLoading(true)
     try {
       const data = await serviceRequiredDocumentsAPI.getAll()
-      setDocRequirements((data || []) as unknown as DocumentRequirementEntry[])
+      setDocRequirements(data || [])
     } catch (error: any) {
       showToast(error.message || 'Failed to load document requirements', 'error')
     } finally {
@@ -701,7 +775,7 @@ function DocumentRequirementsManager() {
     setSyncing(true)
     try {
       // Get existing requirements to check what needs updating vs creating
-      const existing = (await serviceRequiredDocumentsAPI.getAll()) as unknown as DocumentRequirementEntry[]
+      const existing = await serviceRequiredDocumentsAPI.getAll()
       const existingMap = new Map<string, DocumentRequirementEntry>()
       existing.forEach((doc: DocumentRequirementEntry) => {
         const key = `${doc.service_type}:${doc.document_type}`

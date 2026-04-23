@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Admin Emails Page - Enterprise-grade email management system
  * Features:
@@ -67,7 +66,8 @@ import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
-import { getSignedFileUrl } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
+import { getSignedFileUrl } from '@/lib/supabase-api'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 
 // Import types and utilities
@@ -3515,7 +3515,7 @@ export function AdminEmails() {
                 setSelectedInboxEmail(null)
                 setSelectedSentEmail(null)
               }}
-              email={(selectedInboxEmail || selectedSentEmail!) as any}
+              email={selectedInboxEmail || selectedSentEmail!}
               type={activeTab === 'inbox' ? 'inbox' : 'sent'}
               onReply={selectedInboxEmail ? () => {
                 const senderEmail = selectedInboxEmail.from.match(/<(.+?)>/)?.[1] || selectedInboxEmail.from
@@ -3539,7 +3539,7 @@ export function AdminEmails() {
                 setComposing(true)
               } : undefined}
               onDelete={selectedInboxEmail ? () => {
-                handleDeleteInbox(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
+                handleDeleteInboxEmail(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
                 setShowEmailDetail(false)
               } : undefined}
               getAvatarInitial={getInitials}

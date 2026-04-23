@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Client Emails Page - Gmail-style email management
  * Features:
@@ -38,8 +37,9 @@ import { format } from 'date-fns'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { receivedEmailsAPI, ReceivedEmail as DBReceivedEmail } from '@/lib/received-emails-api'
 import { emailAddressesAPI, EmailAddress } from '@/lib/email-addresses-api'
-import { userDetailsAPI } from '@/lib/api'
-import { getSignedFileUrl } from '@/lib/api'
+import { userDetailsAPI } from '@/lib/supabase-api'
+import { supabase } from '@/lib/supabase'
+import { getSignedFileUrl } from '@/lib/supabase-api'
 import { ComposeEmailModal } from '@/components/email/ComposeEmailModal'
 import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
@@ -621,11 +621,10 @@ export function ClientEmails() {
         body: '',
         emailType: 'manual',
         category: 'custom',
-        tags: [] as string[],
+        tags: [],
         fromEmailAddressId: clientEmailAddress.id,
         cc: '',
         bcc: '',
-        replyTo: '',
       })
       setSelectedTemplateId('')
       setTemplateVariables({})
@@ -1369,7 +1368,7 @@ export function ClientEmails() {
                 setSelectedReceivedEmail(null)
                 setSelectedEmail(null)
               }}
-              email={(selectedReceivedEmail || selectedEmail!) as any}
+              email={selectedReceivedEmail || selectedEmail!}
               type={activeTab}
               onReply={selectedReceivedEmail ? () => {
                 const senderEmail = selectedReceivedEmail.from.match(/<(.+?)>/)?.[1] || selectedReceivedEmail.from
@@ -1414,11 +1413,10 @@ export function ClientEmails() {
                 body: '',
                 emailType: 'manual',
                 category: 'custom',
-                tags: [] as string[],
+                tags: [],
                 fromEmailAddressId: clientEmailAddress?.id || '',
                 cc: '',
                 bcc: '',
-                replyTo: '',
               })
               setSelectedTemplateId('')
               setTemplateVariables({})

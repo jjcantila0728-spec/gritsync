@@ -1,4 +1,3 @@
-// @ts-nocheck
 ﻿import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -6,6 +5,7 @@ import { Select } from '@/components/ui/Select'
 import { CheckCircle, ChevronDown, ChevronRight, FileText, Download, Upload, Clock, Copy, Loader2, PenTool, Eye, Info } from 'lucide-react'
 import { formatDate, formatCurrency, sanitizeHTML } from '@/lib/utils'
 import { userDocumentsAPI, getSignedFileUrl, processingAccountsAPI } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { useErrorHandler } from '@/lib/use-error-handler'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'

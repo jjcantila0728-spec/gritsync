@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, User, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { isValidEmail } from '@/lib/utils'
 
 export function Login() {
-  const [identifier, setIdentifier] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -35,8 +36,14 @@ export function Login() {
     e.preventDefault()
     setError('')
     
-    if (!identifier.trim()) {
-      setError('Please enter your mobile number, GritSync ID, or GritSync email')
+    // Validation
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address')
       return
     }
 
@@ -53,8 +60,10 @@ export function Login() {
     setMinutesRemaining(null)
 
     try {
-      await signIn(identifier, password)
+      await signIn(email, password)
       showToast('Welcome back!', 'success')
+      // The useEffect will handle the redirect when user state updates via onAuthStateChange
+      // No need to navigate here - the useEffect will catch the user state change
     } catch (err: any) {
       // Use enhanced error handling
       const { getUserFriendlyMessage } = await import('@/lib/error-handler')
@@ -121,17 +130,7 @@ export function Login() {
   ]
 
   return (
-    <div 
-      className="min-h-screen relative"
-      style={{
-        background: `
-          radial-gradient(circle at 20% 80%, rgba(185, 28, 28, 0.15) 0%, transparent 50%),
-          radial-gradient(circle at 80% 20%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
-          radial-gradient(circle at 40% 40%, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
-          linear-gradient(135deg, #fef2f2 0%, #fee2e2 25%, #fecaca 50%, #fca5a5 75%, #f87171 100%)
-        `
-      }}
-    >
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
         title="Login - GritSync | NCLEX Processing Agency"
         description="Sign in to your GritSync account to access your NCLEX applications, track status, manage documents, and process payments. Secure login for nurses and clients."
@@ -145,22 +144,22 @@ export function Login() {
         structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
       />
       <Header />
-      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
-          <div className="p-4 sm:p-6">
-            <div className="text-center mb-4 sm:mb-6">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
-                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600 dark:text-primary-400" />
+      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        <Card className="w-full max-w-md border-0 shadow-xl">
+          <div className="p-8">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
+                <Lock className="h-8 w-8 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
+              <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
                 Welcome Back
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Sign in to your account
+              <p className="text-gray-600 dark:text-gray-400">
+                Sign in to your account to continue
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 space-y-2">
                   <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
@@ -185,17 +184,16 @@ export function Login() {
 
               <div className="relative">
                 <Input
-                  label="Mobile / GritSync ID / Email"
-                  type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g., 09171234567 or GRIT502145"
+                  label="Email Address"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
                   required
-                  autoComplete="username"
                   className="pl-10"
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
-                  <User className="h-5 w-5" />
+                  <Mail className="h-5 w-5" />
                 </div>
               </div>
 
@@ -207,7 +205,6 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  autoComplete="current-password"
                   className="pl-10"
                   rightIcon={showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowPassword(!showPassword)}
@@ -250,18 +247,18 @@ export function Login() {
               </Button>
             </form>
 
-            <div className="mt-4 sm:mt-5">
+            <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
                 </div>
-                <div className="relative flex justify-center text-xs sm:text-sm">
+                <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                     New to GritSync?
                   </span>
                 </div>
               </div>
-              <p className="mt-4 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
                 Don't have an account?{' '}
                 <Link
                   to="/register"

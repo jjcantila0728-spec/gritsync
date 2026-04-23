@@ -7,15 +7,18 @@ import { Button } from '@/components/ui/Button'
 import { SEO } from '@/components/SEO'
 import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
-import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocumentsAPI, applicationPaymentsAPI, timelineStepsAPI, getSignedFileUrl } from '@/lib/api'
+import { useEffect, useState, useRef } from 'react'
+import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocumentsAPI, applicationPaymentsAPI, timelineStepsAPI } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import { formatDate, formatCurrency, cn } from '@/lib/utils'
+import { getSignedFileUrl } from '@/lib/supabase-api'
+import { formatDate, formatCurrency, cn, debounce } from '@/lib/utils'
 import { QuickActionsPanel } from '@/components/QuickActionsPanel'
 import { ActivityFeed, ActivityItem } from '@/components/ActivityFeed'
 import { PersonalizedRecommendations } from '@/components/PersonalizedRecommendations'
+import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuotations, subscribeToAllQuotations, subscribeToPendingApprovalPayments, unsubscribe } from '@/lib/realtime'
+import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { greetingSettings } from '@/lib/settings'
-import { DashboardOnboarding } from '@/components/DashboardOnboarding'
 
 interface RecentActivity {
   id: string
@@ -25,7 +28,7 @@ interface RecentActivity {
   date: string
   link: string
   service_type?: string
-  application_type?: 'NCLEX'
+  application_type?: 'NCLEX' | 'EAD'
   grit_app_id?: string
 }
 
@@ -38,7 +41,7 @@ interface PendingItem {
   link: string
   priority?: 'high' | 'medium' | 'low'
   service_type?: string
-  application_type?: 'NCLEX'
+  application_type?: 'NCLEX' | 'EAD'
   grit_app_id?: string
 }
 
@@ -57,6 +60,7 @@ export function Dashboard() {
     rejectedApplications: 0,
     paidQuotations: 0,
     nclexApplications: 0,
+    eadApplications: 0,
   })
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([])
@@ -87,6 +91,7 @@ export function Dashboard() {
     passport: false,
   })
   const { showToast } = useToast()
+  const channelsRef = useRef<RealtimeChannel[]>([])
 
   // Helper to set firstName and cache it
   const setFirstNameWithCache = (name: string | null, userId: string | undefined) => {
@@ -276,6 +281,163 @@ export function Dashboard() {
     }
   }, [user])
 
+  // Set up real-time subscriptions for application status changes (optimized)
+  useEffect(() => {
+    if (!user) return
+
+    const channels: RealtimeChannel[] = []
+
+    // Use optimized combined subscriptions (reduces connection overhead)
+    if (isAdmin()) {
+      // Admin: single channel for applications, quotations, and payments
+      const dashboardChannel = subscribeToAdminDashboard({
+        onApplicationUpdate: handleApplicationUpdate,
+        onQuotationUpdate: handleQuotationUpdate,
+        onPaymentUpdate: handlePaymentUpdate,
+      })
+      channels.push(dashboardChannel)
+    } else {
+      // Client: single channel for applications and quotations
+      const dashboardChannel = subscribeToClientDashboard(user.id, {
+        onApplicationUpdate: handleApplicationUpdate,
+        onQuotationUpdate: handleQuotationUpdate,
+      })
+      channels.push(dashboardChannel)
+    }
+
+    channelsRef.current = channels
+
+    // Cleanup on unmount
+    return () => {
+      channels.forEach(channel => unsubscribeOptimized(channel))
+      channelsRef.current = []
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isAdmin()])
+
+  // Handle real-time application updates
+  function handleApplicationUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+      
+      // Only show notifications for status changes on UPDATE events
+      if (eventType === 'UPDATE' && oldRecord && newRecord && oldRecord.status !== newRecord.status) {
+        const appName = isAdmin() 
+          ? `${newRecord.first_name || ''} ${newRecord.last_name || ''}`.trim() || 'An application'
+          : 'Your application'
+        
+        // Show toast notification
+        const statusMessages: Record<string, string> = {
+          'approved': 'has been approved! 🎉',
+          'rejected': 'has been rejected',
+          'pending': 'is now pending review',
+          'in_progress': 'is now in progress',
+          'completed': 'has been completed'
+        }
+        
+        const message = statusMessages[newRecord.status] || `status changed to ${newRecord.status}`
+        showToast(`${appName} ${message}`, newRecord.status === 'approved' ? 'success' : 'info')
+      }
+
+      // Refresh dashboard data for any change
+      fetchData()
+    } catch (error) {
+      console.error('Error handling application update:', error)
+      // Still refresh data even if notification fails
+      fetchData()
+    }
+  }
+
+  // Handle real-time quotation updates
+  function handleQuotationUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+      
+      // Only show notifications for status changes on UPDATE events
+      if (eventType === 'UPDATE' && oldRecord && newRecord && oldRecord.status !== newRecord.status) {
+        const quoteText = isAdmin() 
+          ? `Quotation #${(newRecord.id || '').substring(0, 8)}`
+          : 'Your quotation'
+        
+        // Show toast notification
+        const statusMessages: Record<string, string> = {
+          'paid': 'has been paid! ✅',
+          'pending': 'is now pending',
+          'approved': 'has been approved',
+          'rejected': 'has been rejected'
+        }
+        
+        const message = statusMessages[newRecord.status] || `status changed to ${newRecord.status}`
+        showToast(`${quoteText} ${message}`, newRecord.status === 'paid' ? 'success' : 'info')
+      }
+
+      // Refresh dashboard data for any change
+      fetchData()
+    } catch (error) {
+      console.error('Error handling quotation update:', error)
+      // Still refresh data even if notification fails
+      fetchData()
+    }
+  }
+
+  // Handle real-time payment updates
+  function handlePaymentUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord && newRecord.status === 'pending_approval') {
+        // New payment awaiting approval - refresh pending payments
+        if (isAdmin()) {
+          applicationPaymentsAPI.getPendingApproval()
+            .then((data) => {
+              setPendingPayments((data || []).slice(0, 10))
+            })
+            .catch(() => {
+              // Ignore errors
+            })
+        }
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Payment status changed
+        if (oldRecord && oldRecord.status === 'pending_approval' && newRecord.status !== 'pending_approval') {
+          // Payment was approved or rejected - remove from pending list
+          setPendingPayments((prev) => prev.filter((p: any) => p.id !== newRecord.id))
+        } else if (newRecord.status === 'pending_approval') {
+          // Payment moved to pending approval - refresh list
+          if (isAdmin()) {
+            applicationPaymentsAPI.getPendingApproval()
+              .then((data) => {
+                setPendingPayments((data || []).slice(0, 10))
+              })
+              .catch(() => {
+                // Ignore errors
+              })
+          }
+        }
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Payment deleted - remove from list
+        setPendingPayments((prev) => prev.filter((p: any) => p.id !== oldRecord.id))
+      }
+
+      // Refresh dashboard stats (debounced to prevent excessive calls)
+      debouncedFetchData()
+    } catch (error) {
+      console.error('Error handling payment update:', error)
+      // Still refresh data even if update fails
+      debouncedFetchData()
+    }
+  }
+
+  // Debounced version of fetchData to prevent excessive API calls
+  const debouncedFetchData = debounce(() => {
+    fetchData()
+  }, 500) // Wait 500ms before calling fetchData
+
   async function fetchData() {
     if (!user) return
 
@@ -294,14 +456,18 @@ export function Dashboard() {
       const results = await Promise.all(promises)
       const [statsData, applications, , pendingPaymentsData] = results
       
-      // Calculate NCLEX application counts
+      // Calculate NCLEX and EAD application counts
       const nclexCount = Array.isArray(applications) 
         ? applications.filter((app: any) => (app.application_type || 'NCLEX') === 'NCLEX').length 
+        : 0
+      const eadCount = Array.isArray(applications) 
+        ? applications.filter((app: any) => app.application_type === 'EAD').length 
         : 0
       
       setStats({
         ...statsData,
         nclexApplications: nclexCount,
+        eadApplications: eadCount,
       })
       
       // Set pending payments for admin
@@ -331,7 +497,7 @@ export function Dashboard() {
             status: app.status,
             date: app.created_at,
             link: isAdmin() ? `/admin/applications/${routeId}/timeline` : `/applications/${routeId}`,
-            service_type: app.service_type || 'NCLEX Processing',
+            service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
             application_type: appType,
             grit_app_id: app.grit_app_id,
           })
@@ -399,7 +565,7 @@ export function Dashboard() {
               date: app.created_at,
               link: `/admin/applications/${routeId}/timeline`,
               priority: 'high',
-              service_type: app.service_type || 'NCLEX Processing',
+              service_type: app.service_type || (appType === 'EAD' ? 'EAD Application' : 'NCLEX Processing'),
               application_type: appType,
               grit_app_id: app.grit_app_id,
             })
@@ -557,6 +723,11 @@ export function Dashboard() {
                   <div className="flex-1">
                     <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
                     <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
+                      <span>NCLEX: {stats.nclexApplications || 0}</span>
+                      <span>•</span>
+                      <span>EAD: {stats.eadApplications || 0}</span>
+                    </div>
                   </div>
                   <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20">
                     <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
@@ -911,13 +1082,17 @@ export function Dashboard() {
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors truncate">
                                 {activity.type === 'application' 
-                                  ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
+                                  ? `${activity.service_type || (activity.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')} - ${activity.grit_app_id || activity.id}`
                                   : activity.title}
                               </p>
                               {activity.type === 'application' && (
                                 <>
                                   {activity.application_type && (
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                    <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${
+                                      activity.application_type === 'EAD'
+                                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    }`}>
                                       {activity.application_type}
                                     </span>
                                   )}
@@ -985,6 +1160,11 @@ export function Dashboard() {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">Total Applications</p>
                   <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
+                    <span>NCLEX: {stats.nclexApplications || 0}</span>
+                    <span>•</span>
+                    <span>EAD: {stats.eadApplications || 0}</span>
+                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-primary-500/10 dark:bg-primary-400/20">
                   <FileText className="h-6 w-6 text-primary-600 dark:text-primary-400" />
@@ -1189,7 +1369,6 @@ export function Dashboard() {
           </div>
         </main>
       </div>
-      <DashboardOnboarding />
     </div>
   )
 }

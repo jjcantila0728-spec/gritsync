@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * A/B Testing Tab Component
  * Manages A/B tests for email campaigns

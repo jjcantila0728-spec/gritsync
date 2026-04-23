@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { quotationsAPI, servicesAPI } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
@@ -104,19 +104,16 @@ export function Quote() {
       
       try {
         const services = await servicesAPI.getAll()
-        // Get unique states for the selected service (filter out null/empty states)
+        // Get unique states for the selected service
         const statesForService = services
-          .filter((s: any) => s.service_name === formData.service && s.state)
+          .filter((s: any) => s.service_name === formData.service)
           .map((s: any) => s.state)
-        const uniqueStates = Array.from(new Set(statesForService)).filter(Boolean)
+        const uniqueStates = Array.from(new Set(statesForService))
         setAvailableStates(uniqueStates.sort())
         
         // If only one state is available, auto-select it
         if (uniqueStates.length === 1 && !formData.state) {
           setFormData(prev => ({ ...prev, state: uniqueStates[0] }))
-        } else if (uniqueStates.length === 0) {
-          // No states for this service - set state to empty to allow proceeding
-          setFormData(prev => ({ ...prev, state: '' }))
         } else if (!uniqueStates.includes(formData.state)) {
           // Clear state if it's not available for selected service
           setFormData(prev => ({ ...prev, state: '' }))
@@ -133,20 +130,15 @@ export function Quote() {
   // Loads services dynamically based on selected service and state
   useEffect(() => {
     async function loadServices() {
-      // Only load services if service is selected
-      // State is required only for services that have states (e.g., NCLEX)
-      const requiresState = availableStates.length > 0
-      if (!formData.service || (requiresState && !formData.state)) {
+      // Only load services if both service and state are selected
+      if (!formData.service || !formData.state) {
         setAvailablePaymentTypes([])
         return
       }
 
       try {
         // Fetch all services for the selected service and state (both staggered and full)
-        // For services without states, pass null/undefined
-        const services = requiresState
-          ? await servicesAPI.getAllByServiceAndState(formData.service, formData.state)
-          : await servicesAPI.getByServiceName(formData.service)
+        const services = await servicesAPI.getAllByServiceAndState(formData.service, formData.state)
         
         // Determine which payment types are available
         const paymentTypes = services
@@ -257,7 +249,7 @@ export function Quote() {
       }
     }
     loadServices()
-  }, [formData.service, formData.state, availableStates])
+  }, [formData.service, formData.state])
   
   // Check if quote is expired (30 days from creation or validity_date)
   // Quotes are saved in database until expiration - no automatic deletion
@@ -450,7 +442,7 @@ export function Quote() {
         // Load client details from quote (these should be saved when quote is created)
         setFormData({
           service: typedQuote.service || 'NCLEX Processing',
-          state: typedQuote.state || '',
+          state: typedQuote.state || 'New York',
           takerType: takerTypeFromMetadata,
           firstName: typedQuote.client_first_name || '',
           lastName: typedQuote.client_last_name || '',
@@ -460,24 +452,23 @@ export function Quote() {
           lineItems: items,
           subtotal,
           tax,
-          total: parseFloat(String(typedQuote.amount)) || total // Use quote amount if available, otherwise calculated total
+          total: typedQuote.amount || total // Use quote amount if available, otherwise calculated total
         })
         setGeneratedQuote(typedQuote as any)
         
-        // Hide preloader immediately after quote loads
-        setShowPreloader(false)
+        // Show preloader for 3 seconds before displaying quote
+        setTimeout(() => {
+          setShowPreloader(false)
+        }, 3000)
       } else {
         setShowPreloader(false)
         showToast('Quotation not found', 'error')
         navigate('/quote')
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching quote:', error)
-      console.error('Error message:', error?.message)
-      console.error('Error stack:', error?.stack)
       setShowPreloader(false)
-      const errorMsg = error?.message || 'Failed to load quotation'
-      showToast(errorMsg, 'error')
+      showToast('Failed to load quotation', 'error')
       navigate('/quote')
     } finally {
       setLoadingQuote(false)
@@ -489,12 +480,11 @@ export function Quote() {
   // This handles both Full Payment and Staggered Payment based on service configuration:
   // - First Time Taker: Full Payment includes Step 1 + Step 2, Staggered includes both steps
   // - Retaker: Only Step 2, Full Payment only
-  // - Other services: All items in full payment
+  // - Other services (like EAD Processing): All items in full payment
   // Tax is calculated on taxable items only (12% rate)
   useEffect(() => {
-    // Only calculate if service is selected and line items are available
-    // State is only required for services that have states (e.g., NCLEX has states)
-    if (!formData.service || serviceConfig.step1.items.length === 0) {
+    // Only calculate if service and state are selected
+    if (!formData.service || !formData.state || serviceConfig.step1.items.length === 0) {
       return
     }
 
@@ -508,7 +498,7 @@ export function Quote() {
       return { subtotal, tax, total }
     }
 
-    // For services without taker types, use all items based on available payment types
+    // For services without taker types (like EAD Processing), use all items based on available payment types
     if (formData.service !== 'NCLEX Processing') {
       if (formData.paymentType === 'full') {
         // For full payment, use all items from step1 (for full-only services, all items are in step1)
@@ -991,8 +981,7 @@ export function Quote() {
         showToast('Please select a service', 'error')
         return
       }
-      // Only require state if the service has states available (e.g., NCLEX has states)
-      if (availableStates.length > 0 && !formData.state) {
+      if (!formData.state) {
         showToast('Please select a state', 'error')
         return
       }
@@ -1065,23 +1054,21 @@ export function Quote() {
       
       const clientName = `${formData.firstName} ${formData.lastName}`
       
-      const quote = await quotationsAPI.createPublic({
-        amount: formData.total,
+      const quote = await quotationsAPI.createPublic(
+        formData.total,
         description,
-        service: formData.service,
-        state: formData.state || null,
-        payment_type: formData.paymentType || undefined,
-        line_items: {
-          items: formData.lineItems,
-          metadata: {
-            taker_type: formData.takerType || undefined
-          }
-        },
-        client_first_name: formData.firstName,
-        client_last_name: formData.lastName,
-        client_email: formData.email,
-        client_mobile: formData.mobileNumber
-      })
+        formData.email,
+        clientName,
+        formData.service,
+        formData.state,
+        formData.paymentType || undefined,
+        formData.lineItems,
+        formData.firstName,
+        formData.lastName,
+        formData.email,
+        formData.mobileNumber,
+        formData.takerType || undefined
+      )
       // Check expiration for new quote (should be false for new quotes)
       const typedNewQuote = quote as { id?: string; created_at?: string } | null
       if (!typedNewQuote) return
@@ -1141,8 +1128,8 @@ export function Quote() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <SEO
         title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | Professional Processing Services` : 'Get a Quote - Professional Processing Services | GritSync'}
-        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing and more.` : 'Get instant, transparent quotes for NCLEX Processing and other professional services. No hidden fees, clear pricing upfront.'}
-        keywords="quote, quotation, NCLEX quote, service pricing, processing services, transparent pricing"
+        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing, EAD Processing, and more.` : 'Get instant, transparent quotes for NCLEX Processing, EAD Processing, and other professional services. No hidden fees, clear pricing upfront.'}
+        keywords="quote, quotation, NCLEX quote, EAD processing quote, service pricing, processing services, transparent pricing"
         canonicalUrl={currentUrl}
         ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - Professional Processing Services | GritSync'}
         ogDescription={quoteId ? `View your quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for professional processing services. No hidden fees.'}
@@ -1150,7 +1137,7 @@ export function Quote() {
         ogUrl={currentUrl}
         structuredData={[
           generateBreadcrumbSchema(breadcrumbs),
-          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing and other professional services with transparent pricing'),
+          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing, EAD Processing, and other professional services with transparent pricing'),
         ]}
       />
       <Header />
@@ -1158,29 +1145,22 @@ export function Quote() {
         {user && <Sidebar />}
         <main className="flex-1">
           {/* Banner Section */}
-          <section 
-            className="relative overflow-hidden py-16 md:py-20"
-            style={{
-              backgroundImage: `linear-gradient(to bottom right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.5)), url('/quote_page_banner_image.png')`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center'
-            }}
-          >
-            <div className="container mx-auto px-4">
+          <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
+            <div className="container mx-auto px-4 py-12 md:py-16">
               <div className="max-w-4xl mx-auto text-center">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
                   <DollarSign className="h-4 w-4" />
                   <span>Get Instant Quotes</span>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
+                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                   Get Your Service Quotation
                 </h1>
-                <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
-                  Get transparent, instant quotes for NCLEX Processing and more. No hidden fees, clear pricing upfront.
+                <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+                  Get transparent, instant quotes for NCLEX Processing, EAD Processing, and more. No hidden fees, clear pricing upfront.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">
-                    <Button size="lg" className="text-lg px-8 py-6 bg-white text-red-600 hover:bg-gray-100">
+                    <Button size="lg" className="text-lg px-8 py-6">
                       <Plus className="h-5 w-5 mr-2" />
                       Create New Quotation
                     </Button>
@@ -1920,7 +1900,7 @@ export function Quote() {
                               ))}
                             </select>
                           </div>
-                          {formData.service && availableStates.length > 0 && (
+                          {formData.service && (
                             <div>
                               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                                 State *
@@ -1934,6 +1914,7 @@ export function Quote() {
                                   updateFormField('paymentType', null)
                                 }}
                                 className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                disabled={availableStates.length === 0}
                               >
                                 <option value="">Select a state...</option>
                                 {availableStates.map((state) => (

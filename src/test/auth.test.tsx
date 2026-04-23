@@ -6,32 +6,32 @@ import { Register } from '@/pages/Register'
 import { Login } from '@/pages/Login'
 import { AuthProvider } from '@/contexts/AuthContext'
 
-// Mock API client
-vi.mock('@/lib/api-client', () => {
+// Mock Supabase
+vi.mock('@/lib/supabase', () => {
   const mockSignUp = vi.fn()
   const mockSignIn = vi.fn()
-  const mockSignOut = vi.fn()
-  const mockGetCurrentUser = vi.fn()
+  const mockGetSession = vi.fn()
+  const mockOnAuthStateChange = vi.fn()
+  const mockFrom = vi.fn()
 
   return {
-    apiClient: {
-      setToken: vi.fn(),
-      getToken: vi.fn().mockReturnValue(null),
+    supabase: {
+      auth: {
+        signUp: mockSignUp,
+        signInWithPassword: mockSignIn,
+        getSession: mockGetSession,
+        onAuthStateChange: mockOnAuthStateChange,
+        signOut: vi.fn(),
+      },
+      from: mockFrom,
     },
-    authAPI: {
-      signUp: mockSignUp,
-      signIn: mockSignIn,
-      signOut: mockSignOut,
-      getCurrentUser: mockGetCurrentUser,
-    },
-    usersAPI: {
-      getById: vi.fn(),
-      update: vi.fn(),
-    },
+    handleSupabaseError: vi.fn((error: any) => {
+      throw new Error(error?.message || 'An unexpected error occurred')
+    }),
   }
 })
 
-import * as apiModule from '@/lib/api-client'
+import * as supabaseModule from '@/lib/supabase'
 
 // Mock toast
 vi.mock('@/components/ui/Toast', () => ({
@@ -58,8 +58,26 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('Registration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(apiModule.authAPI.getCurrentUser as any).mockResolvedValue(null)
-    ;(apiModule.apiClient.getToken as any).mockReturnValue(null)
+    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: null },
+    })
+    ;(supabaseModule.supabase.auth.onAuthStateChange as any).mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    })
+    // Set up default Supabase from mock with proper chain
+    ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      if (table === 'users') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+          single: vi.fn().mockResolvedValue({ data: null, error: null }),
+          update: vi.fn().mockReturnThis(),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }
+      }
+      return {}
+    })
   })
 
   afterEach(() => {

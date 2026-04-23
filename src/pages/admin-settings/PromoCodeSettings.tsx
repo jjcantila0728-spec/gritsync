@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/components/ui/Toast'
 import { Plus, Trash2, Copy, Loader2, Tag, Info } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-import { apiClient } from '@/lib/api-client'
 
 interface PromoCode {
   id: string
@@ -20,7 +20,7 @@ interface PromoCode {
   valid_from: string
   valid_until: string | null
   is_active: boolean
-  application_type?: 'NCLEX' | 'ALL'
+  application_type?: 'NCLEX' | 'EAD' | 'ALL'
   created_at: string
 }
 
@@ -31,18 +31,24 @@ export function PromoCodeSettings() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   
+  // Form state
   const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage')
   const [discountValue, setDiscountValue] = useState('')
-  const [applicationType, setApplicationType] = useState<'NCLEX' | 'ALL'>('ALL')
+  const [applicationType, setApplicationType] = useState<'NCLEX' | 'EAD' | 'ALL'>('ALL')
   const [maxUses, setMaxUses] = useState('')
   const [validUntil, setValidUntil] = useState('')
   
   const loadPromoCodes = async () => {
     try {
       setLoading(true)
-      const data = await apiClient.get<PromoCode[]>('/promo-codes')
+      const { data, error } = await supabase
+        .from('promo_codes')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
       setPromoCodes(data || [])
     } catch (error: any) {
       console.error('Error loading promo codes:', error)
@@ -66,6 +72,7 @@ export function PromoCodeSettings() {
   }
   
   const createPromoCode = async () => {
+    // Validation
     if (!code.trim()) {
       showToast('Please enter a promo code', 'error')
       return
@@ -85,15 +92,21 @@ export function PromoCodeSettings() {
     
     try {
       setSubmitting(true)
-      await apiClient.post('/promo-codes', {
-        code: code.toUpperCase(),
-        description,
-        discount_type: discountType,
-        discount_value: parseFloat(discountValue),
-        application_type: applicationType,
-        max_uses: maxUses ? parseInt(maxUses) : null,
-        valid_until: validUntil || null
-      })
+      const { data, error } = await supabase
+        .from('promo_codes')
+        .insert({
+          code: code.toUpperCase(),
+          description,
+          discount_type: discountType,
+          discount_value: parseFloat(discountValue),
+          application_type: applicationType,
+          max_uses: maxUses ? parseInt(maxUses) : null,
+          valid_until: validUntil || null
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
       
       showToast('Promo code created successfully', 'success')
       setShowForm(false)
@@ -101,7 +114,7 @@ export function PromoCodeSettings() {
       loadPromoCodes()
     } catch (error: any) {
       console.error('Error creating promo code:', error)
-      if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      if (error.code === '23505') {
         showToast('This promo code already exists', 'error')
       } else {
         showToast(error.message || 'Failed to create promo code', 'error')
@@ -113,7 +126,13 @@ export function PromoCodeSettings() {
   
   const togglePromoCode = async (id: string, isActive: boolean) => {
     try {
-      await apiClient.patch(`/promo-codes/${id}`, { is_active: !isActive })
+      const { error } = await supabase
+        .from('promo_codes')
+        .update({ is_active: !isActive })
+        .eq('id', id)
+      
+      if (error) throw error
+      
       showToast(`Promo code ${!isActive ? 'activated' : 'deactivated'}`, 'success')
       loadPromoCodes()
     } catch (error: any) {
@@ -122,11 +141,17 @@ export function PromoCodeSettings() {
     }
   }
   
-  const deletePromoCode = async (id: string, promoCode: string) => {
-    if (!confirm(`Are you sure you want to delete the promo code "${promoCode}"?`)) return
+  const deletePromoCode = async (id: string, code: string) => {
+    if (!confirm(`Are you sure you want to delete the promo code "${code}"?`)) return
     
     try {
-      await apiClient.delete(`/promo-codes/${id}`)
+      const { error } = await supabase
+        .from('promo_codes')
+        .delete()
+        .eq('id', id)
+      
+      if (error) throw error
+      
       showToast('Promo code deleted', 'success')
       loadPromoCodes()
     } catch (error: any) {
@@ -168,6 +193,7 @@ export function PromoCodeSettings() {
         </Button>
       </div>
 
+      {/* Info Card: Promo Code Application Rules */}
       <Card className="p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
         <div className="flex items-start gap-2 sm:gap-3">
           <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -176,7 +202,7 @@ export function PromoCodeSettings() {
               Promo Code Application Rules
             </h3>
             <ul className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 space-y-1">
-              <li className="break-words">• <strong>Promo codes can be set for NCLEX applications</strong></li>
+              <li className="break-words">• <strong>Promo codes can be set for NCLEX, EAD, or ALL applications</strong></li>
               <li className="break-words">• <strong>Discounts only apply to the GritSync Service Fee</strong> (not government fees or third-party fees)</li>
               <li className="break-words">• Service fee amounts: Full payment = $150, Staggered payments = $75 per step</li>
               <li className="break-words">• Discounts are automatically capped at the service fee amount</li>
@@ -224,10 +250,11 @@ export function PromoCodeSettings() {
           <Select
             label="Application Type"
             value={applicationType}
-            onChange={(e) => setApplicationType(e.target.value as 'NCLEX' | 'ALL')}
+            onChange={(e) => setApplicationType(e.target.value as 'NCLEX' | 'EAD' | 'ALL')}
             options={[
-              { value: 'ALL', label: 'All Applications' },
-              { value: 'NCLEX', label: 'NCLEX Only' }
+              { value: 'ALL', label: 'All Applications (NCLEX & EAD)' },
+              { value: 'NCLEX', label: 'NCLEX Only' },
+              { value: 'EAD', label: 'EAD Only' }
             ]}
             help="Select which application types this promo code applies to"
           />
@@ -257,7 +284,7 @@ export function PromoCodeSettings() {
           </div>
           
           <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
-            <strong>Note:</strong> This promo code applies to {applicationType === 'ALL' ? 'All NCLEX' : applicationType} applications. Discount only on GritSync Service Fee ($150 full, $75 per step).
+            <strong>Note:</strong> This promo code applies to {applicationType === 'ALL' ? 'NCLEX & EAD' : applicationType} applications. Discount only on GritSync Service Fee ($150 full, $75 per step).
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -310,6 +337,7 @@ export function PromoCodeSettings() {
         </div>
       </Modal>
       
+      {/* Promo Code List */}
       {loading ? (
         <div className="flex items-center justify-center py-6 sm:py-8">
           <Loader2 className="h-6 w-6 animate-spin text-primary-600 dark:text-primary-400" />
@@ -331,8 +359,8 @@ export function PromoCodeSettings() {
       ) : (
         <div className="grid gap-3">
           {promoCodes.map((promo) => {
-            const isExpired = Boolean(promo.valid_until && new Date(promo.valid_until) < new Date())
-            const isMaxedOut = Boolean(promo.max_uses && promo.current_uses >= promo.max_uses)
+            const isExpired = promo.valid_until && new Date(promo.valid_until) < new Date()
+            const isMaxedOut = promo.max_uses && promo.current_uses >= promo.max_uses
             const isEffectivelyInactive = !promo.is_active || isExpired || isMaxedOut
             
             return (
@@ -355,8 +383,9 @@ export function PromoCodeSettings() {
                     <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded text-xs text-gray-600 dark:text-gray-400 break-words">
                       <span className="block sm:inline">
                         Applies to: <strong>
-                          {promo.application_type === 'ALL' ? 'All NCLEX' : 
-                           promo.application_type === 'NCLEX' ? 'NCLEX Only' : 'All NCLEX'}
+                          {promo.application_type === 'ALL' ? 'NCLEX & EAD' : 
+                           promo.application_type === 'NCLEX' ? 'NCLEX Only' : 
+                           promo.application_type === 'EAD' ? 'EAD Only' : 'NCLEX & EAD'}
                         </strong>
                       </span>
                       <span className="hidden sm:inline"> | </span>
@@ -434,3 +463,4 @@ export function PromoCodeSettings() {
     </div>
   )
 }
+

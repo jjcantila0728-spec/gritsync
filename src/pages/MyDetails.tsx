@@ -1,4 +1,3 @@
-// @ts-nocheck
 ﻿import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
@@ -13,7 +12,8 @@ import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, notificationsAPI } from '@/lib/api'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark, getAvatarDesigns } from '@/lib/avatar'
 import { User, Mail, Calendar, Shield, Edit2, Save, X, FileText, MapPin, ArrowLeft, CheckCircle2, Building2, Award, Sparkles, School, Info, Camera, Upload, AlertCircle, Trash2, Palette } from 'lucide-react'
-import { getSignedFileUrl } from '@/lib/api'
+import { getSignedFileUrl } from '@/lib/supabase-api'
+import { supabase } from '@/lib/supabase'
 import { cn, getFullNameWithMiddle } from '@/lib/utils'
 import { Link, useNavigate } from 'react-router-dom'
 import { reminderSettings } from '@/lib/settings'
@@ -863,25 +863,8 @@ export function MyDetails() {
       }
       setAvatarPreview(null)
       
-      // Get signed URL for the new avatar
-      const signedUrl = await getSignedFileUrl(filePath, 3600, true)
-      
-      // Update local state immediately
-      setAvatarUrl(signedUrl)
-      
-      // Update localStorage cache so Header picks it up immediately
-      if (signedUrl) {
-        try {
-          localStorage.setItem(`avatar_${user.id}`, signedUrl)
-          localStorage.setItem(`avatar_path_${user.id}`, filePath)
-        } catch {
-          // Ignore localStorage errors
-        }
-      }
-      
-      // Dispatch custom event to notify Header of avatar change
-      window.dispatchEvent(new CustomEvent('avatar-updated', { detail: { userId: user.id, url: signedUrl, path: filePath } }))
-      
+      // Refresh avatar
+      await fetchDetails()
       // Refresh user context
       refreshUser()
     } catch (error: any) {
@@ -940,17 +923,8 @@ export function MyDetails() {
       showToast('Avatar deleted successfully!', 'success')
       setAvatarUrl(null)
       
-      // Clear localStorage cache so Header knows to use default avatar
-      try {
-        localStorage.removeItem(`avatar_${user.id}`)
-        localStorage.removeItem(`avatar_path_${user.id}`)
-      } catch {
-        // Ignore localStorage errors
-      }
-      
-      // Dispatch custom event to notify Header of avatar deletion
-      window.dispatchEvent(new CustomEvent('avatar-updated', { detail: { userId: user.id, url: null, path: null } }))
-      
+      // Refresh avatar
+      await fetchDetails()
       // Refresh user context
       refreshUser()
     } catch (error: any) {
@@ -1618,7 +1592,7 @@ export function MyDetails() {
                         disabled
                         placeholder="Auto-generated from your name"
                         className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
-                        help="This email is auto-generated based on your first name, middle name, and last name"
+                        hint="This email is auto-generated based on your first name, middle name, and last name"
                       />
                     </div>
                     <Select

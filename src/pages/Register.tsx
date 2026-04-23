@@ -8,21 +8,19 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Lock, User, Phone, CheckCircle } from 'lucide-react'
-import { validatePassword } from '@/lib/utils'
+import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
+import { isValidEmail, validatePassword } from '@/lib/utils'
 
 export function Register() {
   const [firstName, setFirstName] = useState('')
-  const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [mobile, setMobile] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState<{ gritId: string; gritsyncEmail: string } | null>(null)
   const { signUp } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -31,6 +29,7 @@ export function Register() {
     e.preventDefault()
     setError('')
 
+    // Validation
     if (!firstName.trim()) {
       setError('First name is required')
       return
@@ -51,16 +50,18 @@ export function Register() {
       return
     }
 
-    if (!mobile.trim()) {
-      setError('Mobile number is required')
+    if (!email.trim()) {
+      setError('Email is required')
       return
     }
 
-    const mobileClean = mobile.replace(/\s+/g, '').replace(/[^0-9+]/g, '')
-    if (mobileClean.length < 10) {
-      setError('Please enter a valid mobile number')
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address')
       return
     }
+
+    // Email validation will be done in signUp, but we can add a check here too
+    // The actual check happens in AuthContext.signUp before attempting registration
 
     const passwordValidation = await validatePassword(password)
     if (!passwordValidation.valid) {
@@ -76,19 +77,11 @@ export function Register() {
     setLoading(true)
 
     try {
-      await signUp({
-        first_name: firstName.trim(),
-        middle_name: middleName.trim() || null,
-        last_name: lastName.trim(),
-        mobile: mobileClean,
-        password,
-        role: 'client',
-      })
-      showToast('Account created successfully!', 'success')
+      await signUp(firstName, lastName, email, password, 'client')
+      showToast('Account created successfully! Welcome!', 'success')
       navigate('/dashboard')
     } catch (err: any) {
-      const { getErrorMessage } = await import('@/lib/api-client')
-      const errorMessage = getErrorMessage(err)
+      const errorMessage = err.message || 'Failed to create account'
       setError(errorMessage)
       showToast(errorMessage, 'error')
     } finally {
@@ -104,17 +97,7 @@ export function Register() {
   ]
 
   return (
-    <div 
-      className="min-h-screen relative"
-      style={{
-        background: `
-          radial-gradient(circle at 80% 80%, rgba(185, 28, 28, 0.15) 0%, transparent 50%),
-          radial-gradient(circle at 20% 20%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
-          radial-gradient(circle at 60% 60%, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
-          linear-gradient(135deg, #fef2f2 0%, #fee2e2 25%, #fecaca 50%, #fca5a5 75%, #f87171 100%)
-        `
-      }}
-    >
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
         title="Register - Create Your GritSync Account | NCLEX Processing Agency"
         description="Create your free GritSync account to start processing your NCLEX applications. Get instant quotes, track applications, and manage documents. No credit card required."
@@ -135,29 +118,23 @@ export function Register() {
         ]}
       />
       <Header />
-      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
-          <div className="p-4 sm:p-6">
-            <div className="text-center mb-4 sm:mb-6">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
-                <User className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600 dark:text-primary-400" />
+      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        <Card className="w-full max-w-md border-0 shadow-xl">
+          <div className="p-8">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
+                <User className="h-8 w-8 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
+              <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
                 Create Account
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Sign up with your mobile number
+              <p className="text-gray-600 dark:text-gray-400">
+                Sign up to get started with GritSync
               </p>
             </div>
 
-            {error && (
-              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
                   <Input
                     label="First Name"
@@ -165,7 +142,7 @@ export function Register() {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     required
-                    placeholder="Juan"
+                    placeholder="John"
                     className="pl-10"
                   />
                   <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
@@ -179,7 +156,7 @@ export function Register() {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     required
-                    placeholder="Dela Cruz"
+                    placeholder="Doe"
                     className="pl-10"
                   />
                   <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
@@ -190,38 +167,17 @@ export function Register() {
 
               <div className="relative">
                 <Input
-                  label="Middle Name (Optional)"
-                  type="text"
-                  value={middleName}
-                  onChange={(e) => setMiddleName(e.target.value)}
-                  placeholder="Santos"
-                  className="pl-10"
-                />
-                <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
-                  <User className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="relative">
-                <Input
-                  label="Mobile Number"
-                  type="tel"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
+                  label="Email Address"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
-                  autoComplete="tel"
-                  placeholder="09171234567"
+                  placeholder="john.doe@example.com"
                   className="pl-10"
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
-                  <Phone className="h-5 w-5" />
+                  <Mail className="h-5 w-5" />
                 </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  <strong>Note:</strong> Your GritSync ID and GritSync email will be automatically generated after registration.
-                </p>
               </div>
 
               <div className="relative">
@@ -231,8 +187,7 @@ export function Register() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  autoComplete="new-password"
-                  placeholder="Min. 8 characters"
+                  placeholder="••••••••"
                   className="pl-10"
                   rightIcon={showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowPassword(!showPassword)}
@@ -249,15 +204,40 @@ export function Register() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  autoComplete="new-password"
-                  placeholder="Re-enter password"
+                  placeholder="••••••••"
                   className="pl-10"
                   rightIcon={showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   onRightIconClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  error={error}
                 />
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
                   <Lock className="h-5 w-5" />
                 </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
+
+              <div className="flex items-start">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  required
+                />
+                <label htmlFor="terms" className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                  I agree to the{' '}
+                  <Link to="/terms" className="text-primary-600 dark:text-primary-400 hover:underline">
+                    Terms of Service
+                  </Link>{' '}
+                  and{' '}
+                  <Link to="/privacy" className="text-primary-600 dark:text-primary-400 hover:underline">
+                    Privacy Policy
+                  </Link>
+                </label>
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
@@ -270,28 +250,29 @@ export function Register() {
                     Creating account...
                   </>
                 ) : (
-                  'Create Account'
+                  'Sign Up'
                 )}
               </Button>
             </form>
 
-            <div className="mt-4 sm:mt-5">
+            <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
                 </div>
-                <div className="relative flex justify-center text-xs sm:text-sm">
+                <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                     Already have an account?
                   </span>
                 </div>
               </div>
-              <p className="mt-4 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                Already have an account?{' '}
                 <Link
                   to="/login"
                   className="font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 transition-colors"
                 >
-                  Sign in instead
+                  Sign in
                 </Link>
               </p>
             </div>

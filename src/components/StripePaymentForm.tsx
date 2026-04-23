@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
+import { adminAPI } from '@/lib/api'
 import { paymentSettings } from '@/lib/settings'
 import { useToast } from '@/components/ui/Toast'
-import { promoCodesAPI, adminAPI, PromoCodeValidationResponse } from '@/lib/api-client'
+import { supabase } from '@/lib/supabase'
 import { CreditCard, Loader2, Building2, Upload, X, Tag, Image as ImageIcon, FileText, CheckCircle } from 'lucide-react'
 
 type PaymentMethod = 'card' | 'mobile_banking'
@@ -22,7 +23,7 @@ interface MobileBankingConfig {
 interface StripePaymentFormProps {
   amount: number
   serviceFeeAmount?: number // GritSync service fee portion (for promo code calculation)
-  applicationType?: 'NCLEX' // Application type for promo code validation
+  applicationType?: 'NCLEX' | 'EAD' // Application type for promo code validation
   onSuccess: (paymentIntentId: string, paymentMethod?: PaymentMethod, details?: any, proofFile?: File) => void
   onError: (error: string) => void
   paymentIntentId?: string
@@ -169,6 +170,7 @@ export function StripePaymentForm({
   // Calculate final amount after discount
   const finalAmount = amount - discountAmount
   
+  // Validate promo code
   const validatePromoCode = async () => {
     if (!promoCode.trim()) {
       showToast?.('Please enter a promo code', 'error')
@@ -177,14 +179,17 @@ export function StripePaymentForm({
     
     setValidatingPromo(true)
     try {
-      const data = await promoCodesAPI.validate(
-        promoCode.toUpperCase(),
-        amount,
-        serviceFeeAmount || null,
-        applicationType || null
-      )
+      // Pass service fee amount and application type to ensure discount only applies to GritSync service fee
+      const { data, error } = await supabase.rpc('validate_promo_code', {
+        p_code: promoCode.toUpperCase(),
+        p_amount: amount,
+        p_service_fee_amount: serviceFeeAmount || null,
+        p_application_type: applicationType || null
+      })
       
-      if (data?.valid && data.discount_amount) {
+      if (error) throw error
+      
+      if (data?.valid) {
         setAppliedPromo(data)
         setDiscountAmount(data.discount_amount)
         showToast?.(`Promo code applied! You save ${formatCurrency(data.discount_amount)} on service fee`, 'success')

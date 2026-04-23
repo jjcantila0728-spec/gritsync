@@ -29,7 +29,7 @@ export function Donate() {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [message, setMessage] = useState('')
   const [sponsorshipId, setSponsorshipId] = useState<string | null>(null)
-  const [publicStats, setPublicStats] = useState<{ totalDonated: number; totalDonors: number; goal: number } | null>(null)
+  const [publicStats, setPublicStats] = useState<{ total: number; count: number } | null>(null)
 
   // Predefined amounts
   const presetAmounts = [25, 50, 100, 250, 500, 1000]
@@ -62,9 +62,24 @@ export function Donate() {
   useEffect(() => {
     if (user) {
       setDonorEmail(user.email || '')
-      // Set name from user object if available
-      const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ')
-      if (fullName) setDonorName(fullName)
+      // Try to load user details
+      const loadUserDetails = async () => {
+        try {
+          const { data } = await (await import('@/lib/supabase')).supabase
+            .from('users')
+            .select('first_name, last_name')
+            .eq('id', user.id)
+            .single()
+          
+          if (data) {
+            const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
+            if (fullName) setDonorName(fullName)
+          }
+        } catch (error) {
+          // Ignore errors
+        }
+      }
+      loadUserDetails()
     }
   }, [user])
 
@@ -103,14 +118,15 @@ export function Donate() {
     try {
       // Create donation record
       const donationData = {
-        donor_name: isAnonymous ? undefined : donorName.trim(),
-        donor_email: isAnonymous ? undefined : donorEmail.trim(),
-        donor_phone: isAnonymous ? undefined : donorPhone.trim() || undefined,
+        donor_name: isAnonymous ? null : donorName.trim(),
+        donor_email: isAnonymous ? null : donorEmail.trim(),
+        donor_phone: isAnonymous ? null : donorPhone.trim() || null,
         is_anonymous: isAnonymous,
         amount: parseFloat(amount),
         currency: 'USD',
         status: 'pending' as const,
-        message: message.trim() || undefined,
+        message: message.trim() || null,
+        sponsorship_id: sponsorshipId || null,
       }
 
       const donation = await donationsAPI.create(donationData)
@@ -207,9 +223,9 @@ export function Donate() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
-        title="Donate to Support Filipino Nurses - NCLEX Sponsorship Fund | GritSync"
-        description="Support Filipino nurses' journey to becoming licensed USRNs. Your donation funds NCLEX exam fees, CGFNS applications, and VisaScreen certifications. Help nurses achieve their American Dream through education sponsorship."
-        keywords="donate NCLEX sponsorship, support Filipino nurses, nursing education fund, USRN scholarship donation, healthcare philanthropy, nurse sponsorship Philippines, NCLEX exam funding, international nurse support, nursing career donation, Filipino nurse charity"
+        title="Donate - Support NCLEX Sponsorships | GritSync"
+        description="Support aspiring nurses by donating to NCLEX sponsorships. Help nurses achieve their dreams of becoming licensed nurses in the United States. Secure donations with multiple payment options."
+        keywords="donate, NCLEX sponsorship, nursing support, healthcare donation, nursing education, NCLEX funding"
         canonicalUrl={currentUrl}
         ogTitle="Donate - Support NCLEX Sponsorships | GritSync"
         ogDescription="Support aspiring nurses by donating to NCLEX sponsorships. Help nurses achieve their dreams of becoming licensed nurses in the United States."
@@ -234,15 +250,9 @@ export function Donate() {
       />
       <Header />
       <main className="flex-1">
-        {/* Hero Banner Section with Generated Image */}
-        <section 
-          className="relative overflow-hidden text-white py-16"
-          style={{
-            backgroundImage: `linear-gradient(to bottom right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.5)), url('/professional_office_building_exterior.png')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }}
-        >
+        {/* Hero Banner Section */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 dark:from-primary-800 dark:via-primary-900 dark:to-primary-950 text-white">
+          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]"></div>
           <div className="absolute inset-0 bg-gradient-to-t from-primary-900/50 to-transparent"></div>
           <div className="container mx-auto px-4 py-16 md:py-24 relative z-10">
             <div className="max-w-4xl mx-auto text-center">
@@ -253,29 +263,29 @@ export function Donate() {
                 <Sparkles className="h-4 w-4" />
                 <span>Transform Lives Today</span>
               </div>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
                 Help Nurses Achieve Their
                 <span className="block text-yellow-300 mt-2">USRN Dreams</span>
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
+              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed">
                 Your donation removes financial barriers and opens doors for aspiring nurses. 
                 <span className="block mt-2 font-semibold">Every dollar brings someone closer to their dream career.</span>
               </p>
               
               {/* Impact Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12 max-w-3xl mx-auto">
-                {publicStats && publicStats.totalDonated > 0 && (
+                {publicStats && publicStats.total > 0 && (
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                     <div className="text-2xl md:text-3xl font-bold text-yellow-300 mb-1">
-                      {formatCurrency(publicStats.totalDonated)}
+                      {formatCurrency(publicStats.total)}
                     </div>
                     <div className="text-xs md:text-sm text-white/80">Total Raised</div>
                   </div>
                 )}
-                {publicStats && publicStats.totalDonors > 0 && (
+                {publicStats && publicStats.count > 0 && (
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                     <div className="text-2xl md:text-3xl font-bold text-yellow-300 mb-1">
-                      {publicStats.totalDonors.toLocaleString()}
+                      {publicStats.count.toLocaleString()}
                     </div>
                     <div className="text-xs md:text-sm text-white/80">Donations</div>
                   </div>

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Scheduled Emails Tab Component
  * Displays and manages scheduled emails from the email queue

@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Link } from 'react-router-dom'
-import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI, supabase } from '@/lib/api'
+import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
 import jsPDF from 'jspdf'
@@ -18,6 +19,8 @@ import html2canvas from 'html2canvas'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { coverLetterTemplate } from '@/templates/cover-letter-template'
 import { stripePromise } from '@/lib/stripe'
+import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { 
   ArrowLeft, 
   Clock, 
@@ -111,6 +114,9 @@ export function ApplicationDetail() {
   const [showPdfModal, setShowPdfModal] = useState(false)
   const [viewingPdfUrl, setViewingPdfUrl] = useState<string | null>(null)
   const [viewingPdfName, setViewingPdfName] = useState<string>('')
+  const channelRef = useRef<RealtimeChannel | null>(null)
+  const timelineChannelRef = useRef<RealtimeChannel | null>(null)
+  const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
   const isOurUpdateRef = useRef(false)
 
   // Payment pricing will be loaded from admin quote service config
@@ -158,6 +164,233 @@ export function ApplicationDetail() {
     }
     loadPhoneNumber()
   }, [])
+
+  // Set up real-time subscriptions for application updates
+  useEffect(() => {
+    if (!id || !application) return
+
+    // Subscribe to this specific application's updates
+    const appChannel = subscribeToApplicationUpdates(id, (payload) => {
+      handleApplicationRealtimeUpdate(payload)
+    })
+    channelRef.current = appChannel
+
+    // Subscribe to timeline steps updates
+    const timelineChannel = subscribeToApplicationTimelineSteps(id, (payload) => {
+      handleTimelineStepRealtimeUpdate(payload)
+    })
+    timelineChannelRef.current = timelineChannel
+
+    // Subscribe to payments updates
+    const paymentsChannel = subscribeToApplicationPayments(id, (payload) => {
+      handlePaymentRealtimeUpdate(payload)
+    })
+    paymentsChannelRef.current = paymentsChannel
+
+    // Cleanup on unmount or when id changes
+    return () => {
+      if (channelRef.current) {
+        unsubscribe(channelRef.current)
+        channelRef.current = null
+      }
+      if (timelineChannelRef.current) {
+        unsubscribe(timelineChannelRef.current)
+        timelineChannelRef.current = null
+      }
+      if (paymentsChannelRef.current) {
+        unsubscribe(paymentsChannelRef.current)
+        paymentsChannelRef.current = null
+      }
+    }
+  }, [id, application?.id])
+
+  // Check if all required EAD documents are uploaded and auto-update timeline
+  useEffect(() => {
+    const checkEADDocuments = async () => {
+      if (!application || application.application_type !== 'EAD' || !application.user_id) return
+      
+      try {
+        // Get required documents for EAD
+        const requiredDocs = await serviceRequiredDocumentsAPI.getByServiceTypes(['EAD'])
+        const requiredDocTypes = requiredDocs
+          .filter((doc: any) => doc.required)
+          .map((doc: any) => doc.document_type)
+        
+        // Get uploaded documents for the user
+        const uploadedDocs = await userDocumentsAPI.getByUserId(application.user_id)
+        const uploadedDocTypes = uploadedDocs.map((doc: any) => doc.document_type)
+        
+        // Check if all required documents are uploaded
+        const allRequiredUploaded = requiredDocTypes.every((docType: string) => 
+          uploadedDocTypes.includes(docType)
+        )
+        
+        // Auto-update timeline step if all required documents are uploaded
+        if (allRequiredUploaded) {
+          const currentStatus = getStepStatus('ead_documents_uploaded')
+          if (currentStatus !== 'completed') {
+            await updateTimelineStep('ead_documents_uploaded', 'completed', {
+              date: new Date().toISOString(),
+              auto_completed: true
+            })
+          }
+        }
+      } catch (error) {
+        handleErrorSilently(error, { operation: 'checkEADDocuments', applicationId: id })
+      }
+    }
+    
+    if (application && application.application_type === 'EAD' && timelineSteps.length > 0) {
+      checkEADDocuments()
+    }
+  }, [application, timelineSteps])
+
+  // Handle real-time application updates
+  function handleApplicationRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'UPDATE' && newRecord && newRecord.id === id) {
+        // Update application state with new data
+        setApplication((prev) => {
+          if (!prev) return prev
+          return { ...prev, ...newRecord }
+        })
+
+        // Update status if it changed
+        if (oldRecord && oldRecord.status !== newRecord.status) {
+          // Skip if this is our own update to prevent infinite loops
+          if (isOurUpdateRef.current) {
+            setStatus(newRecord.status)
+            return
+          }
+          
+          setStatus(newRecord.status)
+          
+          // Show notification for status changes (only if not updating status ourselves)
+          if (!isUpdatingStatus) {
+            const statusMessages: Record<string, string> = {
+              'approved': 'Application has been approved! ðŸŽ‰',
+              'rejected': 'Application has been rejected',
+              'pending': 'Application is now pending review',
+              'in_progress': 'Application is now in progress',
+              'completed': 'Application has been completed'
+            }
+            
+            const message = statusMessages[newRecord.status] || `Application status changed to ${newRecord.status}`
+            showToast(message, newRecord.status === 'approved' || newRecord.status === 'completed' ? 'success' : 'info')
+          }
+          
+          // Refresh timeline if status changed (but not if we're already updating status to prevent loops)
+          if (application?.id && !isUpdatingStatus && !loadingTimeline) {
+            fetchTimelineSteps()
+          }
+        }
+
+        // Refresh payments if payment-related fields changed
+        if (oldRecord && (
+          oldRecord.payment_type !== newRecord.payment_type ||
+          oldRecord.status !== newRecord.status
+        )) {
+          if (application?.id) {
+            fetchPayments()
+          }
+        }
+      }
+    } catch (error) {
+      handleErrorSilently(error, { operation: 'realtimeApplicationUpdate', applicationId: id })
+    }
+  }
+
+  // Handle real-time timeline step updates
+  function handleTimelineStepRealtimeUpdate(payload: any) {
+    // Prevent infinite loops by checking if we're already loading or updating
+    if (loadingTimeline || isUpdatingStatus) return
+    
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New timeline step added - refresh timeline only if not already loading
+        if (!loadingTimeline) {
+          fetchTimelineSteps()
+        }
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Timeline step updated - update in place
+        setTimelineSteps((prev) => {
+          const index = prev.findIndex((s) => s.id === newRecord.id)
+          if (index >= 0) {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          } else {
+            // Step not in list, might be new - refresh to be safe (only if not loading)
+            if (!loadingTimeline) {
+              fetchTimelineSteps()
+            }
+            return prev
+          }
+        })
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Timeline step deleted - remove from list
+        setTimelineSteps((prev) => prev.filter((s) => s.id !== oldRecord.id))
+      }
+    } catch (error) {
+      handleErrorSilently(error, { operation: 'realtimeTimelineStepUpdate', applicationId: id })
+      // Fallback to full refresh on error (only if not already loading)
+      if (!loadingTimeline) {
+        fetchTimelineSteps()
+      }
+    }
+  }
+
+  // Handle real-time payment updates
+  function handlePaymentRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New payment added - refresh payments
+        fetchPayments()
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Payment updated - update in place or refresh
+        setPayments((prev) => {
+          const index = prev.findIndex((p) => p.id === newRecord.id)
+          if (index >= 0) {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          } else {
+            // Payment not in list, might be new - refresh to be safe
+            fetchPayments()
+            return prev
+          }
+        })
+
+        // Show notification for status changes
+        if (oldRecord && oldRecord.status !== newRecord.status) {
+          if (newRecord.status === 'paid') {
+            showToast('Payment has been approved! âœ…', 'success')
+          } else if (newRecord.status === 'failed') {
+            showToast('Payment has been rejected', 'error')
+          }
+        }
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Payment deleted - remove from list
+        setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id))
+      }
+    } catch (error) {
+      handleErrorSilently(error, { operation: 'realtimePaymentUpdate', applicationId: id })
+      // Fallback to full refresh on error
+      fetchPayments()
+    }
+  }
 
   // Load services from admin quote service config
   async function loadServices() {
@@ -1956,14 +2189,114 @@ export function ApplicationDetail() {
       return 0
     }
 
+    const isEAD = application.application_type === 'EAD'
+
     // Create a map of step statuses (matching tracking logic)
     const stepStatusMap: { [key: string]: any } = {}
     timelineSteps.forEach((step: any) => {
       stepStatusMap[step.step_key] = step
     })
 
-    // Define all main steps and their sub-steps (NCLEX steps only)
-    const allStepsWithSubSteps = [
+    // Define all main steps and their sub-steps
+    const allStepsWithSubSteps = isEAD ? [
+      // EAD Steps
+      {
+        mainKey: 'ead_app_submission',
+        mainName: 'Application Submission',
+        subSteps: [
+          { key: 'ead_app_form_completed', checkFn: () => {
+            const step = stepStatusMap['ead_app_form_completed']
+            return (step && step.status === 'completed') || !!application.created_at
+          }},
+          { key: 'ead_documents_uploaded', checkFn: () => {
+            const step = stepStatusMap['ead_documents_uploaded']
+            return (step && step.status === 'completed') || !!(application.picture_path && application.diploma_path && application.passport_path)
+          }},
+          { key: 'ead_employer_verification_requested', checkFn: () => {
+            const step = stepStatusMap['ead_employer_verification_requested']
+            return step && step.status === 'completed'
+          }},
+        ]
+      },
+      {
+        mainKey: 'ead_form_review',
+        mainName: 'Documents Review',
+        subSteps: [
+          { key: 'ead_app_details_verified', checkFn: () => {
+            const step = stepStatusMap['ead_app_details_verified']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_forms_verified', checkFn: () => {
+            const step = stepStatusMap['ead_forms_verified']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_g1145_generated', checkFn: () => {
+            const step = stepStatusMap['ead_g1145_generated']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_i765_generated', checkFn: () => {
+            const step = stepStatusMap['ead_i765_generated']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_cover_letter_generated', checkFn: () => {
+            const step = stepStatusMap['ead_cover_letter_generated']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_documents_compiled', checkFn: () => {
+            const step = stepStatusMap['ead_documents_compiled']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_client_downloaded_signed', checkFn: () => {
+            const step = stepStatusMap['ead_client_downloaded_signed']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_preparer_downloaded_signed', checkFn: () => {
+            const step = stepStatusMap['ead_preparer_downloaded_signed']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_final_package_download', checkFn: () => {
+            const step = stepStatusMap['ead_final_package_download']
+            return step && step.status === 'completed'
+          }},
+        ]
+      },
+      {
+        mainKey: 'ead_uscis_submission',
+        mainName: 'USCIS Submission',
+        subSteps: [
+          { key: 'ead_application_submitted', checkFn: () => {
+            const step = stepStatusMap['ead_application_submitted']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_receipt_received', checkFn: () => {
+            const step = stepStatusMap['ead_receipt_received']
+            return step && step.status === 'completed'
+          }},
+        ]
+      },
+      {
+        mainKey: 'ead_approval',
+        mainName: 'EAD Approved',
+        subSteps: [
+          { key: 'ead_card_production', checkFn: () => {
+            const step = stepStatusMap['ead_card_production']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_card_mailed', checkFn: () => {
+            const step = stepStatusMap['ead_card_mailed']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_card_received', checkFn: () => {
+            const step = stepStatusMap['ead_card_received']
+            return step && step.status === 'completed'
+          }},
+          { key: 'ead_ssn_received', checkFn: () => {
+            const step = stepStatusMap['ead_ssn_received']
+            return step && step.status === 'completed'
+          }},
+        ]
+      }
+    ] : [
       {
         mainKey: 'app_submission',
         mainName: 'Application Submission',
@@ -2395,7 +2728,7 @@ export function ApplicationDetail() {
     )
   }
 
-  const isNCLEXApplication = true
+  const isEADApplication = application?.application_type === 'EAD'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -2445,7 +2778,9 @@ export function ApplicationDetail() {
                       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1 leading-tight">
                         {(() => {
                           const applicantName = `${application?.first_name || ''} ${application?.middle_name || ''} ${application?.last_name || ''}`.trim()
-                          const serviceName = `${staggeredService?.service_name || 'NCLEX Processing'}${staggeredService?.state ? `, ${staggeredService.state}` : ''}`
+                          const serviceName = isEADApplication 
+                            ? 'EAD Application (Form I-765)'
+                            : `${staggeredService?.service_name || 'NCLEX Processing'}${staggeredService?.state ? `, ${staggeredService.state}` : ''}`
                           return applicantName ? `${applicantName} - ${serviceName}` : serviceName
                         })()}
                       </h2>
@@ -2579,8 +2914,10 @@ export function ApplicationDetail() {
                 {[
                   { id: 'timeline', label: 'Timeline', icon: History },
                   { id: 'details', label: 'Application Details', icon: Info },
-                  { id: 'documents', label: 'Documents', icon: FileText },
-                  { id: 'processing-accounts', label: 'Processing Accounts', icon: Lock },
+                  ...(isEADApplication ? [] : [
+                    { id: 'documents', label: 'Documents', icon: FileText },
+                    { id: 'processing-accounts', label: 'Processing Accounts', icon: Lock },
+                  ]),
                   { id: 'payments', label: 'Payment History', icon: DollarSign },
                 ].map((tabItem) => {
                   const Icon = tabItem.icon
@@ -2632,7 +2969,16 @@ export function ApplicationDetail() {
                         </h3>
                         <div className="ml-auto flex items-center gap-2">
                           <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                            8 Steps
+                            {(() => {
+                              // Calculate total steps dynamically
+                              if (isEADApplication) {
+                                // EAD: 4 main steps
+                                return '4 Steps'
+                              } else {
+                                // NCLEX: 8 main steps (app_submission, credentialing, bon_application, nclex_eligibility, pearson_vue, att, nclex_exam, quick_results)
+                                return '8 Steps'
+                              }
+                            })()}
                           </span>
                           <div className="h-1 w-20 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div 
@@ -2646,6 +2992,305 @@ export function ApplicationDetail() {
                         </div>
                       </div>
                       <div className="space-y-3">
+                        {isEADApplication ? (
+                          /* EAD Timeline Steps */
+                          <>
+                            {/* Step 1: Application Submission */}
+                            <TimelineStep
+                              stepNumber={1}
+                              title="Application Submission"
+                              isCompleted={getStepStatus('ead_app_submission') === 'completed' || !!application.created_at}
+                              application={application}
+                              payments={payments}
+                              isAdmin={isAdmin()}
+                              user={user}
+                              navigate={navigate}
+                              viewingPdfUrl={viewingPdfUrl}
+                              viewingPdfName={viewingPdfName}
+                              showPdfModal={showPdfModal}
+                              setViewingPdfUrl={setViewingPdfUrl}
+                              setViewingPdfName={setViewingPdfName}
+                              setShowPdfModal={setShowPdfModal}
+                              onUpdateStep={(status, data) => updateTimelineStep('ead_app_submission', status as 'completed' | 'pending', data)}
+                              onUpdateSubStep={async (stepKey, status, data) => {
+                                await updateTimelineStep(stepKey, status as 'completed' | 'pending', data)
+                                // Check if all sub-steps are completed
+                                setTimeout(async () => {
+                                  const appFormCompleted = getStepStatus('ead_app_form_completed') === 'completed' || !!application.created_at
+                                  const docsUploaded = getStepStatus('ead_documents_uploaded') === 'completed' || !!(application.picture_path && application.diploma_path && application.passport_path)
+                                  const employerVerificationRequested = getStepStatus('ead_employer_verification_requested') === 'completed'
+                                  
+                                  if (appFormCompleted && docsUploaded && employerVerificationRequested) {
+                                    await updateTimelineStep('ead_app_submission', 'completed', data)
+                                  } else {
+                                    await updateTimelineStep('ead_app_submission', 'pending', {})
+                                  }
+                                }, 100)
+                              }}
+                              subSteps={[
+                                {
+                                  key: 'ead_app_form_completed',
+                                  label: 'Application form Completed',
+                                  completed: getStepStatus('ead_app_form_completed') === 'completed' || !!application.created_at,
+                                  date: getStepData('ead_app_form_completed')?.date || application.created_at,
+                                  data: getStepData('ead_app_form_completed')
+                                },
+                                {
+                                  key: 'ead_documents_uploaded',
+                                  label: 'Uploaded required documents',
+                                  completed: getStepStatus('ead_documents_uploaded') === 'completed' || !!(application.picture_path && application.diploma_path && application.passport_path),
+                                  date: getStepData('ead_documents_uploaded')?.date || application.created_at,
+                                  data: getStepData('ead_documents_uploaded')
+                                },
+                                {
+                                  key: 'ead_employer_verification_requested',
+                                  label: 'Request for employer verification letter',
+                                  completed: getStepStatus('ead_employer_verification_requested') === 'completed',
+                                  date: getStepData('ead_employer_verification_requested')?.date,
+                                  data: getStepData('ead_employer_verification_requested'),
+                                  hasActionButton: true
+                                }
+                              ]}
+                            />
+                            
+                            {/* Step 2: Documents Review */}
+                            <TimelineStep
+                              stepNumber={2}
+                              title="Documents Review"
+                              isCompleted={getStepStatus('ead_form_review') === 'completed'}
+                              application={application}
+                              payments={payments}
+                              isAdmin={isAdmin()}
+                              showToast={showToast}
+                              verifyUSCISForms={verifyUSCISForms}
+                              generateG1145Form={generateG1145Form}
+                              generateI765Form={generateI765Form}
+                              generateCoverLetter={generateCoverLetter}
+                              viewingPdfUrl={viewingPdfUrl}
+                              viewingPdfName={viewingPdfName}
+                              showPdfModal={showPdfModal}
+                              setViewingPdfUrl={setViewingPdfUrl}
+                              setViewingPdfName={setViewingPdfName}
+                              setShowPdfModal={setShowPdfModal}
+                              onUpdateStep={(status, data) => updateTimelineStep('ead_form_review', status as 'completed' | 'pending', data)}
+                              onUpdateSubStep={async (stepKey, status, data) => {
+                                await updateTimelineStep(stepKey, status as 'completed' | 'pending', data)
+                                // Check if all sub-steps are completed
+                                setTimeout(async () => {
+                                  const appDetailsVerified = getStepStatus('ead_app_details_verified') === 'completed'
+                                  const formsVerified = getStepStatus('ead_forms_verified') === 'completed'
+                                  const g1145Generated = getStepStatus('ead_g1145_generated') === 'completed'
+                                  const i765Generated = getStepStatus('ead_i765_generated') === 'completed'
+                                  const coverLetterGenerated = getStepStatus('ead_cover_letter_generated') === 'completed'
+                                  const documentsCompiled = getStepStatus('ead_documents_compiled') === 'completed'
+                                  const clientDownloadedSigned = getStepStatus('ead_client_downloaded_signed') === 'completed'
+                                  const preparerDownloadedSigned = getStepStatus('ead_preparer_downloaded_signed') === 'completed'
+                                  
+                                  if (appDetailsVerified && formsVerified && g1145Generated && i765Generated && coverLetterGenerated && documentsCompiled && clientDownloadedSigned && preparerDownloadedSigned) {
+                                    await updateTimelineStep('ead_form_review', 'completed', data)
+                                  } else {
+                                    await updateTimelineStep('ead_form_review', 'pending', {})
+                                  }
+                                }, 100)
+                              }}
+                              subSteps={[
+                                {
+                                  key: 'ead_app_details_verified',
+                                  label: 'Verified Application details',
+                                  completed: getStepStatus('ead_app_details_verified') === 'completed',
+                                  date: getStepData('ead_app_details_verified')?.date,
+                                  data: getStepData('ead_app_details_verified')
+                                },
+                                {
+                                  key: 'ead_forms_verified',
+                                  label: 'Check Latest Forms for G-1145 & I-765 and the Assigned Service Center',
+                                  completed: getStepStatus('ead_forms_verified') === 'completed',
+                                  date: getStepData('ead_forms_verified')?.date,
+                                  data: getStepData('ead_forms_verified'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Verify'
+                                },
+                                {
+                                  key: 'ead_g1145_generated',
+                                  label: 'AutoGenerate form G-1145',
+                                  completed: getStepStatus('ead_g1145_generated') === 'completed',
+                                  date: getStepData('ead_g1145_generated')?.date,
+                                  data: getStepData('ead_g1145_generated'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Generate G-1145'
+                                },
+                                {
+                                  key: 'ead_i765_generated',
+                                  label: 'AutoGenerate form I-765',
+                                  completed: getStepStatus('ead_i765_generated') === 'completed',
+                                  date: getStepData('ead_i765_generated')?.date,
+                                  data: getStepData('ead_i765_generated'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Generate I-765'
+                                },
+                                {
+                                  key: 'ead_cover_letter_generated',
+                                  label: 'AutoGenerate Cover Letter',
+                                  completed: getStepStatus('ead_cover_letter_generated') === 'completed',
+                                  date: getStepData('ead_cover_letter_generated')?.date,
+                                  data: getStepData('ead_cover_letter_generated'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Generate Cover Letter'
+                                },
+                                {
+                                  key: 'ead_documents_compiled',
+                                  label: 'Compiled All Documents',
+                                  completed: getStepStatus('ead_documents_compiled') === 'completed',
+                                  date: getStepData('ead_documents_compiled')?.date,
+                                  data: getStepData('ead_documents_compiled'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Merge All Docs'
+                                },
+                                {
+                                  key: 'ead_client_downloaded_signed',
+                                  label: 'Client Review and Sign.',
+                                  completed: getStepStatus('ead_client_downloaded_signed') === 'completed',
+                                  date: getStepData('ead_client_downloaded_signed')?.date,
+                                  data: getStepData('ead_client_downloaded_signed')
+                                },
+                                {
+                                  key: 'ead_preparer_downloaded_signed',
+                                  label: 'Preparer Review files and sign.',
+                                  completed: getStepStatus('ead_preparer_downloaded_signed') === 'completed',
+                                  date: getStepData('ead_preparer_downloaded_signed')?.date,
+                                  data: getStepData('ead_preparer_downloaded_signed')
+                                },
+                                {
+                                  key: 'ead_final_package_download',
+                                  label: 'Download Final Application Package',
+                                  completed: getStepStatus('ead_final_package_download') === 'completed',
+                                  date: getStepData('ead_final_package_download')?.date,
+                                  data: getStepData('ead_final_package_download'),
+                                  hasActionButton: true,
+                                  actionButtonLabel: 'Download Package'
+                                }
+                              ]}
+                            />
+                            
+                            {/* Step 3: USCIS Submission */}
+                            <TimelineStep
+                              stepNumber={3}
+                              title="USCIS Submission"
+                              isCompleted={getStepStatus('ead_uscis_submission') === 'completed'}
+                              application={application}
+                              payments={payments}
+                              isAdmin={isAdmin()}
+                              viewingPdfUrl={viewingPdfUrl}
+                              viewingPdfName={viewingPdfName}
+                              showPdfModal={showPdfModal}
+                              setViewingPdfUrl={setViewingPdfUrl}
+                              setViewingPdfName={setViewingPdfName}
+                              setShowPdfModal={setShowPdfModal}
+                              onUpdateStep={(status, data) => updateTimelineStep('ead_uscis_submission', status as 'completed' | 'pending', data)}
+                              onUpdateSubStep={async (stepKey, status, data) => {
+                                await updateTimelineStep(stepKey, status as 'completed' | 'pending', data)
+                                // Check if all sub-steps are completed by fetching fresh data from API
+                                if (application?.id) {
+                                  const steps = await timelineStepsAPI.getByApplication(application.id)
+                                  const stepsMap = new Map((steps || []).map((s: any) => [s.step_key, s]))
+                                  
+                                  const appSubmitted = stepsMap.get('ead_application_submitted')?.status === 'completed'
+                                  const receiptReceived = stepsMap.get('ead_receipt_received')?.status === 'completed'
+                                  
+                                  if (appSubmitted && receiptReceived) {
+                                    await updateTimelineStep('ead_uscis_submission', 'completed', data)
+                                  } else {
+                                    await updateTimelineStep('ead_uscis_submission', 'pending', {})
+                                  }
+                                }
+                              }}
+                              subSteps={[
+                                {
+                                  key: 'ead_application_submitted',
+                                  label: 'EAD application submitted',
+                                  completed: getStepStatus('ead_application_submitted') === 'completed',
+                                  date: getStepData('ead_application_submitted')?.date,
+                                  data: getStepData('ead_application_submitted')
+                                },
+                                {
+                                  key: 'ead_receipt_received',
+                                  label: 'Receipt Notice Received',
+                                  completed: getStepStatus('ead_receipt_received') === 'completed',
+                                  date: getStepData('ead_receipt_received')?.date,
+                                  data: getStepData('ead_receipt_received')
+                                }
+                              ]}
+                            />
+                            
+                            {/* Step 4: EAD Approved */}
+                            <TimelineStep
+                              stepNumber={4}
+                              title="EAD Approved"
+                              isCompleted={getStepStatus('ead_approval') === 'completed'}
+                              application={application}
+                              payments={payments}
+                              isAdmin={isAdmin()}
+                              viewingPdfUrl={viewingPdfUrl}
+                              viewingPdfName={viewingPdfName}
+                              showPdfModal={showPdfModal}
+                              setViewingPdfUrl={setViewingPdfUrl}
+                              setViewingPdfName={setViewingPdfName}
+                              setShowPdfModal={setShowPdfModal}
+                              onUpdateStep={(status, data) => updateTimelineStep('ead_approval', status as 'completed' | 'pending', data)}
+                              onUpdateSubStep={async (stepKey, status, data) => {
+                                await updateTimelineStep(stepKey, status as 'completed' | 'pending', data)
+                                // Check if all sub-steps are completed by fetching fresh data from API
+                                if (application?.id) {
+                                  const steps = await timelineStepsAPI.getByApplication(application.id)
+                                  const stepsMap = new Map((steps || []).map((s: any) => [s.step_key, s]))
+                                  
+                                  const cardProduction = stepsMap.get('ead_card_production')?.status === 'completed'
+                                  const cardMailed = stepsMap.get('ead_card_mailed')?.status === 'completed'
+                                  const cardReceived = stepsMap.get('ead_card_received')?.status === 'completed'
+                                  const ssnReceived = stepsMap.get('ead_ssn_received')?.status === 'completed'
+                                  
+                                  if (cardProduction && cardMailed && cardReceived && ssnReceived) {
+                                    await updateTimelineStep('ead_approval', 'completed', data)
+                                  } else {
+                                    await updateTimelineStep('ead_approval', 'pending', {})
+                                  }
+                                }
+                              }}
+                              subSteps={[
+                                {
+                                  key: 'ead_card_production',
+                                  label: 'Card Production',
+                                  completed: getStepStatus('ead_card_production') === 'completed',
+                                  date: getStepData('ead_card_production')?.date,
+                                  data: getStepData('ead_card_production')
+                                },
+                                {
+                                  key: 'ead_card_mailed',
+                                  label: 'Card Mailed',
+                                  completed: getStepStatus('ead_card_mailed') === 'completed',
+                                  date: getStepData('ead_card_mailed')?.date,
+                                  data: getStepData('ead_card_mailed')
+                                },
+                                {
+                                  key: 'ead_card_received',
+                                  label: 'Card Received',
+                                  completed: getStepStatus('ead_card_received') === 'completed',
+                                  date: getStepData('ead_card_received')?.date,
+                                  data: getStepData('ead_card_received')
+                                },
+                                {
+                                  key: 'ead_ssn_received',
+                                  label: 'SSN Card Received',
+                                  completed: getStepStatus('ead_ssn_received') === 'completed',
+                                  date: getStepData('ead_ssn_received')?.date,
+                                  data: getStepData('ead_ssn_received')
+                                }
+                              ]}
+                            />
+                          </>
+                        ) : (
+                          /* NCLEX Timeline Steps */
+                          <>
                         {/* Step 1: Application Submission */}
                         <TimelineStep
                           stepNumber={1}
@@ -3169,7 +3814,7 @@ export function ApplicationDetail() {
               {activeTab === 'details' && application && (
                 <DetailsTab
                   application={application}
-                  isEADApplication={false}
+                  isEADApplication={isEADApplication}
                   detailsSubTab={detailsSubTab}
                   setDetailsSubTab={setDetailsSubTab}
                   setApplication={setApplication}
@@ -3179,7 +3824,7 @@ export function ApplicationDetail() {
                 />
               )}
 
-              {activeTab === 'documents' && (
+              {activeTab === 'documents' && !isEADApplication && (
                 <DocumentsTab
                   application={application}
                   latestDocuments={latestDocuments}
@@ -3187,7 +3832,7 @@ export function ApplicationDetail() {
                 />
               )}
 
-              {activeTab === 'processing-accounts' && (
+              {activeTab === 'processing-accounts' && !isEADApplication && (
                 <ProcessingAccountsTab
                   processingAccounts={processingAccounts}
                   loadingAccounts={loadingAccounts}

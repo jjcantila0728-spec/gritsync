@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Email Preferences Center - Public Page
  * Allows subscribers to manage their email preferences via token
@@ -47,12 +46,11 @@ export default function EmailPreferences() {
       }
 
       setSubscriber(data)
-      const prefs = data.email_preferences || {}
-      setPreferences({
-        marketing: prefs.marketing ?? true,
-        newsletters: prefs.newsletters ?? true,
-        notifications: prefs.notifications ?? true,
-        promotions: prefs.promotions ?? true,
+      setPreferences(data.email_preferences || {
+        marketing: true,
+        newsletters: true,
+        notifications: true,
+        promotions: true,
       })
     } catch (err: any) {
       console.error('Error loading subscriber:', err)

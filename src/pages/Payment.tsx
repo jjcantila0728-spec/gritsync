@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Elements } from '@stripe/react-stripe-js'

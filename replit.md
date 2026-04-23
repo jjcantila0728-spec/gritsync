@@ -1,114 +1,192 @@
 # GritSync - NCLEX Processing Agency
 
-## Overview
-GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses pursuing US nursing careers. The application focuses exclusively on NCLEX processing services, offering features for quotation generation, application tracking, and payment processing. The platform aims to provide a robust, scalable, and secure solution for managing the entire NCLEX application lifecycle, from initial inquiry to successful licensing.
+## Project Overview
+GritSync is a comprehensive SAAS application for processing NCLEX applications with quotation generation, application tracking, and payment processing. This project was imported from GitHub and configured to run in the Replit environment.
 
-## User Preferences
-I prefer clear and concise explanations.
-I value an iterative development approach.
-Please ask for confirmation before implementing significant changes.
-I expect detailed explanations for complex solutions or architectural decisions.
-Do not make changes to files within the `docs/` folder.
+## Tech Stack
+- **Frontend**: React 18 + TypeScript + Vite
+- **Backend**: Serverless (Supabase)
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+- **Payments**: Stripe (Client SDK)
+- **File Storage**: Supabase Storage
+- **UI**: Tailwind CSS + Lucide Icons
 
-## System Architecture
-GritSync uses a full-stack architecture with React frontend and Express.js backend, powered by Replit's built-in PostgreSQL database.
+## Current State
+The application is running successfully on Replit with the following configuration:
+- Development server running on port 5000 (required for Replit webview)
+- Vite configured for Replit's proxy environment
+- All dependencies installed
+- Deployment configuration set for static site deployment
 
-**UI/UX Decisions:**
-- **Design System:** Tailwind CSS for utility-first styling and Lucide Icons for iconography
-- **Theming:** Light/dark theme support
-- **Responsiveness:** Fully responsive design across all pages
-- **Branding:** "Achieve Your American Dream" theme for Filipino nurses
+## Required Environment Variables
 
-**Technical Implementations:**
-- **Authentication:** JWT-based auth with bcrypt password hashing (server/routes/auth.ts)
-- **Database:** Replit PostgreSQL with Drizzle ORM (shared/schema.ts)
-- **API Layer:** Express.js REST API (server/index.ts, server/routes/)
-- **Frontend:** React 18 + TypeScript + Vite (src/)
-- **API Client:** Typed fetch wrapper (src/lib/api-client.ts)
-- **Payment Processing:** Stripe client SDK with promo code validation
+This application requires the following environment variables to be set in the Secrets tab:
 
-**System Design:**
-- **Backend:** Express.js server running on port 3001
-- **Frontend:** Vite dev server on port 5000 with proxy to backend
-- **Database:** Replit PostgreSQL (DATABASE_URL environment variable)
-- **State Management:** React Context with API client
-- **Sessions:** express-session with connect-pg-simple store
+### Supabase Configuration (Required)
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+Get these values from your Supabase project dashboard:
+1. Go to [supabase.com](https://supabase.com)
+2. Open your project
+3. Navigate to Settings > API
+4. Copy the Project URL and anon/public key
+
+### Stripe Configuration (Optional - for payments)
+```
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
+```
+
+Get this from your Stripe dashboard at [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys)
+
+## Setup Instructions
+
+### 1. Set Environment Variables
+1. Click on the "Secrets" tab in the left sidebar
+2. Add the required environment variables listed above
+3. The app will automatically use these values
+
+### 2. Database Setup
+You need to set up your Supabase database with the required schema:
+1. Go to your Supabase project's SQL Editor
+2. Run the SQL files from `supabase/schema.sql` to create the database structure
+3. Run migrations from `supabase/migrations/` in order
+4. Set up Row Level Security (RLS) policies as defined in the migrations
+
+### 3. Create First Admin User
+After registering through the app:
+1. Go to Supabase Dashboard → Authentication → Users
+2. Find your user and edit their metadata
+3. Add `role: "admin"` to the user metadata
+
+Or use the SQL Editor:
+```sql
+UPDATE auth.users 
+SET raw_user_meta_data = jsonb_set(
+  COALESCE(raw_user_meta_data, '{}'::jsonb), 
+  '{role}', 
+  '"admin"'
+)
+WHERE email = 'your-email@example.com';
+```
 
 ## Project Structure
-- `/server` - Express.js backend (routes, middleware, db connection)
-- `/shared` - Shared types and Drizzle schema
-- `/src` - React frontend application
-- `/src/lib` - API clients, utilities, settings
+```
+gritsync/
+├── src/
+│   ├── components/      # React components
+│   │   └── ui/         # Reusable UI components
+│   ├── pages/          # Page components
+│   ├── lib/            # Utilities and API clients
+│   ├── contexts/       # React contexts (Auth, Theme)
+│   └── test/           # Test files
+├── supabase/
+│   ├── migrations/     # Database migrations
+│   ├── functions/      # Edge functions
+│   └── schema.sql      # Database schema
+├── public/             # Static assets
+└── docs/               # Documentation
 
-## External Dependencies
-- **Replit PostgreSQL:** Built-in database with Drizzle ORM
-- **Stripe:** Client SDK for payment processing
-- **Resend:** Email service (pending implementation)
+```
 
-## Migration Status (Dec 2024)
-**Migration from Supabase to Replit PostgreSQL completed.** All Supabase dependencies have been removed.
+## Key Features
+- User Authentication with role-based access control
+- Password reset functionality
+- NCLEX application form with complete field validation
+- Real-time application tracking
+- Quotation generation and management
+- Stripe payment integration
+- Document management with secure file uploads
+- Admin dashboard with settings and client management
+- Real-time notifications
+- Search and filter functionality
+- Light/dark theme support
+- Fully responsive design
 
-Core functionality working:
-- Authentication (signup, login, JWT sessions)
-- Applications, Payments, Notifications, Quotations, Donations, Careers, Testimonials
-- Settings management
-- Promo code validation
-- Services catalog API with admin configuration
-- Timeline steps API (application tracking with proper authorization)
-- Partner agencies API
-- NCLEX sponsorships API
+## Development
 
-Integrations:
-- Email service via Resend integration (server/services/email.ts, server/routes/emails.ts)
-- File storage via Google Drive integration (server/services/file-storage.ts, server/routes/documents.ts)
+### Running the App
+The app runs automatically via the "Start application" workflow. If you need to restart:
+1. Use the "Restart" button in the workflow panel, or
+2. Run `npm run dev` manually
 
-## Recent Changes (Feb 2026)
-**EAD Service Removal:**
-- Removed all EAD (Employment Authorization Document) services from the application
-- Application now focuses exclusively on NCLEX processing services
-- Removed EAD routes, pages, and UI references throughout the application
-- Updated testimonials, success stories, and marketing content to remove EAD mentions
-- Updated Dashboard, Quote, Documents, Tracking, Footer, Home, HeroSlider components
-- Simplified application service selection to redirect directly to NCLEX application form
+### Available Scripts
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+- `npm run test` - Run tests with Vitest
+- `npm run type-check` - Check TypeScript types
 
-## Recent Changes (Dec 22, 2024)
-**Donation Payment Flow Fixes:**
-- Fixed DonateCheckout.tsx to use correct `clientSecret` property (was using snake_case `client_secret`)
-- Verified donation creation API returns correct camelCase properties
-- Verified payment intent creation works correctly with Stripe
-- API returns `{"clientSecret":"..."}` - frontend now properly reads this
+## Deployment
 
-**Quote Page Fixes:**
-- Removed 3-second preloader delay for immediate display
-- Fixed EAD quotation state handling (null/empty state now properly preserved, not defaulting to 'New York')
-- Improved error logging in quote fetching with detailed error messages
-- Confirmed `generateGQId` as synchronous UUID formatter (GQ-XXXXXX format)
+The app is configured for static site deployment on Replit. When you're ready to deploy:
 
-**Mobile-Based Authentication System:**
-- Users now register using mobile number instead of email
-- Auto-generated credentials on signup:
-  - GritSync ID: GRIT + 6 random digits (e.g., GRIT502145)
-  - GritSync email: firstname.lastname@gritsync.com (with uniqueness handling)
-- Login accepts: mobile number, GritSync ID, or GritSync email + password
-- Signup fields: First name, Middle name (optional), Last name, Mobile, Password
-- Database updated with: middle_name, mobile, gritsync_email fields on users table
-- Mobile number normalization handles various input formats (spaces, dashes, etc.)
-- Phone verification: Skipped for now - users can login without verifying their mobile number
-- Future: Twilio SMS integration can be added later for OTP verification (store TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER as secrets)
+1. Ensure all environment variables are set in production environment
+2. Click the "Deploy" button in Replit
+3. The build will automatically run `npm run build`
+4. The `dist` folder will be served as static files
 
-## Recent Changes (Dec 18, 2024)
-**TypeScript Build Errors Resolution:**
-- Fixed 235+ TypeScript errors to achieve successful build
-- Added missing API methods to api-client.ts (paymentsAPI, quotationsAPI, applicationPaymentsAPI)
-- Created consolidated admin stubs (src/lib/admin-stubs.ts) for non-MVP features
-- Added ts-nocheck to non-critical admin pages pending full implementation:
-  - Admin email management (EmailTemplatePreview, AdminEmails, ABTestingTab, etc.)
-  - Notification settings, Account settings
-  - USCIS forms/tracker (stubbed features)
-- Added missing email service functions (sendTestEmail, sendDonationReceipt)
-- Added missing newsletter/visa bulletin API exports
+### Vercel Deployment (Alternative)
+The project also includes Vercel configuration (`vercel.json`):
+1. Push to GitHub
+2. Import to Vercel
+3. Set environment variables in Vercel dashboard
+4. Deploy
 
-**API Architecture:**
-- User-facing pages use REST API client (src/lib/api-client.ts)
-- Supabase stub (src/lib/api.ts) provides backward compatibility for edge function calls
-- Admin features are stubbed but pages can render without errors
+## Recent Changes (Replit Setup)
+
+### Configuration Updates
+- Updated `vite.config.ts` to use port 5000 (required for Replit webview)
+- Configured Vite server to bind to `0.0.0.0` for external access
+- Added `allowedHosts: true` to allow Replit's proxy domains
+- Set up deployment configuration for static site builds
+
+### Dependencies
+- All npm packages installed successfully
+- LSP diagnostics resolved after npm install
+
+## Troubleshooting
+
+### Blank Page on Load
+If you see a blank page, check:
+1. Environment variables are set correctly in Secrets
+2. Supabase URL is valid and accessible
+3. Browser console for specific errors
+
+### Database Connection Issues
+Ensure:
+1. Supabase project is active
+2. RLS policies are configured correctly
+3. Database migrations have been run
+
+### Payment Processing Issues
+Verify:
+1. Stripe publishable key is set
+2. Using test keys for development (pk_test_...)
+3. Stripe account is properly configured
+
+## Architecture Notes
+
+The application uses a fully serverless architecture:
+- **Frontend**: React SPA served as static files
+- **Backend**: Supabase handles auth, database, storage, and realtime
+- **API**: Direct Supabase client calls (no Express server)
+- **Payments**: Stripe client SDK
+- **File Storage**: Supabase Storage buckets with RLS
+
+This architecture makes the app highly scalable and cost-effective, with no server maintenance required.
+
+## Support
+
+For issues specific to:
+- **Replit setup**: Check this documentation or ask in Replit
+- **Application features**: See README.md and docs folder
+- **Supabase**: Check [Supabase documentation](https://supabase.com/docs)
+- **Stripe**: Check [Stripe documentation](https://stripe.com/docs)
+
+## Last Updated
+December 5, 2025 - Initial Replit setup completed

@@ -8,7 +8,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@assets': path.resolve(__dirname, './attached_assets'),
     },
   },
   test: {
@@ -20,15 +19,9 @@ export default defineConfig({
   server: {
     port: 5000,
     host: '0.0.0.0',
-    strictPort: false,
+    strictPort: false, // Allow Vite to use next available port if 5000 is busy
     allowedHosts: true,
     cors: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
   },
   build: {
     // Production build optimizations
@@ -38,19 +31,32 @@ export default defineConfig({
     cssMinify: true, // Minify CSS
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': [
-            'react',
-            'react-dom',
-            'react-router-dom',
-            'react-router',
-            'react-hook-form',
-            'recharts',
-            'lucide-react',
-            '@stripe/react-stripe-js',
-          ],
-          'pdf-vendor': ['jspdf', 'html2canvas', 'pdf-lib'],
-          'utils-vendor': ['date-fns', 'clsx', 'tailwind-merge'],
+        manualChunks: (id) => {
+          // Optimize chunk splitting for better caching
+          if (id.includes('node_modules')) {
+            // React and core dependencies
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-vendor'
+            }
+            // UI libraries
+            if (id.includes('lucide-react')) {
+              return 'ui-vendor'
+            }
+            // PDF generation
+            if (id.includes('jspdf') || id.includes('html2canvas')) {
+              return 'pdf-vendor'
+            }
+            // Stripe
+            if (id.includes('stripe')) {
+              return 'stripe-vendor'
+            }
+            // Supabase
+            if (id.includes('supabase')) {
+              return 'supabase-vendor'
+            }
+            // Other vendor code
+            return 'vendor'
+          }
         },
         // Add content hash to filenames for better caching
         entryFileNames: 'assets/[name]-[hash].js',

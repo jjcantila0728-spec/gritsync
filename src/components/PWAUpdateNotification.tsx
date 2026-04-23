@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/utils'
 
 export function PWAUpdateNotification() {
   const [showUpdate, setShowUpdate] = useState(false)

@@ -8,7 +8,7 @@ import { Mail, Clock, CheckCircle2, XCircle, AlertCircle, Eye, Trash2, User } fr
 import { cn } from '@/lib/utils'
 import { EmailLog } from '@/lib/email-api'
 import { useState, useEffect } from 'react'
-import { usersAPI } from '@/lib/api-client'
+import { supabase } from '@/lib/supabase'
 
 interface SenderInfo {
   avatar_path: string | null
@@ -171,23 +171,42 @@ function InboxEmailCard({
     return match ? match[1] : fromEmail
   }
 
+  // Fetch sender info and avatar
   useEffect(() => {
     const fetchSenderInfo = async () => {
       try {
         const senderEmail = getSenderEmail()
         
-        try {
-          const userData = await usersAPI.getByEmail(senderEmail)
+        // Try to find user by email in email_addresses table
+        const { data: emailAddress } = await supabase
+          .from('email_addresses')
+          .select('user_id')
+          .eq('email_address', senderEmail)
+          .single()
+
+        if (emailAddress?.user_id) {
+          // Fetch user info
+          const { data: userData } = await supabase
+            .from('users')
+            .select('avatar_path, first_name, last_name')
+            .eq('id', emailAddress.user_id)
+            .single()
+
           if (userData) {
-            setSenderInfo({
-              avatar_path: userData.avatar_path || null,
-              first_name: userData.first_name || null,
-              last_name: userData.last_name || null
-            })
+            setSenderInfo(userData)
+
+            // If user has avatar, get signed URL
+            if (userData.avatar_path) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('documents')
+                .getPublicUrl(userData.avatar_path)
+              
+              setAvatarUrl(publicUrl)
+            }
           }
-        } catch {
         }
       } catch (error) {
+        // Silently fail - will show generated avatar
         console.log('Could not fetch sender info:', error)
       }
     }

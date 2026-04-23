@@ -98,9 +98,9 @@ export function CareerListing() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
-        title="Healthcare Careers & Nursing Jobs - Join GritSync Team | Filipino Nurse Opportunities"
-        description="Join GritSync's mission to help Filipino nurses achieve their American Dream. Explore healthcare careers, nursing recruitment positions, and immigration support roles. Competitive salary, remote work options, and meaningful impact."
-        keywords="nursing jobs USA, healthcare careers Philippines, NCLEX agency employment, nursing recruitment jobs, Filipino nurse opportunities, healthcare staffing careers, nurse immigration consultant, international nursing jobs, USRN career support"
+        title="Career Opportunities - Join GritSync | NCLEX Processing Agency"
+        description="Explore career opportunities with GritSync. Browse available positions and apply for nursing jobs, healthcare positions, and support roles. Join our team helping nurses achieve their USRN dreams."
+        keywords="career, jobs, nursing jobs, healthcare careers, NCLEX agency jobs, nursing positions, healthcare employment, job openings"
         canonicalUrl={currentUrl}
         ogTitle="Career Opportunities - Join GritSync | NCLEX Processing Agency"
         ogDescription="Explore career opportunities with GritSync. Browse available positions and apply for nursing jobs and healthcare positions."
@@ -113,24 +113,17 @@ export function CareerListing() {
       />
       <Header />
       <main className="flex-1">
-        {/* Hero Section with Banner Image */}
-        <section 
-          className="relative overflow-hidden py-20"
-          style={{
-            backgroundImage: `linear-gradient(to bottom right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.5)), url('/healthcare_team_professionals.png')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }}
-        >
-          <div className="container mx-auto px-4">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
+          <div className="container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full mb-6">
-                <Briefcase className="h-8 w-8 text-white" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full mb-6">
+                <Briefcase className="h-8 w-8 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                 Career Opportunities
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
+              <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
                 Join our team and help nurses achieve their USRN dreams. Explore available positions and find your next career opportunity.
               </p>
             </div>
@@ -168,7 +161,7 @@ export function CareerListing() {
                   onChange={(e) => setFilterDepartment(e.target.value)}
                   options={[
                     { value: 'all', label: 'All Departments' },
-                    ...departments.filter(dept => dept !== null).map(dept => ({ value: dept as string, label: dept as string }))
+                    ...departments.map(dept => ({ value: dept, label: dept }))
                   ]}
                 />
               </div>
@@ -239,7 +232,7 @@ interface CareerCardProps {
 
 function CareerCard({ career, featured = false }: CareerCardProps) {
   const navigate = useNavigate()
-  const isDeadlinePassed = !!(career.application_deadline && new Date(career.application_deadline) < new Date())
+  const isDeadlinePassed = career.application_deadline && new Date(career.application_deadline) < new Date()
 
   return (
     <Card className={`p-6 hover:shadow-lg transition-shadow h-full flex flex-col ${featured ? 'border-2 border-primary-300 dark:border-primary-700' : ''}`}>

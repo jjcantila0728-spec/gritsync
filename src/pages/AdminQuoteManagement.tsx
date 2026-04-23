@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -25,6 +24,8 @@ import {
   X
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { subscribeToAllQuotations, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 interface QuoteLineItem {
   id: string
@@ -79,6 +80,7 @@ export function AdminQuoteManagement() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null)
   const [selectedQuotes, setSelectedQuotes] = useState<Set<string>>(new Set())
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   // Get opened quotes from localStorage
   const getOpenedQuotes = (): Set<string> => {
@@ -122,6 +124,90 @@ export function AdminQuoteManagement() {
     window.addEventListener('quotesUpdated', handleQuotesUpdate)
     return () => window.removeEventListener('quotesUpdated', handleQuotesUpdate)
   }, [isAdmin, navigate])
+
+  // Set up real-time subscription for quotations
+  useEffect(() => {
+    if (!isAdmin()) return
+
+    // Subscribe to all quotations
+    const quotesChannel = subscribeToAllQuotations((payload) => {
+      handleQuotationRealtimeUpdate(payload)
+    })
+    channelRef.current = quotesChannel
+
+    // Cleanup on unmount
+    return () => {
+      if (channelRef.current) {
+        unsubscribe(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [isAdmin])
+
+  // Handle real-time quotation updates
+  function handleQuotationRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New quotation added - add to list
+        setQuotations((prev) => [newRecord, ...prev])
+        showToast('New quotation received', 'info')
+        // Trigger counter update in sidebar
+        setTimeout(() => window.dispatchEvent(new CustomEvent('quotesUpdated')), 100)
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Quotation updated - update in place
+        setQuotations((prev) => {
+          const index = prev.findIndex((q) => q.id === newRecord.id)
+          if (index >= 0) {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          } else {
+            // Quotation not in list, might be new - add it
+            return [newRecord, ...prev]
+          }
+        })
+
+        // Show notification for status changes
+        if (oldRecord && oldRecord.status !== newRecord.status) {
+          const statusMessages: Record<string, string> = {
+            'paid': 'Quotation has been paid! ✅',
+            'pending': 'Quotation is now pending',
+            'approved': 'Quotation has been approved',
+            'rejected': 'Quotation has been rejected'
+          }
+          
+          const message = statusMessages[newRecord.status] || `Quotation status changed to ${newRecord.status}`
+          showToast(message, newRecord.status === 'paid' ? 'success' : 'info')
+        }
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Quotation deleted - remove from list
+        setQuotations((prev) => prev.filter((q) => q.id !== oldRecord.id))
+        
+        // Remove from selected quotes if it was selected
+        setSelectedQuotes(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(oldRecord.id)
+          return newSet
+        })
+        
+        // Remove from opened quotes in localStorage
+        const opened = getOpenedQuotes()
+        opened.delete(oldRecord.id)
+        localStorage.setItem('openedQuotes', JSON.stringify(Array.from(opened)))
+        
+        showToast('Quotation deleted', 'info')
+        window.dispatchEvent(new CustomEvent('quotesUpdated'))
+      }
+    } catch (error) {
+      console.error('Error handling real-time quotation update:', error)
+      // Fallback to full refresh on error
+      fetchQuotations()
+    }
+  }
 
   async function fetchQuotations() {
     try {
@@ -176,7 +262,7 @@ export function AdminQuoteManagement() {
       // Verify deletion by fetching again after a short delay
       setTimeout(async () => {
         try {
-          const verify = await quotationsAPI.getById(id)
+          const { data: verify } = await quotationsAPI.getById(id)
           if (verify) {
             console.error('WARNING: Quotation still exists after deletion!', id)
             showToast('Warning: Quotation may not have been fully deleted. Please refresh the page.', 'warning')

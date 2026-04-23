@@ -1,16 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { FileText, ImageIcon, Eye, GraduationCap, Upload, Loader2, Plus, X } from 'lucide-react'
+﻿import { Card } from '@/components/ui/Card'
+import { FileText, ImageIcon } from 'lucide-react'
 import { DocumentImagePreview } from '@/components/ui/DocumentImagePreview'
 import { DocumentPDFPreview } from './DocumentPDFPreview'
-import { getSignedFileUrl, userDocumentsAPI } from '@/lib/api'
-import { toast } from '@/components/ui/Toast'
+import { getSignedFileUrl } from '@/lib/api'
 import type { ApplicationData } from '../types'
-
-const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-  toast[type](message)
-}
 
 interface DocumentsTabProps {
   application: ApplicationData
@@ -20,36 +13,13 @@ interface DocumentsTabProps {
     passport?: { file_path: string; file_name: string }
   }
   handleViewFile: (url: string, fileName: string) => void
-  isAdmin?: boolean
 }
 
 export function DocumentsTab({
   application,
   latestDocuments,
-  handleViewFile,
-  isAdmin = false
+  handleViewFile
 }: DocumentsTabProps) {
-  const [pictureUrl, setPictureUrl] = useState<string | null>(null)
-  const [pictureError, setPictureError] = useState(false)
-  const [uploadingCourseFile, setUploadingCourseFile] = useState(false)
-  const [mandatoryCourseFiles, setMandatoryCourseFiles] = useState<any[]>([])
-  const [viewingFile, setViewingFile] = useState<{url: string; name: string; isImage?: boolean; fileName?: string} | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<{type: string; id: string; name: string} | null>(null)
-  
-  useEffect(() => {
-    const loadPictureUrl = async () => {
-      const picturePath = latestDocuments.picture?.file_path || application.picture_path
-      if (picturePath && !picturePath.toLowerCase().includes('avatar')) {
-        try {
-          const url = await getSignedFileUrl(picturePath)
-          setPictureUrl(url)
-        } catch {
-          setPictureError(true)
-        }
-      }
-    }
-    loadPictureUrl()
-  }, [latestDocuments, application])
   return (
     <div className="space-y-6">
       <Card title={
@@ -278,7 +248,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Infection Control and Barrier Precautions
                               </p>
-                              {isAdmin && (
+                              {isAdmin() && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -364,7 +334,6 @@ export function DocumentsTab({
                                         const isImageFile = fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || false
                                         setViewingFile({
                                           url: signedUrl,
-                                          name: fileName,
                                           fileName: fileName,
                                           isImage: !!isImageFile
                                         })
@@ -393,7 +362,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin && (
+                                    {isAdmin() && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
@@ -429,7 +398,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Child Abuse: New York Mandated Reporter Training
                               </p>
-                              {isAdmin && (
+                              {isAdmin() && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -515,7 +484,6 @@ export function DocumentsTab({
                                         const isImageFile = fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || false
                                         setViewingFile({
                                           url: signedUrl,
-                                          name: fileName,
                                           fileName: fileName,
                                           isImage: !!isImageFile
                                         })
@@ -544,7 +512,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin && (
+                                    {isAdmin() && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()

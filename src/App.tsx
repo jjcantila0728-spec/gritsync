@@ -20,6 +20,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ de
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
 const ApplicationServiceSelection = lazy(() => import('./pages/ApplicationServiceSelection').then(m => ({ default: m.ApplicationServiceSelection })))
 const NCLEXApplication = lazy(() => import('./pages/NCLEXApplication').then(m => ({ default: m.NCLEXApplication })))
+const EADApplication = lazy(() => import('./pages/EADApplication').then(m => ({ default: m.EADApplication })))
 const Tracking = lazy(() => import('./pages/Tracking').then(m => ({ default: m.Tracking })))
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })))
 const Quote = lazy(() => import('./pages/Quote').then(m => ({ default: m.Quote })))
@@ -45,6 +46,7 @@ const AdminQuoteManagement = lazy(() => import('./pages/AdminQuoteManagement').t
 const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m.MyDetails })))
 const AccountSettings = lazy(() => import('./pages/AccountSettings').then(m => ({ default: m.AccountSettings })))
 const Documents = lazy(() => import('./pages/Documents').then(m => ({ default: m.Documents })))
+const TestSupabase = lazy(() => import('./pages/TestSupabase').then(m => ({ default: m.TestSupabase })))
 const TestProofOfPaymentUpload = lazy(() => import('./pages/TestProofOfPaymentUpload').then(m => ({ default: m.TestProofOfPaymentUpload })))
 const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })))
@@ -69,10 +71,6 @@ const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').the
 const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ default: m.ClientEmails })))
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
-const USCISTracker = lazy(() => import('./pages/USCISTracker').then(m => ({ default: m.USCISTracker })))
-const SuccessStories = lazy(() => import('./pages/SuccessStories').then(m => ({ default: m.SuccessStories })))
-const AdminTestimonials = lazy(() => import('./pages/AdminTestimonials').then(m => ({ default: m.AdminTestimonials })))
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 // Loading fallback component
 function PageLoader() {
@@ -244,27 +242,52 @@ function AppRoutes() {
             </PublicRoute>
           } 
         />
-        <Route path="/signup" element={<Navigate to="/register" replace />} />
-        <Route path="/about" element={<Navigate to="/about-us" replace />} />
-        <Route path="/careers" element={<Navigate to="/career" replace />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/about-us" element={<AboutUs />} />
-        <Route path="/uscis-tracker" element={<USCISTracker />} />
-        <Route path="/success-stories" element={<SuccessStories />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />
         <Route path="/career/apply" element={<Career />} />
         <Route path="/career" element={<CareerListing />} />
+        <Route path="/test-supabase" element={<TestSupabase />} />
         <Route path="/test-upload" element={<TestProofOfPaymentUpload />} />
         <Route path="/sign" element={<SignaturePage />} />
       
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/application/new" element={<NCLEXApplication />} />
-      <Route path="/application/new/nclex" element={<NCLEXApplication />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application/new"
+        element={
+          <ProtectedRoute>
+            <ApplicationServiceSelection />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application/new/nclex"
+        element={
+          <ProtectedRoute>
+            <NCLEXApplication />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application/new/ead"
+        element={
+          <ProtectedRoute>
+            <EADApplication />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/sponsorship/apply"
         element={<NCLEXSponsorship />}
@@ -289,12 +312,50 @@ function AppRoutes() {
         path="/applications/:id"
         element={<Navigate to="timeline" replace />}
       />
-      <Route path="/applications/:id/payments" element={<ApplicationPayments />} />
-      <Route path="/applications/:id/checkout" element={<ApplicationCheckout />} />
-      <Route path="/applications/:id/details/:subTab" element={<ApplicationDetail />} />
-      <Route path="/applications/:id/details" element={<Navigate to="personal" replace />} />
-      <Route path="/applications/:id/:tab" element={<ApplicationDetail />} />
-      <Route path="/applications/:applicationId/payment" element={<ApplicationPayment />} />
+      <Route
+        path="/applications/:id/payments"
+        element={
+          <ProtectedRoute>
+            <ApplicationPayments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/applications/:id/checkout"
+        element={<ApplicationCheckout />}
+      />
+      <Route
+        path="/applications/:id/details/:subTab"
+        element={
+          <ProtectedRoute>
+            <ApplicationDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/applications/:id/details"
+        element={
+          <ProtectedRoute>
+            <Navigate to="personal" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/applications/:id/:tab"
+        element={
+          <ProtectedRoute>
+            <ApplicationDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/applications/:applicationId/payment"
+        element={
+          <ProtectedRoute>
+            <ApplicationPayment />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/quote"
         element={<Quote />}
@@ -311,20 +372,110 @@ function AppRoutes() {
         path="/quotations/:id"
         element={<Quote />}
       />
-      <Route path="/quotations/new" element={<NewQuotation />} />
-      <Route path="/quotations/:id/pay" element={<Payment />} />
-      <Route path="/my-details" element={<MyDetails />} />
-      <Route path="/account-settings" element={<AccountSettings />} />
-      <Route path="/documents/:serviceType?" element={<Documents />} />
-      <Route path="/notifications" element={<Notifications />} />
-      <Route path="/admin/dashboard" element={<Dashboard />} />
-      <Route path="/admin/applications" element={<Tracking />} />
-      <Route path="/admin/applications/:id" element={<Navigate to="timeline" replace />} />
-      <Route path="/admin/applications/:id/payments" element={<AdminApplicationPayments />} />
-      <Route path="/admin/applications/:id/details/:subTab" element={<ApplicationDetail />} />
-      <Route path="/admin/applications/:id/details" element={<Navigate to="personal" replace />} />
-      <Route path="/admin/applications/:id/:tab" element={<ApplicationDetail />} />
-      <Route path="/admin/clients" element={<AdminClients />} />
+      <Route
+        path="/quotations/new"
+        element={
+          <ProtectedRoute>
+            <NewQuotation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/quotations/:id/pay"
+        element={
+          <ProtectedRoute>
+            <Payment />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-details"
+        element={
+          <ProtectedRoute>
+            <MyDetails />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/account-settings"
+        element={
+          <ProtectedRoute>
+            <AccountSettings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/documents/:serviceType?"
+        element={
+          <ProtectedRoute>
+            <Documents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/dashboard"
+        element={
+          <AdminRoute>
+            <Dashboard />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/applications"
+        element={
+          <AdminRoute>
+            <Tracking />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/applications/:id"
+        element={<AdminRedirect to="timeline" />}
+      />
+      <Route
+        path="/admin/applications/:id/payments"
+        element={
+          <AdminRoute>
+            <AdminApplicationPayments />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/applications/:id/details/:subTab"
+        element={
+          <AdminRoute>
+            <ApplicationDetail />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/applications/:id/details"
+        element={<AdminRedirect to="personal" />}
+      />
+      <Route
+        path="/admin/applications/:id/:tab"
+        element={
+          <AdminRoute>
+            <ApplicationDetail />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/clients"
+        element={
+          <AdminRoute>
+            <AdminClients />
+          </AdminRoute>
+        }
+      />
       <Route
         path="/admin/quotations"
         element={
@@ -373,14 +524,6 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminDonations />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/testimonials"
-        element={
-          <AdminRoute>
-            <AdminTestimonials />
           </AdminRoute>
         }
       />
@@ -562,9 +705,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      
-      {/* 404 Not Found - Catch all unmatched routes */}
-      <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   )

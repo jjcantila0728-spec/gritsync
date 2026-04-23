@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Unsubscribe Page - One-Click Unsubscribe
  * Accessible at: /unsubscribe/:token

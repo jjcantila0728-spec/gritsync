@@ -10,11 +10,13 @@ import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getSignedFileUrl } from '@/lib/api'
+import { getSignedFileUrl } from '@/lib/supabase-api'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
 import jsPDF from 'jspdf'
+import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -91,6 +93,7 @@ export function ApplicationPayments() {
   const [viewingProof, setViewingProof] = useState<{ url: string; fileName: string } | null>(null)
   const [showProofModal, setShowProofModal] = useState(false)
   const [processingPaymentType, setProcessingPaymentType] = useState<'step1' | 'step2' | 'full' | 'retake' | null>(null)
+  const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -105,6 +108,72 @@ export function ApplicationPayments() {
       loadPayments()
     }
   }, [id, user, authLoading, navigate])
+
+  // Set up real-time subscription for payment updates
+  useEffect(() => {
+    if (!id) return
+
+    const paymentsChannel = subscribeToApplicationPayments(id, (payload) => {
+      handlePaymentRealtimeUpdate(payload)
+    })
+    paymentsChannelRef.current = paymentsChannel
+
+    // Cleanup on unmount
+    return () => {
+      if (paymentsChannelRef.current) {
+        unsubscribe(paymentsChannelRef.current)
+        paymentsChannelRef.current = null
+      }
+    }
+  }, [id])
+
+  // Handle real-time payment updates
+  function handlePaymentRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New payment added - refresh payments
+        loadPayments()
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Payment updated - update in place or refresh
+        setPayments((prev) => {
+          const index = prev.findIndex((p) => p.id === newRecord.id)
+          if (index >= 0) {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          } else {
+            // Payment not in list, might be new - refresh to be safe
+            loadPayments()
+            return prev
+          }
+        })
+
+        // Show notification for status changes
+        if (oldRecord && oldRecord.status !== newRecord.status) {
+          if (newRecord.status === 'paid') {
+            showToast('Payment has been approved! ✅', 'success')
+            // Refresh payments to get receipt
+            loadPayments()
+          } else if (newRecord.status === 'failed') {
+            showToast('Payment has been rejected', 'error')
+          } else if (newRecord.status === 'pending_approval') {
+            showToast('Payment submitted for approval', 'info')
+          }
+        }
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Payment deleted - remove from list
+        setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id))
+      }
+    } catch (error) {
+      console.error('Error handling real-time payment update:', error)
+      // Fallback to full refresh on error
+      loadPayments()
+    }
+  }
 
   // Load services after application is loaded and payments are loaded
   useEffect(() => {
@@ -123,8 +192,13 @@ export function ApplicationPayments() {
       setLoadingServices(true)
       
       // Determine service name and state based on application type
-      const serviceName = 'NCLEX Processing'
-      const serviceState = 'New York'
+      const applicationType = application?.application_type || 'NCLEX'
+      const isEAD = applicationType === 'EAD'
+      
+      // For EAD applications, use NULL state (EAD is nationwide, not state-specific)
+      // For NCLEX, use state-specific pricing
+      const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
+      const serviceState = isEAD ? 'All States' : 'New York'
       
       // Determine payment type from application
       const dbPaymentType = application?.payment_type
@@ -134,6 +208,19 @@ export function ApplicationPayments() {
       const hasStaggeredPayments = payments.some(p => p.payment_type === 'step1' || p.payment_type === 'step2')
       const hasFullPayment = payments.some(p => p.payment_type === 'full')
       const hasNoPayments = payments.length === 0
+      
+      // EAD applications typically use full payment only
+      if (isEAD) {
+        const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, 'full')
+        if (service) {
+          setFullService(service)
+          setStaggeredService(null)
+          setRetakeService(null)
+        } else {
+          showToast('EAD payment service not configured. Please contact support.', 'error')
+        }
+        return
+      }
       
       // Handle retake payment type - retake only needs Step 2 as full payment
       if (dbPaymentType === 'retake') {
@@ -316,7 +403,7 @@ export function ApplicationPayments() {
         throw new Error('Payment intent creation failed: No client secret returned')
       }
 
-      setSelectedPayment(payment as Payment)
+      setSelectedPayment(payment)
       setClientSecret(intentData.clientSecret)
       setPaymentIntentId(intentData.paymentIntentId)
       setShowPaymentModal(true)

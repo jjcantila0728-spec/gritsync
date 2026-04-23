@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -10,11 +9,14 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
 import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
 import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
+import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, userDocumentsAPI, getSignedFileUrl } from '@/lib/api'
 
@@ -40,6 +42,7 @@ export function AdminClients() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
   const [exporting, setExporting] = useState(false)
+  const channelRef = useRef<RealtimeChannel | null>(null)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [clientDetails, setClientDetails] = useState<any>(null)
   const [clientDocuments, setClientDocuments] = useState<any[]>([])
@@ -53,6 +56,56 @@ export function AdminClients() {
     }
   }, [isAdmin])
 
+  // Set up real-time subscription for new client registrations
+  useEffect(() => {
+    if (!isAdmin()) return
+
+    const clientsChannel = subscribeToAllClients((payload) => {
+      handleClientRealtimeUpdate(payload)
+    })
+    channelRef.current = clientsChannel
+
+    // Cleanup on unmount
+    return () => {
+      if (channelRef.current) {
+        unsubscribe(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [isAdmin])
+
+  // Handle real-time client updates
+  function handleClientRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord && newRecord.role === 'client') {
+        // New client registered - add to list
+        setClients((prev) => [newRecord, ...prev])
+        showToast('New client registered', 'info')
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Client updated - update in place
+        setClients((prev) => {
+          const index = prev.findIndex((c) => c.id === newRecord.id)
+          if (index >= 0) {
+            const updated = [...prev]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          }
+          return prev
+        })
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Client deleted - remove from list
+        setClients((prev) => prev.filter((c) => c.id !== oldRecord.id))
+      }
+    } catch (error) {
+      console.error('Error handling real-time client update:', error)
+      // Fallback to full refresh on error
+      fetchClients()
+    }
+  }
 
   async function fetchClients() {
     try {
@@ -91,18 +144,150 @@ export function AdminClients() {
     setClientDocuments([])
     
     try {
+      // Try fetching user details - first via API, then direct query as fallback
       let detailsResult = null
       try {
         detailsResult = await userDetailsAPI.getByUserId(client.id)
       } catch {
-        detailsResult = null
+        // Fallback: direct Supabase query
+        const { data, error } = await supabase
+          .from('user_details')
+          .select('*')
+          .eq('user_id', client.id)
+          .maybeSingle()
+        
+        if (!error) {
+          detailsResult = data
+        }
       }
       
+      // If still no data, try querying without maybeSingle to see if there are any rows
+      if (!detailsResult) {
+        const { data: allRows } = await supabase
+          .from('user_details')
+          .select('*')
+          .eq('user_id', client.id)
+        
+        if (allRows && allRows.length > 0) {
+          detailsResult = allRows[0]
+        }
+      }
+      
+      // If still no data, try fetching from latest application as fallback
+      if (!detailsResult) {
+        const { data: applications } = await supabase
+          .from('applications')
+          .select('*')
+          .eq('user_id', client.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        
+        if (applications && applications.length > 0) {
+          const latestApp = applications[0] as {
+            first_name?: string | null
+            middle_name?: string | null
+            last_name?: string | null
+            gender?: string | null
+            marital_status?: string | null
+            single_full_name?: string | null
+            date_of_birth?: string | null
+            birth_place?: string | null
+            email?: string | null
+            mobile_number?: string | null
+            house_number?: string | null
+            street_name?: string | null
+            city?: string | null
+            province?: string | null
+            country?: string | null
+            zipcode?: string | null
+            elementary_school?: string | null
+            elementary_city?: string | null
+            elementary_province?: string | null
+            elementary_country?: string | null
+            elementary_years_attended?: string | null
+            elementary_start_date?: string | null
+            elementary_end_date?: string | null
+            high_school?: string | null
+            high_school_city?: string | null
+            high_school_province?: string | null
+            high_school_country?: string | null
+            high_school_years_attended?: string | null
+            high_school_start_date?: string | null
+            high_school_end_date?: string | null
+            nursing_school?: string | null
+            nursing_school_city?: string | null
+            nursing_school_province?: string | null
+            nursing_school_country?: string | null
+            nursing_school_years_attended?: string | null
+            nursing_school_start_date?: string | null
+            nursing_school_end_date?: string | null
+            nursing_school_major?: string | null
+            nursing_school_diploma_date?: string | null
+          }
+          // Map application fields to user_details format
+          detailsResult = {
+            first_name: latestApp.first_name,
+            middle_name: latestApp.middle_name,
+            last_name: latestApp.last_name,
+            gender: latestApp.gender,
+            marital_status: latestApp.marital_status,
+            single_full_name: latestApp.single_full_name,
+            date_of_birth: latestApp.date_of_birth,
+            birth_place: latestApp.birth_place,
+            email: latestApp.email,
+            mobile_number: latestApp.mobile_number,
+            house_number: latestApp.house_number,
+            street_name: latestApp.street_name,
+            city: latestApp.city,
+            province: latestApp.province,
+            country: latestApp.country,
+            zipcode: latestApp.zipcode,
+            elementary_school: latestApp.elementary_school,
+            elementary_city: latestApp.elementary_city,
+            elementary_province: latestApp.elementary_province,
+            elementary_country: latestApp.elementary_country,
+            elementary_years_attended: latestApp.elementary_years_attended,
+            elementary_start_date: latestApp.elementary_start_date,
+            elementary_end_date: latestApp.elementary_end_date,
+            high_school: latestApp.high_school,
+            high_school_city: latestApp.high_school_city,
+            high_school_province: latestApp.high_school_province,
+            high_school_country: latestApp.high_school_country,
+            high_school_years_attended: latestApp.high_school_years_attended,
+            high_school_start_date: latestApp.high_school_start_date,
+            high_school_end_date: latestApp.high_school_end_date,
+            nursing_school: latestApp.nursing_school,
+            nursing_school_city: latestApp.nursing_school_city,
+            nursing_school_province: latestApp.nursing_school_province,
+            nursing_school_country: latestApp.nursing_school_country,
+            nursing_school_years_attended: latestApp.nursing_school_years_attended,
+            nursing_school_start_date: latestApp.nursing_school_start_date,
+            nursing_school_end_date: latestApp.nursing_school_end_date,
+            nursing_school_major: latestApp.nursing_school_major,
+            nursing_school_diploma_date: latestApp.nursing_school_diploma_date,
+          }
+        }
+      }
+      
+      // Fetch documents
       let documents: any[] = []
       try {
         documents = await userDocumentsAPI.getByUserId(client.id) || []
       } catch {
-        documents = []
+        // Fallback: direct Supabase query
+        const { data, error } = await supabase
+          .from('user_documents')
+          .select('*')
+          .eq('user_id', client.id)
+          .order('uploaded_at', { ascending: false })
+        
+        if (!error) {
+          documents = data || []
+        }
+      }
+      
+      if (!detailsResult) {
+        // Don't show toast as it might be normal if user hasn't filled details yet
       }
       
       setClientDetails(detailsResult)
@@ -447,11 +632,57 @@ export function AdminClients() {
                               <td className="py-3 px-2 sm:px-4 text-right">
                                 <Button 
                                   size="sm"
-                                  variant="outline"
-                                  className="text-xs sm:text-sm whitespace-nowrap"
-                                  onClick={() => handleViewClient(client)}
+                                  className="text-xs sm:text-sm whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0"
+                                  onClick={async () => {
+                                    try {
+                                      showToast('Logging in as user...', 'info')
+                                      
+                                      // Get current session and token
+                                      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                                      
+                                      if (sessionError || !session?.access_token) {
+                                        throw new Error('No active session. Please log in again.')
+                                      }
+                                      
+                                      // Call Supabase Edge Function for admin login-as
+                                      const { data, error: functionError } = await supabase.functions.invoke('admin-login-as', {
+                                        method: 'POST',
+                                        body: { userId: client.id },
+                                        headers: {
+                                          'Authorization': `Bearer ${session.access_token}`
+                                        }
+                                      })
+
+                                      if (functionError || !data) {
+                                        throw new Error(functionError?.message || data?.error || 'Failed to generate login link')
+                                      }
+                                      
+                                      if (data.loginUrl) {
+                                        // Store admin session to restore later
+                                        const { data: { session: adminSession } } = await supabase.auth.getSession()
+                                        if (adminSession) {
+                                          localStorage.setItem('admin_session_backup', JSON.stringify({
+                                            access_token: adminSession.access_token,
+                                            refresh_token: adminSession.refresh_token,
+                                            expires_at: adminSession.expires_at
+                                          }))
+                                        }
+                                        
+                                        // Redirect to the magic link
+                                        window.location.href = data.loginUrl
+                                      } else if (data.email) {
+                                        // Fallback: show email for manual login
+                                        showToast(`Please login manually with: ${data.email}`, 'info')
+                                      } else {
+                                        throw new Error('No login method available')
+                                      }
+                                    } catch (error: any) {
+                                      console.error('Error logging in as user:', error)
+                                      showToast(error.message || 'Failed to login as user', 'error')
+                                    }
+                                  }}
                                 >
-                                  View
+                                  Login
                                 </Button>
                               </td>
                             </tr>

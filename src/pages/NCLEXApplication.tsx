@@ -1,4 +1,3 @@
-// @ts-nocheck
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -16,13 +15,13 @@ import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import {
   formatMMDDYYYY,
   formatMMYYYY,
   convertFromDatabaseFormat,
   convertToDatabaseFormat,
   convertMMYYYYToDatabase,
-  convertToMMYYYY,
   isValidMMDDYYYY
 } from '@/lib/utils/dateFormatters'
 
@@ -1387,7 +1386,7 @@ export function NCLEXApplication() {
                     value={email}
                     disabled
                     className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
-                    help="Auto-generated from your My Details profile"
+                    hint="Auto-generated from your My Details profile"
                   />
                 </div>
                 <Select

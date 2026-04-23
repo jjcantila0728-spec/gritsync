@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
-import { getSignedFileUrl, getFileUrl } from '../../lib/api'
+import { getSignedFileUrl, getFileUrl } from '../../lib/supabase-api'
 import { getCachedSignedUrl } from '../../lib/image-cache'
 
 interface DocumentImagePreviewProps {
@@ -48,7 +48,7 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
       console.log('DocumentImagePreview: Detected picture file, trying cached/signed URL first:', filePath)
       getCachedSignedUrl(
         filePath,
-        (path) => Promise.resolve(getSignedFileUrl(path, 3600)),
+        (path) => getSignedFileUrl(path, 3600),
         3600000 // Cache for 1 hour (matching signed URL expiration)
       )
         .then(url => {
@@ -96,7 +96,7 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
       // For non-picture files, use cached signed URL (requires authentication)
       getCachedSignedUrl(
         filePath,
-        (path) => Promise.resolve(getSignedFileUrl(path, 3600)),
+        (path) => getSignedFileUrl(path, 3600),
         3600000 // Cache for 1 hour (matching signed URL expiration)
       )
         .then(url => {
@@ -126,7 +126,7 @@ export function DocumentImagePreview({ filePath, alt, className }: DocumentImage
       console.log('DocumentImagePreview: Public URL failed, trying signed URL as fallback')
       getCachedSignedUrl(
         filePath,
-        (path) => Promise.resolve(getSignedFileUrl(path, 3600)),
+        (path) => getSignedFileUrl(path, 3600),
         3600000
       )
         .then(url => {

@@ -17,12 +17,14 @@ import { formatDate, paginate } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { useDebounce } from '@/hooks/useDebounce'
 
 interface Application {
   id: string
   grit_app_id?: string
-  application_type?: 'NCLEX'
+  application_type?: 'NCLEX' | 'EAD'
   first_name: string
   last_name: string
   status: string
@@ -76,6 +78,7 @@ export function Tracking() {
   const [refreshing, setRefreshing] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
+  const channelsRef = useRef<RealtimeChannel[]>([])
   const [applicationsNeedingPayment, setApplicationsNeedingPayment] = useState<Set<string>>(new Set())
   const [deletingAppId, setDeletingAppId] = useState<string | null>(null)
   const [deleteConfirmApp, setDeleteConfirmApp] = useState<Application | null>(null)
@@ -202,6 +205,37 @@ export function Tracking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingResult, trackingId])
 
+  // Set up real-time subscriptions for application status changes
+  useEffect(() => {
+    if (!user || trackingResult) return // Don't subscribe if tracking by ID or no user
+
+    const channels: RealtimeChannel[] = []
+
+    // Subscribe to applications based on user role
+    if (isAdminView) {
+      // Admin: subscribe to all applications
+      const appsChannel = subscribeToAllApplications((payload) => {
+        handleApplicationUpdate(payload)
+      })
+      channels.push(appsChannel)
+    } else {
+      // Client: subscribe to user's applications
+      const appsChannel = subscribeToUserApplications(user.id, (payload) => {
+        handleApplicationUpdate(payload)
+      })
+      channels.push(appsChannel)
+    }
+
+    channelsRef.current = channels
+
+    // Cleanup on unmount
+    return () => {
+      channels.forEach(channel => unsubscribe(channel))
+      channelsRef.current = []
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isAdminView, trackingResult])
+
   async function fetchApplications() {
     try {
       if (user) {
@@ -244,6 +278,42 @@ export function Tracking() {
     )
     
     setApplicationsNeedingPayment(needingPayment)
+  }
+
+  // Handle real-time application updates
+  function handleApplicationUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New application added - refresh list
+        fetchApplications()
+      } else if (eventType === 'UPDATE' && newRecord) {
+        // Application updated - update in place or refresh
+        setApplications((prevApps) => {
+          const index = prevApps.findIndex((app) => app.id === newRecord.id)
+          if (index >= 0) {
+            // Update existing application
+            const updated = [...prevApps]
+            updated[index] = { ...updated[index], ...newRecord }
+            return updated
+          } else {
+            // Application not in list, might be new - refresh to be safe
+            fetchApplications()
+            return prevApps
+          }
+        })
+      } else if (eventType === 'DELETE' && oldRecord) {
+        // Application deleted - remove from list
+        setApplications((prevApps) => prevApps.filter((app) => app.id !== oldRecord.id))
+      }
+    } catch (error) {
+      console.error('Error handling application update:', error)
+      // Fallback to full refresh on error
+      fetchApplications()
+    }
   }
 
   const handleRefresh = async () => {
@@ -394,7 +464,7 @@ export function Tracking() {
       })
     }
 
-    // Apply type filter (NCLEX)
+    // Apply type filter (NCLEX/EAD)
     if (typeFilter !== 'all') {
       filtered = filtered.filter((app) => {
         const appType = app.application_type || 'NCLEX' // Default to NCLEX for backward compatibility
@@ -830,26 +900,22 @@ export function Tracking() {
               </div>
             </section>
           ) : (
-            <section 
-              className="relative overflow-hidden py-16 md:py-20"
-              style={{
-                backgroundImage: `linear-gradient(to bottom right, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.5)), url('/tracking_page_banner_image.png')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center'
-              }}
-            >
-              <div className="container mx-auto px-4">
+            <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
+              <div className="container mx-auto px-4 py-12 md:py-16">
                 <div className="max-w-4xl mx-auto text-center">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
                     <FileText className="h-4 w-4" />
                     <span>Real-Time Tracking</span>
                   </div>
-                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.5)' }}>
+                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                     Application Tracking
                   </h1>
-                  <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.5)' }}>
+                  <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
                     Track your NCLEX application status in real-time. Enter your application ID to view progress and updates.
                   </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    {/* Buttons only for authenticated users; none for public */}
+                  </div>
                 </div>
               </div>
             </section>
@@ -1280,6 +1346,7 @@ export function Tracking() {
                     options={[
                       { value: 'all', label: 'All Types' },
                       { value: 'NCLEX', label: 'NCLEX' },
+                      { value: 'EAD', label: 'EAD (I-765)' },
                     ]}
                   />
                 </div>
@@ -1397,16 +1464,20 @@ export function Tracking() {
                                 </h3>
                                 <span className="text-base font-semibold text-gray-400 dark:text-gray-500">-</span>
                                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                  {app.service_type || 'NCLEX Processing'}
+                                  {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
                                 </h3>
                               </>
                             ) : (
                               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                {app.service_type || 'NCLEX Processing'}
+                                {app.service_type || (app.application_type === 'EAD' ? 'EAD Application' : 'NCLEX Processing')}
                               </h3>
                             )}
                             {app.application_type && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                app.application_type === 'EAD'
+                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              }`}>
                                 {app.application_type}
                               </span>
                             )}

@@ -15,7 +15,7 @@ import {
   Briefcase,
   Building2,
   Mail,
-  MessageSquare,
+  FileText,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -39,7 +39,6 @@ const adminNavItems: NavItem[] = [
   { label: 'Clients', path: '/admin/clients', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
   { label: 'Emails', path: '/admin/emails', icon: Mail },
-  { label: 'Success Stories', path: '/admin/testimonials', icon: MessageSquare },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
   { label: 'Donations', path: '/admin/donations', icon: Heart },
   { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },
@@ -407,7 +406,6 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const location = useLocation()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
-  const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {

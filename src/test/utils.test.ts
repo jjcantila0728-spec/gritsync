@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isValidEmail, validatePasswordSync, isValidPhoneNumber } from '@/lib/utils'
+import { isValidEmail, validatePassword, isValidPhoneNumber } from '@/lib/utils'
 
 describe('Utility Functions', () => {
   describe('isValidEmail', () => {
@@ -27,31 +27,31 @@ describe('Utility Functions', () => {
 
   describe('validatePassword', () => {
     it('should return valid for passwords with 6 or more characters', () => {
-      expect(validatePasswordSync('password123')).toEqual({ valid: true })
-      expect(validatePasswordSync('123456')).toEqual({ valid: true })
-      expect(validatePasswordSync('abcdef')).toEqual({ valid: true })
+      expect(validatePassword('password123')).toEqual({ valid: true })
+      expect(validatePassword('123456')).toEqual({ valid: true })
+      expect(validatePassword('abcdef')).toEqual({ valid: true })
     })
 
-    it('should return invalid for passwords shorter than 6 characters', () => {
-      const result = validatePasswordSync('12345')
+    it('should return invalid for passwords shorter than 6 characters', async () => {
+      const result = await validatePassword('12345')
       expect(result.valid).toBe(false)
       expect(result.message).toBe('Password must be at least 6 characters')
     })
 
-    it('should return invalid for passwords longer than 128 characters', () => {
+    it('should return invalid for passwords longer than 128 characters', async () => {
       const longPassword = 'a'.repeat(129)
-      const result = validatePasswordSync(longPassword)
+      const result = await validatePassword(longPassword)
       expect(result.valid).toBe(false)
       expect(result.message).toBe('Password must be less than 128 characters')
     })
 
     it('should return valid for passwords exactly 6 characters', () => {
-      expect(validatePasswordSync('123456')).toEqual({ valid: true })
+      expect(validatePassword('123456')).toEqual({ valid: true })
     })
 
     it('should return valid for passwords exactly 128 characters', () => {
       const password = 'a'.repeat(128)
-      expect(validatePasswordSync(password)).toEqual({ valid: true })
+      expect(validatePassword(password)).toEqual({ valid: true })
     })
   })
 

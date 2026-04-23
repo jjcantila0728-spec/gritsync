@@ -692,71 +692,7 @@ export interface Database {
           created_by?: string | null
         }
       }
-      user_documents: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      user_details: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      processing_accounts: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      services: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      email_logs: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      email_queue: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      email_templates: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      email_campaigns: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      subscribers: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      business_logos: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      application_payments: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      promo_codes: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
-      [key: string]: {
-        Row: Record<string, any>
-        Insert: Record<string, any>
-        Update: Record<string, any>
-      }
+      [key: string]: any
     }
     Views: {
       [key: string]: never

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Shield, ArrowLeft, FileText, Lock, Eye, Database, Info } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Header } from '@/components/Header'
+import { Shield, ArrowLeft } from 'lucide-react'
+import { Button } from '../components/ui/Button'
 import { Footer } from '@/components/Footer'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { generalSettings } from '@/lib/settings'
@@ -49,49 +48,35 @@ export function PrivacyPolicy() {
           },
         ]}
       />
-      <Header />
-
-      {/* Hero Banner */}
-      <section className="relative py-16 overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' viewBox=\'0 0 40 40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M20 20.5V18H0v-2h20v-2H0v-2h20v-2H0V8h20V6H0V4h20V2H0V0h22v20h2V0h2v20h2V0h2v20h2V0h2v20h2V0h2v22H20v-1.5zM0 20h2v20H0V20zm4 0h2v20H4V20zm4 0h2v20H8V20zm4 0h2v20h-2V20zm4 0h2v20h-2V20zm4 4h20v2H20v-2zm0 4h20v2H20v-2zm0 4h20v2H20v-2zm0 4h20v2H20v-2z\' fill=\'%23ffffff\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'/%3E%3C/svg%3E")'
-          }}></div>
-        </div>
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full mb-6">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Privacy Policy</h1>
-            <p className="text-xl text-white/90 max-w-2xl mx-auto">
-              Your privacy matters to us. Learn how we protect your data.
-            </p>
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2 text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
+              <ArrowLeft className="h-5 w-5" />
+              <span>Back to Home</span>
+            </Link>
+            <Link to="/" className="text-2xl font-bold text-gray-900 dark:text-white">
+              GritSync
+            </Link>
           </div>
         </div>
-      </section>
-
-      {/* Quick Navigation */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <Info className="h-4 w-4" />
-              <span>Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link to="/terms" className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1">
-                <FileText className="h-4 w-4" />
-                Terms of Service
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
+      </header>
 
       {/* Content */}
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 md:p-12">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 md:p-12">
+          {/* Title */}
+          <div className="flex items-center gap-3 mb-8">
+            <Shield className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
+              Privacy Policy
+            </h1>
+          </div>
+
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-8">
+            Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
 
           <div className="prose prose-gray dark:prose-invert max-w-none">
             {/* Introduction */}

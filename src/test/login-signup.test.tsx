@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase', () => {
 })
 
 // Get references to mocked functions
-import * as supabaseModule from '@/lib/api'
+import * as supabaseModule from '@/lib/supabase'
 const mockSignUp = (supabaseModule.supabase.auth.signUp as any)
 const mockSignIn = (supabaseModule.supabase.auth.signInWithPassword as any)
 const mockGetSession = (supabaseModule.supabase.auth.getSession as any)

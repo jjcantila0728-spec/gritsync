@@ -198,7 +198,7 @@ export async function compressPDF(file: File): Promise<File> {
     // Only use compressed version if it's actually smaller
     if (pdfBytes.length < file.size) {
       const compressedFile = new File(
-        [pdfBytes as BlobPart],
+        [pdfBytes],
         file.name,
         {
           type: 'application/pdf',

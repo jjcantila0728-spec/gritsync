@@ -1,7 +1,7 @@
 export interface ApplicationData {
   id: string
   user_id?: string
-  application_type?: 'NCLEX'
+  application_type?: 'NCLEX' | 'EAD'
   first_name: string
   middle_name: string
   last_name: string

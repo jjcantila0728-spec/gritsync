@@ -57,7 +57,7 @@ export function ProcessingAccountsTab({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Processing Accounts</h3>
                         <div className="flex gap-2">
-                          {!isAdmin && (
+                          {!isAdmin() && (
                             <Button onClick={() => {
                               setIsUserForm(true)
                               openAccountModal()
@@ -66,7 +66,7 @@ export function ProcessingAccountsTab({
                               Add Account
                             </Button>
                           )}
-                          {isAdmin && (
+                          {isAdmin() && (
                             <Button onClick={() => {
                               setIsUserForm(false)
                               openAccountModal()
@@ -86,7 +86,7 @@ export function ProcessingAccountsTab({
                         // Filter accounts based on user role
                         const filteredAccounts = processingAccounts.filter((account) => {
                           // Hide inactive Pearson Vue accounts from client users
-                          if (!isAdmin && account.account_type === 'pearson_vue' && account.status === 'inactive') {
+                          if (!isAdmin() && account.account_type === 'pearson_vue' && account.status === 'inactive') {
                             return false
                           }
                           return true
@@ -127,7 +127,7 @@ export function ProcessingAccountsTab({
                                         <a
                                           href={
                                             account.account_type === 'gritsync'
-                                              ? '/client/emails'
+                                              ? 'http://localhost:5000/client/emails'
                                               : 'https://wsr.pearsonvue.com/testtaker/signin/SignInPage.htm?clientCode=NCLEXTESTING'
                                           }
                                           target="_blank"
@@ -270,7 +270,7 @@ export function ProcessingAccountsTab({
                                     <Edit className="h-4 w-4 mr-2" />
                                     Edit
                                   </Button>
-                                  {(isAdmin || (account.account_type === 'custom' && account.created_by === user?.id)) && (
+                                  {(isAdmin() || (account.account_type === 'custom' && account.created_by === user?.id)) && (
                                     <Button
                                       variant="destructive"
                                       size="sm"

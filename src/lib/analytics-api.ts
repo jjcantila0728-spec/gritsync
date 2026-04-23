@@ -1,8 +1,9 @@
 /**
  * Analytics API
  * Handles analytics data retrieval and reporting
- * NOTE: This feature is currently stubbed pending full migration
  */
+
+import { supabase } from './supabase'
 
 export interface AnalyticsDateRange {
   startDate: string
@@ -72,48 +73,190 @@ export interface ReportSchedule {
   updated_at?: string
 }
 
-// Stubbed API - feature pending migration
 export const analyticsAPI = {
-  getApplicationAnalytics: async (_range: AnalyticsDateRange): Promise<ApplicationAnalytics> => ({
-    total: 0,
-    by_status: {},
-    by_service_type: {},
-    daily_trends: [],
-    approval_rate: 0,
-    rejection_rate: 0,
-    avg_processing_days: 0,
-  }),
-  getFinancialAnalytics: async (_range: AnalyticsDateRange): Promise<FinancialAnalytics> => ({
-    total_revenue: 0,
-    total_transactions: 0,
-    by_payment_type: {},
-    by_payment_method: {},
-    daily_revenue: [],
-    avg_transaction_value: 0,
-    outstanding_balance: 0,
-  }),
-  getUserAnalytics: async (_range: AnalyticsDateRange): Promise<UserAnalytics> => ({
-    total_users: 0,
-    by_role: {},
-    active_users: 0,
-    new_users_daily: [],
-    users_with_applications: 0,
-  }),
-  getDocumentAnalytics: async (_range: AnalyticsDateRange): Promise<DocumentAnalytics> => ({
-    total_documents: 0,
-    by_status: {},
-    by_document_type: {},
-    approval_rate: 0,
-    rejection_rate: 0,
-    avg_processing_days: 0,
-  }),
-  getCustomReports: async (): Promise<CustomReport[]> => [],
-  createReport: async (_report: Partial<CustomReport>): Promise<CustomReport | null> => null,
-  updateReport: async (_id: string, _report: Partial<CustomReport>): Promise<CustomReport | null> => null,
-  deleteReport: async (_id: string): Promise<boolean> => false,
-  runReport: async (_id: string): Promise<any> => null,
-  getReportSchedules: async (): Promise<ReportSchedule[]> => [],
-  createSchedule: async (_schedule: Partial<ReportSchedule>): Promise<ReportSchedule | null> => null,
-  updateSchedule: async (_id: string, _schedule: Partial<ReportSchedule>): Promise<ReportSchedule | null> => null,
-  deleteSchedule: async (_id: string): Promise<boolean> => false,
+  /**
+   * Get application analytics
+   */
+  async getApplicationAnalytics(
+    dateRange?: AnalyticsDateRange
+  ): Promise<ApplicationAnalytics> {
+    const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const endDate = dateRange?.endDate || new Date().toISOString()
+
+    const { data, error } = await supabase.rpc('get_application_analytics', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    })
+
+    if (error) throw new Error(error.message)
+    return data as ApplicationAnalytics
+  },
+
+  /**
+   * Get financial analytics
+   */
+  async getFinancialAnalytics(
+    dateRange?: AnalyticsDateRange
+  ): Promise<FinancialAnalytics> {
+    const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const endDate = dateRange?.endDate || new Date().toISOString()
+
+    const { data, error } = await supabase.rpc('get_financial_analytics', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    })
+
+    if (error) throw new Error(error.message)
+    return data as FinancialAnalytics
+  },
+
+  /**
+   * Get user analytics
+   */
+  async getUserAnalytics(
+    dateRange?: AnalyticsDateRange
+  ): Promise<UserAnalytics> {
+    const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const endDate = dateRange?.endDate || new Date().toISOString()
+
+    const { data, error } = await supabase.rpc('get_user_analytics', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    })
+
+    if (error) throw new Error(error.message)
+    return data as UserAnalytics
+  },
+
+  /**
+   * Get document analytics
+   */
+  async getDocumentAnalytics(
+    dateRange?: AnalyticsDateRange
+  ): Promise<DocumentAnalytics> {
+    const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const endDate = dateRange?.endDate || new Date().toISOString()
+
+    const { data, error } = await supabase.rpc('get_document_analytics', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    })
+
+    if (error) throw new Error(error.message)
+    return data as DocumentAnalytics
+  },
+
+  /**
+   * Get cached analytics (if available)
+   */
+  async getCachedAnalytics(cacheKey: string): Promise<any | null> {
+    const { data, error } = await supabase
+      .from('analytics_cache')
+      .select('cache_data')
+      .eq('cache_key', cacheKey)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+
+    if (error || !data) return null
+    return data.cache_data
+  },
+
+  /**
+   * Set cached analytics
+   */
+  async setCachedAnalytics(
+    cacheKey: string,
+    data: any,
+    expiresInMinutes: number = 60
+  ): Promise<void> {
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString()
+
+    await supabase
+      .from('analytics_cache')
+      .upsert({
+        cache_key: cacheKey,
+        cache_data: data,
+        expires_at: expiresAt,
+      })
+  },
+
+  /**
+   * Get all custom reports
+   */
+  async getCustomReports(): Promise<CustomReport[]> {
+    const { data, error } = await supabase
+      .from('custom_reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+    return (data || []) as CustomReport[]
+  },
+
+  /**
+   * Get custom report by ID
+   */
+  async getCustomReportById(id: string): Promise<CustomReport | null> {
+    const { data, error } = await supabase
+      .from('custom_reports')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return null
+      throw new Error(error.message)
+    }
+
+    return data as CustomReport
+  },
+
+  /**
+   * Create custom report
+   */
+  async createCustomReport(report: Omit<CustomReport, 'id' | 'created_at' | 'updated_at'>): Promise<CustomReport> {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { data, error } = await supabase
+      .from('custom_reports')
+      .insert({
+        ...report,
+        created_by_user_id: user?.id || null,
+      })
+      .select()
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data as CustomReport
+  },
+
+  /**
+   * Update custom report
+   */
+  async updateCustomReport(id: string, updates: Partial<CustomReport>): Promise<CustomReport> {
+    const { data, error } = await supabase
+      .from('custom_reports')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data as CustomReport
+  },
+
+  /**
+   * Delete custom report
+   */
+  async deleteCustomReport(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('custom_reports')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw new Error(error.message)
+  },
 }
+
+
+

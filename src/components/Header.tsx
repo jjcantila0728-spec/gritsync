@@ -10,8 +10,11 @@ import { Button } from './ui/Button'
 import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
-import { userDetailsAPI, notificationsAPI, usersAPI } from '@/lib/api'
-import { getSignedFileUrl } from '@/lib/api'
+import { userDetailsAPI, notificationsAPI } from '@/lib/api'
+import { getSignedFileUrl } from '@/lib/supabase-api'
+import { supabase } from '@/lib/supabase'
+import { subscribeToNotifications, unsubscribe } from '@/lib/realtime'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export function Header() {
   const { user, signOut, isAdmin } = useAuth()
@@ -26,6 +29,7 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
   const exploreMenuRef = useRef<HTMLDivElement>(null)
+  const notificationChannelRef = useRef<RealtimeChannel | null>(null)
   const avatarPathRef = useRef<string | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const avatarImageRef = useRef<HTMLImageElement | null>(null)
@@ -299,6 +303,7 @@ export function Header() {
       
       // Fetch avatar from users table (same source as MyDetails page)
       // Always check database to detect avatar changes, but use cache to prevent flicker
+      const cachedAvatarKey = `avatar_${user.id}`
       const cachedAvatarPathKey = `avatar_path_${user.id}`
       
       // Only fetch if we're not already fetching
@@ -310,13 +315,18 @@ export function Header() {
       
       ;(async () => {
         try {
-          const userData = await usersAPI.getById(user.id)
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('avatar_path, default_avatar_design')
+            .eq('id', user.id)
+            .single()
           
-          if (!userData) {
+          if (error || !userData) {
             // Only reset if user changed
             if (userIdChanged) {
               setAvatarUrl(null)
               clearAvatarCache(user.id)
+              // Design will be computed from cache via useMemo
             }
             avatarPathRef.current = null
             isFetchingAvatarRef.current = false
@@ -442,6 +452,23 @@ export function Header() {
         .catch(() => {
           // Keep the current name if fetch fails
         })
+      
+      // Fetch GritSync email address
+      supabase
+        .from('email_addresses')
+        .select('email_address')
+        .eq('user_id', user.id)
+        .eq('address_type', 'client')
+        .eq('is_primary', true)
+        .maybeSingle() // Use maybeSingle() instead of single() to avoid 406 error
+        .then(({ data, error }) => {
+          if (!error && data?.email_address) {
+            setGritsyncEmail(data.email_address)
+          }
+        })
+        .catch(() => {
+          // Keep the current email if fetch fails
+        })
     } else {
       // Only reset if user is actually null (logged out)
       setFirstName(null)
@@ -452,26 +479,6 @@ export function Header() {
       currentUserIdRef.current = null
       persistedFirstNameRef.current = null
       isFetchingAvatarRef.current = false
-    }
-  }, [user])
-
-  // Listen for avatar update events from MyDetails page
-  useEffect(() => {
-    const handleAvatarUpdate = (event: CustomEvent<{ userId: string; url: string | null; path: string | null }>) => {
-      if (user && event.detail.userId === user.id) {
-        setAvatarUrl(event.detail.url)
-        avatarPathRef.current = event.detail.path
-        if (event.detail.url && event.detail.path) {
-          cacheAvatar(user.id, event.detail.url, event.detail.path)
-        } else {
-          clearAvatarCache(user.id)
-        }
-      }
-    }
-    
-    window.addEventListener('avatar-updated', handleAvatarUpdate as EventListener)
-    return () => {
-      window.removeEventListener('avatar-updated', handleAvatarUpdate as EventListener)
     }
   }, [user])
 
@@ -498,8 +505,65 @@ export function Header() {
   useEffect(() => {
     if (user) {
       fetchNotifications()
+      
+      // Set up real-time subscription for notifications
+      const notificationChannel = subscribeToNotifications(user.id, (payload) => {
+        handleNotificationRealtimeUpdate(payload)
+      })
+      notificationChannelRef.current = notificationChannel
+
+      // Cleanup on unmount
+      return () => {
+        if (notificationChannelRef.current) {
+          unsubscribe(notificationChannelRef.current)
+          notificationChannelRef.current = null
+        }
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
+
+  // Handle real-time notification updates
+  function handleNotificationRealtimeUpdate(payload: any) {
+    try {
+      const eventType = payload.eventType || payload.event
+      const newRecord = payload.new
+      const oldRecord = payload.old
+
+      if (eventType === 'INSERT' && newRecord) {
+        // New notification received - add to list and update count
+        setNotifications((prev) => [newRecord, ...prev])
+        if (!newRecord.read) {
+          setUnreadCount((prev) => prev + 1)
+        }
+        
+        // Show browser notification if permission granted
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(newRecord.title || 'New Notification', {
+            body: newRecord.message || '',
+            icon: '/favicon.ico',
+          })
+        }
+      } else if (eventType === 'UPDATE' && newRecord && oldRecord) {
+        // Notification was updated (e.g., marked as read)
+        setNotifications((prev) => 
+          prev.map(n => n.id === newRecord.id ? newRecord : n)
+        )
+        // Update count if read status changed
+        if (oldRecord.read !== newRecord.read) {
+          if (newRecord.read) {
+            setUnreadCount((prev) => Math.max(0, prev - 1))
+          } else {
+            setUnreadCount((prev) => prev + 1)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error handling real-time notification update:', error)
+      // Fallback to fetching notifications
+      fetchNotifications()
+    }
+  }
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {
@@ -563,11 +627,9 @@ export function Header() {
   ]
 
   const exploreMenuItems = [
-    { label: 'USCIS Tracker', path: '/uscis-tracker', hash: '' },
     { label: 'Sponsorship', path: '/sponsorship', hash: '' },
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },
-    { label: 'Success Stories', path: '/success-stories', hash: '' },
     { label: 'About Us', path: '/about-us', hash: '' },
   ]
 

@@ -22,20 +22,26 @@ export function ResetPassword() {
   const { resetPassword } = useAuth()
   const { showToast } = useToast()
 
-  // Check if we're in a password reset flow via URL params
+  // Supabase uses hash fragments for auth callbacks (access_token, type, etc.)
+  // When user clicks reset link, Supabase automatically authenticates them
+  // We just need to check if we're in a password reset flow
   const isPasswordResetFlow = window.location.hash.includes('type=recovery') || 
                                searchParams.get('type') === 'recovery' ||
-                               searchParams.get('token') !== null
+                               window.location.hash.includes('access_token')
 
   useEffect(() => {
-    // Check if user has a valid reset token
+    // Check if Supabase has authenticated the user via the reset link
     // If not, show error after a short delay
-    const token = searchParams.get('token')
-    if (!token && !isPasswordResetFlow) {
-      showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
-      setTimeout(() => navigate('/forgot-password'), 3000)
+    const checkSession = async () => {
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session && !isPasswordResetFlow) {
+        showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
+        setTimeout(() => navigate('/forgot-password'), 3000)
+      }
     }
-  }, [isPasswordResetFlow, navigate, showToast, searchParams])
+    checkSession()
+  }, [isPasswordResetFlow, navigate, showToast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,9 +63,9 @@ export function ResetPassword() {
 
     setLoading(true)
     try {
-      // Reset password using the token from the URL
-      const token = searchParams.get('token') || ''
-      await resetPassword(token, password)
+      // Supabase automatically authenticates the user when they click the reset link
+      // So we can directly update the password using updateUser
+      await resetPassword('', password)
       setSuccess(true)
       showToast('Password reset successfully!', 'success')
       setTimeout(() => navigate('/login'), 3000)
@@ -91,17 +97,17 @@ export function ResetPassword() {
           structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
         />
         <Header />
-        <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
-            <div className="p-4 sm:p-6 text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-3">
-                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-red-600 dark:text-red-400" />
+        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <Card className="w-full max-w-md border-0 shadow-xl">
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                <Lock className="h-8 w-8 text-red-600 dark:text-red-400" />
               </div>
-              <h1 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-gray-100">
+              <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
                 Invalid Reset Link
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                This link is invalid or expired. Please request a new reset.
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                This password reset link is invalid or has expired. Please request a new password reset.
               </p>
               <Link to="/forgot-password">
                 <Button className="w-full">
@@ -127,17 +133,17 @@ export function ResetPassword() {
           structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
         />
         <Header />
-        <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
-            <div className="p-4 sm:p-6 text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-3">
-                <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <Card className="w-full max-w-md border-0 shadow-xl">
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
-              <h1 className="text-lg sm:text-xl font-bold mb-1 text-gray-900 dark:text-gray-100">
+              <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
                 Password Reset Successful!
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                You can now log in with your new password.
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Your password has been successfully reset. You can now log in with your new password.
               </p>
               <Link to="/login">
                 <Button className="w-full">
@@ -162,22 +168,22 @@ export function ResetPassword() {
         structuredData={[generateBreadcrumbSchema(breadcrumbs)]}
       />
       <Header />
-      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Card className="w-full max-w-sm sm:max-w-md border-0 shadow-xl">
-          <div className="p-4 sm:p-6">
-            <div className="text-center mb-4 sm:mb-6">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-3">
-                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600 dark:text-primary-400" />
+      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        <Card className="w-full max-w-md border-0 shadow-xl">
+          <div className="p-8">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
+                <Lock className="h-8 w-8 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
+              <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
                 Reset Password
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Enter your new password
+              <p className="text-gray-600 dark:text-gray-400">
+                Enter your new password below
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="relative">
                 <Input
                   label="New Password"
@@ -227,12 +233,12 @@ export function ResetPassword() {
               </Button>
             </form>
 
-            <div className="mt-4">
+            <div className="mt-6">
               <Link
                 to="/login"
-                className="flex items-center justify-center gap-2 text-xs sm:text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                className="flex items-center justify-center gap-2 text-sm text-primary-600 dark:text-primary-400 hover:underline"
               >
-                <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+                <ArrowLeft className="h-4 w-4" />
                 Back to Login
               </Link>
             </div>

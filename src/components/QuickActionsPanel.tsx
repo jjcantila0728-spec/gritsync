@@ -51,7 +51,7 @@ export function QuickActionsPanel({
       icon: Plus,
       href: '/apply',
       color: 'bg-primary-600 hover:bg-primary-700 text-white',
-      description: 'Start a new NCLEX application'
+      description: 'Start a new NCLEX or EAD application'
     },
     {
       id: 'view-applications',

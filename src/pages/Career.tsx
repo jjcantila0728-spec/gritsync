@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,6 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, AlertCircle, ArrowLeft, Users, Briefcase } from 'lucide-react'
 
@@ -66,7 +66,7 @@ export function Career() {
           }
         }
 
-        const agencies = await partnerAgenciesAPI.getAll()
+        const agencies = await partnerAgenciesAPI.getAll(true)
         setPartnerAgencies(agencies)
       } catch (error) {
         console.error('Error loading data:', error)
@@ -193,20 +193,22 @@ export function Career() {
         last_name: lastName.trim(),
         email: email.trim(),
         mobile_number: mobileNumber.trim(),
-        date_of_birth: dateOfBirth.trim() || undefined,
-        country: country.trim() || undefined,
-        nursing_school: nursingSchool.trim() || undefined,
-        graduation_date: graduationDate.trim() || undefined,
-        years_of_experience: yearsOfExperience.trim() || undefined,
-        current_employment_status: currentEmploymentStatus.trim() || undefined,
-        license_number: licenseNumber.trim() || undefined,
-        license_state: licenseState.trim() || undefined,
+        date_of_birth: dateOfBirth.trim() || null,
+        country: country.trim() || null,
+        nursing_school: nursingSchool.trim() || null,
+        graduation_date: graduationDate.trim() || null,
+        years_of_experience: yearsOfExperience.trim() || null,
+        current_employment_status: currentEmploymentStatus.trim() || null,
+        license_number: licenseNumber.trim() || null,
+        license_state: licenseState.trim() || null,
+        resume_path: resumePath,
+        cover_letter_path: coverLetterPath,
         additional_documents_path: additionalDocumentsPath,
-        career_id: careerId || undefined,
-        partner_agency_id: career?.partner_agency_id || undefined,
+        career_id: careerId || null,
+        partner_agency_id: career?.partner_agency_id || null,
       }
 
-      await careerApplicationsAPI.create(applicationData as any)
+      await careerApplicationsAPI.create(applicationData)
 
       showToast('Career application submitted successfully! GritSync will automatically forward your application to our partner agencies in the USA.', 'success')
       

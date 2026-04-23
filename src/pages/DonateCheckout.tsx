@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
@@ -192,21 +191,16 @@ export function DonateCheckout() {
     const createPaymentIntent = async () => {
       try {
         // Create payment intent - this works for anonymous users
-        console.log('Creating payment intent for donation:', id, 'amount:', donationAmount)
         const paymentIntent = await donationsAPI.createPaymentIntent(id, donationAmount)
-        console.log('Payment intent response:', JSON.stringify(paymentIntent))
-        if (paymentIntent && paymentIntent.clientSecret) {
-          setClientSecret(paymentIntent.clientSecret)
+        if (paymentIntent.client_secret) {
+          setClientSecret(paymentIntent.client_secret)
         } else {
-          console.error('Invalid payment intent response:', paymentIntent)
-          throw new Error('Payment service returned an invalid response. Please try again.')
+          throw new Error('Failed to create payment intent')
         }
       } catch (error: any) {
         console.error('Error creating payment intent:', error)
-        const errorMessage = error.message || 'Failed to initialize payment. Please try again.'
-        showToast(errorMessage, 'error')
-        // Don't navigate away immediately - give user time to see the error
-        setTimeout(() => navigate('/donate'), 2000)
+        showToast(error.message || 'Failed to initialize payment. Please try again.', 'error')
+        navigate('/donate')
       } finally {
         setLoading(false)
       }

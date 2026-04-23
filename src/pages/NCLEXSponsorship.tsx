@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,6 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
 import { sponsorshipsAPI, userDocumentsAPI } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, FileText, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -185,21 +185,21 @@ export function NCLEXSponsorship() {
         last_name: lastName.trim(),
         email: email.trim(),
         mobile_number: mobileNumber.trim(),
-        date_of_birth: dateOfBirth.trim() || undefined,
-        country: country.trim() || undefined,
-        nursing_school: nursingSchool.trim() || undefined,
-        graduation_date: graduationDate.trim() || undefined,
-        current_employment_status: currentEmploymentStatus.trim() || undefined,
-        years_of_experience: yearsOfExperience.trim() || undefined,
+        date_of_birth: dateOfBirth.trim() || null,
+        country: country.trim() || null,
+        nursing_school: nursingSchool.trim() || null,
+        graduation_date: graduationDate.trim() || null,
+        current_employment_status: currentEmploymentStatus.trim() || null,
+        years_of_experience: yearsOfExperience.trim() || null,
         financial_need_description: financialNeedDescription.trim(),
         motivation_statement: motivationStatement.trim(),
-        how_will_this_help: howWillThisHelp.trim() || undefined,
+        how_will_this_help: howWillThisHelp.trim() || null,
         resume_path: resumePath,
         transcript_path: transcriptPath,
-        recommendation_letter_path: recommendationLetterPath || undefined,
+        recommendation_letter_path: recommendationLetterPath,
       }
 
-      await sponsorshipsAPI.create(sponsorshipData as any)
+      await sponsorshipsAPI.create(sponsorshipData)
 
       showToast('Sponsorship application submitted successfully! We will review your application and get back to you soon.', 'success')
       

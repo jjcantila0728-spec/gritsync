@@ -1,7 +1,6 @@
-export const copyToClipboard = async (text: string | null | undefined, label: string = 'text', showToast?: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void) => {
-  const textToCopy = text ?? ''
+export const copyToClipboard = async (text: string, label: string = 'text', showToast?: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void) => {
   try {
-    await navigator.clipboard.writeText(textToCopy)
+    await navigator.clipboard.writeText(text)
     if (showToast) {
       showToast(`${label} copied to clipboard!`, 'success')
     }
