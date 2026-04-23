@@ -4697,6 +4697,17 @@ export const applicationPaymentsAPI = {
     return data
   },
 
+  getPendingApproval: async () => {
+    const { data, error } = await supabase
+      .from('application_payments')
+      .select('*')
+      .eq('status', 'pending_approval')
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
   approvePayment: async (paymentId: string) => {
     if (!(await isAdmin())) {
       throw new Error('Unauthorized - Admin only')

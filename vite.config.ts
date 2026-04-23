@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@supabase/supabase-js': path.resolve(__dirname, './src/lib/supabase-compat.ts'),
     },
   },
   test: {
@@ -19,9 +20,15 @@ export default defineConfig({
   server: {
     port: 5000,
     host: '0.0.0.0',
-    strictPort: false, // Allow Vite to use next available port if 5000 is busy
+    strictPort: false,
     allowedHosts: true,
     cors: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     // Production build optimizations
@@ -49,10 +56,6 @@ export default defineConfig({
             // Stripe
             if (id.includes('stripe')) {
               return 'stripe-vendor'
-            }
-            // Supabase
-            if (id.includes('supabase')) {
-              return 'supabase-vendor'
             }
             // Other vendor code
             return 'vendor'
