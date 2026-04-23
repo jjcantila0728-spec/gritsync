@@ -26,14 +26,25 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'This mobile number is already registered' })
     }
 
-    // Generate GRIT ID and auto-assign email
+    // Generate GRIT ID
     const grit_id = generateGritId()
-    const gritsync_email = `${grit_id.toLowerCase()}@gritsync.com`
 
-    // Ensure the generated email is unique (collision guard)
-    const existingEmail = await query('SELECT id FROM users WHERE email = $1', [gritsync_email])
-    if (existingEmail.rows.length > 0) {
-      return res.status(500).json({ error: 'ID generation conflict, please try again' })
+    // Auto-generate email as firstname.lastname@gritsync.com
+    // Normalize: lowercase, remove non-alphanumeric chars except dots
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const baseEmail = `${normalize(first_name)}.${normalize(last_name)}@gritsync.com`
+
+    // Handle conflicts: append a number if the base email is taken
+    let gritsync_email = baseEmail
+    let suffix = 1
+    while (true) {
+      const conflict = await query('SELECT id FROM users WHERE email = $1', [gritsync_email])
+      if (conflict.rows.length === 0) break
+      gritsync_email = `${normalize(first_name)}.${normalize(last_name)}${suffix}@gritsync.com`
+      suffix++
+      if (suffix > 99) {
+        return res.status(500).json({ error: 'Unable to generate unique email, please contact support' })
+      }
     }
 
     const password_hash = await bcrypt.hash(password, 12)
