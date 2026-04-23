@@ -6,11 +6,10 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
-import { applicationsAPI, serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
+import { serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
 import { getCachedSignedUrl } from '@/lib/image-cache'
-import { cn } from '@/lib/utils'
-import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, GraduationCap, Briefcase } from 'lucide-react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
 
 interface DocumentStatus {
@@ -41,7 +40,6 @@ const DEFAULT_ACCEPTED_FORMATS = ['.pdf', '.jpg', '.jpeg', '.png']
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {
   NCLEX: 'NCLEX',
-  EAD: 'EAD (I-765)',
   Additional: 'Additional',
 }
 
@@ -73,93 +71,11 @@ const FALLBACK_DOC_REQUIREMENTS: ServiceDocumentRequirement[] = [
     required: true,
     sort_order: 2,
   },
-  {
-    id: 'fallback-ead-2x2-picture',
-    service_type: 'EAD',
-    document_type: 'ead_2x2_picture',
-    name: '2X2 Picture',
-    accepted_formats: ['image/*'],
-    required: true,
-    sort_order: 0,
-  },
-  {
-    id: 'fallback-ead-passport',
-    service_type: 'EAD',
-    document_type: 'ead_passport',
-    name: 'Passport',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 1,
-  },
-  {
-    id: 'fallback-ead-h4',
-    service_type: 'EAD',
-    document_type: 'ead_h4_visa',
-    name: 'H-4 Visa',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 2,
-  },
-  {
-    id: 'fallback-ead-i94',
-    service_type: 'EAD',
-    document_type: 'ead_i94',
-    name: 'I-94 Record',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 3,
-  },
-  {
-    id: 'fallback-ead-marriage',
-    service_type: 'EAD',
-    document_type: 'ead_marriage_certificate',
-    name: 'Marriage Certificate',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 4,
-  },
-  {
-    id: 'fallback-ead-spouse-i797',
-    service_type: 'EAD',
-    document_type: 'ead_spouse_i797',
-    name: 'Spouse I-797',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 5,
-  },
-  {
-    id: 'fallback-ead-spouse-i140',
-    service_type: 'EAD',
-    document_type: 'ead_spouse_i140',
-    name: 'Spouse I-140',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 6,
-  },
-  {
-    id: 'fallback-ead-employer-letter',
-    service_type: 'EAD',
-    document_type: 'ead_employer_letter',
-    name: 'Employer Letter',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 7,
-  },
-  {
-    id: 'fallback-ead-paystub',
-    service_type: 'EAD',
-    document_type: 'ead_paystub',
-    name: 'Paystub',
-    accepted_formats: DEFAULT_ACCEPTED_FORMATS,
-    required: true,
-    sort_order: 8,
-  },
+
 ]
 export function Documents() {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const { serviceType: routeServiceType } = useParams<{ serviceType?: string }>()
-  const navigate = useNavigate()
   const [uploading, setUploading] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<DocumentStatus[]>([])
@@ -170,8 +86,6 @@ export function Documents() {
   const [userLastName, setUserLastName] = useState<string>('')
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
   const [serviceDocRequirements, setServiceDocRequirements] = useState<ServiceDocumentRequirement[]>([])
-  const [serviceTypes, setServiceTypes] = useState<string[]>([])
-  const [serviceTypesLoaded, setServiceTypesLoaded] = useState(false)
   const [docConfigLoading, setDocConfigLoading] = useState(true)
   const [docConfigError, setDocConfigError] = useState<string | null>(null)
 
@@ -264,47 +178,15 @@ export function Documents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  useEffect(() => {
-    if (!user) {
-      setServiceTypes([])
-      setServiceTypesLoaded(false)
-      return
-    }
-
-    let isMounted = true
-    setServiceTypesLoaded(false)
-
-    const loadServiceTypes = async () => {
-      try {
-        const types = await applicationsAPI.getServiceTypes()
-        if (!isMounted) return
-        setServiceTypes(types)
-      } catch (error: any) {
-        if (!isMounted) return
-        setServiceTypes([])
-        showToast('Failed to determine your services. Defaulting to NCLEX documents.', 'error')
-      } finally {
-        if (!isMounted) return
-        setServiceTypesLoaded(true)
-      }
-    }
-
-    loadServiceTypes()
-    return () => {
-      isMounted = false
-    }
-  }, [user, showToast])
-
   const loadDocumentRequirements = useCallback(() => {
-    if (!user || !serviceTypesLoaded) {
+    if (!user) {
       return
     }
 
     setDocConfigLoading(true)
     setDocConfigError(null)
-    const normalizedTypes = serviceTypes.length > 0 ? serviceTypes : ['NCLEX']
 
-    serviceRequiredDocumentsAPI.getByServiceTypes(normalizedTypes)
+    serviceRequiredDocumentsAPI.getByServiceTypes(['NCLEX'])
       .then((docs) => {
         // Filter out any error objects and ensure proper typing
         const validDocs = (docs || []).filter((doc: any) => doc && typeof doc === 'object' && 'id' in doc) as unknown as ServiceDocumentRequirement[]
@@ -318,23 +200,21 @@ export function Documents() {
       .finally(() => {
         setDocConfigLoading(false)
       })
-  }, [user, serviceTypesLoaded, serviceTypes])
+  }, [user])
 
   useEffect(() => {
-    if (!user || !serviceTypesLoaded) {
+    if (!user) {
       return
     }
 
     loadDocumentRequirements()
 
-    // Listen for document requirements updates (e.g., when admin changes them)
     const handleDocumentRequirementsUpdate = () => {
       loadDocumentRequirements()
     }
 
     window.addEventListener('documentRequirementsUpdated', handleDocumentRequirementsUpdate)
 
-    // Refresh when window regains focus (in case changes were made in another tab)
     const handleFocus = () => {
       loadDocumentRequirements()
     }
@@ -344,15 +224,14 @@ export function Documents() {
       window.removeEventListener('documentRequirementsUpdated', handleDocumentRequirementsUpdate)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [user, serviceTypesLoaded, loadDocumentRequirements])
+  }, [user, loadDocumentRequirements])
 
   const documentRequirementSource = useMemo(() => {
     if (serviceDocRequirements.length > 0) {
       return serviceDocRequirements
     }
-    const fallbackServiceTypes = serviceTypes.length > 0 ? serviceTypes : ['NCLEX']
-    return FALLBACK_DOC_REQUIREMENTS.filter((doc) => fallbackServiceTypes.includes(doc.service_type))
-  }, [serviceDocRequirements, serviceTypes])
+    return FALLBACK_DOC_REQUIREMENTS.filter((doc) => doc.service_type === 'NCLEX')
+  }, [serviceDocRequirements])
 
   const requiredDocuments = useMemo(() => {
     return documentRequirementSource
@@ -485,53 +364,6 @@ export function Documents() {
     fetchDocuments()
   }, [user, docConfigLoading, fetchDocuments])
 
-  // Handle route-based navigation and redirects
-  useEffect(() => {
-    if (!docConfigLoading && documents.length > 0) {
-      // Group documents to determine available service types
-      const documentsByService = documents.reduce((acc, doc) => {
-        const serviceType = doc.serviceType || 'Additional'
-        if (!acc[serviceType]) {
-          acc[serviceType] = []
-        }
-        acc[serviceType].push(doc)
-        return acc
-      }, {} as Record<string, DocumentStatus[]>)
-
-      const availableServiceTypes = Object.keys(documentsByService).sort()
-      
-      // Map route parameter to service type
-      const routeToServiceTypeMap: Record<string, string> = {
-        'nclex': 'NCLEX',
-        'ead': 'EAD',
-        'additional': 'Additional',
-      }
-      
-      const normalizedRouteServiceType = routeServiceType 
-        ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
-        : null
-
-      // If route parameter is invalid, redirect to base /documents
-      if (routeServiceType && (!normalizedRouteServiceType || !availableServiceTypes.includes(normalizedRouteServiceType))) {
-        navigate('/documents', { replace: true })
-        return
-      }
-
-      // If no route parameter and multiple service types exist, redirect to first tab
-      if (!routeServiceType && availableServiceTypes.length > 1) {
-        const firstServiceType = availableServiceTypes[0]
-        const serviceTypeToRouteMap: Record<string, string> = {
-          'NCLEX': '/documents/nclex',
-          'EAD': '/documents/ead',
-          'Additional': '/documents/additional',
-        }
-        const firstRoute = serviceTypeToRouteMap[firstServiceType]
-        if (firstRoute) {
-          navigate(firstRoute, { replace: true })
-        }
-      }
-    }
-  }, [docConfigLoading, documents, routeServiceType, navigate])
 
   // Removed unused _handleFileUpload function
 
@@ -835,7 +667,7 @@ export function Documents() {
               Documents
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload and manage the documents required for the services you applied for (NCLEX, EAD, etc.).
+              Upload and manage the documents required for your NCLEX application.
             </p>
           </div>
 
@@ -863,7 +695,7 @@ export function Documents() {
               </Card>
             )}
 
-            {/* Documents List with Tabs */}
+            {/* Documents List */}
             {loading ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <CardSkeleton />
@@ -871,58 +703,8 @@ export function Documents() {
                 <CardSkeleton />
               </div>
             ) : (() => {
-              // Group documents by service type
-              const documentsByService = documents.reduce((acc, doc) => {
-                const serviceType = doc.serviceType || 'Additional'
-                if (!acc[serviceType]) {
-                  acc[serviceType] = []
-                }
-                acc[serviceType].push(doc)
-                return acc
-              }, {} as Record<string, typeof documents>)
-
-              // Create tabs based on available service types
-              const serviceTypesInDocuments = Object.keys(documentsByService).sort()
-              
-              // Map route parameter to service type ID (normalize case)
-              const routeToServiceTypeMap: Record<string, string> = {
-                'nclex': 'NCLEX',
-                'ead': 'EAD',
-                'additional': 'Additional',
-              }
-              
-              // Normalize route service type (if provided)
-              const normalizedRouteServiceType = routeServiceType 
-                ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
-                : null
-
-              // Determine which tabs to show based on what documents exist
-              const availableTabs: Array<{ id: string; label: string; icon?: React.ComponentType<{ className?: string }>, routePath: string }> = []
-              
-              if (serviceTypesInDocuments.includes('NCLEX')) {
-                availableTabs.push({ id: 'NCLEX', label: 'NCLEX', icon: GraduationCap, routePath: '/documents/nclex' })
-              }
-              if (serviceTypesInDocuments.includes('EAD')) {
-                availableTabs.push({ id: 'EAD', label: 'EAD (I-765)', icon: Briefcase, routePath: '/documents/ead' })
-              }
-              if (serviceTypesInDocuments.includes('Additional')) {
-                availableTabs.push({ id: 'Additional', label: 'Additional', icon: FileText, routePath: '/documents/additional' })
-              }
 
               // Determine which service type to display based on route
-              // If route parameter is invalid or doesn't exist, show all or redirect to first tab
-              let activeServiceType: string | null = null
-              if (normalizedRouteServiceType && serviceTypesInDocuments.includes(normalizedRouteServiceType)) {
-                activeServiceType = normalizedRouteServiceType
-              } else if (routeServiceType) {
-                // Invalid route parameter - redirect to base documents page
-                setTimeout(() => navigate('/documents', { replace: true }), 0)
-                activeServiceType = null
-              } else {
-                // No route parameter - show all documents or first available tab
-                activeServiceType = null
-              }
-
               // Helper function to render a document card (defined inline to capture closures)
               const renderCard = (doc: DocumentStatus) => (
                 <Card
@@ -1169,145 +951,32 @@ export function Documents() {
                 </Card>
               )
 
-              // If filtering by a specific service type from route
-              if (activeServiceType) {
-                const filteredDocs = documentsByService[activeServiceType] || []
-                // Still show tabs if multiple service types exist
-                if (availableTabs.length > 1) {
-                  return (
-                    <div>
-                      {/* Custom tab headers that navigate to routes */}
-                      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                        <nav className="flex space-x-1" aria-label="Tabs">
-                          {availableTabs.map((tab) => {
-                            const Icon = tab.icon
-                            const isActive = activeServiceType === tab.id
-                            return (
-                              <Link
-                                key={tab.id}
-                                to={tab.routePath}
-                                className={cn(
-                                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-                                  isActive
-                                    ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
-                                )}
-                                aria-current={isActive ? 'page' : undefined}
-                              >
-                                {Icon && <Icon className="h-4 w-4" />}
-                                {tab.label}
-                              </Link>
-                            )
-                          })}
-                        </nav>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredDocs.map(renderCard)}
-                      </div>
-                    </div>
-                  )
-                } else {
-                  // Only one service type, no tabs needed
-                  return (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredDocs.map(renderCard)}
-                    </div>
-                  )
-                }
-              }
-
-              // No route parameter - redirect to first tab if multiple tabs exist
-              if (availableTabs.length > 1) {
-                // Redirect to first tab's route
-                setTimeout(() => navigate(availableTabs[0].routePath, { replace: true }), 0)
-                // Show first tab's content while redirecting
-                return (
-                  <div>
-                    <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                      <nav className="flex space-x-1" aria-label="Tabs">
-                        {availableTabs.map((tab, index) => {
-                          const Icon = tab.icon
-                          const isActive = index === 0
-                          return (
-                            <Link
-                              key={tab.id}
-                              to={tab.routePath}
-                              className={cn(
-                                'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-                                isActive
-                                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
-                              )}
-                              aria-current={isActive ? 'page' : undefined}
-                            >
-                              {Icon && <Icon className="h-4 w-4" />}
-                              {tab.label}
-                            </Link>
-                          )
-                        })}
-                      </nav>
-                    </div>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {(documentsByService[availableTabs[0]?.id] || []).map(renderCard)}
-                    </div>
-                  </div>
-                )
-              }
-
-              // Single tab or no tabs - show documents normally
-              const docsToRender = availableTabs.length === 1 
-                ? documentsByService[availableTabs[0].id] || []
-                : documents
-              
               return (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {docsToRender.map(renderCard)}
+                  {documents.map(renderCard)}
                 </div>
               )
             })()}
 
             {/* Quick Actions */}
-            {(() => {
-              const routeToServiceTypeMap: Record<string, string> = {
-                'nclex': 'NCLEX',
-                'ead': 'EAD',
-                'additional': 'Additional',
-              }
-              const normalizedRouteServiceType = routeServiceType 
-                ? routeToServiceTypeMap[routeServiceType.toLowerCase()] 
-                : null
-              
-              let message = 'Once all documents are uploaded, you can proceed with your application.'
-              let applicationLink = '/application/new'
-              
-              if (normalizedRouteServiceType === 'EAD') {
-                message = 'Once all documents are uploaded, you can proceed with your EAD application.'
-                applicationLink = '/application/new/ead'
-              } else if (normalizedRouteServiceType === 'NCLEX') {
-                message = 'Once all documents are uploaded, you can proceed with your NCLEX application.'
-                applicationLink = '/application/new/nclex'
-              }
-              
-              return (
-                <Card className="border-0 shadow-md bg-primary-50/50 dark:bg-primary-900/10">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                        Ready to submit your application?
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {message}
-                      </p>
-                    </div>
-                    <Link to={applicationLink}>
-                      <Button>
-                        Start Application
-                      </Button>
-                    </Link>
-                  </div>
-                </Card>
-              )
-            })()}
+            <Card className="border-0 shadow-md bg-primary-50/50 dark:bg-primary-900/10">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                    Ready to submit your application?
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Once all documents are uploaded, you can proceed with your NCLEX application.
+                  </p>
+                </div>
+                <Link to="/application/new">
+                  <Button>
+                    Start Application
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+
           </div>
         </main>
       </div>

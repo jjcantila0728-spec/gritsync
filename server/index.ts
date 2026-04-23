@@ -4,6 +4,7 @@ import { json, urlencoded } from 'express'
 import authRoutes from './routes/auth'
 import queryRoutes from './routes/query'
 import paymentRoutes from './routes/payments'
+import emailRoutes from './routes/emails'
 
 const app = express()
 const PORT = process.env.SERVER_PORT || 3001
@@ -24,6 +25,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/db', queryRoutes)
 app.use('/api/payments', paymentRoutes)
+app.use('/api/emails', emailRoutes)
 
 // 404 handler
 app.use((_req, res) => {

@@ -244,7 +244,21 @@ export const emailAddressesAPI = {
       .select()
       .single()
 
-    if (createError) throw createError
+    if (createError) {
+      // If unique constraint violation, the email already exists — fetch and return it
+      if (createError.code === '23505' || (typeof createError.message === 'string' && createError.message.includes('unique constraint'))) {
+        const { data: existing } = await supabase
+          .from('email_addresses')
+          .select('email_address')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle()
+        if (existing) return (existing as any).email_address as string
+        // Last resort: return the attempted email address
+        return emailAddress
+      }
+      throw createError
+    }
     return (created as any).email_address as string
   },
 

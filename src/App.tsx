@@ -18,9 +18,8 @@ const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.R
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })))
 const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })))
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
-const ApplicationServiceSelection = lazy(() => import('./pages/ApplicationServiceSelection').then(m => ({ default: m.ApplicationServiceSelection })))
 const NCLEXApplication = lazy(() => import('./pages/NCLEXApplication').then(m => ({ default: m.NCLEXApplication })))
-const EADApplication = lazy(() => import('./pages/EADApplication').then(m => ({ default: m.EADApplication })))
+const NCLEXReview = lazy(() => import('./pages/NCLEXReview').then(m => ({ default: m.NCLEXReview })))
 const Tracking = lazy(() => import('./pages/Tracking').then(m => ({ default: m.Tracking })))
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })))
 const Quote = lazy(() => import('./pages/Quote').then(m => ({ default: m.Quote })))
@@ -247,6 +246,7 @@ function AppRoutes() {
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/nclex-review" element={<NCLEXReview />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />
@@ -268,7 +268,7 @@ function AppRoutes() {
         path="/application/new"
         element={
           <ProtectedRoute>
-            <ApplicationServiceSelection />
+            <NCLEXApplication />
           </ProtectedRoute>
         }
       />
@@ -277,14 +277,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <NCLEXApplication />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new/ead"
-        element={
-          <ProtectedRoute>
-            <EADApplication />
           </ProtectedRoute>
         }
       />
