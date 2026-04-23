@@ -16,6 +16,7 @@ import {
   Building2,
   Mail,
   FileText,
+  BookOpen,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -30,6 +31,7 @@ const clientNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Applications', path: '/applications', icon: ClipboardList },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
+  { label: 'NCLEX Review', path: '/nclex-review', icon: BookOpen },
   { label: 'Emails', path: '/client/emails', icon: Mail },
 ]
 
@@ -39,6 +41,7 @@ const adminNavItems: NavItem[] = [
   { label: 'Clients', path: '/admin/clients', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
   { label: 'Emails', path: '/admin/emails', icon: Mail },
+  { label: 'Question Bank', path: '/admin/question-bank', icon: BookOpen },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
   { label: 'Donations', path: '/admin/donations', icon: Heart },
   { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },

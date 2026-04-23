@@ -5,6 +5,9 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 const router = Router()
 
 async function getResendApiKey(): Promise<string | null> {
+  if (process.env.RESEND_API_KEY) {
+    return process.env.RESEND_API_KEY
+  }
   try {
     const result = await query(
       `SELECT value FROM settings WHERE key = 'resendApiKey' LIMIT 1`

@@ -70,6 +70,7 @@ const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').the
 const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ default: m.ClientEmails })))
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
+const AdminQuestionBank = lazy(() => import('./pages/AdminQuestionBank').then(m => ({ default: m.AdminQuestionBank })))
 
 // Loading fallback component
 function PageLoader() {
@@ -532,6 +533,14 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminPartnerAgencies />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/question-bank"
+        element={
+          <AdminRoute>
+            <AdminQuestionBank />
           </AdminRoute>
         }
       />
