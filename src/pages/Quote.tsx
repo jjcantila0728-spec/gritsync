@@ -84,8 +84,12 @@ export function Quote() {
     async function loadAvailableServicesAndStates() {
       try {
         const services = await servicesAPI.getAll()
-        // Get unique service names
-        const uniqueServices = Array.from(new Set(services.map((s: any) => s.service_name)))
+        // Get unique service names, excluding EAD Processing
+        const uniqueServices = Array.from(new Set(
+          services
+            .filter((s: any) => s.service_name !== 'EAD Processing')
+            .map((s: any) => s.service_name)
+        ))
         setAvailableServices(uniqueServices.sort())
       } catch (error) {
         console.error('Error loading available services:', error)
@@ -480,7 +484,7 @@ export function Quote() {
   // This handles both Full Payment and Staggered Payment based on service configuration:
   // - First Time Taker: Full Payment includes Step 1 + Step 2, Staggered includes both steps
   // - Retaker: Only Step 2, Full Payment only
-  // - Other services (like EAD Processing): All items in full payment
+  // - Other services: All items in full payment
   // Tax is calculated on taxable items only (12% rate)
   useEffect(() => {
     // Only calculate if service and state are selected
@@ -498,7 +502,7 @@ export function Quote() {
       return { subtotal, tax, total }
     }
 
-    // For services without taker types (like EAD Processing), use all items based on available payment types
+    // For services without taker types, use all items based on available payment types
     if (formData.service !== 'NCLEX Processing') {
       if (formData.paymentType === 'full') {
         // For full payment, use all items from step1 (for full-only services, all items are in step1)
@@ -1128,8 +1132,8 @@ export function Quote() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <SEO
         title={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync | Professional Processing Services` : 'Get a Quote - Professional Processing Services | GritSync'}
-        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing, EAD Processing, and more.` : 'Get instant, transparent quotes for NCLEX Processing, EAD Processing, and other professional services. No hidden fees, clear pricing upfront.'}
-        keywords="quote, quotation, NCLEX quote, EAD processing quote, service pricing, processing services, transparent pricing"
+        description={quoteId ? `View your quotation #${formatQuoteId(quoteId)}. Get transparent pricing for NCLEX Processing and more.` : 'Get instant, transparent quotes for NCLEX Processing and other professional services. No hidden fees, clear pricing upfront.'}
+        keywords="quote, quotation, NCLEX quote, NCLEX processing quote, service pricing, processing services, transparent pricing"
         canonicalUrl={currentUrl}
         ogTitle={quoteId ? `Quote #${formatQuoteId(quoteId)} - GritSync` : 'Get a Quote - Professional Processing Services | GritSync'}
         ogDescription={quoteId ? `View your quotation #${formatQuoteId(quoteId)}` : 'Get instant, transparent quotes for professional processing services. No hidden fees.'}
@@ -1137,7 +1141,7 @@ export function Quote() {
         ogUrl={currentUrl}
         structuredData={[
           generateBreadcrumbSchema(breadcrumbs),
-          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing, EAD Processing, and other professional services with transparent pricing'),
+          generateServiceSchema('Professional Processing Services Quotation', 'Get instant quotes for NCLEX Processing and other professional services with transparent pricing'),
         ]}
       />
       <Header />
@@ -1156,7 +1160,7 @@ export function Quote() {
                   Get Your Service Quotation
                 </h1>
                 <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                  Get transparent, instant quotes for NCLEX Processing, EAD Processing, and more. No hidden fees, clear pricing upfront.
+                  Get transparent, instant quotes for NCLEX Processing and more. No hidden fees, clear pricing upfront.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">

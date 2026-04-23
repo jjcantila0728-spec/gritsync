@@ -4,6 +4,12 @@ import { authenticateToken, optionalAuth, AuthenticatedRequest } from '../middle
 
 const router = Router()
 
+// Tables that allow unauthenticated inserts (public-facing forms)
+const PUBLIC_INSERT_TABLES = new Set([
+  'quotations', 'newsletter_subscriptions', 'career_applications',
+  'donations', 'testimonials',
+])
+
 // Allowed tables for security
 const ALLOWED_TABLES = new Set([
   'applications', 'application_payments', 'application_timeline_steps',
@@ -77,9 +83,14 @@ router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Respo
 })
 
 // POST /api/db/:table - Insert
-router.post('/:table', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { table } = req.params
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
+
+  // Require auth for non-public tables
+  if (!PUBLIC_INSERT_TABLES.has(table) && !req.user) {
+    return res.status(401).json({ error: 'No token provided' })
+  }
 
   try {
     const { returning = '*', ...record } = req.body
