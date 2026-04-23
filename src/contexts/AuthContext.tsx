@@ -101,58 +101,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The profile will load automatically via the auth state change listener
   }
 
-  async function signUp(firstName: string, lastName: string, email: string, password: string, role: UserRole = 'client') {
-    const normalizedEmail = email.toLowerCase().trim()
-
-    // Simple registration - let Supabase Auth handle duplicate checking
-    const { error } = await supabase.auth.signUp({
-      email: normalizedEmail,
+  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client') {
+    const { data, error } = await supabase.auth.signUp({
+      email: '',
       password,
       options: {
         data: {
           first_name: firstName,
           last_name: lastName,
-          role: role, // Store role in metadata for RLS checks
+          mobile,
+          role,
         },
-        emailRedirectTo: `${window.location.origin}/verify-email`,
       },
     })
 
     if (error) {
-      // Handle Supabase auth errors with user-friendly messages
-      if (error.message.includes('already registered') || 
+      if (error.message.includes('already registered') ||
           error.message.includes('already exists') ||
-          error.message.includes('User already registered') ||
-          error.message.includes('email address is already in use')) {
-        throw new Error('This email address is already registered. Please use a different email or try logging in.')
+          error.message.includes('mobile') ||
+          error.message.includes('already in use')) {
+        throw new Error('This mobile number is already registered. Please try logging in.')
       }
       throw new Error(error.message)
     }
 
-    // Send welcome email after successful registration
-    try {
-      const { sendWelcomeEmail } = await import('@/lib/email-notifications')
-      const userName = [firstName, lastName].filter(Boolean).join(' ') || normalizedEmail.split('@')[0]
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-      
-      // Send welcome email asynchronously (don't block registration)
-      sendWelcomeEmail(normalizedEmail, {
-        userName,
-        userEmail: normalizedEmail,
-        dashboardUrl: `${baseUrl}/dashboard`
-      }).catch((error) => {
-        console.error('Failed to send welcome email:', error)
-        // Don't throw - registration should succeed even if email fails
-      })
-    } catch (error) {
-      console.error('Error importing welcome email function:', error)
-      // Don't throw - registration should succeed even if email fails
-    }
-
-    // Email verification is automatically sent by Supabase Auth
-    // Don't wait for profile creation - the trigger will handle it
-    // The auth state change listener will load the profile automatically
-    // This makes registration faster and more resilient
+    // Return the generated GRIT ID and email so the registration page can display them
+    return data?.session?.user?.user_metadata || data?.user?.user_metadata || null
   }
 
   async function signOut() {

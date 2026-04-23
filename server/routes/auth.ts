@@ -13,25 +13,36 @@ function generateGritId(): string {
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, first_name, last_name, middle_name, mobile, role = 'client' } = req.body
+    // Email is NOT required — it will be auto-generated from the GRIT ID
+    const { password, first_name, last_name, middle_name, mobile, role = 'client' } = req.body
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' })
+    if (!password || !first_name || !last_name || !mobile) {
+      return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' })
     }
 
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()])
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'User already registered' })
+    // Check for duplicate mobile number
+    const existingMobile = await query('SELECT id FROM users WHERE mobile = $1', [mobile.trim()])
+    if (existingMobile.rows.length > 0) {
+      return res.status(400).json({ error: 'This mobile number is already registered' })
+    }
+
+    // Generate GRIT ID and auto-assign email
+    const grit_id = generateGritId()
+    const gritsync_email = `${grit_id.toLowerCase()}@gritsync.com`
+
+    // Ensure the generated email is unique (collision guard)
+    const existingEmail = await query('SELECT id FROM users WHERE email = $1', [gritsync_email])
+    if (existingEmail.rows.length > 0) {
+      return res.status(500).json({ error: 'ID generation conflict, please try again' })
     }
 
     const password_hash = await bcrypt.hash(password, 12)
-    const grit_id = generateGritId()
 
     const result = await query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
-       RETURNING id, email, role, first_name, last_name, grit_id, created_at`,
-      [email.toLowerCase(), password_hash, first_name || null, last_name || null, middle_name || null, mobile || null, role, grit_id]
+      `INSERT INTO users (email, gritsync_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+       RETURNING id, email, gritsync_email, role, first_name, last_name, grit_id, created_at`,
+      [gritsync_email, gritsync_email, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id]
     )
 
     const user = result.rows[0]
@@ -42,6 +53,7 @@ router.post('/register', async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
+        gritsync_email: user.gritsync_email,
         role: user.role,
         first_name: user.first_name,
         last_name: user.last_name,
@@ -61,6 +73,7 @@ router.post('/register', async (req: Request, res: Response) => {
             first_name: user.first_name,
             last_name: user.last_name,
             grit_id: user.grit_id,
+            gritsync_email: user.gritsync_email,
             role: user.role,
           },
           app_metadata: { role: user.role },
@@ -79,13 +92,32 @@ router.post('/login', async (req: Request, res: Response) => {
     const { email, password } = req.body
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' })
+      return res.status(400).json({ error: 'Email/mobile and password required' })
     }
 
-    const result = await query(
-      'SELECT id, email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    )
+    // Accept email address, mobile number, or GRIT ID as login identifier
+    const identifier = email.trim()
+    const isEmail = identifier.includes('@')
+    const isGritId = /^GRIT[A-Z0-9]+$/i.test(identifier)
+
+    let result
+    if (isEmail) {
+      result = await query(
+        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE email = $1',
+        [identifier.toLowerCase()]
+      )
+    } else if (isGritId) {
+      result = await query(
+        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE LOWER(grit_id) = LOWER($1)',
+        [identifier]
+      )
+    } else {
+      // Treat as mobile number
+      result = await query(
+        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE mobile = $1',
+        [identifier]
+      )
+    }
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid login credentials' })

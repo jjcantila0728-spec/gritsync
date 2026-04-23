@@ -184,11 +184,11 @@ export function Login() {
 
               <div className="relative">
                 <Input
-                  label="Email Address"
-                  type="email"
+                  label="Email / Mobile Number / GRIT ID"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
+                  placeholder="Enter your email, mobile, or GRIT ID"
                   required
                   className="pl-10"
                 />
