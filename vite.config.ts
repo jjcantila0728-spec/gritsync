@@ -38,32 +38,8 @@ export default defineConfig({
     cssMinify: true, // Minify CSS
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // Optimize chunk splitting for better caching
-          if (id.includes('node_modules')) {
-            // React and core dependencies
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'react-vendor'
-            }
-            // UI libraries
-            if (id.includes('lucide-react')) {
-              return 'ui-vendor'
-            }
-            // PDF generation
-            if (id.includes('jspdf') || id.includes('html2canvas')) {
-              return 'pdf-vendor'
-            }
-            // Stripe
-            if (id.includes('stripe')) {
-              return 'stripe-vendor'
-            }
-            // Other vendor code
-            return 'vendor'
-          }
-        },
-        // Add content hash to filenames for better caching
-        entryFileNames: 'assets/[name]-[hash].js',
-        chunkFileNames: 'assets/[name]-[hash].js',
+        // Let Vite handle chunk splitting automatically to avoid React
+        // initialization order issues between split vendor chunks
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name.split('.')
           const ext = info[info.length - 1]
