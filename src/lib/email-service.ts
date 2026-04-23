@@ -423,7 +423,10 @@ export async function sendEmail(options: EmailOptions & {
     })
 
     if (error) {
-      console.error('Error sending email:', error)
+      const isUnavailable = error.code === 'FUNCTION_NOT_AVAILABLE'
+      if (!isUnavailable) {
+        console.error('Error sending email:', error)
+      }
       
       // Update log with error
       if (logId) {
@@ -436,12 +439,6 @@ export async function sendEmail(options: EmailOptions & {
             error_code: error.code || null,
           })
           .eq('id', logId)
-      }
-      
-      // Check if it's a CORS error
-      if (error.message?.includes('CORS') || error.message?.includes('Failed to send a request')) {
-        console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
-        console.error('To fix this, run: supabase functions deploy send-email')
       }
       
       return false

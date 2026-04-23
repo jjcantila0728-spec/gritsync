@@ -1472,16 +1472,18 @@ export const quotationsAPI = {
   },
 
   createPaymentIntent: async (quotationId: string, amount: number) => {
-    // Call Supabase Edge Function to create Stripe payment intent
-    const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-      body: { 
-        quotation_id: quotationId,
-        amount: amount * 100, // Convert to cents
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch('/api/payments/create-intent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
+      body: JSON.stringify({ quotation_id: quotationId, amount: amount * 100 }),
     })
-    
-    if (error) throw new Error(error.message)
-    return data as Tables<'user_documents'>
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Failed to create payment intent')
+    return data
   },
 }
 
@@ -3412,74 +3414,14 @@ export const clientsAPI = {
     return data || []
   },
 
-  // Optimized: Get clients with their Gmail accounts in batch (reduces N+1 queries)
+  // Get clients with their GritSync Gmail accounts
+  // gritsync_email is stored directly on the users table
   getAllWithGmailAccounts: async () => {
     const clients = await clientsAPI.getAll()
-    if (clients.length === 0) return []
-
-    const clientIds = clients.map((c: any) => c.id).filter(Boolean)
-
-    // Batch fetch: Get latest application for each client
-    const { data: allApplications, error: appsError } = await supabase
-      .from('applications')
-      .select('id, user_id, first_name, middle_name, last_name')
-      .in('user_id', clientIds)
-      .order('created_at', { ascending: false })
-
-    if (appsError) {
-      logError(normalizeError(appsError, { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_applications' }), { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_applications' })
-    }
-
-    // Group applications by user_id, keeping only the most recent
-    const latestAppsByUserId = new Map<string, any>()
-    ;(allApplications || []).forEach((app: any) => {
-      if (!app.user_id) return
-      const existing = latestAppsByUserId.get(app.user_id)
-      if (!existing) {
-        latestAppsByUserId.set(app.user_id, app)
-      }
-    })
-
-    const applicationIds = Array.from(latestAppsByUserId.values())
-      .map((app: any) => app.id)
-      .filter(Boolean)
-
-    // Batch fetch: Get GritSync accounts for all applications at once
-    const { data: gritsyncAccounts, error: accountsError } = applicationIds.length > 0
-      ? await supabase
-          .from('processing_accounts')
-          .select('application_id, email')
-          .in('application_id', applicationIds)
-          .eq('account_type', 'gritsync')
-      : { data: [], error: null }
-
-    if (accountsError) {
-      logError(normalizeError(accountsError, { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_gritsync_accounts' }), { operation: 'clientsAPI.getAllWithGmailAccounts', context: 'fetch_gritsync_accounts' })
-    }
-
-    // Map GritSync accounts by application_id
-    const gritsyncByAppId = new Map<string, string>()
-    ;(gritsyncAccounts || []).forEach((acc: any) => {
-      if (acc.application_id && acc.email) {
-        gritsyncByAppId.set(acc.application_id, acc.email)
-      }
-    })
-
-    // Combine data
-    return clients.map((client: any) => {
-      const latestApp = latestAppsByUserId.get(client.id)
-      if (!latestApp) {
-        return { ...client, gmail_account: client.email }
-      }
-
-      const gritsyncEmail = gritsyncByAppId.get(latestApp.id)
-      if (gritsyncEmail) {
-        return { ...client, gmail_account: gritsyncEmail }
-      }
-
-      // No gritsync account found - fallback to client email
-      return { ...client, gmail_account: client.email }
-    })
+    return clients.map((client: any) => ({
+      ...client,
+      gmail_account: client.gritsync_email || client.email,
+    }))
   },
 
   // Admin impersonation - login as user
@@ -3538,9 +3480,7 @@ export const dashboardAPI = {
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         return mapStats(rpcData[0])
       }
-      if (rpcError) {
-        logError(normalizeError(rpcError, { operation: 'dashboardAPI.getStats', context: 'rpc_admin_fallback' }), { operation: 'dashboardAPI.getStats', context: 'rpc_admin_fallback' })
-      }
+      // RPC unavailable in this environment — silently fall through to direct queries
 
       // Admin stats - comprehensive system-wide statistics (fallback path)
       const [
@@ -3675,9 +3615,7 @@ export const dashboardAPI = {
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         return mapStats(rpcData[0])
       }
-      if (rpcError) {
-        logError(normalizeError(rpcError, { operation: 'dashboardAPI.getStats', context: 'rpc_client_fallback' }), { operation: 'dashboardAPI.getStats', context: 'rpc_client_fallback' })
-      }
+      // RPC unavailable in this environment — silently fall through to direct queries
 
       // Client stats (fallback path)
       const [applications, quotations, payments] = await Promise.all([
@@ -4107,129 +4045,20 @@ export const applicationPaymentsAPI = {
 
 
   createPaymentIntent: async (paymentId: string) => {
-    const context = { operation: 'applicationPaymentsAPI.createPaymentIntent', paymentId }
-    
-    try {
-      // Get session if available (application payments can be made by anyone with the link)
-      let authHeader: string | undefined = undefined
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        // Only use session if it exists and is valid
-        if (!sessionError && session?.access_token) {
-          // Verify the token is still valid
-          const { error: userError } = await supabase.auth.getUser()
-          if (!userError) {
-            authHeader = `Bearer ${session.access_token}`
-            // Using authenticated session for payment intent
-          } else {
-            // Session token invalid, proceeding as public user
-          }
-        } else {
-          // No session found, proceeding as public user
-        }
-      } catch (sessionCheckError) {
-        // If session check fails, proceed as public user (no auth header)
-        logError(normalizeError(sessionCheckError, { operation: 'applicationPaymentsAPI.createPaymentIntent', context: 'session_check' }), { operation: 'applicationPaymentsAPI.createPaymentIntent', context: 'session_check', severity: 'low' })
-      }
-      
-      // Call Supabase Edge Function for Stripe payment intent creation with retry logic
-      const executeInvoke = async () => {
-        const invokeOptions: any = {
-          body: { payment_id: paymentId },
-        }
-        
-        // Only add auth header if we have a valid session
-        if (authHeader) {
-          invokeOptions.headers = {
-            Authorization: authHeader,
-          }
-        }
-        
-        const { data, error } = await supabase.functions.invoke('create-application-payment-intent', invokeOptions)
-        
-        if (error) {
-          // Try to extract error message from response body
-          let errorMessage = 'Failed to connect to payment service'
-          
-          // If context is a Response object, try to read the body
-          if (error.context && error.context instanceof Response) {
-            try {
-              const responseText = await error.context.text()
-              
-              try {
-                const errorBody = JSON.parse(responseText)
-                if (errorBody?.error) {
-                  errorMessage = typeof errorBody.error === 'string' 
-                    ? errorBody.error 
-                    : errorBody.error.message || errorMessage
-                } else if (errorBody?.message) {
-                  errorMessage = errorBody.message
-                }
-              } catch (parseError) {
-                // If it's not JSON, use the text as error message if it's meaningful
-                if (responseText && responseText.length < 200) {
-                  errorMessage = responseText
-                }
-              }
-            } catch (readError) {
-              // Fall through to use default error message
-            }
-          }
-          
-          // Try to get error message from other sources
-          if (errorMessage === 'Failed to connect to payment service') {
-            if (error.message && error.message !== 'Edge Function returned a non-2xx status code') {
-              errorMessage = error.message
-            } else if (error.error?.message) {
-              errorMessage = error.error.message
-            }
-          }
-          
-          throw normalizeError(new Error(errorMessage), { ...context, step: 'invokeFunction', originalError: error })
-        }
-        
-        // Handle edge function error response (function executed but returned error)
-        if (data && typeof data === 'object') {
-          if (data.error) {
-            const errorMsg = typeof data.error === 'string' 
-              ? data.error 
-              : data.error.message || data.error.error || 'Payment intent creation failed'
-            throw normalizeError(new Error(errorMsg), { ...context, step: 'processResponse' })
-          }
-          
-          // Edge function returns snake_case, convert to camelCase for consistency
-          const clientSecret = data.client_secret || data.clientSecret
-          const paymentIntentId = data.payment_intent_id || data.paymentIntentId
-          
-          if (!clientSecret) {
-            throw normalizeError(
-              new Error('Payment intent created but no client secret returned. Please contact support.'),
-              { ...context, step: 'validateResponse' }
-            )
-          }
-          
-          return {
-            clientSecret,
-            paymentIntentId,
-          }
-        }
-        
-        // No data returned
-        throw normalizeError(
-          new Error('No response from payment service. Please try again or contact support.'),
-          { ...context, step: 'validateResponse' }
-        )
-      }
-      
-      // Execute with retry logic for network errors
-      return await retryWithBackoff(executeInvoke, 3, 2000)
-    } catch (err: any) {
-      // Re-throw AppError as-is, normalize others
-      if (err instanceof AppError) {
-        throw err
-      }
-      throw normalizeError(err, context)
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch('/api/payments/create-application-intent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ payment_id: paymentId }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Failed to create payment intent')
+    return {
+      clientSecret: data.clientSecret || data.client_secret,
+      paymentIntentId: data.paymentIntentId || data.payment_intent_id,
     }
   },
 
@@ -5245,6 +5074,21 @@ export const donationsAPI = {
     
     if (error) throw new Error(error.message)
     return data
+  },
+
+  getPublicStats: async () => {
+    const { data, error } = await supabase
+      .from('donations')
+      .select('amount, status')
+    
+    if (error) throw new Error(error.message)
+    const completed = (data || []).filter((d: any) => d.status === 'completed')
+    const total = completed.reduce((sum: number, d: any) => sum + Number(d.amount || 0), 0)
+    return {
+      total_raised: total,
+      total_donors: completed.length,
+      currency: 'USD',
+    }
   },
 }
 

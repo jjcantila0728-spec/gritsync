@@ -154,43 +154,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function requestPasswordReset(email: string) {
     try {
       // Get user info first to get their name
-      const { data: userData, error: userError } = await supabase
+      const { data: userData } = await supabase
         .from('users')
         .select('id, first_name, last_name, email')
         .eq('email', email)
         .maybeSingle()
 
-      // Generate password reset link via edge function
-      const { data: linkData, error: linkError } = await supabase.functions.invoke('generate-password-reset-link', {
-        body: {
-          email,
-          redirectTo: `${window.location.origin}/reset-password`
-        }
+      // Generate password reset token via Express backend
+      const res = await fetch('/api/auth/reset-password-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
+      const resetData = await res.json()
 
-      if (linkError || !linkData?.resetLink) {
-        throw new Error(linkError?.message || 'Failed to generate reset link')
+      if (!res.ok) {
+        throw new Error(resetData.error || 'Failed to generate reset link')
       }
 
+      // Build reset link from the token returned by the backend
+      const resetToken = resetData.token
+      if (!resetToken) {
+        // Backend returns the generic message even if email not found — that's fine
+        return
+      }
+      const resetLink = `${window.location.origin}/reset-password?token=${resetToken}`
+
       // Get user name and ID for email
-      const userName = userData 
+      const userName = userData
         ? [userData.first_name, userData.last_name].filter(Boolean).join(' ') || email.split('@')[0]
         : email.split('@')[0]
       const recipientUserId = userData?.id || null
 
       // Send email using our custom template
       const { sendForgotPasswordEmail } = await import('@/lib/email-notifications')
-      const emailSent = await sendForgotPasswordEmail(
-        email,
-        userName,
-        linkData.resetLink,
-        '1 hour',
-        recipientUserId
-      )
-
-      if (!emailSent) {
-        throw new Error('Failed to send password reset email')
-      }
+      await sendForgotPasswordEmail(email, userName, resetLink, '1 hour', recipientUserId)
     } catch (error: any) {
       console.error('Error in requestPasswordReset:', error)
       throw new Error(error.message || 'Failed to send password reset email')

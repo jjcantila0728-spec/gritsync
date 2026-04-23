@@ -3,6 +3,7 @@ import cors from 'cors'
 import { json, urlencoded } from 'express'
 import authRoutes from './routes/auth'
 import queryRoutes from './routes/query'
+import paymentRoutes from './routes/payments'
 
 const app = express()
 const PORT = process.env.SERVER_PORT || 3001
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => {
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/db', queryRoutes)
+app.use('/api/payments', paymentRoutes)
 
 // 404 handler
 app.use((_req, res) => {

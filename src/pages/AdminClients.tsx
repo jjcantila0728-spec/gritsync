@@ -637,45 +637,40 @@ export function AdminClients() {
                                     try {
                                       showToast('Logging in as user...', 'info')
                                       
-                                      // Get current session and token
-                                      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-                                      
-                                      if (sessionError || !session?.access_token) {
+                                      const adminToken = localStorage.getItem('gritsync_token')
+                                      if (!adminToken) {
                                         throw new Error('No active session. Please log in again.')
                                       }
-                                      
-                                      // Call Supabase Edge Function for admin login-as
-                                      const { data, error: functionError } = await supabase.functions.invoke('admin-login-as', {
-                                        method: 'POST',
-                                        body: { userId: client.id },
-                                        headers: {
-                                          'Authorization': `Bearer ${session.access_token}`
-                                        }
-                                      })
 
-                                      if (functionError || !data) {
-                                        throw new Error(functionError?.message || data?.error || 'Failed to generate login link')
+                                      const res = await fetch('/api/auth/admin-login-as', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${adminToken}`,
+                                        },
+                                        body: JSON.stringify({ userId: client.id }),
+                                      })
+                                      const data = await res.json()
+
+                                      if (!res.ok || !data.access_token) {
+                                        throw new Error(data.error || 'Failed to generate login token')
                                       }
-                                      
-                                      if (data.loginUrl) {
-                                        // Store admin session to restore later
-                                        const { data: { session: adminSession } } = await supabase.auth.getSession()
-                                        if (adminSession) {
-                                          localStorage.setItem('admin_session_backup', JSON.stringify({
-                                            access_token: adminSession.access_token,
-                                            refresh_token: adminSession.refresh_token,
-                                            expires_at: adminSession.expires_at
-                                          }))
-                                        }
-                                        
-                                        // Redirect to the magic link
-                                        window.location.href = data.loginUrl
-                                      } else if (data.email) {
-                                        // Fallback: show email for manual login
-                                        showToast(`Please login manually with: ${data.email}`, 'info')
-                                      } else {
-                                        throw new Error('No login method available')
-                                      }
+
+                                      // Back up current admin session
+                                      const adminUser = localStorage.getItem('gritsync_user')
+                                      localStorage.setItem('admin_session_backup', JSON.stringify({
+                                        access_token: adminToken,
+                                        refresh_token: localStorage.getItem('gritsync_refresh_token') || '',
+                                        user: adminUser ? JSON.parse(adminUser) : null,
+                                      }))
+
+                                      // Swap session to target user
+                                      localStorage.setItem('gritsync_token', data.access_token)
+                                      localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
+                                      localStorage.setItem('gritsync_user', JSON.stringify(data.user))
+
+                                      showToast(`Logged in as ${data.user?.first_name || 'user'}`, 'success')
+                                      window.location.href = '/dashboard'
                                     } catch (error: any) {
                                       console.error('Error logging in as user:', error)
                                       showToast(error.message || 'Failed to login as user', 'error')

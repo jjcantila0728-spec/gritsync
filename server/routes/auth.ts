@@ -315,6 +315,38 @@ router.put('/update', authenticateToken, async (req: AuthenticatedRequest, res: 
   }
 })
 
+// POST /api/auth/admin-login-as — generate a token for a user (admin only)
+router.post('/admin-login-as', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const admin = req.user
+    if (!admin || admin.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+
+    const { userId } = req.body
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' })
+    }
+
+    const result = await query('SELECT id, email, gritsync_email, role, first_name, last_name, grit_id, mobile FROM users WHERE id = $1', [userId])
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const targetUser = result.rows[0]
+    const token = signToken({ id: targetUser.id, email: targetUser.email, role: targetUser.role })
+    const refreshToken = signRefreshToken({ id: targetUser.id, email: targetUser.email })
+
+    res.json({
+      access_token: token,
+      refresh_token: refreshToken,
+      user: targetUser,
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/auth/reset-password-request
 router.post('/reset-password-request', async (req: Request, res: Response) => {
   try {

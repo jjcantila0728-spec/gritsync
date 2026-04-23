@@ -99,6 +99,9 @@ export function ComposeEmailModal({
   const signatureMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bodyTextAreaRef = useRef<HTMLTextAreaElement>(null)
+  // Stable ref for callbacks that change on every parent render — prevents infinite loops
+  const onHtmlBodyChangeRef = useRef(onHtmlBodyChange)
+  useEffect(() => { onHtmlBodyChangeRef.current = onHtmlBodyChange })
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -165,38 +168,21 @@ export function ComposeEmailModal({
   }, [isOpen, initialAttachments])
 
   // Update HTML preview when template variables change
+  // NOTE: onHtmlBodyChange is accessed via ref to prevent infinite re-render loops
   useEffect(() => {
-    if (selectedTemplateId && emailTemplates.length > 0 && onHtmlBodyChange) {
+    if (selectedTemplateId && emailTemplates.length > 0) {
       const template = emailTemplates.find(t => t.id === selectedTemplateId)
       if (template && template.html_content) {
-        // Import emailTemplatesAPI to render template
         import('@/lib/email-templates-api').then(({ emailTemplatesAPI }) => {
           const rendered = emailTemplatesAPI.render(template, templateVariables)
           if (rendered.html && rendered.html.trim().length > 0) {
-            console.log('Rendering template preview:', {
-              templateId: selectedTemplateId,
-              htmlLength: rendered.html.length,
-              variables: templateVariables
-            })
-            // Update htmlBody in parent component for preview
-            onHtmlBodyChange(rendered.html)
-            // Automatically show preview when template HTML is available
+            onHtmlBodyChangeRef.current?.(rendered.html)
             setShowPreview(true)
-          } else {
-            console.warn('Template rendered empty HTML')
           }
-        }).catch((error) => {
-          console.error('Error rendering template:', error)
-        })
-      } else {
-        console.warn('Template not found or has no HTML content:', {
-          selectedTemplateId,
-          templateFound: !!template,
-          hasHtmlContent: template?.html_content ? true : false
-        })
+        }).catch((_err) => {})
       }
     }
-  }, [selectedTemplateId, templateVariables, emailTemplates, onHtmlBodyChange])
+  }, [selectedTemplateId, templateVariables, emailTemplates])
 
   // Show preview when htmlBody is set or forceShowPreview is true
   useEffect(() => {

@@ -403,9 +403,16 @@ export const supabase = {
     },
   },
 
-  // RPC stub — for stored procedures / functions
+  // RPC stub — for stored procedures / functions (not available, callers should use fallback)
   async rpc(_fn: string, _args?: any) {
-    return { data: null, error: { message: 'RPC not supported in this environment' } }
+    return { data: null, error: { message: 'RPC not supported in this environment', code: 'PGRST202' } }
+  },
+
+  // Edge functions stub — returns graceful error so callers can handle it
+  functions: {
+    async invoke(_fn: string, _options?: any) {
+      return { data: null, error: { message: `Edge function "${_fn}" is not available in this environment. Use the API backend instead.`, code: 'FUNCTION_NOT_AVAILABLE' } }
+    },
   },
 
   // Channel/Realtime stub — returns no-op channels
