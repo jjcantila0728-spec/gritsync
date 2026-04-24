@@ -522,4 +522,215 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res) =
   }
 })
 
+// ─── Subscription routes ─────────────────────────────────────────────────────
+
+router.get('/subscription/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id
+    const today = new Date().toISOString().split('T')[0]
+
+    const subResult = await query(
+      `SELECT * FROM nclex_subscriptions
+       WHERE user_id = $1 AND status = 'active'
+         AND (expires_at IS NULL OR expires_at > NOW())
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    )
+    const subscription = subResult.rows[0] || null
+
+    const usageResult = await query(
+      `SELECT questions_answered FROM nclex_daily_usage
+       WHERE user_id = $1 AND usage_date = $2`,
+      [userId, today]
+    )
+    const questionsToday = usageResult.rows[0]?.questions_answered || 0
+
+    const plan = subscription?.plan || 'free'
+    const dailyLimit = plan === 'free' ? 25 : null
+
+    res.json({
+      plan,
+      status: subscription?.status || 'active',
+      expires_at: subscription?.expires_at || null,
+      questions_today: questionsToday,
+      daily_limit: dailyLimit,
+      can_answer: dailyLimit === null || questionsToday < dailyLimit,
+    })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/subscription/track-usage', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id
+    const today = new Date().toISOString().split('T')[0]
+
+    await query(
+      `INSERT INTO nclex_daily_usage (user_id, usage_date, questions_answered)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (user_id, usage_date)
+       DO UPDATE SET questions_answered = nclex_daily_usage.questions_answered + 1,
+                     updated_at = NOW()`,
+      [userId, today]
+    )
+
+    res.json({ success: true })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Admin: list all subscriptions
+router.get('/subscription/admin/list', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const result = await query(
+      `SELECT s.*, 
+              u.email as user_email,
+              u.first_name,
+              u.last_name,
+              u.grit_id,
+              du.questions_answered as questions_today
+       FROM nclex_subscriptions s
+       JOIN users u ON s.user_id = u.id
+       LEFT JOIN nclex_daily_usage du ON s.user_id = du.user_id
+         AND du.usage_date = CURRENT_DATE
+       ORDER BY s.created_at DESC`
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Admin: list all users with their subscription status
+router.get('/subscription/admin/users', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const result = await query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.grit_id,
+              s.plan, s.status, s.expires_at, s.created_at as subscribed_at,
+              COALESCE(du.questions_answered, 0) as questions_today,
+              COALESCE((
+                SELECT SUM(questions_answered)
+                FROM nclex_daily_usage
+                WHERE user_id = u.id
+              ), 0) as questions_total
+       FROM users u
+       LEFT JOIN nclex_subscriptions s ON s.user_id = u.id
+         AND s.status = 'active'
+         AND (s.expires_at IS NULL OR s.expires_at > NOW())
+       LEFT JOIN nclex_daily_usage du ON u.id = du.user_id
+         AND du.usage_date = CURRENT_DATE
+       WHERE u.role = 'client'
+       ORDER BY u.created_at DESC`
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Admin: create or update a subscription
+router.post('/subscription/admin/assign', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const { user_id, plan, payment_amount, payment_currency, payment_reference, payment_method, notes } = req.body
+
+    if (!user_id || !plan) return res.status(400).json({ error: 'user_id and plan are required' })
+
+    let expiresAt: string | null = null
+    if (plan === 'premium') {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 2)
+      expiresAt = d.toISOString()
+    } else if (plan === 'vip') {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 6)
+      expiresAt = d.toISOString()
+    }
+
+    // Expire any existing active subscriptions
+    await query(
+      `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW()
+       WHERE user_id = $1 AND status = 'active'`,
+      [user_id]
+    )
+
+    // Insert new subscription
+    const result = await query(
+      `INSERT INTO nclex_subscriptions
+         (user_id, plan, status, expires_at, payment_amount, payment_currency,
+          payment_reference, payment_method, notes, activated_by)
+       VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [user_id, plan, expiresAt, payment_amount || null,
+       payment_currency || 'PHP', payment_reference || null,
+       payment_method || null, notes || null, req.user?.id]
+    )
+
+    res.json(result.rows[0])
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Admin: cancel a subscription
+router.post('/subscription/admin/cancel', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const { subscription_id } = req.body
+    if (!subscription_id) return res.status(400).json({ error: 'subscription_id is required' })
+
+    await query(
+      `UPDATE nclex_subscriptions SET status = 'cancelled', updated_at = NOW()
+       WHERE id = $1`,
+      [subscription_id]
+    )
+
+    res.json({ success: true })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Admin: usage analytics
+router.get('/subscription/admin/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const summary = await query(
+      `SELECT
+         COUNT(DISTINCT CASE WHEN s.plan = 'free' OR s.id IS NULL THEN u.id END) as free_users,
+         COUNT(DISTINCT CASE WHEN s.plan = 'premium' AND s.status = 'active' AND (s.expires_at IS NULL OR s.expires_at > NOW()) THEN u.id END) as premium_users,
+         COUNT(DISTINCT CASE WHEN s.plan = 'vip' AND s.status = 'active' AND (s.expires_at IS NULL OR s.expires_at > NOW()) THEN u.id END) as vip_users,
+         COALESCE(SUM(du.questions_answered), 0) as questions_today
+       FROM users u
+       LEFT JOIN nclex_subscriptions s ON u.id = s.user_id AND s.status = 'active'
+       LEFT JOIN nclex_daily_usage du ON u.id = du.user_id AND du.usage_date = CURRENT_DATE
+       WHERE u.role = 'client'`
+    )
+
+    const daily = await query(
+      `SELECT usage_date, SUM(questions_answered) as total
+       FROM nclex_daily_usage
+       WHERE usage_date >= CURRENT_DATE - INTERVAL '30 days'
+       GROUP BY usage_date
+       ORDER BY usage_date DESC`
+    )
+
+    res.json({
+      summary: summary.rows[0],
+      daily_usage: daily.rows,
+    })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router

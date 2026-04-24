@@ -86,11 +86,53 @@ The PostgreSQL database has specific column names that differ from common naming
 - Real-time application tracking
 - Quotation generation and management
 - Stripe payment integration (GCash, mobile banking, card)
-- Document management
+- Document management with server-side storage (`server/routes/storage.ts`, `uploads/` dir, multer)
 - Admin dashboard with client management
 - Search and filter functionality
 - Light/dark theme support
 - Fully responsive design
+
+## NCLEX Review Platform (`/nclex-review`)
+A standalone review platform (separate from the main app layout) with subscription tiers:
+- **Free**: 25 questions/day with daily usage tracking (`nclex_daily_usage` table)
+- **Premium**: 250 PHP/2 months, 250 questions/day
+- **VIP**: 500 PHP/6 months, unlimited questions
+
+### Review Modes
+- **Practice Test**: filterable by content area, difficulty, question type; configurable count; immediate or end feedback
+- **Readiness Assessment**: 75-question simulated NCLEX exam
+- **CAT Mode**: Computer Adaptive Testing that adjusts difficulty
+
+### Question Types Supported
+- Traditional MCQ, NGN SATA (select all that apply), NGN Cloze (dropdown fill-in), NGN Matrix/Grid
+
+### Layout
+`src/layouts/NCLEXLayout.tsx` — standalone header with GritSync home button, plan badge, theme toggle, user info. No main app sidebar.
+
+### API Routes (in `server/routes/questions.ts`)
+- `POST /api/questions/session/start` — create session, returns all questions
+- `POST /api/questions/session/:id/answer` — submit answer, get correctness + rationale
+- `GET /api/questions/session/:id/results` — full results with content area breakdown
+- `GET /api/questions/my-sessions` — recent sessions list
+- `GET /api/questions/subscription/me` — current user's plan + daily usage
+- `POST /api/questions/subscription/track-usage` — increment daily usage counter
+- Admin routes: `/subscription/admin/users`, `/subscription/admin/assign`, `/subscription/admin/cancel`, `/subscription/admin/analytics`
+
+### Subscription DB Tables
+- `nclex_subscriptions` — user_id, plan (free/premium/vip), status, expires_at, payment fields
+- `nclex_daily_usage` — user_id, usage_date, questions_answered (daily tracking)
+
+## Admin NCLEX Subscriptions (`/admin/nclex-subscriptions`)
+Admin page at `src/pages/AdminNCLEXSubscriptions.tsx`:
+- Summary stats (free/premium/vip user counts, questions today)
+- Daily usage bar chart (last 30 days)
+- User table with plan, expiry, usage info and search/filter
+- Assign/upgrade modal with plan, payment method, amount, and reference fields
+
+## Email System
+- `server/routes/emails.ts` with `POST /api/emails/send` calling Resend API (`RESEND_API_KEY` secret)
+- `src/lib/email-service.ts` calls `/api/emails/send` directly (not Supabase functions)
+- `src/pages/ClientEmails.tsx` filters inbox by both GritSync address AND user's real email
 
 ## Development Scripts
 - `npm run dev` — Start Vite frontend + Express backend concurrently

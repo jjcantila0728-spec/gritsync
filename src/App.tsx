@@ -71,6 +71,7 @@ const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ defa
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const AdminQuestionBank = lazy(() => import('./pages/AdminQuestionBank').then(m => ({ default: m.AdminQuestionBank })))
+const AdminNCLEXSubscriptions = lazy(() => import('./pages/AdminNCLEXSubscriptions').then(m => ({ default: m.AdminNCLEXSubscriptions })))
 
 // Loading fallback component
 function PageLoader() {
@@ -541,6 +542,14 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminQuestionBank />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/nclex-subscriptions"
+        element={
+          <AdminRoute>
+            <AdminNCLEXSubscriptions />
           </AdminRoute>
         }
       />

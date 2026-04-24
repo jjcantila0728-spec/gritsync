@@ -6,6 +6,7 @@ import queryRoutes from './routes/query'
 import paymentRoutes from './routes/payments'
 import emailRoutes from './routes/emails'
 import questionRoutes from './routes/questions'
+import storageRoutes from './routes/storage'
 
 const app = express()
 const PORT = process.env.SERVER_PORT || 3001
@@ -28,6 +29,7 @@ app.use('/api/db', queryRoutes)
 app.use('/api/payments', paymentRoutes)
 app.use('/api/emails', emailRoutes)
 app.use('/api/questions', questionRoutes)
+app.use('/api/storage', storageRoutes)
 
 // 404 handler
 app.use((_req, res) => {

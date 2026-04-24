@@ -87,6 +87,54 @@ router.post('/inbox/get', authenticateToken, async (req: AuthenticatedRequest, r
   }
 })
 
+router.post('/send', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const apiKey = await getResendApiKey()
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Email service not configured. Contact admin to set up Resend API key.' })
+    }
+
+    const { to, subject, html, text, from, replyTo, cc, bcc, attachments } = req.body
+
+    if (!to || !subject || !html) {
+      return res.status(400).json({ error: 'Missing required fields: to, subject, html' })
+    }
+
+    const payload: Record<string, any> = {
+      to,
+      subject,
+      html,
+      from: from || 'GritSync <noreply@gritsync.com>',
+    }
+    if (text) payload.text = text
+    if (replyTo) payload.reply_to = replyTo
+    if (cc) payload.cc = cc
+    if (bcc) payload.bcc = bcc
+    if (attachments && attachments.length > 0) payload.attachments = attachments
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error('Resend send error:', data)
+      return res.status(response.status).json({ error: (data as any)?.message || 'Failed to send email via Resend' })
+    }
+
+    res.json({ success: true, id: (data as any)?.id })
+  } catch (error: any) {
+    console.error('Email send error:', error)
+    res.status(500).json({ error: error.message || 'Internal server error' })
+  }
+})
+
 router.post('/inbox/attachments', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const apiKey = await getResendApiKey()

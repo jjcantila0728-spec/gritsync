@@ -417,97 +417,51 @@ export async function sendEmail(options: EmailOptions & {
       logId
     })
     
-    // Call Supabase Edge Function to send email
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: emailPayload,
+    // Send email via Express backend (calls Resend API with server-side API key)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('gritsync_token') : null
+    const sendResponse = await fetch('/api/emails/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(emailPayload),
     })
 
-    if (error) {
-      const isUnavailable = error.code === 'FUNCTION_NOT_AVAILABLE'
-      if (!isUnavailable) {
-        console.error('Error sending email:', error)
-      }
-      
-      // Update log with error
+    const data = await sendResponse.json()
+
+    if (!sendResponse.ok) {
+      const errorMessage = (data as any)?.error || 'Failed to send email'
+      console.error('Error sending email:', errorMessage)
+
       if (logId) {
         await supabase
           .from('email_logs')
           .update({
             status: 'failed',
             failed_at: new Date().toISOString(),
-            error_message: error.message || 'Failed to send email',
-            error_code: error.code || null,
+            error_message: errorMessage,
           })
           .eq('id', logId)
       }
-      
+
       return false
     }
 
-    // Log the full response for debugging
-    console.log('Email service response:', data)
+    console.log('Email sent successfully:', data)
 
-    // Check if the response indicates failure
-    if (data && typeof data === 'object' && 'error' in data) {
-      console.error('Email service returned error:', data.error)
-      if ('details' in data) {
-        console.error('Error details:', data.details)
-      }
-      
-      // Update log with error
-      if (logId) {
-        await supabase
-          .from('email_logs')
-          .update({
-            status: 'failed',
-            failed_at: new Date().toISOString(),
-            error_message: data.error || 'Email service error',
-            provider_response: data,
-          })
-          .eq('id', logId)
-      }
-      
-      return false
-    }
-
-    // Check if the response indicates success
-    if (data && typeof data === 'object' && 'success' in data) {
-      const success = data.success === true
-      
-      // Update log with success/failure
-      if (logId) {
-        await supabase
-          .from('email_logs')
-          .update({
-            status: success ? 'sent' : 'failed',
-            sent_at: success ? new Date().toISOString() : null,
-            failed_at: success ? null : new Date().toISOString(),
-            provider_message_id: data.messageId || null,
-            provider_response: data,
-            error_message: success ? null : 'Email service reported failure',
-          })
-          .eq('id', logId)
-      }
-      
-      if (success) {
-        console.log('Email sent successfully:', data)
-        return true
-      }
-      return false
-    }
-
-    // Default to success if no explicit success/error indicator
     if (logId) {
       await supabase
         .from('email_logs')
         .update({
           status: 'sent',
           sent_at: new Date().toISOString(),
+          provider_message_id: (data as any)?.id || null,
           provider_response: data,
         })
         .eq('id', logId)
     }
-    
+
     return true
   } catch (error: any) {
     console.error('Error sending email:', error)

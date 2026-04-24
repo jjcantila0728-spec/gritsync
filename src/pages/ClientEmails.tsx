@@ -361,14 +361,17 @@ export function ClientEmails() {
         console.log('Client Inbox - No emails received from Resend API')
       }
       
-      // Now filter for this client's email address
+      // Filter for this client's emails — match by GritSync address OR real registered email
+      // Resend stores outgoing emails with the recipient's real email in the TO field
       const clientEmailLower = clientEmailAddress.email_address.toLowerCase()
+      const realEmailLower = (user?.email || '').toLowerCase()
       const emails = allEmailsResponse.data.filter((email) => {
         const toAddresses = Array.isArray(email.to) ? email.to : [email.to]
         const matches = toAddresses.some((addr) => {
           const addrLower = addr.toLowerCase()
-          // Check for exact match or if the address contains the client email
-          return addrLower === clientEmailLower || addrLower.includes(clientEmailLower)
+          const matchesGritSync = addrLower === clientEmailLower || addrLower.includes(clientEmailLower)
+          const matchesRealEmail = realEmailLower && (addrLower === realEmailLower || addrLower.includes(realEmailLower))
+          return matchesGritSync || matchesRealEmail
         })
         return matches
       })
