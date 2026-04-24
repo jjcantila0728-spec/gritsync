@@ -42,8 +42,8 @@ if (isProd) {
   const distPath = path.join(__dirname, '..', 'dist')
   app.use(express.static(distPath))
 
-  // SPA fallback — send index.html for all non-API routes
-  app.get('*', (_req, res) => {
+  // SPA fallback — send index.html for all non-API routes (Express 5 syntax)
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'))
   })
 } else {
