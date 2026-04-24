@@ -2407,14 +2407,14 @@ export const userDocumentsAPI = {
     }
   },
 
-  // Delete a document
+  // Delete a document (removes file from storage AND database record)
   delete: async (documentId: string) => {
     const { userId, isAdmin: admin } = await getCurrentUserInfo()
     
-    // First check if user owns the document or is admin
+    // Fetch the document so we have the file_path and can verify ownership
     const { data: doc, error: fetchError } = await supabase
       .from('user_documents')
-      .select('user_id')
+      .select('user_id, file_path')
       .eq('id', documentId)
       .single()
     
@@ -2422,8 +2422,21 @@ export const userDocumentsAPI = {
     if (!admin && doc && !('error' in doc) && 'user_id' in doc && (doc as any).user_id !== userId) {
       throw new Error('Unauthorized')
     }
+
+    // Delete the actual file from storage first
+    const filePath = (doc as any)?.file_path
+    if (filePath) {
+      try {
+        await supabase.storage
+          .from('documents')
+          .remove([filePath])
+      } catch (storageError) {
+        logError(normalizeError(storageError, { operation: 'userDocumentsAPI.delete', context: 'delete_storage_file' }), { operation: 'userDocumentsAPI.delete', context: 'delete_storage_file', severity: 'low' })
+        // Continue even if storage deletion fails — DB record should still be removed
+      }
+    }
     
-    // Delete from storage and database
+    // Delete the database record
     const { error } = await supabase
       .from('user_documents')
       .delete()
