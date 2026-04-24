@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Database } from './database.types'
+import { imageUrlCache } from './image-cache'
 import { 
   handleSupabaseError, 
   normalizeError, 
@@ -2179,8 +2180,10 @@ export const userDocumentsAPI = {
     
     if (checkError) throw new Error(checkError.message)
     
-    // Delete old file from storage if it exists
+    // Delete old file from storage if it exists and clear its URL cache
     if (existing && !('error' in existing) && 'id' in existing && existing.file_path) {
+      // Clear URL cache for the old file BEFORE deleting so nothing loads the stale URL
+      clearSignedUrlCacheForPath(existing.file_path)
       try {
         const pathParts = existing.file_path.split('/')
         const fileName = pathParts[pathParts.length - 1]
@@ -2233,6 +2236,9 @@ export const userDocumentsAPI = {
     
     if (error) throw new Error(error.message)
 
+    // Clear URL cache for the newly uploaded file so next load gets a fresh URL
+    clearSignedUrlCacheForPath(filePath)
+
     // When picture is uploaded, sync it as the user's avatar
     if (type === 'picture' && filePath) {
       try {
@@ -2240,12 +2246,30 @@ export const userDocumentsAPI = {
           .from('users')
           .update({ avatar_path: filePath })
           .eq('id', userId)
-        // Clear avatar cache so Header picks up the new image immediately
+        // Clear all avatar-related caches so Header picks up the new image immediately
         localStorage.removeItem(`avatar_${userId}`)
         localStorage.removeItem(`avatar_path_${userId}`)
+        clearSignedUrlCacheForPath(filePath)
+        // Notify Header component to re-fetch avatar
+        window.dispatchEvent(new CustomEvent('avatarUpdated', { detail: { userId, filePath } }))
       } catch {
         // Non-critical — don't fail the upload if avatar sync fails
       }
+    }
+
+    // Create a notification for the uploaded document
+    try {
+      const docLabel = type === 'picture' ? '2x2 Picture'
+        : type === 'diploma' ? 'Nursing Diploma'
+        : type === 'passport' ? 'Passport'
+        : type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      await notificationsAPI.create(
+        'Document uploaded',
+        `Your ${docLabel} has been uploaded successfully.`,
+        'general'
+      )
+    } catch {
+      // Non-critical — don't fail upload if notification creation fails
     }
 
     return data as Tables<'user_documents'>
@@ -2423,9 +2447,11 @@ export const userDocumentsAPI = {
       throw new Error('Unauthorized')
     }
 
-    // Delete the actual file from storage first
+    // Delete the actual file from storage first and clear its URL cache
     const filePath = (doc as any)?.file_path
     if (filePath) {
+      // Clear URL cache immediately so nothing can load the stale URL
+      clearSignedUrlCacheForPath(filePath)
       try {
         await supabase.storage
           .from('documents')
@@ -2443,6 +2469,17 @@ export const userDocumentsAPI = {
       .eq('id', documentId)
     
     if (error) throw new Error(error.message)
+
+    // Create a notification for the deleted document
+    try {
+      await notificationsAPI.create(
+        'Document removed',
+        'A document has been removed from your profile. Upload a new one if needed.',
+        'general'
+      )
+    } catch {
+      // Non-critical
+    }
   },
 }
 
@@ -2509,6 +2546,28 @@ if (typeof window !== 'undefined') {
       }
     }
   }, CACHE_CLEANUP_INTERVAL)
+}
+
+/**
+ * Clears all cached signed URLs for a given file path.
+ * Must be called after uploading a new version or deleting a file so
+ * components re-fetch a fresh URL instead of using the stale cached one.
+ */
+export function clearSignedUrlCacheForPath(filePath: string) {
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  for (const key of signedUrlCache.keys()) {
+    if (key.startsWith(normalizedPath + ':') || key === normalizedPath) {
+      signedUrlCache.delete(key)
+    }
+  }
+  negativeCache.delete(normalizedPath)
+  for (const key of signedUrlInflight.keys()) {
+    if (key.startsWith(normalizedPath + ':') || key === normalizedPath) {
+      signedUrlInflight.delete(key)
+    }
+  }
+  // Also remove from the image-cache singleton so DocumentImagePreview re-fetches
+  imageUrlCache.delete(normalizedPath)
 }
 
 export async function getSignedFileUrl(filePath: string, expiresIn: number = 3600, silent: boolean = false): Promise<string> {

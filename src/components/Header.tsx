@@ -140,6 +140,8 @@ export function Header() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loadingNotifications, setLoadingNotifications] = useState(false)
+  // Incremented when an avatarUpdated event fires — triggers avatar re-fetch
+  const [avatarFetchTrigger, setAvatarFetchTrigger] = useState(0)
 
   // Helper to cache avatar URL and path
   const cacheAvatar = (userId: string | undefined, url: string, path: string) => {
@@ -480,6 +482,22 @@ export function Header() {
       persistedFirstNameRef.current = null
       isFetchingAvatarRef.current = false
     }
+  }, [user, avatarFetchTrigger])
+
+  // Listen for avatar update events (fired when a picture document is uploaded)
+  useEffect(() => {
+    const handleAvatarUpdate = () => {
+      if (user) {
+        localStorage.removeItem(`avatar_${user.id}`)
+        localStorage.removeItem(`avatar_path_${user.id}`)
+        avatarPathRef.current = null
+        isFetchingAvatarRef.current = false
+        setAvatarUrl(null)
+        setAvatarFetchTrigger(t => t + 1)
+      }
+    }
+    window.addEventListener('avatarUpdated', handleAvatarUpdate)
+    return () => window.removeEventListener('avatarUpdated', handleAvatarUpdate)
   }, [user])
 
   // Fetch notifications

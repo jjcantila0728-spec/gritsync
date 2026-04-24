@@ -738,8 +738,6 @@ export function Dashboard() {
                     <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
                     <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
                       <span>NCLEX: {stats.nclexApplications || 0}</span>
-                      <span>•</span>
-                      <span>EAD: {stats.eadApplications || 0}</span>
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20">
@@ -1204,8 +1202,6 @@ export function Dashboard() {
                   <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
                   <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
                     <span>NCLEX: {stats.nclexApplications || 0}</span>
-                    <span>•</span>
-                    <span>EAD: {stats.eadApplications || 0}</span>
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-primary-500/10 dark:bg-primary-400/20">

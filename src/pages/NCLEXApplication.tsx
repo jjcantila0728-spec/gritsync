@@ -1196,33 +1196,11 @@ export function NCLEXApplication() {
 
           {/* Enhanced Progress Indicator */}
           <Card className="mb-6">
-            <ProgressBar
-              steps={stepTitles.map((title, index) => {
-                const stepNum = index + 1
-                const isComplete = Boolean([
-                  isPersonalInfoComplete,
-                  isAddressComplete,
-                  isElementaryComplete,
-                  isHighSchoolComplete,
-                  isNursingSchoolComplete,
-                  isDocumentsComplete,
-                  isReviewComplete,
-                  isPaymentComplete
-                ][index])
-                return {
-                  id: stepNum,
-                  label: title,
-                  completed: isComplete,
-                  current: currentStep === stepNum,
-                }
-              })}
-              currentStep={currentStep}
-              showLabels={true}
-            />
-            <div className="mt-4 flex items-center justify-between gap-2 text-xs">
+            {/* Clickable step navigator */}
+            <div className="flex items-center justify-between gap-1">
               {stepTitles.map((title, index) => {
                 const stepNum = index + 1
-                const isComplete = [
+                const completionValues = [
                   isPersonalInfoComplete,
                   isAddressComplete,
                   isElementaryComplete,
@@ -1231,8 +1209,10 @@ export function NCLEXApplication() {
                   isDocumentsComplete,
                   isReviewComplete,
                   isPaymentComplete
-                ][index]
+                ]
+                const isComplete = Boolean(completionValues[index])
                 const isActive = currentStep === stepNum
+                const isPast = stepNum < currentStep
                 
                 return (
                   <button
@@ -1241,22 +1221,28 @@ export function NCLEXApplication() {
                       setCurrentStep(stepNum)
                       window.scrollTo({ top: 0, behavior: 'smooth' })
                     }}
-                    className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                    className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-lg transition-colors text-xs font-medium ${
                       isActive
-                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold'
-                        : isComplete
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : isComplete || isPast
                         ? 'text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
                   >
-                    {isComplete ? (
-                      <CheckCircle className="h-3 w-3" />
-                    ) : (
-                      <div className={`h-3 w-3 rounded-full border-2 ${
-                        isActive ? 'border-primary-600' : 'border-gray-300'
-                      }`} />
-                    )}
-                    <span className="hidden sm:inline">{title.split(' ')[0]}</span>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${
+                      isComplete
+                        ? 'bg-green-500 border-green-500 text-white'
+                        : isActive
+                        ? 'border-primary-600 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-gray-300 dark:border-gray-600 text-gray-400'
+                    }`}>
+                      {isComplete ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <span className="text-xs font-bold">{stepNum}</span>
+                      )}
+                    </div>
+                    <span className="hidden sm:block text-center leading-tight max-w-[60px] truncate">{title.split(' ')[0]}</span>
                   </button>
                 )
               })}
