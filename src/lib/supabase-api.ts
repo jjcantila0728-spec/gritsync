@@ -2232,6 +2232,22 @@ export const userDocumentsAPI = {
     }
     
     if (error) throw new Error(error.message)
+
+    // When picture is uploaded, sync it as the user's avatar
+    if (type === 'picture' && filePath) {
+      try {
+        await supabase
+          .from('users')
+          .update({ avatar_path: filePath })
+          .eq('id', userId)
+        // Clear avatar cache so Header picks up the new image immediately
+        localStorage.removeItem(`avatar_${userId}`)
+        localStorage.removeItem(`avatar_path_${userId}`)
+      } catch {
+        // Non-critical — don't fail the upload if avatar sync fails
+      }
+    }
+
     return data as Tables<'user_documents'>
   },
 
@@ -2501,25 +2517,22 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
     return cached.url
   }
   
+  // Determine silent mode before cache checks
+  const isAvatar = normalizedPath.includes('avatar') || normalizedPath.includes('picture')
+  const shouldBeSilent = silent || isAvatar
+
   // Check negative cache (files that don't exist) - avoid repeated API calls
   const negativeCached = negativeCache.get(normalizedPath)
   if (negativeCached && negativeCached.expiresAt > now) {
-    // File was previously not found
-    // For silent mode (avatars), return null instead of throwing
     if (shouldBeSilent) {
       return null as any
     }
-    // For non-silent mode, throw error immediately without API call
     throw new Error(`File not found in storage: ${normalizedPath}`)
   }
   
   // Check if there's already an inflight request for this file
   const inflight = signedUrlInflight.get(cacheKey)
   if (inflight) return inflight
-  
-  // Check if this is an avatar file (for silent error handling)
-  const isAvatar = normalizedPath.includes('avatar') || normalizedPath.includes('picture')
-  const shouldBeSilent = silent || isAvatar
 
   const promise = (async (): Promise<string> => {
     // For silent mode (avatars), check negative cache first to avoid unnecessary API calls
