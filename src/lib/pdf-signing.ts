@@ -163,8 +163,8 @@ export function uint8ArrayToBlob(uint8Array: Uint8Array, mimeType: string = 'app
 }
 
 /**
- * Sign the complete EAD application package (client signature)
- * Signs: Cover letter and I-765 page 4
+ * Sign the complete application package (client signature)
+ * Signs: Cover letter and supporting documents
  */
 export async function signClientDocuments(
   compiledPdfBytes: Uint8Array,

@@ -201,14 +201,14 @@ function resolveServiceType(app: { service_type?: string; application_type?: str
   if (app.service_type) {
     return app.service_type
   }
-  return app.application_type === 'EAD' ? 'EAD (I-765)' : 'NCLEX Processing'
+  return 'NCLEX Processing'
 }
 
 function resolveServiceState(app: { service_state?: string; application_type?: string }) {
   if (app.service_state) {
     return app.service_state
   }
-  return app.application_type === 'EAD' ? 'USCIS' : 'New York'
+  return 'New York'
 }
 
 // Applications API
@@ -385,24 +385,6 @@ export const applicationsAPI = {
                 const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
                 const hasResult = !!(data.result)
                 return hasResult || (stepData && stepData.status === 'completed')
-              }
-              case 'ead_uscis_submission': {
-                const appSubmitted = stepStatusMap['ead_application_submitted']
-                const receiptReceived = stepStatusMap['ead_receipt_received']
-                const allSubStepsDone = (appSubmitted && appSubmitted.status === 'completed') &&
-                                       (receiptReceived && receiptReceived.status === 'completed')
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
-              }
-              case 'ead_approval': {
-                const cardProduction = stepStatusMap['ead_card_production']
-                const cardMailed = stepStatusMap['ead_card_mailed']
-                const cardReceived = stepStatusMap['ead_card_received']
-                const ssnReceived = stepStatusMap['ead_ssn_received']
-                const allSubStepsDone = (cardProduction && cardProduction.status === 'completed') &&
-                                       (cardMailed && cardMailed.status === 'completed') &&
-                                       (cardReceived && cardReceived.status === 'completed') &&
-                                       (ssnReceived && ssnReceived.status === 'completed')
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
               }
               default:
                 return stepData && stepData.status === 'completed'
@@ -832,15 +814,14 @@ export const applicationsAPI = {
   create: async (applicationData: any, files?: { picture?: File; diploma?: File; passport?: File }) => {
     const userId = await getCurrentUserId()
     
-    // Determine application type (default to NCLEX for backward compatibility)
+    // Determine application type (default to NCLEX)
     const applicationType = applicationData.application_type || 'NCLEX'
-    const isEAD = applicationType === 'EAD'
     
     let picturePath = applicationData.picture_path || null
     let diplomaPath = applicationData.diploma_path || null
     let passportPath = applicationData.passport_path || null
     
-    // Upload files to Supabase Storage if provided (required for NCLEX, optional for EAD)
+    // Upload files to Supabase Storage if provided
     if (files) {
       // Import compression utility
       const { compressDocument } = await import('./document-compression')
@@ -907,18 +888,10 @@ export const applicationsAPI = {
       application_type: applicationType,
     }
     
-    // For NCLEX applications, include document paths (required)
-    // For EAD applications, document paths are optional
-    if (!isEAD) {
-      insertData.picture_path = picturePath
-      insertData.diploma_path = diplomaPath
-      insertData.passport_path = passportPath
-    } else {
-      // EAD applications don't require these documents, but include if provided
-      if (picturePath) insertData.picture_path = picturePath
-      if (diplomaPath) insertData.diploma_path = diplomaPath
-      if (passportPath) insertData.passport_path = passportPath
-    }
+    // Include document paths
+    insertData.picture_path = picturePath
+    insertData.diploma_path = diplomaPath
+    insertData.passport_path = passportPath
     
     // Create application
     const { data, error } = await supabase
@@ -933,13 +906,8 @@ export const applicationsAPI = {
     if (data) {
       try {
         const timelineStepsAPI = await import('./supabase-api').then(m => m.timelineStepsAPI)
-        if (isEAD) {
-          // EAD timeline: Application Submission
-          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
-        } else {
-          // NCLEX timeline: Application Submission
-          await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
-        }
+        // NCLEX timeline: Application Submission
+        await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
       } catch (timelineError) {
         // Log but don't fail the application creation if timeline step creation fails
         logError(normalizeError(timelineError, { operation: 'applicationsAPI.create', context: 'timeline_step_creation' }), { operation: 'applicationsAPI.create', context: 'timeline_step_creation' })
@@ -2252,6 +2220,7 @@ export const userDocumentsAPI = {
         .insert({
           user_id: userId,
           document_type: type,
+          filename: file.name, // NOT NULL column — required
           file_path: filePath,
           file_name: file.name, // Keep original filename for display
           file_size: compressedFile.size, // Store compressed file size
@@ -2362,6 +2331,7 @@ export const userDocumentsAPI = {
         .insert({
           user_id: userId,
           document_type: type,
+          filename: file.name, // NOT NULL column — required
           file_path: filePath,
           file_name: file.name, // Keep original filename for display
           file_size: compressedFile.size, // Store compressed file size
@@ -2405,6 +2375,7 @@ export const userDocumentsAPI = {
           .insert({
             user_id: userId,
             document_type: type,
+            filename: file.name, // NOT NULL column — required
             file_path: filePath,
             file_name: file.name, // Keep original filename for display
             file_size: compressedFile.size, // Store compressed file size
@@ -2452,8 +2423,7 @@ async function uploadFile(userId: string, file: File, type: string): Promise<str
   const fileExt = file.name.split('.').pop()
   // Use consistent filename based on document type to allow overwriting
   // This ensures smooth replacement without accumulating duplicate files
-  // Special case: ead_2x2_picture should be saved as 2x2picture for compilation process compatibility
-  const fileNamePrefix = type === 'ead_2x2_picture' ? '2x2picture' : type
+  const fileNamePrefix = type
   const fileName = `${fileNamePrefix}.${fileExt}`
   const filePath = `${userId}/${fileName}`
   
@@ -4391,10 +4361,8 @@ export const applicationPaymentsAPI = {
               .single()
             
             if (appData) {
-              const applicationType = appData.application_type || 'NCLEX'
-              const isEAD = applicationType === 'EAD'
-              const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
-              const serviceState = isEAD ? 'All States' : (appData.province || 'New York')
+              const serviceName = 'NCLEX Processing'
+              const serviceState = appData.province || 'New York'
               const dbPaymentType = appData.payment_type || typedPayment.payment_type
               const servicePaymentType = (dbPaymentType === 'full' ? 'full' : 'staggered') as 'full' | 'staggered'
               
@@ -4644,10 +4612,8 @@ export const applicationPaymentsAPI = {
                 .single()
               
               if (appData) {
-                const applicationType = appData.application_type || 'NCLEX'
-                const isEAD = applicationType === 'EAD'
-                const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
-                const serviceState = isEAD ? 'All States' : (appData.province || 'New York')
+                const serviceName = 'NCLEX Processing'
+                const serviceState = appData.province || 'New York'
                 const dbPaymentType = appData.payment_type || typedPayment.payment_type
                 const servicePaymentType = (dbPaymentType === 'full' ? 'full' : 'staggered') as 'full' | 'staggered'
                 

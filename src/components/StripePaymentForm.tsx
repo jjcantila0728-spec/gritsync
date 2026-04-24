@@ -23,7 +23,7 @@ interface MobileBankingConfig {
 interface StripePaymentFormProps {
   amount: number
   serviceFeeAmount?: number // GritSync service fee portion (for promo code calculation)
-  applicationType?: 'NCLEX' | 'EAD' // Application type for promo code validation
+  applicationType?: 'NCLEX' // Application type for promo code validation
   onSuccess: (paymentIntentId: string, paymentMethod?: PaymentMethod, details?: any, proofFile?: File) => void
   onError: (error: string) => void
   paymentIntentId?: string

@@ -356,7 +356,12 @@ export const supabase = {
             headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             body: formData,
           })
-          if (!res.ok) return { data: null, error: { message: 'Upload failed' } }
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}))
+            const errMsg = errBody.error || `Upload failed (HTTP ${res.status})`
+            console.error('Storage upload error:', errMsg, errBody)
+            return { data: null, error: { message: errMsg } }
+          }
           return { data: { path }, error: null }
         },
         async download(path: string) {

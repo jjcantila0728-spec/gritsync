@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 
 interface DetailsTabProps {
   application: ApplicationData
-  isEADApplication: boolean
+  isEADApplication?: boolean
   detailsSubTab: string
   setDetailsSubTab: (tab: string) => void
   setApplication: (app: ApplicationData | ((prev: ApplicationData | null) => ApplicationData | null)) => void
@@ -18,7 +18,6 @@ interface DetailsTabProps {
 
 export function DetailsTab({
   application,
-  isEADApplication,
   detailsSubTab,
   setDetailsSubTab,
   setApplication,
@@ -31,12 +30,7 @@ export function DetailsTab({
       {/* Sub-tabs for Details */}
       <div className="mb-4 border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-1" aria-label="Detail Sections">
-          {(isEADApplication ? [
-            { id: 'personal', label: 'Personal', icon: User },
-            { id: 'contact', label: 'Contact', icon: Mail },
-            { id: 'ead-info', label: 'EAD Information', icon: FileText },
-            { id: 'immigration', label: 'Immigration', icon: MapPin }
-          ] : [
+          {([
             { id: 'personal', label: 'Personal', icon: User },
             { id: 'contact', label: 'Contact', icon: Mail },
             { id: 'education', label: 'Education', icon: GraduationCap }

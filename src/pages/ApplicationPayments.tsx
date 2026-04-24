@@ -191,14 +191,8 @@ export function ApplicationPayments() {
     try {
       setLoadingServices(true)
       
-      // Determine service name and state based on application type
-      const applicationType = application?.application_type || 'NCLEX'
-      const isEAD = applicationType === 'EAD'
-      
-      // For EAD applications, use NULL state (EAD is nationwide, not state-specific)
-      // For NCLEX, use state-specific pricing
-      const serviceName = isEAD ? 'EAD Processing' : 'NCLEX Processing'
-      const serviceState = isEAD ? 'All States' : 'New York'
+      const serviceName = 'NCLEX Processing'
+      const serviceState = 'New York'
       
       // Determine payment type from application
       const dbPaymentType = application?.payment_type
@@ -208,19 +202,6 @@ export function ApplicationPayments() {
       const hasStaggeredPayments = payments.some(p => p.payment_type === 'step1' || p.payment_type === 'step2')
       const hasFullPayment = payments.some(p => p.payment_type === 'full')
       const hasNoPayments = payments.length === 0
-      
-      // EAD applications typically use full payment only
-      if (isEAD) {
-        const service = await servicesAPI.getByServiceStateAndPaymentType(serviceName, serviceState, 'full')
-        if (service) {
-          setFullService(service)
-          setStaggeredService(null)
-          setRetakeService(null)
-        } else {
-          showToast('EAD payment service not configured. Please contact support.', 'error')
-        }
-        return
-      }
       
       // Handle retake payment type - retake only needs Step 2 as full payment
       if (dbPaymentType === 'retake') {
