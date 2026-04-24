@@ -1086,6 +1086,36 @@ export function Quote() {
       // Navigate to the quote view with the formatted GQ quote ID
       const formattedId = formatQuoteId(typedNewQuote.id || '')
       navigate(`/quote/${formattedId}`, { replace: false })
+
+      // Send quote confirmation email (fire-and-forget — don't block the UI)
+      if (formData.email) {
+        const validUntil = new Date()
+        validUntil.setDate(validUntil.getDate() + 30)
+        const appOrigin = window.location.origin
+        fetch('/api/emails/send-quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quoteNumber: formattedId,
+            quoteId: typedNewQuote.id,
+            clientName: `${formData.firstName} ${formData.lastName}`.trim(),
+            email: formData.email,
+            mobileNumber: formData.mobileNumber,
+            service: formData.service,
+            state: formData.state,
+            paymentType: formData.paymentType,
+            lineItems: formData.lineItems,
+            subtotal: formData.subtotal,
+            tax: formData.tax,
+            total: formData.total,
+            validUntil: validUntil.toISOString(),
+            quoteUrl: `${appOrigin}/quote/${formattedId}`,
+          }),
+        }).catch(() => {
+          // Non-critical — email failure must not block the quote flow
+        })
+      }
+
       // Show preloader for 3 seconds before displaying quote and showing toast
       setTimeout(() => {
         setShowPreloader(false)
