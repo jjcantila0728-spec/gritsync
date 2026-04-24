@@ -1,46 +1,55 @@
 import { Router, Request, Response } from 'express'
 import multer from 'multer'
-import path from 'path'
-import fs from 'fs'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
+import pool from '../db'
 
 const router = Router()
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads')
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+const MIME_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  txt: 'text/plain',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
-const storage = multer.memoryStorage()
-const upload = multer({
-  storage,
-  limits: { fileSize: 15 * 1024 * 1024 },
-})
+function getMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return MIME_TYPES[ext] || 'application/octet-stream'
+}
+
+function sanitizeKey(filePath: string): string {
+  return filePath.replace(/\.\./g, '').replace(/^\//, '')
+}
 
 router.post('/upload', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' })
-    }
-
+    if (!req.file) return res.status(400).json({ error: 'No file provided' })
     const filePath = req.body.path
-    if (!filePath) {
-      return res.status(400).json({ error: 'No path provided' })
-    }
+    if (!filePath) return res.status(400).json({ error: 'No path provided' })
 
-    const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-    const fullPath = path.join(UPLOADS_DIR, sanitized)
-    const dir = path.dirname(fullPath)
+    const key = sanitizeKey(filePath)
+    const contentType = getMimeType(filePath)
 
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
+    await pool.query(
+      `INSERT INTO file_storage (storage_key, data, content_type, file_size)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (storage_key) DO UPDATE
+       SET data = EXCLUDED.data,
+           content_type = EXCLUDED.content_type,
+           file_size = EXCLUDED.file_size,
+           updated_at = NOW()`,
+      [key, req.file.buffer, contentType, req.file.size]
+    )
 
-    fs.writeFileSync(fullPath, req.file.buffer)
-
-    res.json({ path: sanitized })
+    res.json({ path: key })
   } catch (error: any) {
-    console.error('Storage upload error:', error)
+    console.error('Upload error:', error)
     res.status(500).json({ error: error.message || 'Upload failed' })
   }
 })
@@ -48,33 +57,23 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req: Aut
 router.get('/download', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const filePath = req.query.path as string
-    if (!filePath) {
-      return res.status(400).json({ error: 'No path provided' })
-    }
+    if (!filePath) return res.status(400).json({ error: 'No path provided' })
 
-    const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-    const fullPath = path.join(UPLOADS_DIR, sanitized)
+    const key = sanitizeKey(filePath)
+    const result = await pool.query(
+      'SELECT data, content_type, storage_key FROM file_storage WHERE storage_key = $1',
+      [key]
+    )
 
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' })
-    }
+    if (result.rows.length === 0) return res.status(404).json({ error: 'File not found' })
 
-    const ext = path.extname(fullPath).toLowerCase()
-    const mimeTypes: Record<string, string> = {
-      '.pdf': 'application/pdf',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-    }
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
-
-    res.setHeader('Content-Type', contentType)
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(fullPath)}"`)
-    res.send(fs.readFileSync(fullPath))
+    const row = result.rows[0]
+    const filename = key.split('/').pop() || 'file'
+    res.setHeader('Content-Type', row.content_type)
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+    res.send(row.data)
   } catch (error: any) {
-    console.error('Storage download error:', error)
+    console.error('Download error:', error)
     res.status(500).json({ error: error.message || 'Download failed' })
   }
 })
@@ -82,22 +81,21 @@ router.get('/download', authenticateToken, async (req: AuthenticatedRequest, res
 router.get('/signed-url', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const filePath = req.query.path as string
-    if (!filePath) {
-      return res.status(400).json({ error: 'No path provided' })
-    }
+    if (!filePath) return res.status(400).json({ error: 'No path provided' })
 
-    const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-    const fullPath = path.join(UPLOADS_DIR, sanitized)
+    const key = sanitizeKey(filePath)
+    const result = await pool.query(
+      'SELECT storage_key FROM file_storage WHERE storage_key = $1',
+      [key]
+    )
 
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' })
-    }
+    if (result.rows.length === 0) return res.status(404).json({ error: 'File not found' })
 
     const token = req.headers.authorization?.split(' ')[1] || ''
-    const url = `/api/storage/file/${encodeURIComponent(sanitized)}?t=${token}`
+    const url = `/api/storage/file/${encodeURIComponent(key)}?t=${token}`
     res.json({ url })
   } catch (error: any) {
-    console.error('Storage signed-url error:', error)
+    console.error('Signed URL error:', error)
     res.status(500).json({ error: error.message || 'Failed to create URL' })
   }
 })
@@ -105,26 +103,20 @@ router.get('/signed-url', authenticateToken, async (req: AuthenticatedRequest, r
 router.get('/file/*filePath', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const filePath = (req.params as any).filePath
-    const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-    const fullPath = path.join(UPLOADS_DIR, sanitized)
+    const key = sanitizeKey(filePath)
 
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' })
-    }
+    const result = await pool.query(
+      'SELECT data, content_type, storage_key FROM file_storage WHERE storage_key = $1',
+      [key]
+    )
 
-    const ext = path.extname(fullPath).toLowerCase()
-    const mimeTypes: Record<string, string> = {
-      '.pdf': 'application/pdf',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-    }
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
-    res.setHeader('Content-Type', contentType)
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(fullPath)}"`)
-    res.send(fs.readFileSync(fullPath))
+    if (result.rows.length === 0) return res.status(404).json({ error: 'File not found' })
+
+    const row = result.rows[0]
+    const filename = key.split('/').pop() || 'file'
+    res.setHeader('Content-Type', row.content_type)
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+    res.send(row.data)
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to serve file' })
   }
@@ -133,25 +125,18 @@ router.get('/file/*filePath', authenticateToken, async (req: AuthenticatedReques
 router.get('/public/*filePath', async (req: Request, res: Response) => {
   try {
     const filePath = (req.params as any).filePath
-    const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-    const fullPath = path.join(UPLOADS_DIR, sanitized)
+    const key = sanitizeKey(filePath)
 
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' })
-    }
+    const result = await pool.query(
+      'SELECT data, content_type FROM file_storage WHERE storage_key = $1',
+      [key]
+    )
 
-    const ext = path.extname(fullPath).toLowerCase()
-    const mimeTypes: Record<string, string> = {
-      '.pdf': 'application/pdf',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-    }
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
-    res.setHeader('Content-Type', contentType)
-    res.send(fs.readFileSync(fullPath))
+    if (result.rows.length === 0) return res.status(404).json({ error: 'File not found' })
+
+    const row = result.rows[0]
+    res.setHeader('Content-Type', row.content_type)
+    res.send(row.data)
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to serve file' })
   }
@@ -160,21 +145,16 @@ router.get('/public/*filePath', async (req: Request, res: Response) => {
 router.delete('/delete', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { paths } = req.body
-    if (!Array.isArray(paths)) {
-      return res.status(400).json({ error: 'paths must be an array' })
-    }
+    if (!Array.isArray(paths)) return res.status(400).json({ error: 'paths must be an array' })
 
     for (const filePath of paths) {
-      const sanitized = filePath.replace(/\.\./g, '').replace(/^\//, '')
-      const fullPath = path.join(UPLOADS_DIR, sanitized)
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
+      const key = sanitizeKey(filePath)
+      await pool.query('DELETE FROM file_storage WHERE storage_key = $1', [key])
     }
 
     res.json({ success: true })
   } catch (error: any) {
-    console.error('Storage delete error:', error)
+    console.error('Delete error:', error)
     res.status(500).json({ error: error.message || 'Delete failed' })
   }
 })

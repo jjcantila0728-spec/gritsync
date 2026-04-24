@@ -9,7 +9,7 @@ GritSync is a comprehensive SaaS application for processing NCLEX applications f
 - **Database**: Replit PostgreSQL (accessed via `DATABASE_URL` env var)
 - **Authentication**: Custom JWT (bcryptjs + jsonwebtoken)
 - **Payments**: Stripe (Client SDK)
-- **File Storage**: Server-side storage routes (`/api/storage/*`)
+- **File Storage**: PostgreSQL `file_storage` table (persistent, survives deployments) via `/api/storage/*` routes
 - **UI**: Tailwind CSS + Lucide Icons
 
 ## Architecture

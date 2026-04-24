@@ -28,8 +28,14 @@ function buildWhereClause(filters: Record<string, any>): { sql: string; values: 
   const values: any[] = []
   let idx = 1
 
-  for (const [key, val] of Object.entries(filters)) {
-    if (val === null) {
+  for (const [key, rawVal] of Object.entries(filters)) {
+    // Query string values arrive as strings — parse JSON-encoded filter objects
+    let val = rawVal
+    if (typeof rawVal === 'string' && rawVal.startsWith('{')) {
+      try { val = JSON.parse(rawVal) } catch {}
+    }
+
+    if (val === null || val === 'null') {
       conditions.push(`"${key}" IS NULL`)
     } else if (typeof val === 'object' && val !== null) {
       if (val._op === 'gte') { conditions.push(`"${key}" >= $${idx++}`); values.push(val.value) }
