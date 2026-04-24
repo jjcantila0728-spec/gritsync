@@ -3,7 +3,7 @@
  * Sends payment receipt emails with PDF attachments
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import { sendEmail } from './email-service'
 import { formatCurrency } from './utils'
 

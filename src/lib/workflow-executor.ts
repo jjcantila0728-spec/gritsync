@@ -4,7 +4,7 @@
  */
 
 import { workflowsAPI, Workflow, WorkflowAction } from './workflows-api'
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import { sendEmail } from './email-service'
 import { sendApplicationStatusEmail } from './email-notifications'
 
@@ -323,7 +323,7 @@ async function executeCreateTaskAction(
   // For now, we'll create a notification instead
   const { title, description, assigned_to, priority } = config
 
-  const { notificationsAPI } = await import('./supabase-api')
+  const { notificationsAPI } = await import('./api-service')
   
   await notificationsAPI.create(
     resolveVariables(assigned_to, eventData),
@@ -352,7 +352,7 @@ async function executeNotifyAdminAction(
 
   if (!admins) return true
 
-  const { notificationsAPI } = await import('./supabase-api')
+  const { notificationsAPI } = await import('./api-service')
   const resolvedTitle = resolveVariables(title || 'Workflow Notification', eventData)
   const resolvedMessage = resolveVariables(message, eventData)
 

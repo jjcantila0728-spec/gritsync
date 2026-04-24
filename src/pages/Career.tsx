@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, AlertCircle, ArrowLeft, Users, Briefcase } from 'lucide-react'
 

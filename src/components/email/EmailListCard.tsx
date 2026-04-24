@@ -8,7 +8,7 @@ import { Mail, Clock, CheckCircle2, XCircle, AlertCircle, Eye, Trash2, User } fr
 import { cn } from '@/lib/utils'
 import { EmailLog } from '@/lib/email-api'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 
 interface SenderInfo {
   avatar_path: string | null

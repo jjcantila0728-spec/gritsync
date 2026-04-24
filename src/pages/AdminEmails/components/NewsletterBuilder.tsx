@@ -21,7 +21,7 @@ import {
 import { emailCampaignsAPI } from '@/lib/email-campaigns-api'
 import { emailQueueAPI } from '@/lib/email-queue-api'
 import { cn, sanitizeHTML } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 
 interface NewsletterBuilderProps {
   showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void

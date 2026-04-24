@@ -3,7 +3,7 @@
  * Handles analytics data retrieval and reporting
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 
 export interface AnalyticsDateRange {
   startDate: string

@@ -7,7 +7,7 @@ import { Login } from '@/pages/Login'
 import { AuthProvider } from '@/contexts/AuthContext'
 
 // Mock Supabase
-vi.mock('@/lib/supabase', () => {
+vi.mock('@/lib/api-client', () => {
   const mockSignUp = vi.fn()
   const mockSignIn = vi.fn()
   const mockGetSession = vi.fn()
@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase', () => {
   }
 })
 
-import * as supabaseModule from '@/lib/supabase'
+import * as supabaseModule from '@/lib/api-client'
 
 // Mock toast
 vi.mock('@/components/ui/Toast', () => ({

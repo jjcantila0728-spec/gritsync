@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { testSupabaseConnections, getTestSummary, type TestResult } from '@/lib/test-supabase'
+import { testSupabaseConnections, getTestSummary, type TestResult } from '@/lib/test-api'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Loading } from '@/components/ui/Loading'

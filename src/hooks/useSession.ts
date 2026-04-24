@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import type { Session } from '@supabase/supabase-js'
 import {
   ensureValidSession,

@@ -7,7 +7,7 @@
  * Channels are not reused across components to prevent subscription conflicts.
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 /**

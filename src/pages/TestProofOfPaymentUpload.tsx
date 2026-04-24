@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import { Upload, Download, CheckCircle, XCircle, AlertCircle, FileText } from 'lucide-react'
 
 export function TestProofOfPaymentUpload() {

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
 import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions

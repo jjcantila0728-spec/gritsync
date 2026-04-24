@@ -3,7 +3,7 @@
  * Ensures tokens are refreshed and sessions are valid before critical operations
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import type { Session } from '@supabase/supabase-js'
 
 /**

@@ -1,5 +1,5 @@
-import { supabase } from './supabase';
-import { getCurrentUserId } from './supabase-api';
+import { supabase } from './api-client';
+import { getCurrentUserId } from './api-service';
 
 export interface EmailTemplate {
   id: string;

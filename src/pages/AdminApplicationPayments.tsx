@@ -13,7 +13,7 @@ import { applicationPaymentsAPI, applicationsAPI, adminAPI, servicesAPI } from '
 import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getSignedFileUrl } from '@/lib/supabase-api'
+import { getSignedFileUrl } from '@/lib/api-service'
 import { 
   ArrowLeft, 
   CheckCircle, 

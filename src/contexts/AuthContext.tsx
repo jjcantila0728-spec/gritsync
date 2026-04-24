@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import { User, UserRole } from '@/lib/types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     // Clear auth cache before signing out
     try {
-      const { clearAuthCache } = await import('@/lib/supabase-api')
+      const { clearAuthCache } = await import('@/lib/api-service')
       clearAuthCache()
     } catch {
       // Ignore if import fails

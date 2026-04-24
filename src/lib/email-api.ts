@@ -3,8 +3,8 @@
  * Handles email logs, analytics, and admin email operations
  */
 
-import { supabase } from './supabase'
-import { getCurrentUserId } from './supabase-api'
+import { supabase } from './api-client'
+import { getCurrentUserId } from './api-service'
 
 export interface EmailLog {
   id: string

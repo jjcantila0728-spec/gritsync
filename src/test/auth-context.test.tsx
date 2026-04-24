@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 
 // Mock Supabase
-vi.mock('@/lib/supabase', () => {
+vi.mock('@/lib/api-client', () => {
   const mockSignUp = vi.fn()
   const mockSignIn = vi.fn()
   const mockSignOut = vi.fn()
@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase', () => {
   }
 })
 
-import * as supabaseModule from '@/lib/supabase'
+import * as supabaseModule from '@/lib/api-client'
 
 // Test component that uses auth
 function TestComponent() {

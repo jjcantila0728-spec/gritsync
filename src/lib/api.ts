@@ -1,8 +1,7 @@
-// Re-export Supabase API for backward compatibility
-// The app now uses Supabase directly - this file maintains API compatibility
-export * from './supabase-api'
+// Re-export all API service functions
+export * from './api-service'
 
-// Legacy auth API (now handled by AuthContext with Supabase)
+// Legacy auth API stubs (now handled by AuthContext)
 export const authAPI = {
   register: async () => {
     // This is now handled by AuthContext.signUp
@@ -40,9 +39,4 @@ export const authAPI = {
   },
 }
 
-// Applications API - now uses Supabase
-// Re-exported from supabase-api.ts above
-
-// All APIs are now re-exported from supabase-api.ts
-// This maintains backward compatibility while using Supabase
 

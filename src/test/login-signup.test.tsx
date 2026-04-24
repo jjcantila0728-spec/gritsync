@@ -7,7 +7,7 @@ import { Login } from '@/pages/Login'
 import { AuthProvider } from '@/contexts/AuthContext'
 
 // Mock Supabase - functions must be defined inside the factory
-vi.mock('@/lib/supabase', () => {
+vi.mock('@/lib/api-client', () => {
   const mockSignUp = vi.fn()
   const mockSignIn = vi.fn()
   const mockSignOut = vi.fn()
@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase', () => {
 })
 
 // Get references to mocked functions
-import * as supabaseModule from '@/lib/supabase'
+import * as supabaseModule from '@/lib/api-client'
 const mockSignUp = (supabaseModule.supabase.auth.signUp as any)
 const mockSignIn = (supabaseModule.supabase.auth.signInWithPassword as any)
 const mockGetSession = (supabaseModule.supabase.auth.getSession as any)

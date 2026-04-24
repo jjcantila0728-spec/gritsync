@@ -3,7 +3,7 @@
  * Manages multiple email addresses for users and admin addresses
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 
 export interface EmailAddress {
   id: string

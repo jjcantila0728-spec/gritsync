@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import type { Database } from './database.types'
 import { imageUrlCache } from './image-cache'
 import { 
@@ -906,7 +906,7 @@ export const applicationsAPI = {
     // Create initial timeline step for the application
     if (data) {
       try {
-        const timelineStepsAPI = await import('./supabase-api').then(m => m.timelineStepsAPI)
+        const timelineStepsAPI = await import('./api-service').then(m => m.timelineStepsAPI)
         // NCLEX timeline: Application Submission
         await timelineStepsAPI.create(data.id, 'app_submission', 'Application Submission')
       } catch (timelineError) {

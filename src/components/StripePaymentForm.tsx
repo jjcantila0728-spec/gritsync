@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/utils'
 import { adminAPI } from '@/lib/api'
 import { paymentSettings } from '@/lib/settings'
 import { useToast } from '@/components/ui/Toast'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/api-client'
 import { CreditCard, Loader2, Building2, Upload, X, Tag, Image as ImageIcon, FileText, CheckCircle } from 'lucide-react'
 
 type PaymentMethod = 'card' | 'mobile_banking'

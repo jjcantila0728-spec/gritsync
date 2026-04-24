@@ -66,8 +66,8 @@ import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
-import { supabase } from '@/lib/supabase'
-import { getSignedFileUrl } from '@/lib/supabase-api'
+import { supabase } from '@/lib/api-client'
+import { getSignedFileUrl } from '@/lib/api-service'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 
 // Import types and utilities

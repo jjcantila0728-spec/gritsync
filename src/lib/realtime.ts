@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // Realtime subscription helpers

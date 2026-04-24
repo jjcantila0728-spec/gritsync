@@ -3,7 +3,7 @@
  * Provides easy access to admin settings throughout the application
  */
 
-import { supabase } from './supabase'
+import { supabase } from './api-client'
 
 // Cache for settings to avoid repeated database queries
 let settingsCache: Record<string, string> | null = null
