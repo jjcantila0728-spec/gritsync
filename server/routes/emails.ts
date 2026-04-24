@@ -25,15 +25,15 @@ router.post('/inbox/list', authenticateToken, async (req: AuthenticatedRequest, 
       return res.status(503).json({ error: 'Email service not configured. Contact admin to set up Resend API key.' })
     }
 
-    const { limit, after, before, to } = req.body
+    const { limit, after, before } = req.body
 
     const params = new URLSearchParams()
     if (limit) params.set('limit', String(limit))
     if (after) params.set('after', after)
     if (before) params.set('before', before)
-    if (to) params.set('to', to)
 
-    const url = `https://api.resend.com/emails?${params.toString()}`
+    // Use the inbound receiving endpoint, not the sent emails endpoint
+    const url = `https://api.resend.com/emails/receiving?${params.toString()}`
 
     const response = await fetch(url, {
       headers: {
@@ -45,7 +45,8 @@ router.post('/inbox/list', authenticateToken, async (req: AuthenticatedRequest, 
     const data = await response.json()
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: (data as any)?.message || 'Failed to fetch emails from Resend' })
+      console.error('Resend receiving list error:', data)
+      return res.status(response.status).json({ error: (data as any)?.message || 'Failed to fetch received emails from Resend' })
     }
 
     res.json(data)
@@ -67,7 +68,8 @@ router.post('/inbox/get', authenticateToken, async (req: AuthenticatedRequest, r
       return res.status(400).json({ error: 'emailId is required' })
     }
 
-    const response = await fetch(`https://api.resend.com/emails/${emailId}`, {
+    // Use the receiving endpoint for inbound emails
+    const response = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -77,7 +79,7 @@ router.post('/inbox/get', authenticateToken, async (req: AuthenticatedRequest, r
     const data = await response.json()
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: (data as any)?.message || 'Failed to fetch email' })
+      return res.status(response.status).json({ error: (data as any)?.message || 'Failed to fetch received email' })
     }
 
     res.json(data)
@@ -147,7 +149,8 @@ router.post('/inbox/attachments', authenticateToken, async (req: AuthenticatedRe
       return res.status(400).json({ error: 'emailId is required' })
     }
 
-    const response = await fetch(`https://api.resend.com/emails/${emailId}/attachments`, {
+    // Use the receiving attachments endpoint for inbound email attachments
+    const response = await fetch(`https://api.resend.com/emails/${emailId}/attachments/receiving`, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
