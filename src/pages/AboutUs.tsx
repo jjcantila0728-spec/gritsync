@@ -45,11 +45,13 @@ const values = [
 const team = [
   {
     name: 'JJ Cantila',
-    title: 'RM, RN, SGRN, CADRN, USRN',
+    title: 'RM, RN, SGRN, USRN, PN (RES)',
     role: 'Founder & CEO',
     desc: 'A licensed USRN with extensive experience navigating the NCLEX process. JJ founded GritSync to give every Filipino nurse the same fighting chance he had.',
     initials: 'JJ',
-    color: 'from-primary-600 to-primary-400'
+    color: 'from-primary-600 to-primary-400',
+    photo: '/gritsyncfounder.png',
+    board: 'Texas Board of Nursing'
   },
   {
     name: 'Krizza Mae Cantila',
@@ -57,7 +59,44 @@ const team = [
     role: 'Co-Founder & Operations',
     desc: 'With deep expertise in nursing licensure requirements, Krizza ensures every application meets the highest standards of accuracy and completeness.',
     initials: 'KC',
-    color: 'from-blue-600 to-blue-400'
+    color: 'from-blue-600 to-blue-400',
+    photo: null,
+    board: null
+  },
+]
+
+const advisors = [
+  {
+    name: 'JJ Cantila',
+    title: 'RM, RN, SGRN, USRN, PN (RES)',
+    board: 'Texas Board of Nursing',
+    initials: 'JJ',
+    color: 'from-primary-600 to-primary-400',
+    photo: '/gritsyncfounder.png',
+  },
+  {
+    name: 'John Matthew Jalla',
+    title: 'BSN, PHRN, USRN',
+    board: 'Illinois Board of Nursing',
+    initials: 'JJ',
+    color: 'from-indigo-600 to-indigo-400',
+    photo: null,
+  },
+  {
+    name: 'Reynaldo Santos III',
+    title: 'PHRN, DHA-RN, DOH-RN, USRN, MAN',
+    board: 'New York Board of Nursing',
+    initials: 'RS',
+    color: 'from-emerald-600 to-emerald-400',
+    photo: null,
+  },
+  {
+    name: 'Dylan Rodriguez',
+    title: 'BSN, PHRN, USRN',
+    board: 'New York Board of Nursing',
+    initials: 'DR',
+    color: 'from-violet-600 to-violet-400',
+    photo: null,
   },
 ]
 
@@ -287,13 +326,22 @@ export function AboutUs() {
                 style={{ transitionDelay: `${i * 150}ms` }}
               >
                 <div className="flex items-start gap-5 mb-5">
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${member.color} flex items-center justify-center text-white font-black text-xl flex-shrink-0 shadow-lg`}>
-                    {member.initials}
-                  </div>
+                  {member.photo ? (
+                    <img
+                      src={member.photo}
+                      alt={member.name}
+                      className="w-20 h-20 rounded-2xl object-cover object-top shadow-lg flex-shrink-0 border-2 border-primary-100 dark:border-primary-900"
+                    />
+                  ) : (
+                    <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${member.color} flex items-center justify-center text-white font-black text-2xl flex-shrink-0 shadow-lg`}>
+                      {member.initials}
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{member.name}</h3>
                     <p className="text-primary-600 dark:text-primary-400 font-semibold text-sm">{member.role}</p>
                     <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">{member.title}</p>
+                    {member.board && <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">{member.board}</p>}
                   </div>
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{member.desc}</p>
@@ -301,6 +349,55 @@ export function AboutUs() {
                   {[...Array(5)].map((_, j) => (
                     <Star key={j} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                   ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Program Advisors */}
+      <section className="py-24 bg-gray-950">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-900/50 border border-primary-800 text-primary-300 text-sm font-medium mb-4">
+              <GraduationCap className="h-4 w-4" />
+              <span>Our Advisors</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Meet the Program Advisors</h2>
+            <p className="text-xl text-gray-400 max-w-xl mx-auto">Licensed USRNs across multiple states guiding our program and clients</p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            {advisors.map((advisor, i) => (
+              <div
+                key={advisor.name + advisor.board}
+                className="group bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden hover:border-primary-700 hover:shadow-xl hover:shadow-primary-900/20 transition-all duration-300"
+              >
+                {/* Photo / Avatar */}
+                <div className="relative h-56 bg-gray-800 overflow-hidden">
+                  {advisor.photo ? (
+                    <img
+                      src={advisor.photo}
+                      alt={advisor.name}
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${advisor.color} flex items-center justify-center`}>
+                      <span className="text-6xl font-black text-white/30">{advisor.initials}</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent" />
+                </div>
+
+                {/* Info */}
+                <div className="p-5">
+                  <h3 className="text-white font-bold text-lg leading-tight mb-1">{advisor.name}</h3>
+                  <p className="text-primary-400 text-xs font-semibold mb-2 leading-relaxed">{advisor.title}</p>
+                  <div className="flex items-center gap-1.5 text-gray-500 text-xs">
+                    <Globe className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>{advisor.board}</span>
+                  </div>
                 </div>
               </div>
             ))}
