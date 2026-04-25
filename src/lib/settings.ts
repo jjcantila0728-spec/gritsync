@@ -304,17 +304,22 @@ export const paymentSettings = {
     enabled: boolean
   }>> => {
     const configsJson = await getSetting('mobileBankingConfigs', '[]')
+    const defaults = [
+      { id: 'bdo', name: 'BDO', accountName: 'Joy Jeric Cantila', accountNumber: '0059 4600 0994', enabled: true },
+      { id: 'gcash', name: 'GCash', accountName: 'Joy Jeric Cantila', accountNumber: '09691533239', enabled: true },
+      { id: 'zelle', name: 'Zelle', accountName: 'Joy Jeric Cantila', accountNumber: '509 270 3437', enabled: true },
+    ]
     try {
       const configs = JSON.parse(configsJson)
+      // If no configs saved yet, return defaults
+      if (!Array.isArray(configs) || configs.length === 0) {
+        return defaults
+      }
       // Filter to only enabled configs
       return configs.filter((c: any) => c.enabled)
     } catch {
       // Return default configs if parsing fails
-      return [
-        { id: 'bdo', name: 'BDO', accountName: 'Joy Jeric Cantila', accountNumber: '0059 4600 0994', enabled: true },
-        { id: 'gcash', name: 'GCash', accountName: 'Joy Jeric Cantila', accountNumber: '09691533239', enabled: true },
-        { id: 'zelle', name: 'Zelle', accountName: 'Joy Jeric Cantila', accountNumber: '509 270 3437', enabled: true },
-      ]
+      return defaults
     }
   },
   
