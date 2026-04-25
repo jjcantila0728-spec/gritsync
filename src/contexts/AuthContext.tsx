@@ -65,14 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Extract role from auth metadata
         const role = (authUser.user_metadata?.role || authUser.app_metadata?.role || 'client') as UserRole
         
-        // Use auth metadata only - fast and reliable
+        // Use auth metadata and direct fields from /auth/me response
         setUser({
           id: authUser.id,
           email: authUser.email || '',
           role: role,
-          first_name: authUser.user_metadata?.first_name || undefined,
-          last_name: authUser.user_metadata?.last_name || undefined,
-          grit_id: authUser.user_metadata?.grit_id || undefined,
+          first_name: (authUser as any).first_name || authUser.user_metadata?.first_name || undefined,
+          middle_name: (authUser as any).middle_name || undefined,
+          last_name: (authUser as any).last_name || authUser.user_metadata?.last_name || undefined,
+          mobile: (authUser as any).mobile || undefined,
+          grit_id: (authUser as any).grit_id || authUser.user_metadata?.grit_id || undefined,
           created_at: authUser.created_at,
         })
       } else {

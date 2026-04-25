@@ -415,9 +415,32 @@ export function ApplicationDetail() {
       if (!data || typeof data !== 'object' || 'error' in data) {
         throw new Error('Failed to fetch application')
       }
-      setApplication(data as ApplicationData)
+      let appData = data as ApplicationData
+      
+      // If application is missing name fields (older records before migration), fetch from users table
+      if (!appData.first_name && appData.user_id) {
+        try {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('first_name, middle_name, last_name, mobile')
+            .eq('id', appData.user_id)
+            .single()
+          if (userData) {
+            appData = {
+              ...appData,
+              first_name: appData.first_name || userData.first_name || '',
+              middle_name: appData.middle_name || userData.middle_name || '',
+              last_name: appData.last_name || userData.last_name || '',
+            }
+          }
+        } catch {
+          // Silently ignore — names will just show as N/A
+        }
+      }
+      
+      setApplication(appData)
       // Initialize status from application data - this ensures it's always synced with the database
-      const appStatus = (data as ApplicationData).status || 'initiated'
+      const appStatus = appData.status || 'initiated'
       setStatus(appStatus)
       
       // Fetch latest documents from user_documents table for the application owner
