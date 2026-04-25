@@ -169,6 +169,7 @@ class MutationBuilder {
   private _filters: Record<string, any> = {}
   private _returning: string = '*'
   private _single = false
+  _onConflict: string | null = null
 
   constructor(table: string, operation: 'insert' | 'update' | 'delete' | 'upsert', payload?: any) {
     this.table = table
@@ -192,9 +193,12 @@ class MutationBuilder {
     }
 
     if (this.operation === 'insert' || this.operation === 'upsert') {
-      const payload = Array.isArray(this.payload) 
+      const basePayload = Array.isArray(this.payload) 
         ? { _batch: this.payload, returning: this._returning }
         : { ...this.payload, returning: this._returning }
+      const payload = this.operation === 'upsert' && this._onConflict
+        ? { ...basePayload, _onConflict: this._onConflict }
+        : basePayload
       
       const res = await fetch(`${API_BASE}/db/${this.table}`, {
         method: 'POST', headers, body: JSON.stringify(payload)
@@ -235,7 +239,11 @@ export const supabase = {
       select: (cols = '*') => new QueryBuilder(table).select(cols),
       insert: (data: any) => new MutationBuilder(table, 'insert', data),
       update: (data: any) => new MutationBuilder(table, 'update', data),
-      upsert: (data: any) => new MutationBuilder(table, 'upsert', data),
+      upsert: (data: any, opts?: { onConflict?: string }) => {
+      const builder = new MutationBuilder(table, 'upsert', data)
+      if (opts?.onConflict) (builder as any)._onConflict = opts.onConflict
+      return builder
+    },
       delete: () => new MutationBuilder(table, 'delete'),
     }
   },

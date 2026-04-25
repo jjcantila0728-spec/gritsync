@@ -18,6 +18,7 @@ interface DetailsTabProps {
 
 export function DetailsTab({
   application,
+  isEADApplication,
   detailsSubTab,
   setDetailsSubTab,
   setApplication,

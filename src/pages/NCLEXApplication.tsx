@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
-import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -22,6 +21,7 @@ import {
   convertFromDatabaseFormat,
   convertToDatabaseFormat,
   convertMMYYYYToDatabase,
+  convertToMMYYYY,
   isValidMMDDYYYY
 } from '@/lib/utils/dateFormatters'
 
@@ -587,17 +587,13 @@ export function NCLEXApplication() {
       
       if (typedDetails) {
         // Auto-populate all fields from saved details
-        setFirstName(typedDetails.first_name || '')
-        setMiddleName(typedDetails.middle_name || '')
-        setLastName(typedDetails.last_name || '')
-        setMobileNumber(typedDetails.mobile_number || '')
-        // Always prioritize GritSync email over user_details.email
-        // NEVER use typedDetails.email to avoid old Gmail addresses
+        // first_name/last_name/middle_name come from users table (user context), not user_details
+        setFirstName(user?.first_name || '')
+        setMiddleName(typedDetails.middle_name || user?.middle_name || '')
+        setLastName(user?.last_name || '')
+        setMobileNumber(typedDetails.mobile_number || user?.mobile || '')
+        // Always use GritSync email (business email)
         const finalEmail = gritsyncEmail || user?.email || ''
-        console.log('📧 Setting email to:', finalEmail)
-        console.log('   - GritSync email:', gritsyncEmail || '(not found)')
-        console.log('   - Auth email:', user?.email || '(not found)')
-        console.log('   - user_details.email (IGNORED):', typedDetails.email || '(none)')
         setEmail(finalEmail)
         setGender(typedDetails.gender || '')
         setMaritalStatus(typedDetails.marital_status || '')
@@ -634,9 +630,19 @@ export function NCLEXApplication() {
         setNursingSchoolMajor(typedDetails.nursing_school_major || '')
         setNursingSchoolDiplomaDate(convertFromDatabaseFormat(typedDetails.nursing_school_diploma_date))
         setAutoFilled(true)
+      } else {
+        // No saved details yet — still populate name/email from user context
+        setFirstName(user?.first_name || '')
+        setMiddleName(user?.middle_name || '')
+        setLastName(user?.last_name || '')
+        setMobileNumber(user?.mobile || '')
+        setEmail(gritsyncEmail || user?.email || '')
       }
     } catch (error) {
       // No saved details, that's okay
+      setFirstName(user?.first_name || '')
+      setLastName(user?.last_name || '')
+      setEmail(gritsyncEmail || user?.email || '')
     } finally {
       setLoadingDetails(false)
     }
@@ -1034,13 +1040,28 @@ export function NCLEXApplication() {
       // Fetch existing details first to preserve data that isn't being updated
       const existingDetails = await userDetailsAPI.get()
       
-      // Prepare new data with current form values
+      // Save first_name, last_name, middle_name to users table if they changed
+      if ((firstName || lastName) && user?.id) {
+        try {
+          const token = localStorage.getItem('gritsync_token')
+          await fetch('/api/auth/update', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              first_name: safeTrim(firstName),
+              last_name: safeTrim(lastName),
+              middle_name: safeTrim(middleName),
+              mobile: safeTrim(mobileNumber),
+            })
+          })
+        } catch {
+          // Non-fatal - continue saving user_details
+        }
+      }
+
+      // Prepare new data with current form values (only user_details columns)
       const newData: any = {
-        first_name: safeTrim(firstName),
-        middle_name: safeTrim(middleName),
-        last_name: safeTrim(lastName),
         mobile_number: safeTrim(mobileNumber),
-        email: safeTrim(email) || user?.email || null,
         gender: gender || null,
         marital_status: maritalStatus || null,
         single_full_name: maritalStatus === 'single' ? safeTrim(singleFullName) : null,
@@ -1148,15 +1169,12 @@ export function NCLEXApplication() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex">
-          <Sidebar />
-          <main className="flex-1 p-4 md:p-8">
-            <div className="mb-8">
-              <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded w-64 animate-pulse" />
-            </div>
-            <CardSkeleton />
-          </main>
-        </div>
+        <main className="w-full max-w-7xl mx-auto p-4 md:p-8">
+          <div className="mb-8">
+            <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded w-64 animate-pulse" />
+          </div>
+          <CardSkeleton />
+        </main>
       </div>
     )
   }
@@ -1165,8 +1183,7 @@ export function NCLEXApplication() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
       <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-4 md:p-8">
+        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
           <div className="mb-8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -2753,7 +2770,7 @@ export function NCLEXApplication() {
         isOpen={!!viewingFile}
         onClose={() => setViewingFile(null)}
         title={viewingFile?.fileName}
-        size="xl"
+        size="2xl"
       >
         {viewingFile && (
           <div className="space-y-4 -mx-4 -mt-4">

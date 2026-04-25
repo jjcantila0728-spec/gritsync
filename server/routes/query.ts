@@ -100,7 +100,7 @@ router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Resp
   }
 
   try {
-    const { returning = '*', ...record } = req.body
+    const { returning = '*', _onConflict, ...record } = req.body
     if (Object.keys(record).length === 0) return res.status(400).json({ error: 'No data provided' })
 
     // Handle array of records or single record
@@ -113,10 +113,21 @@ router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Resp
     for (const rec of records) {
       const vals = cols.map(c => rec[c])
       const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ')
-      const result = await query(
-        `INSERT INTO "${table}" (${colSQL}) VALUES (${placeholders}) RETURNING ${returning}`,
-        vals
-      )
+
+      let sql = `INSERT INTO "${table}" (${colSQL}) VALUES (${placeholders})`
+      if (_onConflict) {
+        const conflictCols = _onConflict.split(',').map((c: string) => `"${c.trim()}"`).join(', ')
+        const updateCols = cols.filter(c => !_onConflict.split(',').map((x: string) => x.trim()).includes(c))
+        if (updateCols.length > 0) {
+          const setClause = updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ')
+          sql += ` ON CONFLICT (${conflictCols}) DO UPDATE SET ${setClause}`
+        } else {
+          sql += ` ON CONFLICT (${conflictCols}) DO NOTHING`
+        }
+      }
+      sql += ` RETURNING ${returning}`
+
+      const result = await query(sql, vals)
       inserted.push(...result.rows)
     }
 
