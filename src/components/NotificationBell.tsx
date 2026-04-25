@@ -22,17 +22,17 @@ export function NotificationBell({ unreadCount, onClick, className }: Notificati
       aria-label="Notifications"
     >
       <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-      
-      {/* Red circle badge with white number */}
+
       {unreadCount > 0 && (
-        <span 
-          className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold shadow-lg animate-pulse"
-          style={{ animationDuration: '2s' }}
-        >
-          {unreadCount > 99 ? '99+' : unreadCount}
+        <span className="absolute -top-1 -right-1">
+          {/* Expanding ping ring for blink effect */}
+          <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
+          {/* Solid badge with count */}
+          <span className="relative flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold shadow-md leading-none">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
         </span>
       )}
     </button>
   )
 }
-
