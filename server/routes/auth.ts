@@ -13,11 +13,31 @@ function generateGritId(): string {
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    // Email is NOT required — it will be auto-generated from the GRIT ID
-    const { password, first_name, last_name, middle_name, mobile, role = 'client' } = req.body
+    const { password, first_name, last_name, middle_name, mobile, personal_email, role = 'client' } = req.body
 
     if (!password || !first_name || !last_name || !mobile) {
       return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' })
+    }
+
+    if (!personal_email) {
+      return res.status(400).json({ error: 'Personal email address is required' })
+    }
+
+    // Validate personal email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(personal_email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid personal email address' })
+    }
+
+    // Disallow @gritsync.com as personal email
+    if (personal_email.trim().toLowerCase().endsWith('@gritsync.com')) {
+      return res.status(400).json({ error: 'Please use your personal email address (e.g. Gmail, Yahoo), not a GritSync email' })
+    }
+
+    // Check for duplicate personal email
+    const existingEmail = await query('SELECT id FROM users WHERE personal_email = $1', [personal_email.trim().toLowerCase()])
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'This email address is already registered' })
     }
 
     // Check for duplicate mobile number
@@ -29,31 +49,31 @@ router.post('/register', async (req: Request, res: Response) => {
     // Generate GRIT ID
     const grit_id = generateGritId()
 
-    // Auto-generate email as firstname.lastname@gritsync.com
-    // Normalize: lowercase, remove non-alphanumeric chars except dots
+    // Auto-generate business email as firstname.lastname@gritsync.com
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
     const baseEmail = `${normalize(first_name)}.${normalize(last_name)}@gritsync.com`
 
-    // Handle conflicts: append a number if the base email is taken
+    // Handle conflicts: append a number if the base gritsync email is taken
     let gritsync_email = baseEmail
     let suffix = 1
     while (true) {
-      const conflict = await query('SELECT id FROM users WHERE email = $1', [gritsync_email])
+      const conflict = await query('SELECT id FROM users WHERE gritsync_email = $1', [gritsync_email])
       if (conflict.rows.length === 0) break
       gritsync_email = `${normalize(first_name)}.${normalize(last_name)}${suffix}@gritsync.com`
       suffix++
       if (suffix > 99) {
-        return res.status(500).json({ error: 'Unable to generate unique email, please contact support' })
+        return res.status(500).json({ error: 'Unable to generate unique business email, please contact support' })
       }
     }
 
     const password_hash = await bcrypt.hash(password, 12)
+    const personal_email_normalized = personal_email.trim().toLowerCase()
 
     const result = await query(
-      `INSERT INTO users (email, gritsync_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
-       RETURNING id, email, gritsync_email, role, first_name, last_name, grit_id, created_at`,
-      [gritsync_email, gritsync_email, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id]
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+       RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, created_at`,
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id]
     )
 
     const user = result.rows[0]
@@ -65,6 +85,7 @@ router.post('/register', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         gritsync_email: user.gritsync_email,
+        personal_email: user.personal_email,
         role: user.role,
         first_name: user.first_name,
         last_name: user.last_name,
@@ -80,11 +101,14 @@ router.post('/register', async (req: Request, res: Response) => {
           id: user.id,
           email: user.email,
           role: user.role,
+          gritsync_email: user.gritsync_email,
+          personal_email: user.personal_email,
           user_metadata: {
             first_name: user.first_name,
             last_name: user.last_name,
             grit_id: user.grit_id,
             gritsync_email: user.gritsync_email,
+            personal_email: user.personal_email,
             role: user.role,
           },
           app_metadata: { role: user.role },
@@ -113,8 +137,9 @@ router.post('/login', async (req: Request, res: Response) => {
 
     let result
     if (isEmail) {
+      // Check both gritsync email (email col) and personal email
       result = await query(
-        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE email = $1',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE email = $1 OR personal_email = $1',
         [identifier.toLowerCase()]
       )
     } else if (isGritId) {

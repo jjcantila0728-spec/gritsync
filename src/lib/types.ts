@@ -7,6 +7,10 @@ export interface User {
   first_name?: string
   last_name?: string
   grit_id?: string  // Optional - may not exist immediately after registration
+  gritsync_email?: string  // Auto-generated @gritsync.com email for NCLEX processing
+  personal_email?: string  // User's personal email (Gmail, Yahoo, etc.)
+  mobile?: string
+  middle_name?: string
   created_at: string
 }
 
