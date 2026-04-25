@@ -2,6 +2,27 @@ import { Card } from '@/components/ui/Card'
 import { Copy, User, Mail, Phone, MapPin, Calendar, GraduationCap, School, Building2, FileText } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { copyToClipboard } from '../utils/clipboardHelpers'
+
+// Converts stored date strings → "Month YYYY" display
+// Handles: "MM/YYYY", "YYYY-MM", "YYYY-MM-DD"
+function formatMMYYYYDisplay(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'N/A'
+  // MM/YYYY format (e.g. "06/2000")
+  if (/^(0[1-9]|1[0-2])\/\d{4}$/.test(dateStr)) {
+    const [mm, yyyy] = dateStr.split('/')
+    return new Date(Number(yyyy), Number(mm) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }
+  // YYYY-MM format (e.g. "2000-06")
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(dateStr)) {
+    const [yyyy, mm] = dateStr.split('-')
+    return new Date(Number(yyyy), Number(mm) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }
+  // YYYY-MM-DD format (e.g. "2000-06-01")
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }
+  return dateStr
+}
 import type { ApplicationData } from '../types'
 import { Link } from 'react-router-dom'
 
@@ -458,14 +479,14 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Years:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">
                       {application.elementary_start_date && application.elementary_end_date
-                        ? `${formatDate(application.elementary_start_date)} - ${formatDate(application.elementary_end_date)}`
+                        ? `${formatMMYYYYDisplay(application.elementary_start_date)} - ${formatMMYYYYDisplay(application.elementary_end_date)}`
                         : application.elementary_years_attended || 'N/A'}
                     </span>
                     {(application.elementary_start_date || application.elementary_end_date || application.elementary_years_attended) && (
                       <button
                         onClick={() => copyToClipboard(
                           application.elementary_start_date && application.elementary_end_date
-                            ? `${formatDate(application.elementary_start_date)} - ${formatDate(application.elementary_end_date)}`
+                            ? `${formatMMYYYYDisplay(application.elementary_start_date)} - ${formatMMYYYYDisplay(application.elementary_end_date)}`
                             : application.elementary_years_attended || '',
                           'Elementary years', showToast)}
                         className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
@@ -529,14 +550,14 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Years:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">
                       {application.high_school_start_date && application.high_school_end_date
-                        ? `${formatDate(application.high_school_start_date)} - ${formatDate(application.high_school_end_date)}`
+                        ? `${formatMMYYYYDisplay(application.high_school_start_date)} - ${formatMMYYYYDisplay(application.high_school_end_date)}`
                         : application.high_school_years_attended || 'N/A'}
                     </span>
                     {(application.high_school_start_date || application.high_school_end_date || application.high_school_years_attended) && (
                       <button
                         onClick={() => copyToClipboard(
                           application.high_school_start_date && application.high_school_end_date
-                            ? `${formatDate(application.high_school_start_date)} - ${formatDate(application.high_school_end_date)}`
+                            ? `${formatMMYYYYDisplay(application.high_school_start_date)} - ${formatMMYYYYDisplay(application.high_school_end_date)}`
                             : application.high_school_years_attended || '',
                           'High school years', showToast)}
                         className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
@@ -626,14 +647,14 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Years:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">
                       {application.nursing_school_start_date && application.nursing_school_end_date
-                        ? `${formatDate(application.nursing_school_start_date)} - ${formatDate(application.nursing_school_end_date)}`
+                        ? `${formatMMYYYYDisplay(application.nursing_school_start_date)} - ${formatMMYYYYDisplay(application.nursing_school_end_date)}`
                         : application.nursing_school_years_attended || 'N/A'}
                     </span>
                     {(application.nursing_school_start_date || application.nursing_school_end_date || application.nursing_school_years_attended) && (
                       <button
                         onClick={() => copyToClipboard(
                           application.nursing_school_start_date && application.nursing_school_end_date
-                            ? `${formatDate(application.nursing_school_start_date)} - ${formatDate(application.nursing_school_end_date)}`
+                            ? `${formatMMYYYYDisplay(application.nursing_school_start_date)} - ${formatMMYYYYDisplay(application.nursing_school_end_date)}`
                             : application.nursing_school_years_attended || '',
                           'Nursing school years', showToast)}
                         className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
@@ -660,9 +681,9 @@ export function DetailsTab({
                 {application.nursing_school_diploma_date && (
                   <div className="flex items-center gap-1.5 py-1">
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Diploma:</span>
-                    <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{formatDate(application.nursing_school_diploma_date)}</span>
+                    <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{formatMMYYYYDisplay(application.nursing_school_diploma_date)}</span>
                     <button
-                      onClick={() => copyToClipboard(application.nursing_school_diploma_date, 'Nursing school diploma date', showToast)}
+                      onClick={() => copyToClipboard(formatMMYYYYDisplay(application.nursing_school_diploma_date), 'Nursing school diploma date', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy Diploma Date"
                     >

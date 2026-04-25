@@ -634,7 +634,7 @@ export function NCLEXApplication() {
         setNursingSchoolStartDate(convertToMMYYYY(typedDetails.nursing_school_start_date))
         setNursingSchoolEndDate(convertToMMYYYY(typedDetails.nursing_school_end_date))
         setNursingSchoolMajor(typedDetails.nursing_school_major || '')
-        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(typedDetails.nursing_school_diploma_date))
+        setNursingSchoolDiplomaDate(convertToMMYYYY(typedDetails.nursing_school_diploma_date))
         setAutoFilled(true)
       } else {
         // No saved details yet — still populate name/email from user context
@@ -933,7 +933,9 @@ export function NCLEXApplication() {
         nursing_school_start_date: nursingSchoolStartDate,
         nursing_school_end_date: nursingSchoolEndDate,
         nursing_school_major: nursingSchoolMajor || null,
-        nursing_school_diploma_date: nursingSchoolDiplomaDate || null,
+        nursing_school_diploma_date: nursingSchoolDiplomaDate
+          ? (convertMMYYYYToDatabase(nursingSchoolDiplomaDate) + '-01') || null
+          : null,
         signature: signature || null,
         payment_type: paymentType || null,
         picture_path: picturePath,
@@ -1101,7 +1103,9 @@ export function NCLEXApplication() {
         nursing_school_start_date: convertMMYYYYToDatabase(nursingSchoolStartDate) || null,
         nursing_school_end_date: convertMMYYYYToDatabase(nursingSchoolEndDate) || null,
         nursing_school_major: safeTrim(nursingSchoolMajor),
-        nursing_school_diploma_date: convertToDatabaseFormat(nursingSchoolDiplomaDate) || null,
+        nursing_school_diploma_date: nursingSchoolDiplomaDate
+          ? (convertMMYYYYToDatabase(nursingSchoolDiplomaDate) + '-01') || null
+          : null,
       }
       
       // Merge with existing details - preserve existing values when new value is null/empty
