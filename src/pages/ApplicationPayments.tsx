@@ -418,9 +418,7 @@ export function ApplicationPayments() {
       return
     }
 
-    setSelectedPayment(payment)
-    setDirectPayFile(null)
-    setShowDirectPayModal(true)
+    navigate(`/applications/${id}/checkout?payment_id=${payment.id}`)
   }
 
   async function handleDirectPaySubmit() {
