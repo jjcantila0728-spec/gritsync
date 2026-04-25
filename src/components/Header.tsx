@@ -5,6 +5,8 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { NotificationDropdown } from './NotificationDropdown'
+import { NotificationModal } from './NotificationModal'
+import type { NotificationItem } from './NotificationModal'
 import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle } from 'lucide-react'
 import { Button } from './ui/Button'
 import { MobileSidebar } from './Sidebar'
@@ -137,9 +139,11 @@ export function Header() {
     }
   }, [user?.id, defaultAvatarDesign])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loadingNotifications, setLoadingNotifications] = useState(false)
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null)
+  const [viewAllModalOpen, setViewAllModalOpen] = useState(false)
   // Incremented when an avatarUpdated event fires — triggers avatar re-fetch
   const [avatarFetchTrigger, setAvatarFetchTrigger] = useState(0)
 
@@ -610,9 +614,36 @@ export function Header() {
       await notificationsAPI.deleteAll()
       setNotifications([])
       setUnreadCount(0)
+      setViewAllModalOpen(false)
     } catch (error) {
       console.error('Error clearing notifications:', error)
     }
+  }
+
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await notificationsAPI.deleteOne(id)
+      setNotifications(prev => {
+        const notif = prev.find(n => n.id === id)
+        if (notif && !notif.read) {
+          setUnreadCount(c => Math.max(0, c - 1))
+        }
+        return prev.filter(n => n.id !== id)
+      })
+      if (selectedNotification?.id === id) setSelectedNotification(null)
+    } catch (error) {
+      console.error('Error deleting notification:', error)
+    }
+  }
+
+  const handleOpenNotification = (notif: NotificationItem) => {
+    setSelectedNotification(notif)
+    setNotificationsOpen(false)
+  }
+
+  const handleViewAll = () => {
+    setViewAllModalOpen(true)
+    setNotificationsOpen(false)
   }
 
   const handleSignOut = async () => {
@@ -852,6 +883,8 @@ export function Header() {
                       onMarkAsRead={handleMarkAsRead}
                       onMarkAllAsRead={handleMarkAllAsRead}
                       onClearAll={handleClearAll}
+                      onOpenNotification={handleOpenNotification}
+                      onViewAll={handleViewAll}
                       onClose={() => setNotificationsOpen(false)}
                     />
                   )}
@@ -1097,6 +1130,31 @@ export function Header() {
             <MobileSidebar onNavigate={() => setMobileMenuOpen(false)} />
           </div>
         </>
+      )}
+
+      {/* Single Notification Detail Modal */}
+      {selectedNotification && (
+        <NotificationModal
+          mode="single"
+          notification={selectedNotification}
+          onClose={() => setSelectedNotification(null)}
+          onDelete={handleDeleteNotification}
+          onMarkAsRead={handleMarkAsRead}
+        />
+      )}
+
+      {/* All Notifications Modal */}
+      {viewAllModalOpen && (
+        <NotificationModal
+          mode="all"
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onClose={() => setViewAllModalOpen(false)}
+          onDelete={handleDeleteNotification}
+          onMarkAsRead={handleMarkAsRead}
+          onMarkAllAsRead={handleMarkAllAsRead}
+          onClearAll={handleClearAll}
+        />
       )}
     </>
   )

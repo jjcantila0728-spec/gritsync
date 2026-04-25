@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { 
   FileText, 
@@ -7,28 +6,21 @@ import {
   User,
   CheckCircle,
   AlertCircle,
-  Bell
+  Bell,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-interface Notification {
-  id: string
-  type: 'document_reminder' | 'payment_reminder' | 'timeline_update' | 'profile_completion' | 'general'
-  title: string
-  message: string
-  read: boolean
-  created_at: string
-  application_id?: string
-  link?: string
-}
+import type { NotificationItem } from './NotificationModal'
 
 interface NotificationDropdownProps {
-  notifications: Notification[]
+  notifications: NotificationItem[]
   loading: boolean
   unreadCount: number
   onMarkAsRead: (id: string) => void
   onMarkAllAsRead: () => void
   onClearAll: () => void
+  onOpenNotification: (notification: NotificationItem) => void
+  onViewAll: () => void
   onClose: () => void
 }
 
@@ -39,9 +31,10 @@ export function NotificationDropdown({
   onMarkAsRead,
   onMarkAllAsRead,
   onClearAll,
+  onOpenNotification,
+  onViewAll,
   onClose,
 }: NotificationDropdownProps) {
-  const navigate = useNavigate()
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -58,43 +51,12 @@ export function NotificationDropdown({
     }
   }
 
-  const handleNotificationClick = (notification: Notification) => {
-    // Mark as read
+  const handleItemClick = (notification: NotificationItem) => {
     if (!notification.read) {
       onMarkAsRead(notification.id)
     }
-
-    // Navigate to the appropriate page
-    if (notification.link) {
-      navigate(notification.link)
-      onClose()
-    } else if (notification.application_id) {
-      navigate(`/applications/${notification.application_id}/timeline`)
-      onClose()
-    } else {
-      // Default navigation based on type
-      switch (notification.type) {
-        case 'document_reminder':
-          navigate('/documents')
-          break
-        case 'payment_reminder':
-          if (notification.application_id) {
-            navigate(`/applications/${notification.application_id}/timeline`)
-          }
-          break
-        case 'profile_completion':
-          navigate('/my-details')
-          break
-        case 'timeline_update':
-          if (notification.application_id) {
-            navigate(`/applications/${notification.application_id}/timeline`)
-          }
-          break
-        default:
-          break
-      }
-      onClose()
-    }
+    onOpenNotification(notification)
+    onClose()
   }
 
   const formatDate = (dateString: string) => {
@@ -166,7 +128,7 @@ export function NotificationDropdown({
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                onClick={() => handleNotificationClick(notification)}
+                onClick={() => handleItemClick(notification)}
                 className={cn(
                   "p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all cursor-pointer group",
                   !notification.read && "bg-primary-50/30 dark:bg-primary-900/10 border-l-4 border-l-primary-500"
@@ -194,15 +156,18 @@ export function NotificationDropdown({
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
                       {notification.message}
                     </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <p className="text-xs text-gray-500 dark:text-gray-500 font-medium">
-                        {formatDate(notification.created_at)}
-                      </p>
-                      {!notification.read && (
-                        <span className="text-xs font-semibold text-primary-600 dark:text-primary-400">
-                          • NEW
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-500 font-medium">
+                          {formatDate(notification.created_at)}
+                        </p>
+                        {!notification.read && (
+                          <span className="text-xs font-semibold text-primary-600 dark:text-primary-400">
+                            • NEW
+                          </span>
+                        )}
+                      </div>
+                      <Trash2 className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
                 </div>
@@ -212,12 +177,12 @@ export function NotificationDropdown({
         )}
       </div>
 
-      {/* Footer - View All Link (optional) */}
+      {/* Footer */}
       {notifications.length > 0 && (
         <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50">
           <button
             onClick={() => {
-              navigate('/notifications')
+              onViewAll()
               onClose()
             }}
             className="w-full text-center text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors py-1"
@@ -229,4 +194,3 @@ export function NotificationDropdown({
     </div>
   )
 }
-

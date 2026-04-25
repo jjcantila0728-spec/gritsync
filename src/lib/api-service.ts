@@ -1844,6 +1844,19 @@ export const notificationsAPI = {
     notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
   },
 
+  deleteOne: async (id: string) => {
+    const userId = await getCurrentUserId()
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+    
+    if (error) throw new Error(error.message)
+    
+    notificationsAPI.invalidateCountCache(userId)
+  },
+
   deleteAll: async () => {
     const userId = await getCurrentUserId()
     const { error } = await supabase
