@@ -284,14 +284,17 @@ export const db = {
     },
 
     async signUp({ password, options }: { email?: string; password: string; options?: { data?: any } }) {
-      // Email is NOT sent — backend auto-generates it from the GRIT ID
       const { data, error } = await apiRequest('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ password, ...options?.data }),
       })
-      if (error) return { data: { session: null, user: null }, error }
+      if (error) return { data: { session: null, user: null, requiresVerification: false }, error }
+      // If registration requires email verification, don't create session
+      if (data.requiresVerification) {
+        return { data: { session: null, user: null, requiresVerification: true, personal_email: data.personal_email }, error: null }
+      }
       setSession(data.session)
-      return { data: { session: data.session, user: data.session?.user }, error: null }
+      return { data: { session: data.session, user: data.session?.user, requiresVerification: false }, error: null }
     },
 
     async signOut() {

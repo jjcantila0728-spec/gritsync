@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (firstName: string, lastName: string, email: string, password: string, role?: UserRole) => Promise<void>
+  signUp: (firstName: string, lastName: string, mobile: string, password: string, role?: UserRole, personalEmail?: string) => Promise<{ requiresVerification?: boolean; personal_email?: string } | null>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The profile will load automatically via the auth state change listener
   }
 
-  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client') {
+  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client', personalEmail?: string) {
     const { data, error } = await db.auth.signUp({
       email: '',
       password,
@@ -113,22 +113,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_name: lastName,
           mobile,
           role,
+          personal_email: personalEmail,
         },
       },
     })
 
     if (error) {
-      if (error.message.includes('already registered') ||
-          error.message.includes('already exists') ||
-          error.message.includes('mobile') ||
-          error.message.includes('already in use')) {
-        throw new Error('This mobile number is already registered. Please try logging in.')
-      }
       throw new Error(error.message)
     }
 
+    // If registration requires email verification, return that info
+    if ((data as any)?.requiresVerification) {
+      return { requiresVerification: true, personal_email: (data as any).personal_email }
+    }
+
     // Return the generated GRIT ID and email so the registration page can display them
-    return data?.session?.user?.user_metadata || data?.user?.user_metadata || null
+    return data?.session?.user?.user_metadata || (data as any)?.user?.user_metadata || null
   }
 
   async function signOut() {

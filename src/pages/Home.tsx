@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/Button'
@@ -19,8 +19,26 @@ import {
   Star,
   Zap,
   Mail,
-  Send
+  Send,
+  AtSign
 } from 'lucide-react'
+
+function useCountUp(target: number, duration: number = 1800, started: boolean = false) {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!started) return
+    let startTime: number | null = null
+    const step = (timestamp: number) => {
+      if (!startTime) startTime = timestamp
+      const progress = Math.min((timestamp - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setCount(Math.floor(eased * target))
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [started, target, duration])
+  return count
+}
 
 export function Home() {
   const location = useLocation()
@@ -32,11 +50,16 @@ export function Home() {
     message: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [statsStarted, setStatsStarted] = useState(false)
+  const statsRef = useRef<HTMLDivElement>(null)
+  const count500 = useCountUp(500, 1800, statsStarted)
+  const count98 = useCountUp(98, 1600, statsStarted)
+  const count50 = useCountUp(50, 1500, statsStarted)
 
   useEffect(() => {
     // Handle scroll to section when page loads with hash
     if (location.hash) {
-      const hash = location.hash.substring(1) // Remove the #
+      const hash = location.hash.substring(1)
       setTimeout(() => {
         const element = document.getElementById(hash)
         if (element) {
@@ -45,6 +68,17 @@ export function Home() {
       }, 100)
     }
   }, [location.hash])
+
+  useEffect(() => {
+    const el = statsRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStatsStarted(true); observer.disconnect() } },
+      { threshold: 0.3 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -241,7 +275,7 @@ export function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
             <div className="p-8 rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-700 transition-all hover:shadow-lg">
               <div className="w-14 h-14 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center mb-6">
                 <FileText className="h-7 w-7 text-primary-600 dark:text-primary-400" />
@@ -277,8 +311,10 @@ export function Home() {
                 Monitor your application status in real-time. Get instant notifications on updates and approvals.
               </p>
             </div>
+          </div>
 
-            <div className="p-8 rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-700 transition-all hover:shadow-lg">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="p-8 rounded-xl border-2 border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800 hover:border-purple-400 dark:hover:border-purple-600 transition-all hover:shadow-lg">
               <div className="w-14 h-14 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-6">
                 <Shield className="h-7 w-7 text-purple-600 dark:text-purple-400" />
               </div>
@@ -287,6 +323,23 @@ export function Home() {
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
                 Enterprise-grade security protecting your sensitive information. Fully compliant with healthcare data regulations.
+              </p>
+            </div>
+
+            <div className="p-8 rounded-xl border-2 border-primary-200 dark:border-primary-800 bg-gradient-to-br from-primary-50 to-white dark:from-primary-900/20 dark:to-gray-800 hover:border-primary-400 dark:hover:border-primary-600 transition-all hover:shadow-lg">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-14 h-14 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                  <AtSign className="h-7 w-7 text-primary-600 dark:text-primary-400" />
+                </div>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-600 text-white uppercase tracking-wide">
+                  Free
+                </span>
+              </div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900 dark:text-gray-100">
+                Free Business Email
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Every account gets a dedicated <span className="font-mono text-primary-600 dark:text-primary-400">@gritsync.com</span> business email — making your NCLEX correspondence look professional and keeping everything organized.
               </p>
             </div>
           </div>
@@ -356,11 +409,11 @@ export function Home() {
                   <div className="flex items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary-600 dark:bg-primary-500 flex items-center justify-center text-white font-semibold">
-                        JD
+                        CP
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">John Doe</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Nursing Student</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">Cheryl Piseo</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">USRN</p>
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -376,7 +429,7 @@ export function Home() {
               </div>
               
               <div className="absolute -bottom-6 -right-6 bg-primary-600 dark:bg-primary-500 text-white p-6 rounded-xl shadow-lg">
-                <div className="text-3xl font-bold">500+</div>
+                <div className="text-3xl font-bold tabular-nums">{count500}+</div>
                 <div className="text-sm opacity-90">Applications Processed</div>
               </div>
             </div>
@@ -384,16 +437,20 @@ export function Home() {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Stats Section */}
       <section id="pricing" className="py-20 bg-primary-600 dark:bg-primary-700 text-white scroll-mt-16">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+          <div ref={statsRef} className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div>
-              <div className="text-4xl md:text-5xl font-bold mb-2">500+</div>
+              <div className="text-4xl md:text-5xl font-bold mb-2 tabular-nums">
+                {count500}<span>+</span>
+              </div>
               <div className="text-primary-100">Applications Processed</div>
             </div>
             <div>
-              <div className="text-4xl md:text-5xl font-bold mb-2">98%</div>
+              <div className="text-4xl md:text-5xl font-bold mb-2 tabular-nums">
+                {count98}<span>%</span>
+              </div>
               <div className="text-primary-100">Success Rate</div>
             </div>
             <div>
@@ -401,7 +458,9 @@ export function Home() {
               <div className="text-primary-100">Support Available</div>
             </div>
             <div>
-              <div className="text-4xl md:text-5xl font-bold mb-2">50%</div>
+              <div className="text-4xl md:text-5xl font-bold mb-2 tabular-nums">
+                {count50}<span>%</span>
+              </div>
               <div className="text-primary-100">Faster Processing</div>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -8,22 +8,26 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Lock, User, Phone } from 'lucide-react'
+import { Eye, EyeOff, Lock, User, Phone, Mail, CheckCircle, RefreshCw } from 'lucide-react'
 import { validatePasswordSync } from '@/lib/utils'
 
 export function Register() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [mobile, setMobile] = useState('')
+  const [personalEmail, setPersonalEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verificationSent, setVerificationSent] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
   const { signUp } = useAuth()
   const { showToast } = useToast()
-  const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +40,22 @@ export function Register() {
 
     if (!lastName.trim() || lastName.trim().length < 2) {
       setError('Last name must be at least 2 characters')
+      return
+    }
+
+    if (!personalEmail.trim()) {
+      setError('Personal email address is required')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(personalEmail.trim())) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    if (personalEmail.trim().toLowerCase().endsWith('@gritsync.com')) {
+      setError('Please use your personal email (Gmail, Yahoo, etc.), not a GritSync email')
       return
     }
 
@@ -63,15 +83,11 @@ export function Register() {
     setLoading(true)
 
     try {
-      const result = await signUp(firstName, lastName, mobile, password, 'client')
-      if (result?.grit_id) {
-        // Store new account info for the dashboard welcome banner
-        sessionStorage.setItem('gritsync_new_account', JSON.stringify({
-          grit_id: result.grit_id,
-          gritsync_email: result.gritsync_email || `${result.grit_id.toLowerCase()}@gritsync.com`,
-        }))
+      const result = await signUp(firstName, lastName, mobile, password, 'client', personalEmail)
+      if (result && (result as any).requiresVerification) {
+        setRegisteredEmail((result as any).personal_email || personalEmail)
+        setVerificationSent(true)
       }
-      // Auth state change will redirect to /dashboard automatically
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to create account'
       setError(errorMessage)
@@ -81,12 +97,86 @@ export function Register() {
     }
   }
 
+  const handleResend = async () => {
+    setResendLoading(true)
+    setResendMessage('')
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personal_email: registeredEmail }),
+      })
+      const data = await res.json()
+      setResendMessage(data.message || 'Verification email sent!')
+    } catch {
+      setResendMessage('Failed to resend. Please try again.')
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
   const breadcrumbs = [
     { name: 'Home', url: baseUrl },
     { name: 'Register', url: currentUrl },
   ]
+
+  if (verificationSent) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+        <Header />
+        <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+          <Card className="w-full max-w-md border-0 shadow-xl">
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-6">
+                <CheckCircle className="h-10 w-10 text-green-600 dark:text-green-400" />
+              </div>
+              <h1 className="text-2xl font-bold mb-3 text-gray-900 dark:text-gray-100">
+                Check Your Email
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mb-2">
+                We sent a verification link to:
+              </p>
+              <p className="font-semibold text-primary-600 dark:text-primary-400 mb-6 break-all">
+                {registeredEmail}
+              </p>
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 text-left">
+                <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
+                  Click the link in your email to verify your account. Once verified, your <strong>GritSync business email</strong> will be activated for NCLEX processing.
+                </p>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Didn't receive it? Check your spam folder or
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleResend}
+                disabled={resendLoading}
+                className="w-full mb-4"
+              >
+                {resendLoading ? (
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                ) : (
+                  <><RefreshCw className="h-4 w-4 mr-2" />Resend Verification Email</>
+                )}
+              </Button>
+              {resendMessage && (
+                <p className="text-sm text-green-600 dark:text-green-400 mt-2">{resendMessage}</p>
+              )}
+              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                Already verified?{' '}
+                <Link to="/login" className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
@@ -159,6 +249,24 @@ export function Register() {
 
               <div className="relative">
                 <Input
+                  label="Personal Email"
+                  type="email"
+                  value={personalEmail}
+                  onChange={(e) => setPersonalEmail(e.target.value)}
+                  required
+                  placeholder="you@gmail.com"
+                  className="pl-10"
+                />
+                <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
+                  Use your Gmail, Yahoo, or other personal email for verification.
+                </p>
+              </div>
+
+              <div className="relative">
+                <Input
                   label="Mobile Number"
                   type="tel"
                   value={mobile}
@@ -211,6 +319,15 @@ export function Register() {
                   <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                 </div>
               )}
+
+              <div className="bg-primary-50 dark:bg-primary-900/20 rounded-lg p-3 border border-primary-100 dark:border-primary-800">
+                <div className="flex items-start gap-2">
+                  <Mail className="h-4 w-4 text-primary-600 dark:text-primary-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-primary-700 dark:text-primary-300 leading-relaxed">
+                    A <strong>free GritSync business email</strong> (e.g. <em>juan.delacruz@gritsync.com</em>) will be generated for your NCLEX processing — no action needed.
+                  </p>
+                </div>
+              </div>
 
               <div className="flex items-start">
                 <input

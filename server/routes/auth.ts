@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } from '../middleware/auth'
 
@@ -8,6 +9,61 @@ const router = Router()
 function generateGritId(): string {
   const num = Math.floor(100000 + Math.random() * 900000)
   return `GRIT${num}`
+}
+
+async function getResendApiKey(): Promise<string | null> {
+  if (process.env.RESEND_API_KEY) return process.env.RESEND_API_KEY
+  try {
+    const r = await query(`SELECT value FROM settings WHERE key = 'resendApiKey' LIMIT 1`)
+    return r.rows[0]?.value || null
+  } catch { return null }
+}
+
+async function sendVerificationEmail(personalEmail: string, firstName: string, token: string) {
+  const apiKey = await getResendApiKey()
+  if (!apiKey) return
+  const verifyUrl = `${process.env.APP_URL || 'https://gritsync.com'}/verify-email?token=${token}`
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+      <div style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:40px 32px;border-radius:12px 12px 0 0;text-align:center;">
+        <h1 style="color:#fff;font-size:28px;margin:0;font-weight:700;">Verify Your Email</h1>
+        <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:16px;">GritSync Account Verification</p>
+      </div>
+      <div style="padding:40px 32px;">
+        <p style="font-size:16px;color:#374151;">Hi <strong>${firstName}</strong>,</p>
+        <p style="font-size:15px;color:#374151;line-height:1.6;">
+          Thank you for registering with GritSync! Please verify your email address to complete your account setup and receive your business email for NCLEX processing.
+        </p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${verifyUrl}" style="background:#dc2626;color:#fff;padding:16px 40px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;">
+            Verify My Email
+          </a>
+        </div>
+        <p style="font-size:13px;color:#6b7280;line-height:1.5;">
+          This link will expire in <strong>24 hours</strong>. If you didn't create a GritSync account, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+        <p style="font-size:12px;color:#9ca3af;text-align:center;">
+          Having trouble? Copy and paste this link into your browser:<br />
+          <span style="color:#dc2626;word-break:break-all;">${verifyUrl}</span>
+        </p>
+      </div>
+    </div>
+  `
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'GritSync <no-reply@gritsync.com>',
+        to: [personalEmail],
+        subject: 'Verify your GritSync account email',
+        html,
+      }),
+    })
+  } catch (e) {
+    console.error('Failed to send verification email:', e)
+  }
 }
 
 // POST /api/auth/register
@@ -69,18 +125,73 @@ router.post('/register', async (req: Request, res: Response) => {
     const password_hash = await bcrypt.hash(password, 12)
     const personal_email_normalized = personal_email.trim().toLowerCase()
 
+    // Generate email verification token (valid 24 hours)
+    const verification_token = crypto.randomBytes(32).toString('hex')
+    const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
     const result = await query(
-      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11, $12)
        RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, created_at`,
-      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id]
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, verification_token, verification_expires]
     )
 
     const user = result.rows[0]
-    const token = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
+
+    // Send verification email asynchronously (don't await, don't block registration)
+    sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token)
+
+    // Do NOT create a session — user must verify email first
+    res.status(201).json({
+      requiresVerification: true,
+      message: 'Account created! Please check your email to verify your account.',
+      personal_email: personal_email_normalized,
+    })
+  } catch (err: any) {
+    console.error('Register error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/auth/verify-email?token=xxx
+router.get('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.query
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Verification token is required' })
+    }
+
+    const result = await query(
+      `SELECT id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, email_verified, email_verification_expires_at
+       FROM users WHERE email_verification_token = $1`,
+      [token]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired verification link' })
+    }
+
+    const user = result.rows[0]
+
+    if (user.email_verified) {
+      // Already verified — just log them in
+    } else if (new Date(user.email_verification_expires_at) < new Date()) {
+      return res.status(400).json({ error: 'This verification link has expired. Please register again.' })
+    }
+
+    // Mark email as verified, clear the token
+    await query(
+      `UPDATE users SET email_verified = true, email_verification_token = NULL, email_verification_expires_at = NULL, updated_at = NOW()
+       WHERE id = $1`,
+      [user.id]
+    )
+
+    const accessToken = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
     const refresh_token = signRefreshToken({ id: user.id })
 
-    res.status(201).json({
+    res.json({
+      verified: true,
+      message: 'Email verified successfully! Your account is now active.',
       user: {
         id: user.id,
         email: user.email,
@@ -90,10 +201,9 @@ router.post('/register', async (req: Request, res: Response) => {
         first_name: user.first_name,
         last_name: user.last_name,
         grit_id: user.grit_id,
-        created_at: user.created_at,
       },
       session: {
-        access_token: token,
+        access_token: accessToken,
         refresh_token,
         token_type: 'bearer',
         expires_in: 604800,
@@ -116,7 +226,7 @@ router.post('/register', async (req: Request, res: Response) => {
       },
     })
   } catch (err: any) {
-    console.error('Register error:', err)
+    console.error('Verify email error:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -139,18 +249,18 @@ router.post('/login', async (req: Request, res: Response) => {
     if (isEmail) {
       // Check both gritsync email (email col) and personal email
       result = await query(
-        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE email = $1 OR personal_email = $1',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE email = $1 OR personal_email = $1',
         [identifier.toLowerCase()]
       )
     } else if (isGritId) {
       result = await query(
-        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE LOWER(grit_id) = LOWER($1)',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE LOWER(grit_id) = LOWER($1)',
         [identifier]
       )
     } else {
       // Treat as mobile number
       result = await query(
-        'SELECT id, email, gritsync_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, created_at FROM users WHERE mobile = $1',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE mobile = $1',
         [identifier]
       )
     }
@@ -163,6 +273,15 @@ router.post('/login', async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       return res.status(401).json({ error: 'Invalid login credentials' })
+    }
+
+    // Block login if email not verified
+    if (user.email_verified === false) {
+      return res.status(403).json({
+        error: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+        requiresVerification: true,
+        personal_email: user.personal_email,
+      })
     }
 
     const token = signToken({
@@ -387,6 +506,44 @@ router.post('/reset-password-request', async (req: Request, res: Response) => {
       [result.rows[0].id, token]
     ).catch(() => {})
     res.json({ message: 'If that email exists, a reset link will be sent.', token })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/auth/resend-verification
+router.post('/resend-verification', async (req: Request, res: Response) => {
+  try {
+    const { personal_email } = req.body
+    if (!personal_email) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+
+    const result = await query(
+      'SELECT id, first_name, personal_email, email_verified FROM users WHERE personal_email = $1',
+      [personal_email.trim().toLowerCase()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({ message: 'If that email is registered, a verification link will be sent.' })
+    }
+
+    const user = result.rows[0]
+    if (user.email_verified) {
+      return res.json({ message: 'This email is already verified. You can log in.' })
+    }
+
+    const verification_token = crypto.randomBytes(32).toString('hex')
+    const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+    await query(
+      `UPDATE users SET email_verification_token = $1, email_verification_expires_at = $2, updated_at = NOW() WHERE id = $3`,
+      [verification_token, verification_expires, user.id]
+    )
+
+    sendVerificationEmail(user.personal_email, user.first_name, verification_token)
+
+    res.json({ message: 'Verification email resent. Please check your inbox.' })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
