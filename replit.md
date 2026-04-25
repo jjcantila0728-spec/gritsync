@@ -80,6 +80,16 @@ The PostgreSQL database has specific column names that differ from common naming
 - `business_logos`: full table for company logo management
 - Allowed query tables (server/routes/query.ts): includes `email_signatures` and `business_logos`
 
+### Critical Column Constraints
+- `applications` table: `applicant_name NOT NULL`, `email NOT NULL`, `service_type NOT NULL` — always inject these on INSERT (`applicationsAPI.create()` handles this)
+- `application_payments` table: **has NO `user_id` column** — to get user_id, JOIN with `applications` via `application_id`. Also has NO `service_fee_amount` column.
+- `user_details` table: **has NO `first_name`, `last_name`, or `email` columns** — those live in the `users` table
+- `users` table: `first_name`, `last_name`, `middle_name`, `mobile` (UNIQUE), `grit_id`, `avatar_path`, `default_avatar_design`, `gritsync_email`, `personal_email`
+- Auth token stored as `gritsync_token` in `localStorage` (NOT `'token'`)
+
+### API Client (`src/lib/api-client.ts`)
+Exported as `db` (not `supabase`). Supports `.from(table)`, `.select()`, `.insert()`, `.update()`, `.upsert()`, `.delete()`, `.eq()`, `.neq()`, `.in(col, vals[])`, `.maybeSingle()`, `.single()`. No JOIN support — multi-table queries must go through `server/routes/` raw SQL.
+
 ## Key Features
 - User Authentication with role-based access control (admin / client)
 - NCLEX application form with complete field validation

@@ -887,6 +887,12 @@ export const applicationsAPI = {
       grit_app_id: gritAppId,
       user_id: userId,
       application_type: applicationType,
+      // Required NOT NULL columns — derive from applicationData fields if not explicitly set
+      applicant_name: applicationData.applicant_name ||
+        [applicationData.first_name, applicationData.last_name].filter(Boolean).join(' ').trim() || 'Unknown',
+      service_type: applicationData.service_type || 'NCLEX Processing',
+      state_of_application: applicationData.state_of_application || 'New York',
+      email: applicationData.email || '',
     }
     
     // Include document paths
@@ -3666,16 +3672,23 @@ export const dashboardAPI = {
       // RPC unavailable in this environment — silently fall through to direct queries
 
       // Client stats (fallback path)
-      const [applications, quotations, payments] = await Promise.all([
-        db.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+      const [applications, quotations] = await Promise.all([
+        db.from('applications').select('id').eq('user_id', userId),
         db.from('quotations').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        db.from('application_payments').select('amount', { count: 'exact' }).eq('user_id', userId).eq('status', 'paid'),
       ])
       
-      // Calculate revenue from user's payments
+      // Calculate revenue: application_payments has no user_id — must join through application IDs
       let revenue = 0
-      if (payments.data) {
-        revenue = payments.data.reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0)
+      const userAppIds = (applications.data || []).map((a: any) => a.id).filter(Boolean)
+      if (userAppIds.length > 0) {
+        const { data: paymentData } = await db
+          .from('application_payments')
+          .select('amount')
+          .in('application_id', userAppIds)
+          .eq('status', 'paid')
+        if (paymentData) {
+          revenue = paymentData.reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0)
+        }
       }
       
       // Get completed counts for client
@@ -3731,10 +3744,11 @@ export const dashboardAPI = {
       
       const totalCompleted = completedCount
       
+      const appCount = (applications.data || []).length
       return {
-        totalApplications: applications.count || 0,
+        totalApplications: appCount,
         totalQuotations: quotations.count || 0,
-        applications: applications.count || 0,
+        applications: appCount,
         quotations: quotations.count || 0,
         completed: totalCompleted,
         completedApplications: totalCompleted,
@@ -4099,10 +4113,8 @@ export const applicationPaymentsAPI = {
       .from('application_payments')
       .insert({
         application_id: actualApplicationId,
-        user_id: paymentUserId, // Use application owner's user_id, not admin's
         payment_type: paymentType,
         amount,
-        service_fee_amount: serviceFeeAmount,
         status: 'pending',
       })
       .select('*')
@@ -4151,9 +4163,9 @@ export const applicationPaymentsAPI = {
       // User not authenticated, proceed as public user
     }
     
-    // Fetch payment data before update (needed for receipt creation and to get user_id)
+    // Fetch payment data before update (needed for receipt creation and to get user_id via application)
     try {
-      const { data: paymentData, error: fetchError } = await db
+      const { data: paymentData } = await db
         .from('application_payments')
         .select('*')
         .eq('id', paymentId)
@@ -4161,19 +4173,15 @@ export const applicationPaymentsAPI = {
       
       if (paymentData) {
         originalPaymentData = paymentData
-        const typedPayment = paymentData as { user_id?: string }
-        userId = typedPayment.user_id || userId
-      } else if (fetchError && !userId) {
-        // If we can't fetch and no userId, try minimal fetch for user_id only
-        const { data: minimalData } = await db
-          .from('application_payments')
-          .select('user_id')
-          .eq('id', paymentId)
-          .maybeSingle()
-        
-        if (minimalData) {
-          const typedMinimal = minimalData as { user_id?: string }
-          userId = typedMinimal.user_id
+        // application_payments has no user_id — get it from the linked application
+        const typedPayment = paymentData as { application_id?: string }
+        if (typedPayment.application_id && !userId) {
+          const { data: appData } = await db
+            .from('applications')
+            .select('user_id')
+            .eq('id', typedPayment.application_id)
+            .maybeSingle()
+          if (appData) userId = (appData as any).user_id || userId
         }
       }
     } catch (err) {

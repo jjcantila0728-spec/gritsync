@@ -50,8 +50,12 @@ router.post('/create-application-intent', optionalAuth, async (req: Authenticate
     }
 
     // Fetch payment record to get amount and metadata
+    // application_payments has no user_id — join with applications to get it
     const result = await query(
-      'SELECT id, amount, currency, description, application_id, user_id FROM application_payments WHERE id = $1',
+      `SELECT ap.id, ap.amount, ap.currency, ap.description, ap.application_id, a.user_id
+       FROM application_payments ap
+       LEFT JOIN applications a ON a.id = ap.application_id
+       WHERE ap.id = $1`,
       [payment_id]
     )
 
