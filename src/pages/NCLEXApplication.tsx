@@ -476,7 +476,7 @@ export function NCLEXApplication() {
   // Calculate payment amount based on payment type
   const calculatePaymentAmount = (): number => {
     if (paymentType === 'full' && firstTakeService) {
-      return firstTakeService.total_full || 0
+      return firstTakeService.full?.total_full || firstTakeService.total_full || 0
     } else if (paymentType === 'step1' && firstTakeService) {
       return firstTakeService.staggered?.total_step1 || 0
     } else if (paymentType === 'retake' && retakeService) {

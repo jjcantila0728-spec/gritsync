@@ -21,6 +21,7 @@ const ALLOWED_TABLES = new Set([
   'sessions', 'exchange_rates', 'visa_bulletin_cache', 'visa_bulletin_email_log',
   'newsletter_subscriptions', 'password_reset_tokens',
   'email_signatures', 'business_logos',
+  'processing_accounts',
 ])
 
 function buildWhereClause(filters: Record<string, any>): { sql: string; values: any[] } {
@@ -198,6 +199,39 @@ router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res
     const { sql: where, values } = buildWhereClause(filters)
     const result = await query(`SELECT COUNT(*) as count FROM "${table}" ${where}`, values)
     res.json({ data: result.rows[0].count, error: null })
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: { message: err.message } })
+  }
+})
+
+// Allowed RPC functions (PostgreSQL stored procedures/functions)
+const ALLOWED_RPC_FUNCTIONS = new Set([
+  'validate_promo_code',
+])
+
+// POST /api/db/rpc/:fn — call a PostgreSQL function
+router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { fn } = req.params
+
+  if (!ALLOWED_RPC_FUNCTIONS.has(fn)) {
+    return res.status(403).json({ data: null, error: { message: 'Function not allowed', code: 'PGRST301' } })
+  }
+
+  try {
+    const args = req.body || {}
+    let result: any
+
+    if (fn === 'validate_promo_code') {
+      const { p_code, p_amount, p_service_fee_amount, p_application_type } = args
+      const sql = `SELECT validate_promo_code($1, $2, $3, $4) AS result`
+      const values = [p_code, p_amount, p_service_fee_amount ?? null, p_application_type ?? null]
+      const rows = await query(sql, values)
+      result = rows.rows[0]?.result ?? null
+    } else {
+      result = null
+    }
+
+    res.json({ data: result, error: null })
   } catch (err: any) {
     res.status(500).json({ data: null, error: { message: err.message } })
   }

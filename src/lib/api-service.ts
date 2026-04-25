@@ -1028,6 +1028,11 @@ export const applicationsAPI = {
     if (!admin && existing.user_id !== userId) {
       throw new Error('Unauthorized: You can only delete your own applications')
     }
+
+    // Manually delete child records with NO ACTION FK constraints before deleting application
+    await db.from('application_payments').delete().eq('application_id', id)
+    await db.from('notifications').delete().eq('application_id', id)
+    await db.from('user_documents').delete().eq('application_id', id)
     
     const { error } = await db
       .from('applications')

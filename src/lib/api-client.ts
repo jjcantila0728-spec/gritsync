@@ -416,9 +416,12 @@ export const db = {
     },
   },
 
-  // RPC stub — for stored procedures / functions (not available, callers should use fallback)
-  async rpc(_fn: string, _args?: any) {
-    return { data: null, error: { message: 'RPC not supported in this environment', code: 'PGRST202' } }
+  // RPC — calls PostgreSQL functions via the Express backend
+  async rpc(fn: string, args?: any) {
+    return apiRequest(`/db/rpc/${fn}`, {
+      method: 'POST',
+      body: JSON.stringify(args || {}),
+    })
   },
 
   // Edge functions stub — returns graceful error so callers can handle it

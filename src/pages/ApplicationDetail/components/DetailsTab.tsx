@@ -153,19 +153,17 @@ export function DetailsTab({
                 )}
               </div>
 
-              {application.marital_status === 'single' && application.single_name && (
+              {(application.single_name || application.single_full_name) && (
                 <div className="flex items-center gap-1.5 py-1 md:col-span-2 lg:col-span-3">
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Single Name:</span>
                   <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.single_name || application.single_full_name || 'N/A'}</span>
-                  {(application.single_name || application.single_full_name) && (
-                    <button
-                      onClick={() => copyToClipboard(application.single_name || application.single_full_name || '', 'Single name', showToast)}
-                      className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
-                      title="Copy Single Name"
-                    >
-                      <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => copyToClipboard(application.single_name || application.single_full_name || '', 'Single name', showToast)}
+                    className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
+                    title="Copy Single Name"
+                  >
+                    <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                  </button>
                 </div>
               )}
 
