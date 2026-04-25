@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import { sendEmail } from '@/lib/email-service'
 import { generalSettings } from '@/lib/settings'
 import { SEO, generateOrganizationSchema, generateWebSiteSchema, generateFAQSchema } from '@/components/SEO'
+import { HeroSlider } from '@/components/HeroSlider'
 import { 
   FileText, 
   DollarSign, 
@@ -17,7 +18,6 @@ import {
   Users,
   ArrowRight,
   Star,
-  Zap,
   Mail,
   Send,
   AtSign
@@ -217,51 +217,8 @@ export function Home() {
       />
       <Header />
       
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-        <div className="container mx-auto px-4 py-20 md:py-32">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
-              <Zap className="h-4 w-4" />
-              <span>Streamline Your NCLEX Application Process</span>
-            </div>
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 text-gray-900 dark:text-gray-100 leading-tight">
-              Your Trusted Partner for
-              <span className="text-primary-600 dark:text-primary-400"> NCLEX Processing</span>
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-              Simplify your journey to becoming a licensed nurse. Fast, secure, and reliable application processing with real-time tracking.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-              <Link to="/quote">
-                <Button size="lg" className="w-full sm:w-auto text-lg px-8 py-6">
-                  Get a quote
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/register">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto text-lg px-8 py-6">
-                  Apply Now
-                </Button>
-              </Link>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>No Credit Card Required</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>24/7 Support</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                <span>Secure & Compliant</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Hero Slider */}
+      <HeroSlider />
 
       {/* Features Section */}
       <section id="features" className="py-20 bg-white dark:bg-gray-900 scroll-mt-16">
