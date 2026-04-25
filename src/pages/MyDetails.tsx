@@ -985,10 +985,10 @@ export function MyDetails() {
       const existingDetails = await userDetailsAPI.get()
       
       // Prepare new data with current form values
+      // NOTE: first_name and last_name are NOT columns in user_details — they live in the users table.
+      // middle_name IS a column in user_details, so it stays here.
       const newData: any = {
-        first_name: safeTrim(firstName),
         middle_name: safeTrim(middleName),
-        last_name: safeTrim(lastName),
         gender: gender || null,
         marital_status: maritalStatus || null,
         single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? safeTrim(singleFullName) : null,
@@ -1064,13 +1064,15 @@ export function MyDetails() {
       // Auto-generate and save email address if names are provided
       if (firstName && lastName && user?.id) {
         try {
-          // Update middle_name in users table if needed
-          if (middleName) {
-            await supabase
-              .from('users')
-              .update({ middle_name: middleName.trim() })
-              .eq('id', user.id)
-          }
+          // Save first_name, last_name, middle_name to the users table (they don't belong in user_details)
+          await supabase
+            .from('users')
+            .update({
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              middle_name: middleName ? middleName.trim() : null,
+            })
+            .eq('id', user.id)
           
           // Generate or regenerate the client email address
           const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
@@ -1149,9 +1151,9 @@ export function MyDetails() {
         }, 1000)
       }
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to save details. Please try again.'
+      const errorMessage = (typeof error === 'string' ? error : error?.message) || 'Failed to save details. Please try again.'
       showToast(errorMessage, 'error')
-      console.error('Error saving details:', error)
+      console.error('Error saving details:', error?.message || error)
     } finally {
       setSaving(false)
     }
