@@ -605,6 +605,16 @@ export function Header() {
     }
   }
 
+  const handleClearAll = async () => {
+    try {
+      await notificationsAPI.deleteAll()
+      setNotifications([])
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Error clearing notifications:', error)
+    }
+  }
+
   const handleSignOut = async () => {
     try {
       await signOut()
@@ -827,6 +837,8 @@ export function Header() {
                       setNotificationsOpen(!notificationsOpen)
                       if (!notificationsOpen) {
                         fetchNotifications()
+                        // Auto-delete read notifications older than 24h in background
+                        notificationsAPI.deleteReadOlderThan24h().catch(() => {})
                       }
                     }}
                   />
@@ -839,6 +851,7 @@ export function Header() {
                       unreadCount={unreadCount}
                       onMarkAsRead={handleMarkAsRead}
                       onMarkAllAsRead={handleMarkAllAsRead}
+                      onClearAll={handleClearAll}
                       onClose={() => setNotificationsOpen(false)}
                     />
                   )}

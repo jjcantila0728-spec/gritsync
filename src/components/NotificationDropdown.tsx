@@ -28,6 +28,7 @@ interface NotificationDropdownProps {
   unreadCount: number
   onMarkAsRead: (id: string) => void
   onMarkAllAsRead: () => void
+  onClearAll: () => void
   onClose: () => void
 }
 
@@ -37,6 +38,7 @@ export function NotificationDropdown({
   unreadCount,
   onMarkAsRead,
   onMarkAllAsRead,
+  onClearAll,
   onClose,
 }: NotificationDropdownProps) {
   const navigate = useNavigate()
@@ -117,15 +119,25 @@ export function NotificationDropdown({
             </p>
           )}
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={onMarkAllAsRead}
-            className="flex items-center gap-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
-          >
-            <CheckCircle className="h-3.5 w-3.5" />
-            Mark all read
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {unreadCount > 0 && (
+            <button
+              onClick={onMarkAllAsRead}
+              className="flex items-center gap-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+              Mark all read
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button
+              onClick={onClearAll}
+              className="flex items-center gap-1 text-xs font-medium text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Notifications List */}

@@ -1790,12 +1790,7 @@ export const notificationsAPI = {
   ) => {
     const userId = await getCurrentUserId()
     
-    // Check if email notifications are enabled for this type
-    // Import dynamically to avoid circular dependencies
-    const { shouldSendEmailNotification } = await import('./settings')
-    const shouldSendEmail = await shouldSendEmailNotification(type)
-    
-    // Always create the in-app notification
+    // Create the in-app notification only (no email sending for system events)
     const { data, error } = await supabase
       .from('notifications')
       .insert({
@@ -1813,49 +1808,6 @@ export const notificationsAPI = {
     
     // Invalidate cache since a new notification was created
     notificationsAPI.invalidateCountCache(userId)
-    
-    // If email notifications are enabled for this type, send email
-    if (shouldSendEmail && data) {
-      // Send email asynchronously in the background (don't wait for it to complete)
-      // This prevents blocking the notification creation
-      Promise.resolve().then(async () => {
-        try {
-          // Optimize: Get user email and profile in parallel
-          const [userDataResult, userProfileResult] = await Promise.all([
-            supabase.auth.getUser(),
-            supabase
-              .from('users')
-              .select('first_name, last_name, email')
-              .eq('id', userId)
-              .single()
-          ])
-          
-          // Prefer email from users table, fallback to auth
-          const userEmail = userProfileResult.data?.email || userDataResult.data?.user?.email
-          
-          if (userEmail) {
-            const profile = userProfileResult.data as { first_name?: string; last_name?: string } | null
-            const userName = (profile?.first_name && profile?.last_name 
-                              ? `${profile.first_name} ${profile.last_name}` 
-                              : profile?.first_name || 'User')
-            
-            // Import email service dynamically
-            const { sendNotificationEmail } = await import('./email-service')
-            
-            // Send email with error handling
-            await sendNotificationEmail(userEmail, type, {
-              userName,
-              title,
-              message,
-              applicationId,
-            })
-          }
-        } catch (emailError) {
-          logError(normalizeError(emailError, { operation: 'notificationsAPI.create', context: 'email_sending' }), { operation: 'notificationsAPI.create', context: 'email_sending' })
-          // Don't throw - email failure shouldn't break notification creation
-        }
-      })
-    }
     
     return data
   },
@@ -1890,6 +1842,34 @@ export const notificationsAPI = {
     // Invalidate cache and set count to 0
     notificationsAPI.invalidateCountCache(userId)
     notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
+  },
+
+  deleteAll: async () => {
+    const userId = await getCurrentUserId()
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', userId)
+    
+    if (error) throw new Error(error.message)
+    
+    notificationsAPI.invalidateCountCache(userId)
+    notificationCountCache.set(userId, { count: 0, timestamp: Date.now() })
+  },
+
+  deleteReadOlderThan24h: async () => {
+    const userId = await getCurrentUserId()
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', userId)
+      .eq('read', true)
+      .lt('created_at', cutoff)
+    
+    if (error) throw new Error(error.message)
+    
+    notificationsAPI.invalidateCountCache(userId)
   },
 
   // Trigger notification generation functions

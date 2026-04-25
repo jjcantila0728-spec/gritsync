@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
 import { getCachedSignedUrl } from '@/lib/image-cache'
-import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2 } from 'lucide-react'
+import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
 
@@ -78,6 +78,7 @@ export function Documents() {
   const { showToast } = useToast()
   const [uploading, setUploading] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [documents, setDocuments] = useState<DocumentStatus[]>([])
   const [viewingFile, setViewingFile] = useState<{ url: string, fileName: string, isImage: boolean, documentId?: string, documentType?: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -436,6 +437,7 @@ export function Documents() {
 
       setUploadPreview(null)
       await fetchDocuments()
+      setRefreshKey(k => k + 1)
       window.dispatchEvent(new Event('documentsUpdated'))
     } catch (error: any) {
       const docName = requiredDocumentMap.get(documentType)?.name || getDocumentDisplayName(documentType)
@@ -662,13 +664,26 @@ export function Documents() {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-4 md:p-8">
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-              Documents
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Upload and manage the documents required for your NCLEX application.
-            </p>
+          <div className="mb-8 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+                Documents
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Upload and manage the documents required for your NCLEX application.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                await fetchDocuments()
+                setRefreshKey(k => k + 1)
+              }}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 mt-1 flex-shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
 
           <div className="space-y-6">
@@ -814,6 +829,7 @@ export function Documents() {
                                     <div className="mb-3 relative group cursor-pointer w-full" onClick={handleFileClick}>
                                       <div className="w-full h-48 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-100 dark:bg-gray-700">
                                         <DocumentImagePreview
+                                          key={`${filePath}-${refreshKey}`}
                                           filePath={filePath}
                                           alt={doc.fileName || 'Uploaded file'}
                                           className="w-full h-full object-cover transition-opacity group-hover:opacity-90"
@@ -1134,8 +1150,8 @@ export function Documents() {
                         await userDocumentsAPI.delete(viewingFile.documentId)
                         showToast('Document deleted successfully', 'success')
                         setViewingFile(null)
-                        await fetchDocuments() // Refresh the list
-                        // Notify sidebar to update cache
+                        await fetchDocuments()
+                        setRefreshKey(k => k + 1)
                         window.dispatchEvent(new Event('documentsUpdated'))
                       } catch (error: any) {
                         showToast(error.message || 'Failed to delete document', 'error')
