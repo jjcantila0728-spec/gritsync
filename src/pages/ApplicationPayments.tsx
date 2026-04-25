@@ -11,6 +11,7 @@ import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/api-service'
+import { paymentSettings } from '@/lib/settings'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
@@ -95,6 +96,14 @@ export function ApplicationPayments() {
   const [processingPaymentType, setProcessingPaymentType] = useState<'step1' | 'step2' | 'full' | 'retake' | null>(null)
   const paymentsChannelRef = useRef<RealtimeChannel | null>(null)
 
+  const [showDirectPayModal, setShowDirectPayModal] = useState(false)
+  const [directPayFile, setDirectPayFile] = useState<File | null>(null)
+  const [directPayLoading, setDirectPayLoading] = useState(false)
+  const [mobileBankingConfigs, setMobileBankingConfigs] = useState<Array<{
+    id: string; name: string; accountName: string; accountNumber: string; enabled: boolean
+  }>>([])
+  const [selectedBankId, setSelectedBankId] = useState<string>('')
+
   useEffect(() => {
     if (authLoading) return
     
@@ -107,6 +116,10 @@ export function ApplicationPayments() {
       fetchApplication()
       loadPayments()
     }
+    paymentSettings.getMobileBankingConfigs().then((configs) => {
+      setMobileBankingConfigs(configs)
+      if (configs.length > 0) setSelectedBankId(configs[0].id)
+    }).catch(() => {})
   }, [id, user, authLoading, navigate])
 
   // Set up real-time subscription for payment updates
@@ -405,8 +418,37 @@ export function ApplicationPayments() {
       return
     }
 
-    // Navigate to checkout page
-    navigate(`/applications/${id}/checkout?payment_id=${payment.id}`)
+    setSelectedPayment(payment)
+    setDirectPayFile(null)
+    setShowDirectPayModal(true)
+  }
+
+  async function handleDirectPaySubmit() {
+    if (!selectedPayment) return
+    if (!directPayFile) {
+      showToast('Please upload your proof of payment before submitting.', 'error')
+      return
+    }
+    setDirectPayLoading(true)
+    try {
+      await applicationPaymentsAPI.complete(
+        selectedPayment.id,
+        undefined,
+        undefined,
+        'mobile_banking',
+        undefined,
+        directPayFile
+      )
+      showToast('Payment proof submitted! An admin will review and approve your payment. You will be notified once approved.', 'success')
+      setShowDirectPayModal(false)
+      setSelectedPayment(null)
+      setDirectPayFile(null)
+      await loadPayments()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to submit payment proof. Please try again.', 'error')
+    } finally {
+      setDirectPayLoading(false)
+    }
   }
 
   function handleCopyPaymentLink(payment: Payment) {
@@ -1680,6 +1722,116 @@ export function ApplicationPayments() {
             )
             })()}
           </div>
+
+          {/* Direct GCash / Mobile Banking Payment Modal */}
+          {showDirectPayModal && selectedPayment && (
+            <Modal
+              isOpen={showDirectPayModal}
+              onClose={() => {
+                setShowDirectPayModal(false)
+                setSelectedPayment(null)
+                setDirectPayFile(null)
+              }}
+              title={`Submit Payment Proof — ${formatCurrency(selectedPayment.amount)}`}
+              size="lg"
+            >
+              <div className="space-y-5">
+                {mobileBankingConfigs.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Transfer the amount to one of the accounts below, then upload your proof of payment.
+                    </p>
+                    <div className="grid gap-3">
+                      {mobileBankingConfigs.map((cfg) => (
+                        <button
+                          key={cfg.id}
+                          type="button"
+                          onClick={() => setSelectedBankId(cfg.id)}
+                          className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+                            selectedBankId === cfg.id
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">{cfg.name}</span>
+                            {selectedBankId === cfg.id && (
+                              <CheckCircle className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                            )}
+                          </div>
+                          <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            <div>{cfg.accountName}</div>
+                            <div className="font-mono font-medium">{cfg.accountNumber}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Please transfer <strong>{formatCurrency(selectedPayment.amount)}</strong> via GCash or mobile banking and upload your receipt below.
+                  </p>
+                )}
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Upload Proof of Payment <span className="text-red-500">*</span>
+                  </label>
+                  {directPayFile ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20">
+                      <FileText className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      <span className="text-sm text-green-800 dark:text-green-200 flex-1 truncate">{directPayFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDirectPayFile(null)}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-colors">
+                      <Download className="h-8 w-8 text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Click to upload screenshot or receipt (JPG, PNG, PDF)</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) setDirectPayFile(file)
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowDirectPayModal(false)
+                      setSelectedPayment(null)
+                      setDirectPayFile(null)
+                    }}
+                    className="flex-1"
+                    disabled={directPayLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleDirectPaySubmit}
+                    disabled={directPayLoading || !directPayFile}
+                    className="flex-1"
+                  >
+                    {directPayLoading ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting...</>
+                    ) : 'Submit Proof'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
 
           {/* Stripe Payment Modal */}
           {showPaymentModal && selectedPayment && clientSecret && stripePromise && (

@@ -65,26 +65,23 @@ export function ApplicationCheckout() {
 
       await loadServiceDetails(appData, targetPayment)
 
-      // Create payment intent using create-application-payment-intent
-      const intentData = await applicationPaymentsAPI.createPaymentIntent(paymentId)
-      
-      if (!intentData.clientSecret) {
-        throw new Error('Payment intent creation failed: No client secret returned')
+      // Create payment intent — non-fatal if Stripe is not configured
+      try {
+        const intentData = await applicationPaymentsAPI.createPaymentIntent(paymentId)
+        if (intentData.clientSecret) {
+          setClientSecret(intentData.clientSecret)
+          setPaymentIntentId(intentData.paymentIntentId)
+        }
+      } catch {
+        // Stripe not configured — GCash / Mobile Banking still available
+        setClientSecret(null)
       }
-
-      setClientSecret(intentData.clientSecret)
-      setPaymentIntentId(intentData.paymentIntentId)
     } catch (error: any) {
       console.error('Error loading checkout data:', error)
       const errorMessage = error.message || 'Failed to load checkout. Please try again.'
       showToast(errorMessage, 'error')
-      
-      // Only navigate if user is authenticated (public users should stay on page to see error)
       if (user) {
-        // Small delay to ensure toast is visible before navigation
-        setTimeout(() => {
-          navigate(`/applications/${id}/payments`)
-        }, 2000)
+        setTimeout(() => navigate(`/applications/${id}/payments`), 2000)
       }
     } finally {
       setLoading(false)
@@ -343,8 +340,7 @@ export function ApplicationCheckout() {
             {/* Payment Form */}
             <div className="lg:col-span-2">
               <Card>
-                {clientSecret && stripePromise ? (
-                  <div className="space-y-6">
+                <div className="space-y-6">
                     <div className="pb-4 border-b border-gray-200 dark:border-gray-700">
                       <div className="flex items-center gap-3">
                         <CreditCard className="h-5 w-5 text-primary-600 dark:text-primary-400" />
@@ -354,29 +350,31 @@ export function ApplicationCheckout() {
                       </div>
                     </div>
 
-                    {/* Use key prop to force remount when clientSecret changes */}
-                    <Elements 
-                      key={clientSecret} 
-                      stripe={stripePromise} 
-                      options={{ clientSecret }}
-                    >
-                      <StripePaymentForm
-                        amount={payment.amount || 0}
-                        serviceFeeAmount={payment.service_fee_amount}
-                        applicationType={application?.application_type as 'NCLEX' | undefined}
-                        onSuccess={handlePaymentSuccess}
-                        onError={handlePaymentError}
-                        paymentIntentId={paymentIntentId || undefined}
-                        processingPayment={processingPayment}
-                      />
-                    </Elements>
+                    {clientSecret && stripePromise ? (
+                      <Elements key={clientSecret} stripe={stripePromise} options={{ clientSecret }}>
+                        <StripePaymentForm
+                          amount={payment.amount || 0}
+                          serviceFeeAmount={payment.service_fee_amount}
+                          applicationType={application?.application_type as 'NCLEX' | undefined}
+                          onSuccess={handlePaymentSuccess}
+                          onError={handlePaymentError}
+                          paymentIntentId={paymentIntentId || undefined}
+                          processingPayment={processingPayment}
+                        />
+                      </Elements>
+                    ) : (
+                      <div className="space-y-4 text-center py-6">
+                        <Info className="h-10 w-10 text-primary-500 mx-auto" />
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Card Payment Not Available</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Online card payment is not configured. Please go back to your payments page and choose <strong>GCash</strong> or <strong>Mobile Banking</strong> to complete your payment.
+                        </p>
+                        <Button onClick={() => navigate(`/applications/${id}/payments`)} className="mt-2">
+                          Go to Payments Page
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary-600 dark:text-primary-400 mx-auto mb-4" />
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Initializing payment...</p>
-                  </div>
-                )}
               </Card>
             </div>
           </div>
