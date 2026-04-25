@@ -670,9 +670,9 @@ export function MyDetails() {
       } | null
       if (typedDetails) {
         // Populate all fields from saved details
-        setFirstName(typedDetails.first_name || '')
-        setMiddleName(typedDetails.middle_name || '')
-        setLastName(typedDetails.last_name || '')
+        setFirstName(typedDetails.first_name || user?.first_name || '')
+        setMiddleName(typedDetails.middle_name || user?.middle_name || '')
+        setLastName(typedDetails.last_name || user?.last_name || '')
         setGender(typedDetails.gender || '')
         setMaritalStatus(typedDetails.marital_status || '')
         setSingleFullName(typedDetails.single_full_name || typedDetails.single_name || '')
