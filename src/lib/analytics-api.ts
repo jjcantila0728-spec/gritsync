@@ -3,7 +3,7 @@
  * Handles analytics data retrieval and reporting
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface AnalyticsDateRange {
   startDate: string
@@ -83,7 +83,7 @@ export const analyticsAPI = {
     const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const endDate = dateRange?.endDate || new Date().toISOString()
 
-    const { data, error } = await supabase.rpc('get_application_analytics', {
+    const { data, error } = await db.rpc('get_application_analytics', {
       p_start_date: startDate,
       p_end_date: endDate,
     })
@@ -101,7 +101,7 @@ export const analyticsAPI = {
     const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const endDate = dateRange?.endDate || new Date().toISOString()
 
-    const { data, error } = await supabase.rpc('get_financial_analytics', {
+    const { data, error } = await db.rpc('get_financial_analytics', {
       p_start_date: startDate,
       p_end_date: endDate,
     })
@@ -119,7 +119,7 @@ export const analyticsAPI = {
     const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const endDate = dateRange?.endDate || new Date().toISOString()
 
-    const { data, error } = await supabase.rpc('get_user_analytics', {
+    const { data, error } = await db.rpc('get_user_analytics', {
       p_start_date: startDate,
       p_end_date: endDate,
     })
@@ -137,7 +137,7 @@ export const analyticsAPI = {
     const startDate = dateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const endDate = dateRange?.endDate || new Date().toISOString()
 
-    const { data, error } = await supabase.rpc('get_document_analytics', {
+    const { data, error } = await db.rpc('get_document_analytics', {
       p_start_date: startDate,
       p_end_date: endDate,
     })
@@ -150,7 +150,7 @@ export const analyticsAPI = {
    * Get cached analytics (if available)
    */
   async getCachedAnalytics(cacheKey: string): Promise<any | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('analytics_cache')
       .select('cache_data')
       .eq('cache_key', cacheKey)
@@ -171,7 +171,7 @@ export const analyticsAPI = {
   ): Promise<void> {
     const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString()
 
-    await supabase
+    await db
       .from('analytics_cache')
       .upsert({
         cache_key: cacheKey,
@@ -184,7 +184,7 @@ export const analyticsAPI = {
    * Get all custom reports
    */
   async getCustomReports(): Promise<CustomReport[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('custom_reports')
       .select('*')
       .order('created_at', { ascending: false })
@@ -197,7 +197,7 @@ export const analyticsAPI = {
    * Get custom report by ID
    */
   async getCustomReportById(id: string): Promise<CustomReport | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('custom_reports')
       .select('*')
       .eq('id', id)
@@ -215,9 +215,9 @@ export const analyticsAPI = {
    * Create custom report
    */
   async createCustomReport(report: Omit<CustomReport, 'id' | 'created_at' | 'updated_at'>): Promise<CustomReport> {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('custom_reports')
       .insert({
         ...report,
@@ -234,7 +234,7 @@ export const analyticsAPI = {
    * Update custom report
    */
   async updateCustomReport(id: string, updates: Partial<CustomReport>): Promise<CustomReport> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('custom_reports')
       .update(updates)
       .eq('id', id)
@@ -249,7 +249,7 @@ export const analyticsAPI = {
    * Delete custom report
    */
   async deleteCustomReport(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('custom_reports')
       .delete()
       .eq('id', id)

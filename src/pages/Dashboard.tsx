@@ -17,7 +17,7 @@ import { ActivityFeed, ActivityItem } from '@/components/ActivityFeed'
 import { PersonalizedRecommendations } from '@/components/PersonalizedRecommendations'
 import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuotations, subscribeToAllQuotations, subscribeToPendingApprovalPayments, unsubscribe } from '@/lib/realtime'
 import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { greetingSettings } from '@/lib/settings'
 
 interface RecentActivity {

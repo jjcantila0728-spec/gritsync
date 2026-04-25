@@ -4,7 +4,7 @@
  */
 
 import { workflowsAPI, Workflow, WorkflowAction } from './workflows-api'
-import { supabase } from './api-client'
+import { db } from './api-client'
 import { sendEmail } from './email-service'
 import { sendApplicationStatusEmail } from './email-notifications'
 
@@ -303,7 +303,7 @@ async function executeUpdateRecordAction(
     resolvedUpdates[key] = resolveVariables(value as any, eventData)
   }
 
-  const { error } = await supabase
+  const { error } = await db
     .from(table)
     .update(resolvedUpdates)
     .eq('id', resolvedRecordId)
@@ -345,7 +345,7 @@ async function executeNotifyAdminAction(
   const { message, title } = config
 
   // Get all admins
-  const { data: admins } = await supabase
+  const { data: admins } = await db
     .from('users')
     .select('id')
     .eq('role', 'admin')
@@ -381,7 +381,7 @@ async function executeAssignToUserAction(
   const resolvedRecordId = resolveVariables(record_id, eventData)
   const resolvedUserId = resolveVariables(user_id || user_id_field, eventData)
 
-  const { error } = await supabase
+  const { error } = await db
     .from(table)
     .update({ assigned_to: resolvedUserId })
     .eq('id', resolvedRecordId)
@@ -402,7 +402,7 @@ async function executeUpdateStatusAction(
   const resolvedRecordId = resolveVariables(record_id, eventData)
   const resolvedStatus = resolveVariables(status, eventData)
 
-  const { error } = await supabase
+  const { error } = await db
     .from(table)
     .update({ status: resolvedStatus })
     .eq('id', resolvedRecordId)
@@ -502,7 +502,7 @@ async function logWorkflowRun(
   workflowId: string,
   event: WorkflowEvent
 ): Promise<string> {
-  const { data, error } = await supabase.rpc('log_workflow_run', {
+  const { data, error } = await db.rpc('log_workflow_run', {
     p_workflow_id: workflowId,
     p_trigger_type: event.triggerType,
     p_trigger_event_id: event.eventId,
@@ -528,7 +528,7 @@ async function updateWorkflowRun(
     execution_log: any[]
   }>
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('workflow_runs')
     .update(updates)
     .eq('id', runId)
@@ -543,7 +543,7 @@ async function updateWorkflowStats(
   workflowId: string,
   success: boolean
 ): Promise<void> {
-  const { error } = await supabase.rpc('update_workflow_stats', {
+  const { error } = await db.rpc('update_workflow_stats', {
     p_workflow_id: workflowId,
     p_success: success,
   })

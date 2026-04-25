@@ -1,4 +1,4 @@
-import { supabase } from './api-client'
+import { db } from './api-client'
 import type { Database } from './database.types'
 import { imageUrlCache } from './image-cache'
 import { 
@@ -140,7 +140,7 @@ async function getCurrentUserInfo(): Promise<{ userId: string; isAdmin: boolean 
     }
 
     // Fetch user once
-    const { data: { user }, error } = await supabase.auth.getUser()
+    const { data: { user }, error } = await db.auth.getUser()
     if (error) {
       throw normalizeError(error, { operation: 'getCurrentUserInfo' })
     }
@@ -218,7 +218,7 @@ export const applicationsAPI = {
     const userId = await getCurrentUserId()
     const admin = await isAdmin()
     
-    const query = supabase
+    const query = db
       .from('applications')
       .select('*')
       .order('created_at', { ascending: false })
@@ -243,12 +243,12 @@ export const applicationsAPI = {
       { data: paymentsData, error: paymentsError }
     ] = applicationIds.length > 0
       ? await Promise.all([
-          supabase
+          db
             .from('application_timeline_steps')
             .select('*')
             .in('application_id', applicationIds)
             .order('created_at', { ascending: true }),
-          supabase
+          db
             .from('application_payments')
             .select('*')
             .in('application_id', applicationIds)
@@ -632,7 +632,7 @@ export const applicationsAPI = {
           // Get GritSync account email from processing accounts
           let displayEmail = app.email
           try {
-            const { data: gritsyncAccounts, error: gritsyncError } = await supabase
+            const { data: gritsyncAccounts, error: gritsyncError } = await db
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
@@ -670,7 +670,7 @@ export const applicationsAPI = {
           // Try to get or generate Gmail email even in error case
           let displayEmail = app.email
           try {
-            const { data: gmailAccounts } = await supabase
+            const { data: gmailAccounts } = await db
               .from('processing_accounts')
               .select('email')
               .eq('application_id', app.id)
@@ -714,7 +714,7 @@ export const applicationsAPI = {
   getServiceTypes: async () => {
     const { userId, isAdmin: admin } = await getCurrentUserInfo()
 
-    const query = supabase
+    const query = db
       .from('applications')
       .select('application_type')
       .order('created_at', { ascending: false })
@@ -741,7 +741,7 @@ export const applicationsAPI = {
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(id)
     
     // Try authenticated query first
-    let query = supabase
+    let query = db
       .from('applications')
       .select('*')
     
@@ -757,7 +757,7 @@ export const applicationsAPI = {
     if (error || (Array.isArray(data) && data.length === 0)) {
       // Try case-insensitive search for grit_app_id
       if (isGritAppId) {
-        const { data: allApps, error: allError } = await supabase
+        const { data: allApps, error: allError } = await db
           .from('applications')
           .select('*')
         
@@ -779,7 +779,7 @@ export const applicationsAPI = {
       
       // Last resort: try with UUID if we haven't already
       if (isGritAppId) {
-        const { data: uuidData, error: uuidError } = await supabase
+        const { data: uuidData, error: uuidError } = await db
           .from('applications')
           .select('*')
           .ilike('grit_app_id', id)
@@ -870,7 +870,7 @@ export const applicationsAPI = {
     let gritAppId = generateGritAppId()
     let attempts = 0
     while (attempts < 10) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('applications')
         .select('grit_app_id')
         .eq('grit_app_id', gritAppId)
@@ -895,7 +895,7 @@ export const applicationsAPI = {
     insertData.passport_path = passportPath
     
     // Create application
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .insert(insertData)
       .select('*')
@@ -920,7 +920,7 @@ export const applicationsAPI = {
 
   updateStatus: async (id: string, status: 'initiated' | 'in-progress' | 'rejected' | 'completed' | 'pending' | 'approved') => {
     // First, try to update without selecting (more reliable with RLS)
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('applications')
       .update({ status: status as any })
       .eq('id', id)
@@ -930,7 +930,7 @@ export const applicationsAPI = {
     }
     
     // Then, try to fetch the updated record
-    const { data, error: selectError } = await supabase
+    const { data, error: selectError } = await db
       .from('applications')
       .select('*')
       .eq('id', id)
@@ -972,7 +972,7 @@ export const applicationsAPI = {
       ? { ...updates, status: updates.status as any }
       : updates
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .update(typedUpdates)
       .eq('id', id)
@@ -983,7 +983,7 @@ export const applicationsAPI = {
       // Handle the specific "Cannot coerce" error
       if (error.message.includes('Cannot coerce') || error.code === 'PGRST116') {
         // If single() fails, try without it (might return array)
-        const { data: dataArray, error: arrayError } = await supabase
+        const { data: dataArray, error: arrayError } = await db
           .from('applications')
           .update(typedUpdates)
           .eq('id', id)
@@ -1009,7 +1009,7 @@ export const applicationsAPI = {
     const { userId, isAdmin: admin } = await getCurrentUserInfo()
     
     // Check if user owns the application or is admin
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await db
       .from('applications')
       .select('user_id')
       .eq('id', id)
@@ -1023,7 +1023,7 @@ export const applicationsAPI = {
       throw new Error('Unauthorized: You can only delete your own applications')
     }
     
-    const { error } = await supabase
+    const { error } = await db
       .from('applications')
       .delete()
       .eq('id', id)
@@ -1055,7 +1055,7 @@ export const quotationsAPI = {
     
     if (admin) {
       // For admins, show all quotations
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('quotations')
         .select('*')
         .order('created_at', { ascending: false })
@@ -1065,12 +1065,12 @@ export const quotationsAPI = {
     } else {
       // For non-admin users, fetch their own quotations and public quotations separately, then combine
       const [userQuotes, publicQuotes] = await Promise.all([
-        supabase
+        db
           .from('quotations')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
-        supabase
+        db
           .from('quotations')
           .select('*')
           .is('user_id', null)
@@ -1115,7 +1115,7 @@ export const quotationsAPI = {
 
   // Fetch all quotations without any user filtering (for display purposes)
   getAllUnfiltered: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('quotations')
       .select('*')
       .order('created_at', { ascending: false })
@@ -1157,7 +1157,7 @@ export const quotationsAPI = {
     // If it's GQ format, we need to search all quotes and match
     if (id.startsWith('GQ') && id.length === 14) {
       // Fetch all quotes and find the one that matches this GQ format
-      const { data: allQuotes, error: fetchError } = await supabase
+      const { data: allQuotes, error: fetchError } = await db
         .from('quotations')
         .select('*')
       
@@ -1179,7 +1179,7 @@ export const quotationsAPI = {
       }
     } else {
       // Regular lookup by UUID
-      const result = await supabase
+      const result = await db
         .from('quotations')
         .select('*')
         .eq('id', id)
@@ -1199,7 +1199,7 @@ export const quotationsAPI = {
     // If it's GQ format, we need to search all quotes and match
     if (id.startsWith('GQ') && id.length === 14) {
       // Fetch all quotes and find the one that matches this GQ format
-      const { data: allQuotes, error: fetchError } = await supabase
+      const { data: allQuotes, error: fetchError } = await db
         .from('quotations')
         .select('*')
       
@@ -1221,7 +1221,7 @@ export const quotationsAPI = {
       }
     } else {
       // Regular lookup by UUID
-      const result = await supabase
+      const result = await db
         .from('quotations')
         .select('*')
         .eq('id', id)
@@ -1236,7 +1236,7 @@ export const quotationsAPI = {
 
   create: async (data: Inserts<'quotations'>) => {
     const userId = await getCurrentUserId()
-    const { data: quotation, error } = await supabase
+    const { data: quotation, error } = await db
       .from('quotations')
       .insert({ ...data, user_id: userId })
       .select()
@@ -1295,7 +1295,7 @@ export const quotationsAPI = {
     }
     
     // Insert quote into Supabase
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('quotations')
       .insert(quoteData)
       .select()
@@ -1316,7 +1316,7 @@ export const quotationsAPI = {
   },
 
   update: async (id: string, updates: Updates<'quotations'>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('quotations')
       .update(updates)
       .eq('id', id)
@@ -1327,7 +1327,7 @@ export const quotationsAPI = {
       // Handle the specific "Cannot coerce" error
       if (error.message.includes('Cannot coerce') || error.code === 'PGRST116') {
         // If single() fails, try without it (might return array)
-        const { data: dataArray, error: arrayError } = await supabase
+        const { data: dataArray, error: arrayError } = await db
           .from('quotations')
           .update(updates)
           .eq('id', id)
@@ -1352,7 +1352,7 @@ export const quotationsAPI = {
   },
 
   updateStatus: async (id: string, status: 'pending' | 'paid' | 'cancelled') => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('quotations')
       .update({ status })
       .eq('id', id)
@@ -1363,7 +1363,7 @@ export const quotationsAPI = {
       // Handle the specific "Cannot coerce" error
       if (error.message.includes('Cannot coerce') || error.code === 'PGRST116') {
         // If single() fails, try without it (might return array)
-        const { data: dataArray, error: arrayError } = await supabase
+        const { data: dataArray, error: arrayError } = await db
           .from('quotations')
           .update({ status })
           .eq('id', id)
@@ -1389,7 +1389,7 @@ export const quotationsAPI = {
 
   delete: async (id: string) => {
     // First, verify the quotation exists and we can access it
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await db
       .from('quotations')
       .select('id, user_id')
       .eq('id', id)
@@ -1410,7 +1410,7 @@ export const quotationsAPI = {
     const { isAdmin: adminCheck } = await getCurrentUserInfo()
     
     // Perform the deletion
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('quotations')
       .delete()
       .eq('id', id)
@@ -1423,7 +1423,7 @@ export const quotationsAPI = {
     // Verify deletion was successful
     if (!data || data.length === 0) {
       // Double-check by trying to fetch it again
-      const { data: verifyData, error: verifyError } = await supabase
+      const { data: verifyData, error: verifyError } = await db
         .from('quotations')
         .select('id')
         .eq('id', id)
@@ -1461,7 +1461,7 @@ export const quotationsAPI = {
 export const servicesAPI = {
   getAll: async () => {
     // Use Supabase directly (serverless)
-    const { data, error: supabaseError } = await supabase
+    const { data, error: supabaseError } = await db
       .from('services')
       .select('*')
       .order('service_name', { ascending: true })
@@ -1477,7 +1477,7 @@ export const servicesAPI = {
       return cachedQuery(
         cacheKeys.service(serviceName, state),
         async () => {
-          const { data, error: supabaseError } = await supabase
+          const { data, error: supabaseError } = await db
             .from('services')
             .select('*')
             .eq('service_name', serviceName)
@@ -1492,7 +1492,7 @@ export const servicesAPI = {
     }
 
     // Direct query without cache
-    const { data, error: supabaseError } = await supabase
+    const { data, error: supabaseError } = await db
       .from('services')
       .select('*')
       .eq('service_name', serviceName)
@@ -1504,7 +1504,7 @@ export const servicesAPI = {
   },
 
   getByServiceStateAndPaymentType: async (serviceName: string, state: string, paymentType: 'full' | 'staggered') => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('services')
       .select('*')
       .eq('service_name', serviceName)
@@ -1517,7 +1517,7 @@ export const servicesAPI = {
   },
 
   getAllByServiceAndState: async (serviceName: string, state: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('services')
       .select('*')
       .eq('service_name', serviceName)
@@ -1540,7 +1540,7 @@ export const servicesAPI = {
   }) => {
     if (serviceData.id) {
       // Update existing
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('services')
         .update({
           service_name: serviceData.service_name,
@@ -1560,7 +1560,7 @@ export const servicesAPI = {
     } else {
       // Create new
       const id = `svc_${Date.now()}`
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('services')
         .insert({
           id,
@@ -1581,7 +1581,7 @@ export const servicesAPI = {
   },
 
   update: async (id: string, updates: Partial<Tables<'services'>>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('services')
       .update(updates)
       .eq('id', id)
@@ -1593,7 +1593,7 @@ export const servicesAPI = {
   },
 
   delete: async (id: string) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('services')
       .delete()
       .eq('id', id)
@@ -1604,7 +1604,7 @@ export const servicesAPI = {
 
 export const serviceRequiredDocumentsAPI = {
   getAll: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('service_required_documents')
       .select('*')
       .order('service_type', { ascending: true })
@@ -1616,7 +1616,7 @@ export const serviceRequiredDocumentsAPI = {
   },
 
   getByServiceTypes: async (serviceTypes: string[]) => {
-    const query = supabase
+    const query = db
       .from('service_required_documents')
       .select('*')
       .order('service_type', { ascending: true })
@@ -1656,7 +1656,7 @@ export const serviceRequiredDocumentsAPI = {
       sort_order: doc.sort_order ?? 0,
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('service_required_documents')
       .insert(payload)
       .select('*')
@@ -1687,7 +1687,7 @@ export const serviceRequiredDocumentsAPI = {
     if (updates.required !== undefined) updatePayload.required = updates.required
     if (updates.sort_order !== undefined) updatePayload.sort_order = updates.sort_order
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('service_required_documents')
       .update(updatePayload)
       .eq('id', id)
@@ -1704,7 +1704,7 @@ export const serviceRequiredDocumentsAPI = {
       throw new Error('Admin access required')
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('service_required_documents')
       .delete()
       .eq('id', id)
@@ -1723,7 +1723,7 @@ export const notificationsAPI = {
   getAll: async (unreadOnly?: boolean, limit?: number) => {
     const userId = await getCurrentUserId()
     
-    const query = supabase
+    const query = db
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
@@ -1755,7 +1755,7 @@ export const notificationsAPI = {
     }
     
     // Fetch unread notification IDs and count them (compatible with custom API client)
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('notifications')
       .select('id')
       .eq('user_id', userId)
@@ -1791,7 +1791,7 @@ export const notificationsAPI = {
     const userId = await getCurrentUserId()
     
     // Create the in-app notification only (no email sending for system events)
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('notifications')
       .insert({
         user_id: userId,
@@ -1814,7 +1814,7 @@ export const notificationsAPI = {
 
   markAsRead: async (id: string) => {
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('notifications')
       .update({ read: true })
       .eq('id', id)
@@ -1831,7 +1831,7 @@ export const notificationsAPI = {
 
   markAllAsRead: async () => {
     const userId = await getCurrentUserId()
-    const { error } = await supabase
+    const { error } = await db
       .from('notifications')
       .update({ read: true })
       .eq('user_id', userId)
@@ -1846,7 +1846,7 @@ export const notificationsAPI = {
 
   deleteOne: async (id: string) => {
     const userId = await getCurrentUserId()
-    const { error } = await supabase
+    const { error } = await db
       .from('notifications')
       .delete()
       .eq('id', id)
@@ -1859,7 +1859,7 @@ export const notificationsAPI = {
 
   deleteAll: async () => {
     const userId = await getCurrentUserId()
-    const { error } = await supabase
+    const { error } = await db
       .from('notifications')
       .delete()
       .eq('user_id', userId)
@@ -1873,7 +1873,7 @@ export const notificationsAPI = {
   deleteReadOlderThan24h: async () => {
     const userId = await getCurrentUserId()
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { error } = await supabase
+    const { error } = await db
       .from('notifications')
       .delete()
       .eq('user_id', userId)
@@ -1888,7 +1888,7 @@ export const notificationsAPI = {
   // Trigger notification generation functions
   generateDocumentReminders: async () => {
     try {
-      const { data, error } = await supabase.rpc('generate_document_reminders')
+      const { data, error } = await db.rpc('generate_document_reminders')
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateDocumentReminders' })
       return data
     } catch (error) {
@@ -1898,7 +1898,7 @@ export const notificationsAPI = {
 
   generateProfileCompletionReminders: async () => {
     try {
-      const { data, error } = await supabase.rpc('generate_profile_completion_reminders')
+      const { data, error } = await db.rpc('generate_profile_completion_reminders')
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateProfileCompletionReminders' })
       return data
     } catch (error) {
@@ -1908,7 +1908,7 @@ export const notificationsAPI = {
 
   generatePaymentReminders: async () => {
     try {
-      const { data, error } = await supabase.rpc('generate_payment_reminders')
+      const { data, error } = await db.rpc('generate_payment_reminders')
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.generatePaymentReminders' })
       return data
     } catch (error) {
@@ -1918,7 +1918,7 @@ export const notificationsAPI = {
 
   generateCredentialingReminders: async () => {
     try {
-      const { data, error } = await supabase.rpc('notify_credentialing_reminder')
+      const { data, error } = await db.rpc('notify_credentialing_reminder')
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.generateCredentialingReminders' })
       return data
     } catch (error) {
@@ -1929,7 +1929,7 @@ export const notificationsAPI = {
   checkMissingDocuments: async (userId?: string) => {
     try {
       const targetUserId = userId || await getCurrentUserId()
-      const { data, error } = await supabase.rpc('check_missing_documents', {
+      const { data, error } = await db.rpc('check_missing_documents', {
         p_user_id: targetUserId
       })
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.checkMissingDocuments', userId: targetUserId })
@@ -1943,7 +1943,7 @@ export const notificationsAPI = {
   checkIncompleteProfile: async (userId?: string) => {
     try {
       const targetUserId = userId || await getCurrentUserId()
-      const { data, error } = await supabase.rpc('check_incomplete_profile', {
+      const { data, error } = await db.rpc('check_incomplete_profile', {
         p_user_id: targetUserId
       })
       if (error) throw normalizeError(error, { operation: 'notificationsAPI.checkIncompleteProfile', userId: targetUserId })
@@ -1966,7 +1966,7 @@ export const userDetailsAPI = {
       return cachedQuery(
         cacheKeys.userDetails(userId),
         async () => {
-          const { data, error } = await supabase
+          const { data, error } = await db
             .from('user_details')
             .select('*')
             .eq('user_id', userId)
@@ -1980,7 +1980,7 @@ export const userDetailsAPI = {
     }
 
     // Direct query without cache
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_details')
       .select('*')
       .eq('user_id', userId)
@@ -1999,7 +1999,7 @@ export const userDetailsAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_details')
       .select('*')
       .eq('user_id', userId)
@@ -2032,7 +2032,7 @@ export const userDetailsAPI = {
       }
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_details')
       .upsert(cleanedDetails, { onConflict: 'user_id' })
       .select()
@@ -2049,7 +2049,7 @@ export const userDetailsAPI = {
 export const userPreferencesAPI = {
   get: async () => {
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_preferences')
       .select('*')
       .eq('user_id', userId)
@@ -2077,7 +2077,7 @@ export const userPreferencesAPI = {
 
   save: async (preferences: Partial<Tables<'user_preferences'>>) => {
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_preferences')
       .upsert({ ...preferences, user_id: userId }, { onConflict: 'user_id' })
       .select()
@@ -2122,7 +2122,7 @@ export const userPreferencesAPI = {
 export const userDocumentsAPI = {
   getAll: async () => {
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_documents')
       .select('*')
       .eq('user_id', userId)
@@ -2141,7 +2141,7 @@ export const userDocumentsAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('user_documents')
       .select('*')
       .eq('user_id', userId)
@@ -2164,7 +2164,7 @@ export const userDocumentsAPI = {
     })
     
     // Check if document already exists and delete old file from storage
-    const { data: existing, error: checkError } = await supabase
+    const { data: existing, error: checkError } = await db
       .from('user_documents')
       .select('id, file_path')
       .eq('user_id', userId)
@@ -2181,7 +2181,7 @@ export const userDocumentsAPI = {
         const pathParts = existing.file_path.split('/')
         const fileName = pathParts[pathParts.length - 1]
         const storagePath = `${userId}/${fileName}`
-        await supabase.storage
+        await db.storage
           .from('documents')
           .remove([storagePath])
       } catch (storageError) {
@@ -2196,7 +2196,7 @@ export const userDocumentsAPI = {
     let data, error
     if (existing && !('error' in existing) && 'id' in existing) {
       // Update existing document (use compressed file size)
-      const { data: updated, error: updateError } = await supabase
+      const { data: updated, error: updateError } = await db
         .from('user_documents')
         .update({
           file_path: filePath,
@@ -2211,7 +2211,7 @@ export const userDocumentsAPI = {
       error = updateError
     } else {
       // Insert new document (use compressed file size)
-      const { data: inserted, error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await db
         .from('user_documents')
         .insert({
           user_id: userId,
@@ -2235,7 +2235,7 @@ export const userDocumentsAPI = {
     // When picture is uploaded, sync it as the user's avatar
     if (type === 'picture' && filePath) {
       try {
-        await supabase
+        await db
           .from('users')
           .update({ avatar_path: filePath })
           .eq('id', userId)
@@ -2289,7 +2289,7 @@ export const userDocumentsAPI = {
     // For G-1145, I-765, and cover letter, delete all existing documents of the same type to prevent duplicates
     // This ensures that upload and generate operations overwrite each other
     if (type === 'additional_g1145' || type === 'additional_i765' || type === 'additional_cover_letter') {
-      const { data: existingDocs, error: checkError } = await supabase
+      const { data: existingDocs, error: checkError } = await db
         .from('user_documents')
         .select('id, file_path')
         .eq('user_id', userId)
@@ -2306,7 +2306,7 @@ export const userDocumentsAPI = {
               const pathParts = doc.file_path.split('/')
               const fileName = pathParts[pathParts.length - 1]
               const storagePath = `${userId}/${fileName}`
-              await supabase.storage
+              await db.storage
                 .from('documents')
                 .remove([storagePath])
             } catch (storageError) {
@@ -2317,7 +2317,7 @@ export const userDocumentsAPI = {
         }
         
         // Delete all database records
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await db
           .from('user_documents')
           .delete()
           .eq('user_id', userId)
@@ -2327,7 +2327,7 @@ export const userDocumentsAPI = {
       }
     } else {
       // For other document types, check if document already exists and update it
-      const { data: existing, error: checkError } = await supabase
+      const { data: existing, error: checkError } = await db
         .from('user_documents')
         .select('id, file_path')
         .eq('user_id', userId)
@@ -2342,7 +2342,7 @@ export const userDocumentsAPI = {
           const pathParts = existing.file_path.split('/')
           const fileName = pathParts[pathParts.length - 1]
           const storagePath = `${userId}/${fileName}`
-          await supabase.storage
+          await db.storage
             .from('documents')
             .remove([storagePath])
         } catch (storageError) {
@@ -2359,7 +2359,7 @@ export const userDocumentsAPI = {
     // For other types, update if exists, otherwise insert
     if (type === 'additional_g1145' || type === 'additional_i765' || type === 'additional_cover_letter') {
       // Insert new document (use compressed file size)
-      const { data: inserted, error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await db
         .from('user_documents')
         .insert({
           user_id: userId,
@@ -2376,7 +2376,7 @@ export const userDocumentsAPI = {
       return inserted as Tables<'user_documents'>
     } else {
       // For other document types, update if exists, otherwise insert
-      const { data: existing, error: checkError } = await supabase
+      const { data: existing, error: checkError } = await db
         .from('user_documents')
         .select('id')
         .eq('user_id', userId)
@@ -2388,7 +2388,7 @@ export const userDocumentsAPI = {
       let data, error
       if (existing && !('error' in existing) && 'id' in existing) {
         // Update existing document (use compressed file size)
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await db
           .from('user_documents')
           .update({
             file_path: filePath,
@@ -2403,7 +2403,7 @@ export const userDocumentsAPI = {
         error = updateError
       } else {
         // Insert new document (use compressed file size)
-        const { data: inserted, error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await db
           .from('user_documents')
           .insert({
             user_id: userId,
@@ -2429,7 +2429,7 @@ export const userDocumentsAPI = {
     const { userId, isAdmin: admin } = await getCurrentUserInfo()
     
     // Fetch the document so we have the file_path and can verify ownership
-    const { data: doc, error: fetchError } = await supabase
+    const { data: doc, error: fetchError } = await db
       .from('user_documents')
       .select('user_id, file_path')
       .eq('id', documentId)
@@ -2446,7 +2446,7 @@ export const userDocumentsAPI = {
       // Clear URL cache immediately so nothing can load the stale URL
       clearSignedUrlCacheForPath(filePath)
       try {
-        await supabase.storage
+        await db.storage
           .from('documents')
           .remove([filePath])
       } catch (storageError) {
@@ -2456,7 +2456,7 @@ export const userDocumentsAPI = {
     }
     
     // Delete the database record
-    const { error } = await supabase
+    const { error } = await db
       .from('user_documents')
       .delete()
       .eq('id', documentId)
@@ -2486,7 +2486,7 @@ async function uploadFile(userId: string, file: File, type: string): Promise<str
   const fileName = `${fileNamePrefix}.${fileExt}`
   const filePath = `${userId}/${fileName}`
   
-  const { error } = await supabase.storage
+  const { error } = await db.storage
     .from('documents')
     .upload(filePath, file, {
       cacheControl: '3600',
@@ -2499,7 +2499,7 @@ async function uploadFile(userId: string, file: File, type: string): Promise<str
 
 // Get file URL (for Supabase Storage)
 export function getFileUrl(filePath: string): string {
-  const { data } = supabase.storage
+  const { data } = db.storage
     .from('documents')
     .getPublicUrl(filePath)
   
@@ -2609,7 +2609,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
       }
     }
     
-    const { data, error } = await supabase.storage
+    const { data, error } = await db.storage
       .from('documents')
       .createSignedUrl(normalizedPath, expiresIn)
     
@@ -2649,7 +2649,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
                 const altNegativeCached = negativeCache.get(altPath)
                 if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
                   try {
-                    const { data: altData, error: altError } = await supabase.storage
+                    const { data: altData, error: altError } = await db.storage
                       .from('documents')
                       .createSignedUrl(altPath, expiresIn)
                     if (!altError && altData?.signedUrl) {
@@ -2688,7 +2688,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
                 const altNegativeCached = negativeCache.get(altPath)
                 if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
                   try {
-                    const { data: altData, error: altError } = await supabase.storage
+                    const { data: altData, error: altError } = await db.storage
                       .from('documents')
                       .createSignedUrl(altPath, expiresIn)
                     if (!altError && altData?.signedUrl) {
@@ -2708,7 +2708,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
                 const altNegativeCached = negativeCache.get(altPath)
                 if (!altNegativeCached || altNegativeCached.expiresAt <= now) {
                   try {
-                    const { data: altData, error: altError } = await supabase.storage
+                    const { data: altData, error: altError } = await db.storage
                       .from('documents')
                       .createSignedUrl(altPath, expiresIn)
                     if (!altError && altData?.signedUrl) {
@@ -2736,7 +2736,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
               files = cachedListing.files
             } else {
               // Fetch fresh listing with rate limiting
-              const { data: listData, error: listError } = await supabase.storage
+              const { data: listData, error: listError } = await db.storage
                 .from('documents')
                 .list(directory || '', {
                   limit: 100
@@ -2791,7 +2791,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
             // Both paths failed before, try file listing as last resort
             alternativePath = null // Reset to trigger file listing
           } else {
-            const { data: fallbackData, error: fallbackError } = await supabase.storage
+            const { data: fallbackData, error: fallbackError } = await db.storage
               .from('documents')
               .createSignedUrl(alternativePath, expiresIn)
             
@@ -2820,7 +2820,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
               files = cachedListing.files
             } else {
               // Fetch fresh listing with rate limiting
-              const { data: listData, error: listError } = await supabase.storage
+              const { data: listData, error: listError } = await db.storage
                 .from('documents')
                 .list(directory || '', {
                   limit: 100
@@ -2868,7 +2868,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
         
         // Try the file listing result if found
         if (alternativePath) {
-          const { data: fallbackData, error: fallbackError } = await supabase.storage
+          const { data: fallbackData, error: fallbackError } = await db.storage
             .from('documents')
             .createSignedUrl(alternativePath, expiresIn)
           
@@ -2931,7 +2931,7 @@ export const timelineStepsAPI = {
       return cachedQuery(
         cacheKeys.applicationTimeline(applicationId),
         async () => {
-          const { data, error } = await supabase
+          const { data, error } = await db
             .from('application_timeline_steps')
             .select('*')
             .eq('application_id', applicationId)
@@ -2945,7 +2945,7 @@ export const timelineStepsAPI = {
     }
 
     // Direct query without cache
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('application_timeline_steps')
       .select('*')
       .eq('application_id', applicationId)
@@ -3008,7 +3008,7 @@ export const timelineStepsAPI = {
     }
     
     // First, fetch existing step data to merge with new data
-    const { data: existingStep } = await supabase
+    const { data: existingStep } = await db
       .from('application_timeline_steps')
       .select('data, status, step_name')
       .eq('application_id', applicationId)
@@ -3066,7 +3066,7 @@ export const timelineStepsAPI = {
       upsertData.data = null
     }
     
-    const { data: updatedStep, error } = await supabase
+    const { data: updatedStep, error } = await db
       .from('application_timeline_steps')
       .upsert(upsertData, {
         onConflict: 'application_id,step_key',
@@ -3079,7 +3079,7 @@ export const timelineStepsAPI = {
   },
 
   create: async (applicationId: string, stepKey: string, stepName: string, parentStep?: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('application_timeline_steps')
       .insert({
         application_id: applicationId,
@@ -3152,7 +3152,7 @@ export const processingAccountsAPI = {
     // Otherwise, fall back to UUID id
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
     
-    let query = supabase
+    let query = db
       .from('applications')
       .select('id, user_id, first_name, middle_name, last_name, elementary_school, gender, marital_status')
     
@@ -3186,7 +3186,7 @@ export const processingAccountsAPI = {
     }
     
     // Get existing accounts (use actual UUID id)
-    const { data: accounts, error } = await supabase
+    const { data: accounts, error } = await db
       .from('processing_accounts')
       .select('*')
       .eq('application_id', actualApplicationId)
@@ -3203,7 +3203,7 @@ export const processingAccountsAPI = {
     const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
     
     // Get user's grit_id for password
-    const { data: user } = await supabase
+    const { data: user } = await db
       .from('users')
       .select('grit_id')
       .eq('id', typedApplication.user_id)
@@ -3235,7 +3235,7 @@ export const processingAccountsAPI = {
             typedApplication.marital_status || null
           )
           
-          const { error: pearsonError } = await supabase
+          const { error: pearsonError } = await db
             .from('processing_accounts')
             .insert({
               application_id: actualApplicationId,
@@ -3265,7 +3265,7 @@ export const processingAccountsAPI = {
     }
     
     // Re-fetch accounts from database to ensure we have the latest data and avoid duplicates
-    const { data: allAccounts, error: refetchError } = await supabase
+    const { data: allAccounts, error: refetchError } = await db
       .from('processing_accounts')
       .select('*')
       .eq('application_id', actualApplicationId)
@@ -3314,7 +3314,7 @@ export const processingAccountsAPI = {
     }
     
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('processing_accounts')
       .insert({
         ...accountData,
@@ -3344,7 +3344,7 @@ export const processingAccountsAPI = {
     const userId = await getCurrentUserId()
     
     // First, get the account to check its type
-    const { data: account, error: fetchError } = await supabase
+    const { data: account, error: fetchError } = await db
       .from('processing_accounts')
       .select('account_type, application_id, created_by')
       .eq('id', id)
@@ -3370,7 +3370,7 @@ export const processingAccountsAPI = {
         if (!applicationId) {
           throw new Error('Application ID not found')
         }
-        const { data: application } = await supabase
+        const { data: application } = await db
           .from('applications')
           .select('user_id')
           .eq('id', applicationId)
@@ -3405,7 +3405,7 @@ export const processingAccountsAPI = {
         if (!customApplicationId) {
           throw new Error('Application ID not found')
         }
-        const { data: application } = await supabase
+        const { data: application } = await db
           .from('applications')
           .select('user_id')
           .eq('id', customApplicationId)
@@ -3421,7 +3421,7 @@ export const processingAccountsAPI = {
       }
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('processing_accounts')
       .update(updates)
       .eq('id', id)
@@ -3437,7 +3437,7 @@ export const processingAccountsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
     
-    const { error } = await supabase
+    const { error } = await db
       .from('processing_accounts')
       .delete()
       .eq('id', id)
@@ -3449,7 +3449,7 @@ export const processingAccountsAPI = {
 // Clients API
 export const clientsAPI = {
   getAll: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('users')
       .select('*')
       .eq('role', 'client')
@@ -3478,7 +3478,7 @@ export const clientsAPI = {
     // For now, we'll use a direct approach with Supabase
     try {
       // Get the user's email from the database
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await db
         .from('users')
         .select('email')
         .eq('id', userId)
@@ -3524,7 +3524,7 @@ export const dashboardAPI = {
     
     // Use Supabase RPC for aggregated stats when available; fallback to legacy queries
     if (admin) {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_stats', { is_admin: true })
+      const { data: rpcData, error: rpcError } = await db.rpc('get_dashboard_stats', { is_admin: true })
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         return mapStats(rpcData[0])
       }
@@ -3542,15 +3542,15 @@ export const dashboardAPI = {
         users,
         payments
       ] = await Promise.all([
-        supabase.from('applications').select('*', { count: 'exact', head: true }),
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
-        supabase.from('quotations').select('*', { count: 'exact', head: true }),
-        supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'paid'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'client'),
-        supabase.from('application_payments').select('amount', { count: 'exact' }).eq('status', 'paid'),
+        db.from('applications').select('*', { count: 'exact', head: true }),
+        db.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        db.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
+        db.from('applications').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
+        db.from('quotations').select('*', { count: 'exact', head: true }),
+        db.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        db.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'paid'),
+        db.from('users').select('*', { count: 'exact', head: true }).eq('role', 'client'),
+        db.from('application_payments').select('amount', { count: 'exact' }).eq('status', 'paid'),
       ])
       
       // Check for errors in queries
@@ -3563,7 +3563,7 @@ export const dashboardAPI = {
       
       // If counts are 0 but we suspect there might be data, do a manual count as fallback
       if (completedCount === 0) {
-        const { data: allApps, error: allAppsError } = await supabase
+        const { data: allApps, error: allAppsError } = await db
           .from('applications')
           .select('id, status')
         
@@ -3581,7 +3581,7 @@ export const dashboardAPI = {
       // (applications with nclex_exam or quick_results steps completed)
       // This handles cases where status might not be 'completed' but the exam is done
       // Get all applications to check for timeline-based completion
-      const { data: allApps, error: allAppsError } = await supabase
+      const { data: allApps, error: allAppsError } = await db
         .from('applications')
         .select('id, status')
       
@@ -3598,7 +3598,7 @@ export const dashboardAPI = {
         
         if (appIdsToCheck.length > 0) {
           // Check for completed nclex_exam or quick_results steps
-          const { data: completedSteps, error: stepsError } = await supabase
+          const { data: completedSteps, error: stepsError } = await db
             .from('application_timeline_steps')
             .select('application_id')
             .in('application_id', appIdsToCheck)
@@ -3620,7 +3620,7 @@ export const dashboardAPI = {
       let pendingCount = pendingApps.count ?? 0
       if (timelineCompletedAppIds.size > 0) {
         // Check how many of the timeline-completed apps are currently counted as pending
-        const { data: pendingAppsData } = await supabase
+        const { data: pendingAppsData } = await db
           .from('applications')
           .select('id')
           .eq('status', 'pending')
@@ -3659,7 +3659,7 @@ export const dashboardAPI = {
         quotations: quotations.count || 0,
       }
     } else {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_stats', { is_admin: false })
+      const { data: rpcData, error: rpcError } = await db.rpc('get_dashboard_stats', { is_admin: false })
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         return mapStats(rpcData[0])
       }
@@ -3667,9 +3667,9 @@ export const dashboardAPI = {
 
       // Client stats (fallback path)
       const [applications, quotations, payments] = await Promise.all([
-        supabase.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('application_payments').select('amount', { count: 'exact' }).eq('user_id', userId).eq('status', 'paid'),
+        db.from('applications').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        db.from('quotations').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        db.from('application_payments').select('amount', { count: 'exact' }).eq('user_id', userId).eq('status', 'paid'),
       ])
       
       // Calculate revenue from user's payments
@@ -3681,8 +3681,8 @@ export const dashboardAPI = {
       // Get completed counts for client
       // We need to check both status and timeline steps to determine completion
       const [, allUserApps] = await Promise.all([
-        supabase.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).eq('status', 'completed'),
-        supabase.from('applications').select('id, status').eq('user_id', userId),
+        db.from('applications').select('id', { count: 'exact' }).eq('user_id', userId).eq('status', 'completed'),
+        db.from('applications').select('id, status').eq('user_id', userId),
       ])
       
       // Count applications with status 'completed'
@@ -3709,7 +3709,7 @@ export const dashboardAPI = {
         
         if (appIdsToCheck.length > 0) {
           // Check for completed nclex_exam or quick_results steps
-          const { data: completedSteps } = await supabase
+          const { data: completedSteps } = await db
             .from('application_timeline_steps')
             .select('application_id')
             .in('application_id', appIdsToCheck)
@@ -3759,7 +3759,7 @@ export const adminAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('settings')
       .select('*')
     
@@ -3784,7 +3784,7 @@ export const adminAPI = {
       value: String(value),
     }))
     
-    const { error } = await supabase
+    const { error } = await db
       .from('settings')
       .upsert(entries, { onConflict: 'key' })
     
@@ -3822,7 +3822,7 @@ export const adminAPI = {
   getUsdToPhpRate: async () => {
     try {
       // Get settings (this will work for all users, but only admins can modify)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('settings')
         .select('*')
       
@@ -3875,7 +3875,7 @@ export const adminAPI = {
     }
     
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('notification_types')
         .select('*')
         .order('sort_order', { ascending: true })
@@ -3915,7 +3915,7 @@ export const adminAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('notification_types')
       .insert({
         ...notification,
@@ -3944,7 +3944,7 @@ export const adminAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('notification_types')
       .update(updates)
       .eq('id', id)
@@ -3960,7 +3960,7 @@ export const adminAPI = {
       throw new Error('Unauthorized')
     }
     
-    const { error } = await supabase
+    const { error } = await db
       .from('notification_types')
       .delete()
       .eq('id', id)
@@ -3989,13 +3989,13 @@ const calculateServiceFee = (paymentType: 'step1' | 'step2' | 'full'): number =>
 export const applicationPaymentsAPI = {
   getAll: async () => {
     const { userId, isAdmin: admin } = await getCurrentUserInfo()
-    const query = supabase
+    const query = db
       .from('application_payments')
       .select('*')
       .order('created_at', { ascending: false })
     if (!admin) {
       // Join through applications to filter by user
-      const { data: apps } = await supabase
+      const { data: apps } = await db
         .from('applications')
         .select('id')
         .eq('user_id', userId)
@@ -4010,7 +4010,7 @@ export const applicationPaymentsAPI = {
 
   checkRetaker: async () => {
     const userId = await getCurrentUserId()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .select('id')
       .eq('user_id', userId)
@@ -4041,7 +4041,7 @@ export const applicationPaymentsAPI = {
     
     if (isGritAppId) {
       // Look up the application by grit_app_id to get the UUID
-      const { data: application, error: appError } = await supabase
+      const { data: application, error: appError } = await db
         .from('applications')
         .select('id, user_id')
         .eq('grit_app_id', applicationId.toUpperCase())
@@ -4067,7 +4067,7 @@ export const applicationPaymentsAPI = {
       actualApplicationId = typedApp.id || ''
     } else {
       // For UUID, fetch application to get user_id
-      const { data: application, error: appError } = await supabase
+      const { data: application, error: appError } = await db
         .from('applications')
         .select('id, user_id')
         .eq('id', applicationId)
@@ -4095,7 +4095,7 @@ export const applicationPaymentsAPI = {
     // Calculate service fee amount for this payment type
     const serviceFeeAmount = calculateServiceFee(paymentType)
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('application_payments')
       .insert({
         application_id: actualApplicationId,
@@ -4153,7 +4153,7 @@ export const applicationPaymentsAPI = {
     
     // Fetch payment data before update (needed for receipt creation and to get user_id)
     try {
-      const { data: paymentData, error: fetchError } = await supabase
+      const { data: paymentData, error: fetchError } = await db
         .from('application_payments')
         .select('*')
         .eq('id', paymentId)
@@ -4165,7 +4165,7 @@ export const applicationPaymentsAPI = {
         userId = typedPayment.user_id || userId
       } else if (fetchError && !userId) {
         // If we can't fetch and no userId, try minimal fetch for user_id only
-        const { data: minimalData } = await supabase
+        const { data: minimalData } = await db
           .from('application_payments')
           .select('user_id')
           .eq('id', paymentId)
@@ -4245,7 +4245,7 @@ export const applicationPaymentsAPI = {
 
         // Try REST API upload as workaround for SDK contentType issue
         try {
-          const { data: { session } } = await supabase.auth.getSession()
+          const { data: { session } } = await db.auth.getSession()
           const token = session?.access_token
           
           if (!token) {
@@ -4282,7 +4282,7 @@ export const applicationPaymentsAPI = {
           console.error('REST API upload failed, falling back to SDK:', restError)
           
           // Fallback to SDK method
-          const { error: uploadError } = await supabase.storage
+          const { error: uploadError } = await db.storage
             .from('documents')
             .upload(filePath, blob, {
               cacheControl: '3600',
@@ -4349,7 +4349,7 @@ export const applicationPaymentsAPI = {
     
     // Update payment record
     // Don't select after update to avoid RLS 406 errors - update and fetch separately
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('application_payments')
       .update(updatePayload)
       .eq('id', paymentId)
@@ -4432,7 +4432,7 @@ export const applicationPaymentsAPI = {
         if (typedPayment.application_id) {
           try {
             // Fetch application to get service details
-            const { data: appData } = await supabase
+            const { data: appData } = await db
               .from('applications')
               .select('application_type, province, payment_type')
               .eq('id', typedPayment.application_id)
@@ -4473,7 +4473,7 @@ export const applicationPaymentsAPI = {
           }
         }
         
-        const { data: receipt, error: receiptError } = await supabase
+        const { data: receipt, error: receiptError } = await db
           .from('receipts')
           .insert({
             payment_id: paymentId,
@@ -4498,7 +4498,7 @@ export const applicationPaymentsAPI = {
             let userData: any = null
             
             if (typedPayment.application_id) {
-              const { data: appData } = await supabase
+              const { data: appData } = await db
                 .from('applications')
                 .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
                 .eq('id', typedPayment.application_id)
@@ -4507,7 +4507,7 @@ export const applicationPaymentsAPI = {
             }
             
             if (receiptUserId) {
-              const { data: uData } = await supabase
+              const { data: uData } = await db
                 .from('users')
                 .select('id, email, full_name, first_name, last_name')
                 .eq('id', receiptUserId)
@@ -4546,14 +4546,14 @@ export const applicationPaymentsAPI = {
     // Resolve application ID (could be grit_app_id or UUID)
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
     
-    let query = supabase
+    let query = db
       .from('application_payments')
       .select('*')
       .order('created_at', { ascending: false })
     
     if (isGritAppId) {
       // First get the application UUID from grit_app_id
-      const { data: application, error: appError } = await supabase
+      const { data: application, error: appError } = await db
         .from('applications')
         .select('id')
         .eq('grit_app_id', applicationId.toUpperCase())
@@ -4576,7 +4576,7 @@ export const applicationPaymentsAPI = {
   },
 
   getReceipt: async (paymentId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('receipts')
       .select('*')
       .eq('payment_id', paymentId)
@@ -4594,7 +4594,7 @@ export const applicationPaymentsAPI = {
   },
 
   getPendingApproval: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('application_payments')
       .select('*')
       .eq('status', 'pending_approval')
@@ -4610,7 +4610,7 @@ export const applicationPaymentsAPI = {
     }
     
     // Get current USD to PHP rate for GCash/mobile banking payments
-    const { data: payment, error: fetchError } = await supabase
+    const { data: payment, error: fetchError } = await db
       .from('application_payments')
       .select('payment_method, amount')
       .eq('id', paymentId)
@@ -4637,7 +4637,7 @@ export const applicationPaymentsAPI = {
       }
     }
     
-    const { data: updatedPayment, error: updateError } = await supabase
+    const { data: updatedPayment, error: updateError } = await db
       .from('application_payments')
       .update(updatePayload)
       .eq('id', paymentId)
@@ -4662,7 +4662,7 @@ export const applicationPaymentsAPI = {
       }
       
       // Check if receipt already exists
-      const { data: existingReceipt } = await supabase
+      const { data: existingReceipt } = await db
         .from('receipts')
         .select('id')
         .eq('payment_id', paymentId)
@@ -4683,7 +4683,7 @@ export const applicationPaymentsAPI = {
           if (typedPayment.application_id) {
             try {
               // Fetch application to get service details
-              const { data: appData } = await supabase
+              const { data: appData } = await db
                 .from('applications')
                 .select('application_type, province, payment_type')
                 .eq('id', typedPayment.application_id)
@@ -4739,7 +4739,7 @@ export const applicationPaymentsAPI = {
             }
           }
           
-          const { data: receipt, error: receiptError } = await supabase
+          const { data: receipt, error: receiptError } = await db
             .from('receipts')
             .insert({
               payment_id: typedPayment.id,
@@ -4764,7 +4764,7 @@ export const applicationPaymentsAPI = {
               let userData: any = null
               
               if (typedPayment.application_id) {
-                const { data: appData } = await supabase
+                const { data: appData } = await db
                   .from('applications')
                   .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
                   .eq('id', typedPayment.application_id)
@@ -4773,7 +4773,7 @@ export const applicationPaymentsAPI = {
               }
               
               if (typedPayment.user_id) {
-                const { data: uData } = await supabase
+                const { data: uData } = await db
                   .from('users')
                   .select('id, email, full_name, first_name, last_name')
                   .eq('id', typedPayment.user_id)
@@ -4823,7 +4823,7 @@ export const applicationPaymentsAPI = {
     }
     
     // First, fetch the payment to get its details
-    const { data: existingPayment, error: fetchError } = await supabase
+    const { data: existingPayment, error: fetchError } = await db
       .from('application_payments')
       .select('*')
       .eq('id', paymentId)
@@ -4844,7 +4844,7 @@ export const applicationPaymentsAPI = {
       updatePayload.admin_note = reason
     }
     
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('application_payments')
       .update(updatePayload)
       .eq('id', paymentId)
@@ -4859,7 +4859,7 @@ export const applicationPaymentsAPI = {
     
     if (requiresApproval && payment.payment_type && payment.application_id && payment.amount) {
       // Check if there's already a pending payment for this type
-      const { data: existingPending, error: checkError } = await supabase
+      const { data: existingPending, error: checkError } = await db
         .from('application_payments')
         .select('id')
         .eq('application_id', payment.application_id)
@@ -4872,7 +4872,7 @@ export const applicationPaymentsAPI = {
         // Calculate service fee amount for this payment type
         const serviceFeeAmount = calculateServiceFee(payment.payment_type)
         
-        const { error: createError } = await supabase
+        const { error: createError } = await db
           .from('application_payments')
           .insert({
             application_id: payment.application_id,
@@ -4891,7 +4891,7 @@ export const applicationPaymentsAPI = {
     }
     
     // Get the updated payment
-    const { data: updatedPayment, error: selectError } = await supabase
+    const { data: updatedPayment, error: selectError } = await db
       .from('application_payments')
       .select('*')
       .eq('id', paymentId)
@@ -4919,7 +4919,7 @@ export const applicationPaymentsAPI = {
     }
     
     // Get payment to invalidate cache
-    const { data: payment, error: fetchError } = await supabase
+    const { data: payment, error: fetchError } = await db
       .from('application_payments')
       .select('application_id')
       .eq('id', paymentId)
@@ -4934,7 +4934,7 @@ export const applicationPaymentsAPI = {
     }
     
     // Delete the payment
-    const { data: deletedData, error: deleteError } = await supabase
+    const { data: deletedData, error: deleteError } = await db
       .from('application_payments')
       .delete()
       .eq('id', paymentId)
@@ -4972,7 +4972,7 @@ export const applicationPaymentsAPI = {
 // Tracking API
 export const trackingAPI = {
   getByGritAppId: async (gritAppId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .select('*')
       .eq('grit_app_id', gritAppId.toUpperCase())
@@ -4986,7 +4986,7 @@ export const trackingAPI = {
 // Careers API
 export const careersAPI = {
   getAll: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('careers')
       .select('*')
       .eq('is_active', true)
@@ -4997,7 +4997,7 @@ export const careersAPI = {
   },
 
   getById: async (id: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('careers')
       .select('*')
       .eq('id', id)
@@ -5022,7 +5022,7 @@ export const careersAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('careers')
       .insert(career)
       .select('*')
@@ -5047,7 +5047,7 @@ export const careersAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('careers')
       .update(updates)
       .eq('id', id)
@@ -5063,7 +5063,7 @@ export const careersAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('careers')
       .delete()
       .eq('id', id)
@@ -5079,7 +5079,7 @@ export const donationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('donations')
       .select('*')
       .order('created_at', { ascending: false })
@@ -5093,7 +5093,7 @@ export const donationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('donations')
       .select('*')
       .eq('id', id)
@@ -5115,7 +5115,7 @@ export const donationsAPI = {
     status: 'pending' | 'completed' | 'failed'
     message?: string
   }) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('donations')
       .insert(donation)
       .select('*')
@@ -5130,7 +5130,7 @@ export const donationsAPI = {
     payment_method: string
     stripe_payment_intent_id: string
   }>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('donations')
       .update(updates)
       .eq('id', id)
@@ -5142,7 +5142,7 @@ export const donationsAPI = {
   },
 
   getPublicStats: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('donations')
       .select('amount, status')
     
@@ -5160,7 +5160,7 @@ export const donationsAPI = {
 // Partner Agencies API
 export const partnerAgenciesAPI = {
   getAll: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('partner_agencies')
       .select('*')
       .eq('is_active', true)
@@ -5175,7 +5175,7 @@ export const partnerAgenciesAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('partner_agencies')
       .select('*')
       .order('created_at', { ascending: false })
@@ -5185,7 +5185,7 @@ export const partnerAgenciesAPI = {
   },
 
   getById: async (id: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('partner_agencies')
       .select('*')
       .eq('id', id)
@@ -5213,7 +5213,7 @@ export const partnerAgenciesAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('partner_agencies')
       .insert(agency)
       .select('*')
@@ -5241,7 +5241,7 @@ export const partnerAgenciesAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('partner_agencies')
       .update(updates)
       .eq('id', id)
@@ -5257,7 +5257,7 @@ export const partnerAgenciesAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('partner_agencies')
       .delete()
       .eq('id', id)
@@ -5273,7 +5273,7 @@ export const careerApplicationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('career_applications')
       .select('*, careers(*)')
       .order('created_at', { ascending: false })
@@ -5287,7 +5287,7 @@ export const careerApplicationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('career_applications')
       .select('*, careers(*)')
       .eq('id', id)
@@ -5302,7 +5302,7 @@ export const careerApplicationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('career_applications')
       .select('*')
       .eq('career_id', careerId)
@@ -5331,7 +5331,7 @@ export const careerApplicationsAPI = {
   }) => {
     const userId = await getCurrentUserId().catch(() => null)
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('career_applications')
       .insert({
         ...application,
@@ -5353,7 +5353,7 @@ export const careerApplicationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('career_applications')
       .update(updates)
       .eq('id', id)
@@ -5369,7 +5369,7 @@ export const careerApplicationsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('career_applications')
       .delete()
       .eq('id', id)
@@ -5385,7 +5385,7 @@ export const sponsorshipsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nclex_sponsorships')
       .select('*')
       .order('created_at', { ascending: false })
@@ -5399,7 +5399,7 @@ export const sponsorshipsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nclex_sponsorships')
       .select('*')
       .eq('id', id)
@@ -5428,7 +5428,7 @@ export const sponsorshipsAPI = {
   }) => {
     const userId = await getCurrentUserId().catch(() => null)
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nclex_sponsorships')
       .insert({
         ...sponsorship,
@@ -5451,7 +5451,7 @@ export const sponsorshipsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nclex_sponsorships')
       .update(updates)
       .eq('id', id)
@@ -5467,7 +5467,7 @@ export const sponsorshipsAPI = {
       throw new Error('Unauthorized - Admin only')
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('nclex_sponsorships')
       .delete()
       .eq('id', id)

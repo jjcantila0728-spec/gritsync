@@ -3,7 +3,7 @@
  * Handles email campaigns, newsletters, and subscriber management
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export type CampaignType = 'newsletter' | 'broadcast' | 'announcement' | 'promotional' | 'transactional'
 export type RecipientType = 'subscribers' | 'users' | 'custom' | 'segment'
@@ -98,7 +98,7 @@ export const emailCampaignsAPI = {
     campaign_type?: CampaignType
     limit?: number
   }): Promise<EmailCampaign[]> {
-    let query = supabase
+    let query = db
       .from('email_campaigns')
       .select('*')
       .order('created_at', { ascending: false })
@@ -125,7 +125,7 @@ export const emailCampaignsAPI = {
    * Get campaign by ID
    */
   async getById(id: string): Promise<EmailCampaign | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_campaigns')
       .select('*')
       .eq('id', id)
@@ -143,7 +143,7 @@ export const emailCampaignsAPI = {
    * Create a new campaign
    */
   async create(campaign: Omit<EmailCampaign, 'id' | 'created_at' | 'updated_at'>): Promise<EmailCampaign> {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
 
     const campaignData: Partial<EmailCampaign> = {
       ...campaign,
@@ -162,7 +162,7 @@ export const emailCampaignsAPI = {
       bounce_rate: 0,
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_campaigns')
       .insert(campaignData)
       .select()
@@ -176,7 +176,7 @@ export const emailCampaignsAPI = {
    * Update campaign
    */
   async update(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_campaigns')
       .update(updates)
       .eq('id', id)
@@ -191,7 +191,7 @@ export const emailCampaignsAPI = {
    * Delete campaign
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_campaigns')
       .delete()
       .eq('id', id)
@@ -213,7 +213,7 @@ export const emailCampaignsAPI = {
    * Get campaign recipients
    */
   async getRecipients(campaignId: string): Promise<CampaignRecipient[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_campaign_recipients')
       .select('*')
       .eq('campaign_id', campaignId)
@@ -238,7 +238,7 @@ export const emailCampaignsAPI = {
     click_rate: number
     bounce_rate: number
   }> {
-    const { error } = await supabase.rpc('update_campaign_stats', {
+    const { error } = await db.rpc('update_campaign_stats', {
       p_campaign_id: campaignId
     })
 
@@ -271,7 +271,7 @@ export const emailSubscribersAPI = {
     tags?: string[]
     limit?: number
   }): Promise<EmailSubscriber[]> {
-    let query = supabase
+    let query = db
       .from('email_subscribers')
       .select('*')
       .order('created_at', { ascending: false })
@@ -298,7 +298,7 @@ export const emailSubscribersAPI = {
    * Get subscriber by email
    */
   async getByEmail(email: string): Promise<EmailSubscriber | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .select('*')
       .eq('email', email.toLowerCase())
@@ -335,7 +335,7 @@ export const emailSubscribersAPI = {
       status: 'subscribed',
     }
 
-    const { data: result, error } = await supabase
+    const { data: result, error } = await db
       .from('email_subscribers')
       .upsert(subscriberData, {
         onConflict: 'email',
@@ -352,7 +352,7 @@ export const emailSubscribersAPI = {
    * Unsubscribe email
    */
   async unsubscribe(email: string, reason?: string): Promise<EmailSubscriber> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .update({
         status: 'unsubscribed',
@@ -371,7 +371,7 @@ export const emailSubscribersAPI = {
    * Update subscriber
    */
   async update(id: string, updates: Partial<EmailSubscriber>): Promise<EmailSubscriber> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .update(updates)
       .eq('id', id)
@@ -386,7 +386,7 @@ export const emailSubscribersAPI = {
    * Delete subscriber
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_subscribers')
       .delete()
       .eq('id', id)
@@ -442,7 +442,7 @@ export const emailSubscribersAPI = {
    * Get subscriber count by segment
    */
   async getCountBySegment(tags?: string[], status: SubscriberStatus = 'subscribed'): Promise<number> {
-    const { data, error } = await supabase.rpc('get_subscriber_count_by_segment', {
+    const { data, error } = await db.rpc('get_subscriber_count_by_segment', {
       p_tags: tags || null,
       p_status: status,
     })
@@ -459,7 +459,7 @@ export const emailSubscribersAPI = {
     status: SubscriberStatus = 'subscribed',
     limit: number = 1000
   ): Promise<EmailSubscriber[]> {
-    const { data, error } = await supabase.rpc('get_subscribers_for_segment', {
+    const { data, error } = await db.rpc('get_subscribers_for_segment', {
       p_tags: tags || null,
       p_status: status,
       p_limit: limit,
@@ -480,11 +480,11 @@ export const emailSubscribersAPI = {
     complained: number
   }> {
     const [total, subscribed, unsubscribed, bounced, complained] = await Promise.all([
-      supabase.from('email_subscribers').select('id', { count: 'exact', head: true }),
-      supabase.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'subscribed'),
-      supabase.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed'),
-      supabase.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'bounced'),
-      supabase.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'complained'),
+      db.from('email_subscribers').select('id', { count: 'exact', head: true }),
+      db.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'subscribed'),
+      db.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed'),
+      db.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'bounced'),
+      db.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('status', 'complained'),
     ])
 
     return {

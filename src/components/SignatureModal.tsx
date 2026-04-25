@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { X, QrCode, Smartphone } from 'lucide-react'
 import { SignaturePad } from './SignaturePad'
 import { SignatureSuccessAnimation } from './SignatureSuccessAnimation'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 
 interface SignatureModalProps {
   isOpen: boolean
@@ -87,7 +87,7 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
       const checkForSignature = async () => {
         // First, check Supabase for cross-device signatures
         try {
-          const { data: supabaseSignature, error } = await supabase
+          const { data: supabaseSignature, error } = await db
             .from('temporary_signatures')
             .select('*')
             .eq('session_id', signatureSessionId)
@@ -100,7 +100,7 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
           if (!error && supabaseSignature) {
             console.log('Signature found in Supabase:', signatureSessionId)
             // Mark as consumed
-            const { error: updateError } = await supabase
+            const { error: updateError } = await db
               .from('temporary_signatures')
               .update({ 
                 is_consumed: true,

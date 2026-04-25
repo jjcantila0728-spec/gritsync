@@ -1,12 +1,12 @@
-import { supabase } from './api-client'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { db } from './api-client'
+import type { RealtimeChannel } from '@db/db-js'
 
 // Realtime subscription helpers
 export function subscribeToNotifications(
   userId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`notifications:${userId}`)
     .on(
       'postgres_changes',
@@ -25,7 +25,7 @@ export function subscribeToApplicationUpdates(
   applicationId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`application:${applicationId}`)
     .on(
       'postgres_changes',
@@ -44,7 +44,7 @@ export function subscribeToUserApplications(
   userId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`user_applications:${userId}`)
     .on(
       'postgres_changes',
@@ -63,7 +63,7 @@ export function subscribeToQuotations(
   userId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`quotations:${userId}`)
     .on(
       'postgres_changes',
@@ -82,7 +82,7 @@ export function subscribeToQuotations(
 export function subscribeToAllApplications(
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel('all_applications')
     .on(
       'postgres_changes',
@@ -100,7 +100,7 @@ export function subscribeToAllApplications(
 export function subscribeToAllQuotations(
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel('all_quotations')
     .on(
       'postgres_changes',
@@ -118,7 +118,7 @@ export function subscribeToAllQuotations(
 export function subscribeToPendingApprovalPayments(
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel('pending_approval_payments')
     .on(
       'postgres_changes',
@@ -137,7 +137,7 @@ export function subscribeToPendingApprovalPayments(
 export function subscribeToAllClients(
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel('all_clients')
     .on(
       'postgres_changes',
@@ -161,7 +161,7 @@ export function subscribeToCompilationJob(
     old?: any
   }) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`compilation_job:${jobId}`)
     .on(
       'postgres_changes',
@@ -187,7 +187,7 @@ export function subscribeToApplicationTimelineSteps(
   applicationId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`timeline_steps:${applicationId}`)
     .on(
       'postgres_changes',
@@ -207,7 +207,7 @@ export function subscribeToApplicationPayments(
   applicationId: string,
   callback: (payload: any) => void
 ): RealtimeChannel {
-  return supabase
+  return db
     .channel(`application_payments:${applicationId}`)
     .on(
       'postgres_changes',
@@ -223,6 +223,6 @@ export function subscribeToApplicationPayments(
 }
 
 export function unsubscribe(channel: RealtimeChannel) {
-  supabase.removeChannel(channel)
+  db.removeChannel(channel)
 }
 

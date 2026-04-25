@@ -304,7 +304,7 @@ export async function checkAndSendDocumentReminders(
 ): Promise<void> {
   try {
     // Get user's applications with missing documents
-    const { data: applications, error } = await supabase
+    const { data: applications, error } = await db
       .from('applications')
       .select(`
         id,
@@ -361,7 +361,7 @@ export async function checkAndSendDetailsReminders(
 ): Promise<void> {
   try {
     // Get user details
-    const { data: user, error: userError } = await supabase
+    const { data: user, error: userError } = await db
       .from('users')
       .select('*')
       .eq('id', userId)
@@ -370,7 +370,7 @@ export async function checkAndSendDetailsReminders(
     if (userError) throw userError
 
     // Get user_details
-    const { data: details, error: detailsError } = await supabase
+    const { data: details, error: detailsError } = await db
       .from('user_details')
       .select('*')
       .eq('user_id', userId)

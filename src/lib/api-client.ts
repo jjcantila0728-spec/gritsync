@@ -1,5 +1,5 @@
-// Replit backend API client — drop-in replacement for @supabase/supabase-js
-// All existing code that uses `supabase` will work without changes
+// Replit backend API client — custom DB client that talks to the Express API server
+// Exports `db` — a chainable query builder that mimics the Supabase JS SDK interface
 
 const API_BASE = '/api'
 
@@ -49,7 +49,7 @@ async function apiRequest(path: string, options: RequestInit = {}): Promise<{ da
     const body = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      return { data: null, error: { message: body.error || `HTTP ${res.status}`, status: res.status, code: res.status } }
+      return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}`, status: res.status, code: res.status } }
     }
     return { data: body, error: null }
   } catch (err: any) {
@@ -57,7 +57,7 @@ async function apiRequest(path: string, options: RequestInit = {}): Promise<{ da
   }
 }
 
-// Query builder — mimics supabase's chainable interface
+// Query builder — chainable interface for DB queries
 class QueryBuilder {
   private table: string
   private _select: string = '*'
@@ -204,7 +204,7 @@ class MutationBuilder {
         method: 'POST', headers, body: JSON.stringify(payload)
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) return { data: null, error: { message: body.error || `HTTP ${res.status}` } }
+      if (!res.ok) return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
       const d = body.data
       return { data: this._single && Array.isArray(d) ? d[0] : d, error: null }
     }
@@ -215,7 +215,7 @@ class MutationBuilder {
         body: JSON.stringify({ ...this.payload, _filters: this._filters, _returning: this._returning })
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) return { data: null, error: { message: body.error || `HTTP ${res.status}` } }
+      if (!res.ok) return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
       return { data: body.data, error: null }
     }
 
@@ -224,7 +224,7 @@ class MutationBuilder {
         method: 'DELETE', headers, body: JSON.stringify(this._filters)
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) return { data: null, error: { message: body.error || `HTTP ${res.status}` } }
+      if (!res.ok) return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
       return { data: body.data, error: null }
     }
 
@@ -232,8 +232,8 @@ class MutationBuilder {
   }
 }
 
-// The main supabase-compatible client
-export const supabase = {
+// The main DB client
+export const db = {
   from(table: string) {
     return {
       select: (cols = '*') => new QueryBuilder(table).select(cols),

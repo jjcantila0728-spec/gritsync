@@ -66,7 +66,7 @@ import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { getSignedFileUrl } from '@/lib/api-service'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 
@@ -696,7 +696,7 @@ export function AdminEmails() {
           
           // Try to get sender's full name and avatar from database
           try {
-            const { data: userData, error } = await supabase
+            const { data: userData, error } = await db
               .from('users')
               .select('id, first_name, middle_name, last_name, avatar_path')
               .eq('email', senderEmail)
@@ -817,7 +817,7 @@ export function AdminEmails() {
       
       if (receiverEmail) {
         try {
-          const { data: userData, error } = await supabase
+          const { data: userData, error } = await db
             .from('users')
             .select('id, first_name, middle_name, last_name, avatar_path')
             .eq('email', receiverEmail)

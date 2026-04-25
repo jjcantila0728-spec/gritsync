@@ -14,9 +14,9 @@ import { cn } from '@/lib/utils'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 import { userDetailsAPI, notificationsAPI } from '@/lib/api'
 import { getSignedFileUrl } from '@/lib/api-service'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { subscribeToNotifications, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 
 export function Header() {
   const { user, signOut, isAdmin } = useAuth()
@@ -321,7 +321,7 @@ export function Header() {
       
       ;(async () => {
         try {
-          const { data: userData, error } = await supabase
+          const { data: userData, error } = await db
             .from('users')
             .select('avatar_path, default_avatar_design')
             .eq('id', user.id)
@@ -460,7 +460,7 @@ export function Header() {
         })
       
       // Fetch GritSync email address
-      supabase
+      db
         .from('email_addresses')
         .select('email_address')
         .eq('user_id', user.id)

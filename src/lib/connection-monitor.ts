@@ -3,7 +3,7 @@
  * Tracks connection health and provides diagnostics
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface ConnectionHealth {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -45,7 +45,7 @@ export async function checkConnectionHealth(timeoutMs: number = 5000): Promise<C
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-    const { error } = await supabase
+    const { error } = await db
       .from('users')
       .select('id')
       .limit(1)

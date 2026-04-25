@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { subscribeToAllQuotations, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 
 interface QuoteLineItem {
   id: string

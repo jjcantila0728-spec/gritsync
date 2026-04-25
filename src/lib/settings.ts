@@ -3,7 +3,7 @@
  * Provides easy access to admin settings throughout the application
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 // Cache for settings to avoid repeated database queries
 let settingsCache: Record<string, string> | null = null
@@ -23,7 +23,7 @@ async function getAllSettings(): Promise<Record<string, string>> {
   }
   
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('settings')
       .select('*')
     

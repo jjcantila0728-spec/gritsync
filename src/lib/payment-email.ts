@@ -3,7 +3,7 @@
  * Sends payment receipt emails with PDF attachments
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 import { sendEmail } from './email-service'
 import { formatCurrency } from './utils'
 
@@ -68,7 +68,7 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
         : data.application.first_name || userName
     } else if (data.receipt.user_id) {
       // Fetch user from database
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await db
         .from('users')
         .select('email, full_name, first_name, last_name')
         .eq('id', data.receipt.user_id)
@@ -98,7 +98,7 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
 
     // Generate PDFs using edge function
     console.log('Generating PDFs via edge function...')
-    const { data: pdfData, error: pdfError } = await supabase.functions.invoke('generate-payment-pdfs', {
+    const { data: pdfData, error: pdfError } = await db.functions.invoke('generate-payment-pdfs', {
       body: {
         receipt: {
           receipt_number: data.receipt.receipt_number,

@@ -14,7 +14,7 @@ import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon
 import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import {
   formatMMDDYYYY,
   formatMMYYYY,
@@ -340,7 +340,7 @@ export function NCLEXApplication() {
         
         try {
           // Try fetching from email_addresses table first
-          const { data: emailData, error: emailError } = await supabase
+          const { data: emailData, error: emailError } = await db
             .from('email_addresses')
             .select('email_address, address_type, is_primary, is_active')
             .eq('user_id', user.id)
@@ -356,7 +356,7 @@ export function NCLEXApplication() {
             
             // Try using active_email_addresses view instead
             console.log('🔄 Trying active_email_addresses view...')
-            const { data: viewData, error: viewError } = await supabase
+            const { data: viewData, error: viewError } = await db
               .from('active_email_addresses')
               .select('email_address')
               .eq('user_id', user.id)
@@ -372,7 +372,7 @@ export function NCLEXApplication() {
             }
             
             // Try without .single() to see all results
-            const { data: allEmails, error: allError } = await supabase
+            const { data: allEmails, error: allError } = await db
               .from('email_addresses')
               .select('*')
               .eq('user_id', user.id)
@@ -567,7 +567,7 @@ export function NCLEXApplication() {
       let gritsyncEmail = ''
       if (user?.id) {
         try {
-          const { data: emailData, error: emailError } = await supabase
+          const { data: emailData, error: emailError } = await db
             .from('email_addresses')
             .select('email_address')
             .eq('user_id', user.id)

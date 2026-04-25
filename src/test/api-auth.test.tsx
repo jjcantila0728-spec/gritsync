@@ -16,7 +16,7 @@ vi.mock('@/lib/api-client', () => {
   const mockFrom = vi.fn()
 
   return {
-    supabase: {
+    db: {
       auth: {
         signUp: mockSignUp,
         signInWithPassword: mockSignIn,
@@ -35,11 +35,11 @@ vi.mock('@/lib/api-client', () => {
 import * as supabaseModule from '@/lib/api-client'
 
 // Get references to mocked functions
-const mockSignUp = (supabaseModule.supabase.auth.signUp as any)
-const mockSignIn = (supabaseModule.supabase.auth.signInWithPassword as any)
-const mockGetSession = (supabaseModule.supabase.auth.getSession as any)
-const mockOnAuthStateChange = (supabaseModule.supabase.auth.onAuthStateChange as any)
-const mockFrom = (supabaseModule.supabase.from as any)
+const mockSignUp = (supabaseModule.db.auth.signUp as any)
+const mockSignIn = (supabaseModule.db.auth.signInWithPassword as any)
+const mockGetSession = (supabaseModule.db.auth.getSession as any)
+const mockOnAuthStateChange = (supabaseModule.db.auth.onAuthStateChange as any)
+const mockFrom = (supabaseModule.db.from as any)
 
 // Mock toast
 vi.mock('@/components/ui/Toast', () => ({

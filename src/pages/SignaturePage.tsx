@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { SignaturePad } from '@/components/SignaturePad'
 import { SignatureSuccessAnimation } from '@/components/SignatureSuccessAnimation'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 
 export function SignaturePage() {
   const [searchParams] = useSearchParams()
@@ -49,7 +49,7 @@ export function SignaturePage() {
     
     try {
       // Store signature in Supabase for cross-device access
-      const { error: supabaseError } = await supabase
+      const { error: supabaseError } = await db
         .from('temporary_signatures')
         .insert({
           session_id: sessionId,

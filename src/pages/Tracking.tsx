@@ -18,7 +18,7 @@ import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/componen
 import { Eye, FileText, Search, CheckCircle, XCircle, Clock, Loader2, RefreshCw, Image as ImageIcon, Shield, MapPin, ExternalLink, Download, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { subscribeToUserApplications, subscribeToAllApplications, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { useDebounce } from '@/hooks/useDebounce'
 
 interface Application {

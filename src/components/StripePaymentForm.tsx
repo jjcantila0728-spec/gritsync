@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/utils'
 import { adminAPI } from '@/lib/api'
 import { paymentSettings } from '@/lib/settings'
 import { useToast } from '@/components/ui/Toast'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { CreditCard, Loader2, Building2, Upload, X, Tag, Image as ImageIcon, FileText, CheckCircle } from 'lucide-react'
 
 type PaymentMethod = 'card' | 'mobile_banking'
@@ -180,7 +180,7 @@ export function StripePaymentForm({
     setValidatingPromo(true)
     try {
       // Pass service fee amount and application type to ensure discount only applies to GritSync service fee
-      const { data, error } = await supabase.rpc('validate_promo_code', {
+      const { data, error } = await db.rpc('validate_promo_code', {
         p_code: promoCode.toUpperCase(),
         p_amount: amount,
         p_service_fee_amount: serviceFeeAmount || null,

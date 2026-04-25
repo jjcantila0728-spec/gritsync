@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { User, UserRole } from '@/lib/types'
-import type { Session } from '@supabase/supabase-js'
+import type { Session } from '@db/db-js'
 
 interface AuthContextType {
   user: User | null
@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // SIMPLE: Get session and load user immediately
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    db.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         console.error('Error getting session:', error)
         setLoading(false)
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = db.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) {
         loadUserProfile()
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function loadUserProfile() {
     try {
       // SIMPLE: Just use auth metadata - no database queries, instant loading
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const { data: { user: authUser } } = await db.auth.getUser()
       
       if (authUser) {
         // Extract role from auth metadata
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await db.auth.signInWithPassword({
       email,
       password,
     })
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client') {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await db.auth.signUp({
       email: '',
       password,
       options: {
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore if import fails
     }
     
-    const { error } = await supabase.auth.signOut()
+    const { error } = await db.auth.signOut()
     if (error) {
       throw new Error(error.message)
     }
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function requestPasswordReset(email: string) {
     try {
       // Get user info first to get their name
-      const { data: userData } = await supabase
+      const { data: userData } = await db
         .from('users')
         .select('id, first_name, last_name, email')
         .eq('email', email)
@@ -200,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function resetPassword(_token: string, newPassword: string) {
     // Supabase handles password reset through email links
     // This function is kept for compatibility but may need adjustment
-    const { error } = await supabase.auth.updateUser({
+    const { error } = await db.auth.updateUser({
       password: newPassword,
     })
 
@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Verify current password
-    const { error: verifyError } = await supabase.auth.signInWithPassword({
+    const { error: verifyError } = await db.auth.signInWithPassword({
       email: session.user.email,
       password: currentPassword,
     })
@@ -226,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Update password
-    const { error } = await supabase.auth.updateUser({
+    const { error } = await db.auth.updateUser({
       password: newPassword,
     })
 

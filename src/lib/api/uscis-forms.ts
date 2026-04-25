@@ -1,4 +1,4 @@
-import { supabase } from '../api-client'
+import { db } from '../api-client'
 
 export interface USCISFormData {
   // Personal Information
@@ -65,14 +65,14 @@ export async function generateUSCISForm(
   data: USCISFormData
 ): Promise<Blob> {
   try {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session } } = await db.auth.getSession()
     
     if (!session) {
       throw new Error('Authentication required')
     }
 
     // Call the AI-powered fill-pdf-form edge function
-    const response = await supabase.functions.invoke('fill-pdf-form-ai', {
+    const response = await db.functions.invoke('fill-pdf-form-ai', {
       body: {
         formType,
         data
@@ -139,7 +139,7 @@ export async function uploadGeneratedForm(
   try {
     const filePath = `${userId}/uscis-forms/${fileName}`
     
-    const { data, error } = await supabase.storage
+    const { data, error } = await db.storage
       .from('documents')
       .upload(filePath, blob, {
         contentType: 'application/pdf',
@@ -164,7 +164,7 @@ export async function getFormDataFromApplication(
   applicationId: string
 ): Promise<USCISFormData> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('applications')
       .select(`
         *,

@@ -1,4 +1,4 @@
-import { supabase } from './api-client';
+import { db } from './api-client';
 import { getCurrentUserId } from './api-service';
 
 export interface EmailSignature {
@@ -62,7 +62,7 @@ export interface BusinessLogo {
 // ============ Email Signatures API ============
 
 export async function getAllSignatures(): Promise<EmailSignature[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_signatures')
     .select('*')
     .order('created_at', { ascending: false });
@@ -82,7 +82,7 @@ export async function getAllSignatures(): Promise<EmailSignature[]> {
 export async function getUserSignatures(userId?: string): Promise<EmailSignature[]> {
   const uid = userId || await getCurrentUserId();
   
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_signatures')
     .select('*')
     .or(`user_id.eq.${uid},signature_type.eq.company`)
@@ -105,7 +105,7 @@ export async function getUserSignatures(userId?: string): Promise<EmailSignature
 export async function getDefaultSignature(userId?: string): Promise<EmailSignature | null> {
   const uid = userId || await getCurrentUserId();
   
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_signatures')
     .select('*')
     .or(`user_id.eq.${uid},signature_type.eq.company`)
@@ -125,7 +125,7 @@ export async function getDefaultSignature(userId?: string): Promise<EmailSignatu
 }
 
 export async function getSignatureById(id: string): Promise<EmailSignature | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_signatures')
     .select('*')
     .eq('id', id)
@@ -142,7 +142,7 @@ export async function getSignatureById(id: string): Promise<EmailSignature | nul
 export async function createSignature(signature: Partial<EmailSignature>): Promise<EmailSignature> {
   const userId = signature.user_id || await getCurrentUserId();
   
-  const { data, error} = await supabase
+  const { data, error} = await db
     .from('email_signatures')
     .insert({
       ...signature,
@@ -160,7 +160,7 @@ export async function createSignature(signature: Partial<EmailSignature>): Promi
 }
 
 export async function updateSignature(id: string, updates: Partial<EmailSignature>): Promise<EmailSignature> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_signatures')
     .update(updates)
     .eq('id', id)
@@ -176,7 +176,7 @@ export async function updateSignature(id: string, updates: Partial<EmailSignatur
 }
 
 export async function deleteSignature(id: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('email_signatures')
     .delete()
     .eq('id', id);
@@ -191,13 +191,13 @@ export async function setDefaultSignature(id: string): Promise<void> {
   const userId = await getCurrentUserId();
 
   // First, unset all default signatures for this user
-  await supabase
+  await db
     .from('email_signatures')
     .update({ is_default: false })
     .eq('user_id', userId);
 
   // Then set the new default
-  const { error } = await supabase
+  const { error } = await db
     .from('email_signatures')
     .update({ is_default: true })
     .eq('id', id)
@@ -220,7 +220,7 @@ export async function generateSignatureHtml(params: {
   text_color?: string;
   link_color?: string;
 }): Promise<string> {
-  const { data, error } = await supabase.rpc('generate_signature_html', {
+  const { data, error } = await db.rpc('generate_signature_html', {
     p_full_name: params.full_name,
     p_job_title: params.job_title,
     p_company_name: params.company_name,
@@ -243,7 +243,7 @@ export async function generateSignatureHtml(params: {
 // ============ Business Logos API ============
 
 export async function getAllLogos(): Promise<BusinessLogo[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('business_logos')
     .select('*')
     .eq('is_active', true)
@@ -262,7 +262,7 @@ export async function getAllLogos(): Promise<BusinessLogo[]> {
 }
 
 export async function getLogosByType(logoType: BusinessLogo['logo_type']): Promise<BusinessLogo[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('business_logos')
     .select('*')
     .eq('logo_type', logoType)
@@ -283,7 +283,7 @@ export async function getLogosByType(logoType: BusinessLogo['logo_type']): Promi
 }
 
 export async function getDefaultLogo(logoType: BusinessLogo['logo_type']): Promise<BusinessLogo | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('business_logos')
     .select('*')
     .eq('logo_type', logoType)
@@ -311,7 +311,7 @@ export async function uploadLogo(
   const filePath = `${logoType}/${fileName}`;
 
   // Upload file to storage
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await db.storage
     .from('email-logos')
     .upload(filePath, file, {
       cacheControl: '3600',
@@ -328,7 +328,7 @@ export async function uploadLogo(
   }
 
   // Get public URL
-  const { data: urlData } = supabase.storage
+  const { data: urlData } = db.storage
     .from('email-logos')
     .getPublicUrl(filePath);
 
@@ -358,7 +358,7 @@ export async function uploadLogo(
   }
 
   // Insert logo record
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('business_logos')
     .insert({
       file_name: file.name,
@@ -385,7 +385,7 @@ export async function uploadLogo(
 
 export async function deleteLogo(id: string): Promise<void> {
   // Get logo details
-  const { data: logo } = await supabase
+  const { data: logo } = await db
     .from('business_logos')
     .select('storage_path')
     .eq('id', id)
@@ -393,13 +393,13 @@ export async function deleteLogo(id: string): Promise<void> {
 
   if (logo?.storage_path) {
     // Delete from storage
-    await supabase.storage
+    await db.storage
       .from('email-logos')
       .remove([logo.storage_path]);
   }
 
   // Delete record
-  const { error } = await supabase
+  const { error } = await db
     .from('business_logos')
     .delete()
     .eq('id', id);
@@ -412,13 +412,13 @@ export async function deleteLogo(id: string): Promise<void> {
 
 export async function setDefaultLogo(id: string, logoType: BusinessLogo['logo_type']): Promise<void> {
   // First, unset all default logos for this type
-  await supabase
+  await db
     .from('business_logos')
     .update({ is_default: false })
     .eq('logo_type', logoType);
 
   // Then set the new default
-  const { error } = await supabase
+  const { error } = await db
     .from('business_logos')
     .update({ is_default: true })
     .eq('id', id);
@@ -430,7 +430,7 @@ export async function setDefaultLogo(id: string, logoType: BusinessLogo['logo_ty
 }
 
 export async function incrementLogoUsage(id: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_logo_usage', {
+  const { error } = await db.rpc('increment_logo_usage', {
     p_logo_id: id,
   });
 

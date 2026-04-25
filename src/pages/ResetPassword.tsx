@@ -33,8 +33,8 @@ export function ResetPassword() {
     // Check if Supabase has authenticated the user via the reset link
     // If not, show error after a short delay
     const checkSession = async () => {
-      const { supabase } = await import('@/lib/api-client')
-      const { data: { session } } = await supabase.auth.getSession()
+      const { db } = await import('@/lib/api-client')
+      const { data: { session } } = await db.auth.getSession()
       if (!session && !isPasswordResetFlow) {
         showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
         setTimeout(() => navigate('/forgot-password'), 3000)

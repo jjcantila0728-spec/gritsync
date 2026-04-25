@@ -1,4 +1,4 @@
-import { supabase } from './api-client';
+import { db } from './api-client';
 import { getCurrentUserId } from './api-service';
 
 export interface EmailTemplate {
@@ -45,7 +45,7 @@ export interface RenderTemplateResult {
 
 // Get all active templates
 export async function getAllActiveTemplates(): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('*')
     .eq('is_active', true)
@@ -62,7 +62,7 @@ export async function getAllActiveTemplates(): Promise<EmailTemplate[]> {
 
 // Get all templates (admin only)
 export async function getAllTemplates(): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('*')
     .order('created_at', { ascending: false });
@@ -77,7 +77,7 @@ export async function getAllTemplates(): Promise<EmailTemplate[]> {
 
 // Get templates by category
 export async function getTemplatesByCategory(category: EmailTemplate['category']): Promise<EmailTemplate[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('*')
     .eq('category', category)
@@ -94,7 +94,7 @@ export async function getTemplatesByCategory(category: EmailTemplate['category']
 
 // Get template by ID
 export async function getTemplateById(templateId: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('*')
     .eq('id', templateId)
@@ -110,7 +110,7 @@ export async function getTemplateById(templateId: string): Promise<EmailTemplate
 
 // Get template by slug
 export async function getTemplateBySlug(slug: string): Promise<EmailTemplate | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('*')
     .eq('slug', slug)
@@ -128,7 +128,7 @@ export async function getTemplateBySlug(slug: string): Promise<EmailTemplate | n
 export async function createTemplate(template: Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at' | 'usage_count' | 'last_used_at'>): Promise<EmailTemplate> {
   const userId = await getCurrentUserId();
   
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .insert({
       ...template,
@@ -150,7 +150,7 @@ export async function createTemplate(template: Omit<EmailTemplate, 'id' | 'creat
 export async function updateTemplate(templateId: string, updates: Partial<EmailTemplate>): Promise<EmailTemplate> {
   const userId = await getCurrentUserId();
   
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .update({
       ...updates,
@@ -170,7 +170,7 @@ export async function updateTemplate(templateId: string, updates: Partial<EmailT
 
 // Delete template (soft delete by deactivating)
 export async function deactivateTemplate(templateId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('email_templates')
     .update({ is_active: false })
     .eq('id', templateId);
@@ -183,7 +183,7 @@ export async function deactivateTemplate(templateId: string): Promise<void> {
 
 // Hard delete template (admin only, for user-created templates)
 export async function deleteTemplate(templateId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('email_templates')
     .delete()
     .eq('id', templateId);
@@ -229,7 +229,7 @@ export function renderTemplate(template: EmailTemplate, variables: Record<string
 
 // Render template with variables (server-side via database function)
 export async function renderTemplateOnServer(params: RenderTemplateParams): Promise<RenderTemplateResult> {
-  const { data, error } = await supabase.rpc('render_email_template', {
+  const { data, error } = await db.rpc('render_email_template', {
     p_template_id: params.templateId,
     p_variables: params.variables,
   });
@@ -244,7 +244,7 @@ export async function renderTemplateOnServer(params: RenderTemplateParams): Prom
 
 // Increment template usage
 export async function incrementTemplateUsage(templateId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_template_usage', {
+  const { error } = await db.rpc('increment_template_usage', {
     p_template_id: templateId,
   });
 
@@ -286,7 +286,7 @@ export async function cloneTemplate(templateId: string, newName?: string): Promi
 
 // Get template statistics
 export async function getTemplateStats() {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('email_templates')
     .select('category, template_type, is_active, usage_count');
 

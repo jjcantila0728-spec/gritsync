@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { Upload, Download, CheckCircle, XCircle, AlertCircle, FileText } from 'lucide-react'
 
 export function TestProofOfPaymentUpload() {
@@ -111,7 +111,7 @@ export function TestProofOfPaymentUpload() {
       
       addTestResult('Blob Creation', 'success', `Blob type: ${blob.type}, Size: ${blob.size}`)
       
-      const { data: uploadData1, error: uploadError1 } = await supabase.storage
+      const { data: uploadData1, error: uploadError1 } = await db.storage
         .from('documents')
         .upload(filePath, blob, {
           cacheControl: '3600',
@@ -129,7 +129,7 @@ export function TestProofOfPaymentUpload() {
         const blob = new Blob([await selectedFile.arrayBuffer()], { type: selectedFile.type })
         const filePath2 = `test-uploads/blob_${Date.now()}.${fileExt}`
         
-        const { data: uploadData2, error: uploadError2 } = await supabase.storage
+        const { data: uploadData2, error: uploadError2 } = await db.storage
           .from('documents')
           .upload(filePath2, blob, {
             cacheControl: '3600',
@@ -151,7 +151,7 @@ export function TestProofOfPaymentUpload() {
       // Test 7: Verify file exists in storage
       const pathToCheck = uploadedFilePath || filePath
       if (pathToCheck) {
-        const { data: fileList, error: listError } = await supabase.storage
+        const { data: fileList, error: listError } = await db.storage
           .from('documents')
           .list('test-uploads')
 
@@ -163,7 +163,7 @@ export function TestProofOfPaymentUpload() {
         }
 
         // Test 8: Get public URL
-        const { data: publicUrlData } = supabase.storage
+        const { data: publicUrlData } = db.storage
           .from('documents')
           .getPublicUrl(pathToCheck)
 
@@ -172,7 +172,7 @@ export function TestProofOfPaymentUpload() {
         }
 
         // Test 9: Get signed URL
-        const { data: signedUrlData, error: signedError } = await supabase.storage
+        const { data: signedUrlData, error: signedError } = await db.storage
           .from('documents')
           .createSignedUrl(pathToCheck, 3600)
 
@@ -256,13 +256,13 @@ export function TestProofOfPaymentUpload() {
 
   async function cleanupTestFiles() {
     try {
-      const { data: fileList } = await supabase.storage
+      const { data: fileList } = await db.storage
         .from('documents')
         .list('test-uploads')
 
       if (fileList && fileList.length > 0) {
         const filePaths = fileList.map(f => `test-uploads/${f.name}`)
-        await supabase.storage
+        await db.storage
           .from('documents')
           .remove(filePaths)
         

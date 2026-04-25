@@ -3,7 +3,7 @@
  * Handles email logs, analytics, and admin email operations
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 import { getCurrentUserId } from './api-service'
 
 export interface EmailLog {
@@ -123,7 +123,7 @@ export const emailLogsAPI = {
 
     const effectivePageSize = limit || pageSize || 50
 
-    let query = supabase
+    let query = db
       .from('email_logs')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
@@ -182,7 +182,7 @@ export const emailLogsAPI = {
    * Get a single email log by ID
    */
   getById: async (id: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .select('*')
       .eq('id', id)
@@ -200,7 +200,7 @@ export const emailLogsAPI = {
    * Get email logs for a specific user
    */
   getByUserId: async (userId: string, limit: number = 50) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .select('*')
       .eq('recipient_user_id', userId)
@@ -219,7 +219,7 @@ export const emailLogsAPI = {
    * Get email logs for a specific application
    */
   getByApplicationId: async (applicationId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .select('*')
       .eq('application_id', applicationId)
@@ -243,7 +243,7 @@ export const emailLogsAPI = {
   }) => {
     const { startDate, endDate, emailType } = options || {}
 
-    let query = supabase
+    let query = db
       .from('email_logs')
       .select('status, created_at, sent_at')
 
@@ -308,7 +308,7 @@ export const emailLogsAPI = {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_analytics')
       .select('*')
       .gte('date', startDate.toISOString().split('T')[0])
@@ -326,7 +326,7 @@ export const emailLogsAPI = {
    * Refresh analytics materialized view
    */
   refreshAnalytics: async () => {
-    const { error } = await supabase.rpc('refresh_email_analytics')
+    const { error } = await db.rpc('refresh_email_analytics')
 
     if (error) {
       console.error('Error refreshing email analytics:', error)
@@ -340,7 +340,7 @@ export const emailLogsAPI = {
    * Create an email log entry
    */
   create: async (logData: Partial<EmailLog>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .insert(logData)
       .select()
@@ -358,7 +358,7 @@ export const emailLogsAPI = {
    * Update an email log (e.g., update status after delivery)
    */
   update: async (id: string, updates: Partial<EmailLog>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .update(updates)
       .eq('id', id)
@@ -377,7 +377,7 @@ export const emailLogsAPI = {
    * Delete email logs (admin only)
    */
   delete: async (id: string) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_logs')
       .delete()
       .eq('id', id)
@@ -394,7 +394,7 @@ export const emailLogsAPI = {
    * Bulk delete email logs
    */
   bulkDelete: async (ids: string[]) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_logs')
       .delete()
       .in('id', ids)
@@ -411,7 +411,7 @@ export const emailLogsAPI = {
    * Get email count by status
    */
   getCountByStatus: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .select('status')
 
@@ -432,7 +432,7 @@ export const emailLogsAPI = {
    * Get recent failed emails
    */
   getRecentFailed: async (limit: number = 20) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_logs')
       .select('*')
       .eq('status', 'failed')
@@ -514,7 +514,7 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
   try {
     // Get current user for sender info (using cached helper to minimize auth calls)
     const userId = await getCurrentUserId()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
     
     // Get email config
     const { generalSettings } = await import('./settings')

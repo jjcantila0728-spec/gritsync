@@ -3,7 +3,7 @@
  * Handles sending emails with templates and proper formatting
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 import { generalSettings } from './settings'
 import * as EmailTemplates from './email-templates'
 import { getCurrentUserId } from './api-service'
@@ -52,7 +52,7 @@ async function getEmailConfig() {
   const supportEmail = await generalSettings.getSupportEmail()
   
   // Get email settings from database
-  const { data: emailSettings, error } = await supabase
+  const { data: emailSettings, error } = await db
     .from('settings')
     .select('key, value')
     .in('key', ['emailFrom', 'emailFromName', 'emailServiceProvider', 'resendApiKey'])
@@ -267,7 +267,7 @@ export async function sendEmail(options: EmailOptions & {
     let user: any = null
     try {
       await getCurrentUserId() // Just to check if session exists
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      const { data: { user: currentUser } } = await db.auth.getUser()
       user = currentUser
     } catch (error) {
       // No session - this is OK for password reset emails
@@ -315,7 +315,7 @@ export async function sendEmail(options: EmailOptions & {
     if (user || options.recipientUserId) {
       // Only log if we have a user session or recipient user ID (for system emails)
       try {
-        const { data: logData, error: logError } = await supabase
+        const { data: logData, error: logError } = await db
           .from('email_logs')
           .insert({
             recipient_email: options.to.trim(),
@@ -435,7 +435,7 @@ export async function sendEmail(options: EmailOptions & {
       console.error('Error sending email:', errorMessage)
 
       if (logId) {
-        await supabase
+        await db
           .from('email_logs')
           .update({
             status: 'failed',
@@ -451,7 +451,7 @@ export async function sendEmail(options: EmailOptions & {
     console.log('Email sent successfully:', data)
 
     if (logId) {
-      await supabase
+      await db
         .from('email_logs')
         .update({
           status: 'sent',
@@ -468,7 +468,7 @@ export async function sendEmail(options: EmailOptions & {
     
     // Update log with error
     if (logId) {
-      await supabase
+      await db
         .from('email_logs')
         .update({
           status: 'failed',
@@ -481,7 +481,7 @@ export async function sendEmail(options: EmailOptions & {
     // Check if it's a CORS error
     if (error?.message?.includes('CORS') || error?.message?.includes('Failed to send')) {
       console.error('CORS Error: The send-email Edge Function may need to be redeployed.')
-      console.error('To fix this, run: supabase functions deploy send-email')
+      console.error('To fix this, run: db functions deploy send-email')
     }
     
     return false

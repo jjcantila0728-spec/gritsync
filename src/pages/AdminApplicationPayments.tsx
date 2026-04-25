@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, adminAPI, servicesAPI } from '@/lib/api'
 import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/api-service'
 import { 

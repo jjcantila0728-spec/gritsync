@@ -3,7 +3,7 @@
  * Manages A/B tests for email campaigns
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface ABTestVariant {
   name: string
@@ -93,7 +93,7 @@ export const abTestingAPI = {
     campaign_id?: string
     limit?: number
   }): Promise<ABTest[]> {
-    let query = supabase
+    let query = db
       .from('email_ab_tests')
       .select('*')
       .order('created_at', { ascending: false })
@@ -120,7 +120,7 @@ export const abTestingAPI = {
    * Get A/B test by ID
    */
   async getById(id: string): Promise<ABTest | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_ab_tests')
       .select('*')
       .eq('id', id)
@@ -138,7 +138,7 @@ export const abTestingAPI = {
    * Create new A/B test
    */
   async create(test: Omit<ABTest, 'id' | 'created_at' | 'updated_at'>): Promise<ABTest> {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
 
     const testData = {
       ...test,
@@ -152,7 +152,7 @@ export const abTestingAPI = {
       metadata: test.metadata || {},
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_ab_tests')
       .insert(testData)
       .select()
@@ -166,7 +166,7 @@ export const abTestingAPI = {
    * Update A/B test
    */
   async update(id: string, updates: Partial<ABTest>): Promise<ABTest> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_ab_tests')
       .update(updates)
       .eq('id', id)
@@ -181,7 +181,7 @@ export const abTestingAPI = {
    * Delete A/B test
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_ab_tests')
       .delete()
       .eq('id', id)
@@ -222,7 +222,7 @@ export const abTestingAPI = {
    * Get A/B test results
    */
   async getResults(testId: string): Promise<ABTestResult[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_ab_test_results')
       .select('*')
       .eq('ab_test_id', testId)
@@ -236,7 +236,7 @@ export const abTestingAPI = {
    * Calculate metrics for a test
    */
   async calculateMetrics(testId: string): Promise<void> {
-    const { error } = await supabase.rpc('calculate_ab_test_metrics', {
+    const { error } = await db.rpc('calculate_ab_test_metrics', {
       test_id: testId,
     })
 
@@ -254,7 +254,7 @@ export const abTestingAPI = {
     engagement_score?: number
     error?: string
   }> {
-    const { data, error } = await supabase.rpc('determine_ab_test_winner', {
+    const { data, error } = await db.rpc('determine_ab_test_winner', {
       test_id: testId,
     })
 
@@ -266,7 +266,7 @@ export const abTestingAPI = {
    * Add recipient to test variant
    */
   async addRecipient(recipient: Omit<ABTestRecipient, 'id' | 'created_at'>): Promise<ABTestRecipient> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_ab_test_recipients')
       .insert({
         ...recipient,
@@ -283,7 +283,7 @@ export const abTestingAPI = {
    * Record email open
    */
   async recordOpen(recipientId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_ab_test_recipients')
       .update({ opened_at: new Date().toISOString() })
       .eq('id', recipientId)
@@ -295,7 +295,7 @@ export const abTestingAPI = {
    * Record email click
    */
   async recordClick(recipientId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_ab_test_recipients')
       .update({ clicked_at: new Date().toISOString() })
       .eq('id', recipientId)
@@ -307,7 +307,7 @@ export const abTestingAPI = {
    * Record conversion
    */
   async recordConversion(recipientId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_ab_test_recipients')
       .update({ converted_at: new Date().toISOString() })
       .eq('id', recipientId)
@@ -319,7 +319,7 @@ export const abTestingAPI = {
    * Get recipients for a test
    */
   async getRecipients(testId: string, variantName?: string): Promise<ABTestRecipient[]> {
-    let query = supabase
+    let query = db
       .from('email_ab_test_recipients')
       .select('*')
       .eq('ab_test_id', testId)
@@ -338,7 +338,7 @@ export const abTestingAPI = {
    * Get A/B testing statistics
    */
   async getStats(): Promise<ABTestStats> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('ab_test_stats')
       .select('*')
       .single()

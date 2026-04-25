@@ -15,7 +15,7 @@ vi.mock('@/lib/api-client', () => {
   const mockFrom = vi.fn()
 
   return {
-    supabase: {
+    db: {
       auth: {
         signUp: mockSignUp,
         signInWithPassword: mockSignIn,
@@ -58,14 +58,14 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('Registration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
       data: { session: null },
     })
-    ;(supabaseModule.supabase.auth.onAuthStateChange as any).mockReturnValue({
+    ;(supabaseModule.db.auth.onAuthStateChange as any).mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
     })
     // Set up default Supabase from mock with proper chain
-    ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+    ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
       if (table === 'users') {
         return {
           select: vi.fn().mockReturnThis(),
@@ -240,7 +240,7 @@ describe('Registration Tests', () => {
   describe('Successful Registration', () => {
     it('should successfully register with valid data', async () => {
       const user = userEvent.setup()
-      ;(supabaseModule.supabase.auth.signUp as any).mockResolvedValue({
+      ;(supabaseModule.db.auth.signUp as any).mockResolvedValue({
         data: {
           user: { id: 'user-123', email: 'john@example.com' },
           session: { user: { id: 'user-123' } },
@@ -258,7 +258,7 @@ describe('Registration Tests', () => {
         error: null,
       })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             update: vi.fn().mockReturnThis(),
@@ -295,7 +295,7 @@ describe('Registration Tests', () => {
       await user.click(submitButton)
 
       await waitFor(() => {
-        expect(supabaseModule.supabase.auth.signUp).toHaveBeenCalledWith({
+        expect(supabaseModule.db.auth.signUp).toHaveBeenCalledWith({
           email: 'john@example.com',
           password: 'password123',
           options: {
@@ -310,7 +310,7 @@ describe('Registration Tests', () => {
 
     it('should handle registration error', async () => {
       const user = userEvent.setup()
-      ;(supabaseModule.supabase.auth.signUp as any).mockResolvedValue({
+      ;(supabaseModule.db.auth.signUp as any).mockResolvedValue({
         data: { user: null, session: null },
         error: { message: 'User already exists' },
       })
@@ -400,14 +400,14 @@ describe('Registration Tests', () => {
 describe('Login Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
       data: { session: null },
     })
-    ;(supabaseModule.supabase.auth.onAuthStateChange as any).mockReturnValue({
+    ;(supabaseModule.db.auth.onAuthStateChange as any).mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
     })
     // Set up default Supabase from mock with proper chain
-    ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+    ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
       if (table === 'users') {
         return {
           select: vi.fn().mockReturnThis(),
@@ -493,7 +493,7 @@ describe('Login Tests', () => {
   describe('Successful Login', () => {
     it('should successfully login with valid credentials', async () => {
       const user = userEvent.setup()
-      ;(supabaseModule.supabase.auth.signInWithPassword as any).mockResolvedValue({
+      ;(supabaseModule.db.auth.signInWithPassword as any).mockResolvedValue({
         data: {
           user: { id: 'user-123', email: 'john@example.com' },
           session: { user: { id: 'user-123' } },
@@ -501,7 +501,7 @@ describe('Login Tests', () => {
         error: null,
       })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             select: vi.fn().mockReturnThis(),
@@ -536,7 +536,7 @@ describe('Login Tests', () => {
       await user.click(submitButton)
 
       await waitFor(() => {
-        expect(supabaseModule.supabase.auth.signInWithPassword).toHaveBeenCalledWith({
+        expect(supabaseModule.db.auth.signInWithPassword).toHaveBeenCalledWith({
           email: 'john@example.com',
           password: 'password123',
         }, { timeout: 3000 })
@@ -545,7 +545,7 @@ describe('Login Tests', () => {
 
     it('should handle login error with invalid credentials', async () => {
       const user = userEvent.setup()
-      ;(supabaseModule.supabase.auth.signInWithPassword as any).mockResolvedValue({
+      ;(supabaseModule.db.auth.signInWithPassword as any).mockResolvedValue({
         data: { user: null, session: null },
         error: { message: 'Invalid login credentials' },
       })

@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, AlertCircle, ArrowLeft, Users, Briefcase } from 'lucide-react'
 
@@ -76,7 +76,7 @@ export function Career() {
         setEmail(user.email || '')
         // Try to load user details from user_details table
         try {
-          const { data } = await supabase
+          const { data } = await db
             .from('user_details')
             .select('first_name, last_name, mobile_number, date_of_birth, country')
             .eq('user_id', user.id)
@@ -124,7 +124,7 @@ export function Career() {
       const fileName = `career_${type}_${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
-      const { error } = await supabase.storage
+      const { error } = await db.storage
         .from('documents')
         .upload(filePath, file, {
           cacheControl: '3600',

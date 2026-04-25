@@ -9,14 +9,14 @@ import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
 import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
 import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, userDocumentsAPI, getSignedFileUrl } from '@/lib/api'
 
@@ -150,7 +150,7 @@ export function AdminClients() {
         detailsResult = await userDetailsAPI.getByUserId(client.id)
       } catch {
         // Fallback: direct Supabase query
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('user_details')
           .select('*')
           .eq('user_id', client.id)
@@ -163,7 +163,7 @@ export function AdminClients() {
       
       // If still no data, try querying without maybeSingle to see if there are any rows
       if (!detailsResult) {
-        const { data: allRows } = await supabase
+        const { data: allRows } = await db
           .from('user_details')
           .select('*')
           .eq('user_id', client.id)
@@ -175,7 +175,7 @@ export function AdminClients() {
       
       // If still no data, try fetching from latest application as fallback
       if (!detailsResult) {
-        const { data: applications } = await supabase
+        const { data: applications } = await db
           .from('applications')
           .select('*')
           .eq('user_id', client.id)
@@ -275,7 +275,7 @@ export function AdminClients() {
         documents = await userDocumentsAPI.getByUserId(client.id) || []
       } catch {
         // Fallback: direct Supabase query
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('user_documents')
           .select('*')
           .eq('user_id', client.id)

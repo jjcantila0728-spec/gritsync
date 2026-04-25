@@ -7,8 +7,8 @@
  * Channels are not reused across components to prevent subscription conflicts.
  */
 
-import { supabase } from './api-client'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { db } from './api-client'
+import type { RealtimeChannel } from '@db/db-js'
 
 /**
  * Subscribe to multiple events on a single channel (optimized)
@@ -29,7 +29,7 @@ export function subscribeToMultipleEvents(
   }>
 ): RealtimeChannel {
   // Create a new channel instance (don't reuse - each component needs its own)
-  const channel = supabase.channel(channelName)
+  const channel = db.channel(channelName)
   
   // Add all subscriptions to the same channel
   // This reduces connection overhead by using one WebSocket connection
@@ -168,7 +168,7 @@ export function unsubscribe(channel: RealtimeChannel): void {
     // Unsubscribe from the channel
     channel.unsubscribe()
     // Remove the channel from Supabase client
-    supabase.removeChannel(channel)
+    db.removeChannel(channel)
     
     // Track channel unsubscription for monitoring
     try {

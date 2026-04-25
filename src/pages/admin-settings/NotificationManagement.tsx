@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Loading } from '@/components/ui/Loading'
 import { useToast } from '@/components/ui/Toast'
 import { Bell, Search, Filter, CheckCircle, Send, Calendar, User } from 'lucide-react'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { formatDate } from '@/lib/utils'
 import { sendNotificationEmail } from '@/lib/email-service'
 
@@ -49,7 +49,7 @@ export function NotificationManagement() {
       
       // Optimize: Use pagination and limit initial fetch
       // Fetch notifications with user information using optimized query
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('notifications')
         .select(`
           *,
@@ -82,7 +82,7 @@ export function NotificationManagement() {
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('notifications')
         .update({ read: true })
         .eq('id', id)

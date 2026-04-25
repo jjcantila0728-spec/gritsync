@@ -14,7 +14,7 @@ vi.mock('@/lib/api-client', () => {
   const mockFrom = vi.fn()
 
   return {
-    supabase: {
+    db: {
       auth: {
         signUp: mockSignUp,
         signInWithPassword: mockSignIn,
@@ -54,10 +54,10 @@ function TestComponent() {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
       data: { session: null },
     })
-    ;(supabaseModule.supabase.auth.onAuthStateChange as any).mockReturnValue({
+    ;(supabaseModule.db.auth.onAuthStateChange as any).mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
     })
   })
@@ -84,12 +84,12 @@ describe('AuthContext', () => {
     const user = { id: 'user-123', email: 'test@example.com' }
     const session = { user }
 
-    ;(supabaseModule.supabase.auth.signInWithPassword as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.signInWithPassword as any).mockResolvedValue({
       data: { user, session },
       error: null,
     })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             select: vi.fn().mockReturnThis(),
@@ -124,7 +124,7 @@ describe('AuthContext', () => {
     await userEvent.click(signInButton)
 
       await waitFor(() => {
-        expect(supabaseModule.supabase.auth.signInWithPassword).toHaveBeenCalledWith({
+        expect(supabaseModule.db.auth.signInWithPassword).toHaveBeenCalledWith({
           email: 'test@example.com',
           password: 'password',
         })
@@ -135,12 +135,12 @@ describe('AuthContext', () => {
     const user = { id: 'user-123', email: 'test@example.com' }
     const session = { user }
 
-    ;(supabaseModule.supabase.auth.signUp as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.signUp as any).mockResolvedValue({
       data: { user, session },
       error: null,
     })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             update: vi.fn().mockReturnThis(),
@@ -179,7 +179,7 @@ describe('AuthContext', () => {
     await userEvent.click(signUpButton)
 
       await waitFor(() => {
-        expect(supabaseModule.supabase.auth.signUp).toHaveBeenCalledWith({
+        expect(supabaseModule.db.auth.signUp).toHaveBeenCalledWith({
           email: 'test@example.com',
           password: 'password',
           options: {
@@ -193,7 +193,7 @@ describe('AuthContext', () => {
   })
 
   it('should handle sign out', async () => {
-    ;(supabaseModule.supabase.auth.signOut as any).mockResolvedValue({ error: null })
+    ;(supabaseModule.db.auth.signOut as any).mockResolvedValue({ error: null })
 
     render(
       <BrowserRouter>
@@ -211,7 +211,7 @@ describe('AuthContext', () => {
     await userEvent.click(signOutButton)
 
       await waitFor(() => {
-        expect(supabaseModule.supabase.auth.signOut).toHaveBeenCalled()
+        expect(supabaseModule.db.auth.signOut).toHaveBeenCalled()
       })
   })
 
@@ -219,11 +219,11 @@ describe('AuthContext', () => {
     const user = { id: 'admin-123', email: 'admin@example.com' }
     const session = { user }
 
-    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
       data: { session },
     })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             select: vi.fn().mockReturnThis(),
@@ -259,11 +259,11 @@ describe('AuthContext', () => {
     const user = { id: 'client-123', email: 'client@example.com' }
     const session = { user }
 
-    ;(supabaseModule.supabase.auth.getSession as any).mockResolvedValue({
+    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
       data: { session },
     })
 
-      ;(supabaseModule.supabase.from as any).mockImplementation((table: string) => {
+      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
         if (table === 'users') {
           return {
             select: vi.fn().mockReturnThis(),

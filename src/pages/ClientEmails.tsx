@@ -38,7 +38,7 @@ import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { receivedEmailsAPI, ReceivedEmail as DBReceivedEmail } from '@/lib/received-emails-api'
 import { emailAddressesAPI, EmailAddress } from '@/lib/email-addresses-api'
 import { userDetailsAPI } from '@/lib/api-service'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { getSignedFileUrl } from '@/lib/api-service'
 import { ComposeEmailModal } from '@/components/email/ComposeEmailModal'
 import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
@@ -400,7 +400,7 @@ export function ClientEmails() {
           
           // Try to get sender's full name and avatar from database
           try {
-            const { data: userData, error } = await supabase
+            const { data: userData, error } = await db
               .from('users')
               .select('id, first_name, middle_name, last_name, avatar_path')
               .eq('email', senderEmail)

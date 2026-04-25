@@ -3,7 +3,7 @@
  * Manages email subscribers for newsletters and marketing campaigns
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface EmailSubscriber {
   id?: string
@@ -63,7 +63,7 @@ export const subscribersAPI = {
    * Get all subscribers with optional filters
    */
   async getAll(filters?: SubscriberFilters): Promise<EmailSubscriber[]> {
-    let query = supabase
+    let query = db
       .from('email_subscribers')
       .select('*')
       .order('created_at', { ascending: false })
@@ -103,7 +103,7 @@ export const subscribersAPI = {
    * Get subscriber by ID
    */
   async getById(id: string): Promise<EmailSubscriber | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .select('*')
       .eq('id', id)
@@ -121,7 +121,7 @@ export const subscribersAPI = {
    * Get subscriber by email
    */
   async getByEmail(email: string): Promise<EmailSubscriber | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .select('*')
       .eq('email', email.toLowerCase())
@@ -139,7 +139,7 @@ export const subscribersAPI = {
    * Get subscriber by unsubscribe token
    */
   async getByToken(token: string): Promise<EmailSubscriber | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .select('*')
       .eq('unsubscribe_token', token)
@@ -192,7 +192,7 @@ export const subscribersAPI = {
       bounce_count: 0,
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .insert(subscriberData)
       .select()
@@ -206,7 +206,7 @@ export const subscribersAPI = {
    * Update subscriber
    */
   async update(id: string, updates: Partial<EmailSubscriber>): Promise<EmailSubscriber> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_subscribers')
       .update(updates)
       .eq('id', id)
@@ -221,7 +221,7 @@ export const subscribersAPI = {
    * Delete subscriber
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_subscribers')
       .delete()
       .eq('id', id)
@@ -349,7 +349,7 @@ export const subscribersAPI = {
    * Get subscriber statistics
    */
   async getStats(): Promise<SubscriberStats> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('subscriber_stats')
       .select('*')
       .single()
@@ -362,7 +362,7 @@ export const subscribersAPI = {
    * Unsubscribe by token (public function)
    */
   async unsubscribe(token: string, reason?: string): Promise<{ success: boolean; email?: string; error?: string }> {
-    const { data, error } = await supabase.rpc('unsubscribe_email', {
+    const { data, error } = await db.rpc('unsubscribe_email', {
       token_value: token,
       reason_text: reason,
     })
@@ -375,7 +375,7 @@ export const subscribersAPI = {
    * Resubscribe by token (public function)
    */
   async resubscribe(token: string): Promise<{ success: boolean; email?: string; error?: string }> {
-    const { data, error } = await supabase.rpc('resubscribe_email', {
+    const { data, error } = await db.rpc('resubscribe_email', {
       token_value: token,
     })
 
@@ -390,7 +390,7 @@ export const subscribersAPI = {
     token: string,
     preferences: Record<string, boolean>
   ): Promise<{ success: boolean; email?: string; error?: string }> {
-    const { data, error } = await supabase.rpc('update_email_preferences', {
+    const { data, error } = await db.rpc('update_email_preferences', {
       token_value: token,
       preferences: preferences,
     })
@@ -403,7 +403,7 @@ export const subscribersAPI = {
    * Increment email count
    */
   async incrementEmailCount(subscriberId: string): Promise<void> {
-    await supabase.rpc('increment', {
+    await db.rpc('increment', {
       table_name: 'email_subscribers',
       row_id: subscriberId,
       column_name: 'email_count',
@@ -414,7 +414,7 @@ export const subscribersAPI = {
    * Increment open count
    */
   async incrementOpenCount(subscriberId: string): Promise<void> {
-    await supabase.rpc('increment', {
+    await db.rpc('increment', {
       table_name: 'email_subscribers',
       row_id: subscriberId,
       column_name: 'open_count',
@@ -425,7 +425,7 @@ export const subscribersAPI = {
    * Increment click count
    */
   async incrementClickCount(subscriberId: string): Promise<void> {
-    await supabase.rpc('increment', {
+    await db.rpc('increment', {
       table_name: 'email_subscribers',
       row_id: subscriberId,
       column_name: 'click_count',

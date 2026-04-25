@@ -13,7 +13,7 @@ import { userDetailsAPI, notificationsAPI } from '@/lib/api'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark, getAvatarDesigns } from '@/lib/avatar'
 import { User, Mail, Calendar, Shield, Edit2, Save, X, FileText, MapPin, ArrowLeft, CheckCircle2, Building2, Award, Sparkles, School, Info, Camera, Upload, AlertCircle, Trash2, Palette } from 'lucide-react'
 import { getSignedFileUrl } from '@/lib/api-service'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { cn, getFullNameWithMiddle } from '@/lib/utils'
 import { Link, useNavigate } from 'react-router-dom'
 import { reminderSettings } from '@/lib/settings'
@@ -590,7 +590,7 @@ export function MyDetails() {
     try {
       // Fetch avatar and default design from users table (separate from 2x2 picture)
       try {
-        const { data: userData } = await supabase
+        const { data: userData } = await db
           .from('users')
           .select('avatar_path, default_avatar_design')
           .eq('id', user?.id || '')
@@ -820,7 +820,7 @@ export function MyDetails() {
       const filePath = `${user.id}/${fileName}`
       
       // Delete old avatar if exists
-      const { data: currentUser } = await supabase
+      const { data: currentUser } = await db
         .from('users')
         .select('avatar_path')
         .eq('id', user.id)
@@ -829,7 +829,7 @@ export function MyDetails() {
       const typedCurrentUser = currentUser as { avatar_path?: string } | null
       if (typedCurrentUser?.avatar_path) {
         try {
-          await supabase.storage
+          await db.storage
             .from('documents')
             .remove([typedCurrentUser.avatar_path])
         } catch {
@@ -838,7 +838,7 @@ export function MyDetails() {
       }
       
       // Upload new avatar
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await db.storage
         .from('documents')
         .upload(filePath, avatarPreview.file, {
           cacheControl: '3600',
@@ -848,7 +848,7 @@ export function MyDetails() {
       if (uploadError) throw uploadError
       
       // Update users table with avatar_path
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from('users')
         .update({ avatar_path: filePath })
         .eq('id', user.id)
@@ -893,7 +893,7 @@ export function MyDetails() {
     setShowDeleteConfirmModal(false)
     try {
       // Get current avatar path
-      const { data: currentUser } = await supabase
+      const { data: currentUser } = await db
         .from('users')
         .select('avatar_path')
         .eq('id', user.id)
@@ -904,7 +904,7 @@ export function MyDetails() {
       // Delete file from storage if exists
       if (typedCurrentUser?.avatar_path) {
         try {
-          await supabase.storage
+          await db.storage
             .from('documents')
             .remove([typedCurrentUser.avatar_path])
         } catch {
@@ -913,7 +913,7 @@ export function MyDetails() {
       }
       
       // Update users table to remove avatar_path
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from('users')
         .update({ avatar_path: null })
         .eq('id', user.id)
@@ -938,7 +938,7 @@ export function MyDetails() {
     if (!user) return
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('users')
         .update({ default_avatar_design: design })
         .eq('id', user.id)
@@ -994,7 +994,6 @@ export function MyDetails() {
         single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? safeTrim(singleFullName) : null,
         date_of_birth: convertToDatabaseFormat(dateOfBirth) || null,
         birth_place: safeTrim(birthPlace),
-        email: safeTrim(email) || user?.email || null,
         mobile_number: safeTrim(mobileNumber),
         house_number: safeTrim(houseNumber),
         street_name: safeTrim(streetName),
@@ -1065,7 +1064,7 @@ export function MyDetails() {
       if (firstName && lastName && user?.id) {
         try {
           // Save first_name, last_name, middle_name to the users table (they don't belong in user_details)
-          await supabase
+          await db
             .from('users')
             .update({
               first_name: firstName.trim(),

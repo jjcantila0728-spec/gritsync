@@ -3,7 +3,7 @@
  * Manages received emails stored in our database (from Resend webhook)
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface ReceivedEmailAttachment {
   id: string
@@ -57,7 +57,7 @@ export async function getReceivedEmails(options: ReceivedEmailsListOptions = {})
       includeDeleted = false,
     } = options
 
-    let query = supabase
+    let query = db
       .from('received_emails')
       .select('*')
       .order('received_at', { ascending: false })
@@ -98,7 +98,7 @@ export async function getReceivedEmails(options: ReceivedEmailsListOptions = {})
  */
 export async function getReceivedEmailById(id: string): Promise<ReceivedEmail | null> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('received_emails')
       .select('*')
       .eq('id', id)
@@ -126,7 +126,7 @@ export async function getReceivedEmailById(id: string): Promise<ReceivedEmail | 
  */
 export async function markAsRead(id: string): Promise<void> {
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('received_emails')
       .update({ is_read: true })
       .eq('id', id)
@@ -146,7 +146,7 @@ export async function markAsRead(id: string): Promise<void> {
  */
 export async function markAsUnread(id: string): Promise<void> {
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('received_emails')
       .update({ is_read: false })
       .eq('id', id)
@@ -166,7 +166,7 @@ export async function markAsUnread(id: string): Promise<void> {
  */
 export async function deleteReceivedEmail(id: string): Promise<void> {
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('received_emails')
       .update({ is_deleted: true })
       .eq('id', id)
@@ -213,7 +213,7 @@ export async function batchDeleteReceivedEmails(ids: string[]): Promise<{
  */
 export async function getUnreadCount(toEmail?: string): Promise<number> {
   try {
-    let query = supabase
+    let query = db
       .from('received_emails')
       .select('id', { count: 'exact', head: true })
       .eq('is_read', false)

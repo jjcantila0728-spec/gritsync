@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@db/db-js'
 import { config } from 'dotenv'
 
 // Load environment variables
@@ -30,7 +30,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const db = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
@@ -69,7 +69,7 @@ async function createTestUser(userData: Partial<TestUser> = {}): Promise<TestUse
   }
 
   // Sign up the user
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await db.auth.signUp({
     email: user.email,
     password: user.password,
     options: {
@@ -103,7 +103,7 @@ async function createTestUser(userData: Partial<TestUser> = {}): Promise<TestUse
     await new Promise(resolve => setTimeout(resolve, 3000))
     
     // Check if profile exists
-    const { data: profileCheck, error: checkError } = await supabase
+    const { data: profileCheck, error: checkError } = await db
       .from('users')
       .select('id')
       .eq('id', data.user.id)
@@ -115,7 +115,7 @@ async function createTestUser(userData: Partial<TestUser> = {}): Promise<TestUse
 
     // If profile exists, update it; if not, the trigger should have created it
     if (profileCheck) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from('users')
         .update({
           first_name: user.firstName,
@@ -141,7 +141,7 @@ async function cleanupTestUsers() {
   for (const userId of createdUserIds) {
     try {
       // Sign in as the user first (if we have the session)
-      await supabase.auth.signOut()
+      await db.auth.signOut()
       
       // Try to delete via admin API if available
       // Note: This requires service role key, which we don't have in tests
@@ -149,7 +149,7 @@ async function cleanupTestUsers() {
       
       // Delete from public.users table (if RLS allows)
       try {
-        await supabase
+        await db
           .from('users')
           .delete()
           .eq('id', userId)
@@ -167,14 +167,14 @@ async function cleanupTestUsers() {
 describe('E2E Authentication Tests', () => {
   beforeAll(async () => {
     // Ensure we start with a clean session
-    await supabase.auth.signOut()
+    await db.auth.signOut()
     
     // Verify database setup
     console.log('\n🔍 Verifying database setup...')
     
     // Check if generate_grit_id function exists
     try {
-      const { error: funcError } = await supabase.rpc('generate_grit_id')
+      const { error: funcError } = await db.rpc('generate_grit_id')
       if (funcError && funcError.message.includes('function') && funcError.message.includes('does not exist')) {
         console.warn('⚠️  generate_grit_id() function not found. Run FIX_REGISTRATION_ERROR.sql')
       }
@@ -183,7 +183,7 @@ describe('E2E Authentication Tests', () => {
     }
     
     // Check if we can query users table (tests RLS)
-    const { error: queryError } = await supabase.from('users').select('count').limit(1)
+    const { error: queryError } = await db.from('users').select('count').limit(1)
     if (queryError && queryError.code === 'PGRST301') {
       console.warn('⚠️  RLS policies may be blocking. Run SIMPLE_FIX_403.sql')
     }
@@ -192,12 +192,12 @@ describe('E2E Authentication Tests', () => {
   afterAll(async () => {
     // Cleanup all test users
     await cleanupTestUsers()
-    await supabase.auth.signOut()
+    await db.auth.signOut()
   })
 
   beforeEach(async () => {
     // Sign out before each test
-    await supabase.auth.signOut()
+    await db.auth.signOut()
     // Add delay to avoid rate limiting
     await new Promise(resolve => setTimeout(resolve, 500))
   })
@@ -221,7 +221,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
       
       // Try to sign in to verify the account works
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -238,7 +238,7 @@ describe('E2E Authentication Tests', () => {
       })
 
       // Sign in to get the user ID
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      const { data: signInData } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -250,7 +250,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Check if profile exists
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await db
         .from('users')
         .select('*')
         .eq('id', userId)
@@ -269,7 +269,7 @@ describe('E2E Authentication Tests', () => {
       const testUser = await createTestUser()
 
       // Try to register again with the same email
-      const { error } = await supabase.auth.signUp({
+      const { error } = await db.auth.signUp({
         email: testUser.email,
         password: 'AnotherPassword123!',
       })
@@ -287,7 +287,7 @@ describe('E2E Authentication Tests', () => {
       const testUser = await createTestUser()
 
       // Sign in
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      const { data: signInData } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -298,7 +298,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Check GRIT-ID
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from('users')
         .select('grit_id')
         .eq('id', userId)
@@ -321,7 +321,7 @@ describe('E2E Authentication Tests', () => {
     })
 
     it('should successfully login with correct credentials', async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -333,7 +333,7 @@ describe('E2E Authentication Tests', () => {
     }, 30000)
 
     it('should fail login with incorrect password', async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: 'WrongPassword123!',
       })
@@ -348,7 +348,7 @@ describe('E2E Authentication Tests', () => {
     }, 30000)
 
     it('should fail login with non-existent email', async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await db.auth.signInWithPassword({
         email: 'nonexistent@example.com',
         password: 'SomePassword123!',
       })
@@ -359,7 +359,7 @@ describe('E2E Authentication Tests', () => {
 
     it('should load user profile after login', async () => {
       // Sign in
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      const { data: signInData } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -371,7 +371,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Load profile
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await db
         .from('users')
         .select('*')
         .eq('id', userId)
@@ -397,7 +397,7 @@ describe('E2E Authentication Tests', () => {
 
     it('should allow users to read their own profile', async () => {
       // Sign in
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      const { data: signInData } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -408,7 +408,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Read profile
-      const { data: profile, error } = await supabase
+      const { data: profile, error } = await db
         .from('users')
         .select('*')
         .eq('id', userId)
@@ -421,7 +421,7 @@ describe('E2E Authentication Tests', () => {
 
     it('should allow users to update their own profile', async () => {
       // Sign in
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      const { data: signInData } = await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
@@ -432,7 +432,7 @@ describe('E2E Authentication Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Update profile
-      const { data: updatedProfile, error: updateError } = await supabase
+      const { data: updatedProfile, error: updateError } = await db
         .from('users')
         .update({
           first_name: 'Updated',
@@ -458,30 +458,30 @@ describe('E2E Authentication Tests', () => {
 
     it('should maintain session after login', async () => {
       // Sign in
-      await supabase.auth.signInWithPassword({
+      await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
 
       // Check session
-      const { data: session } = await supabase.auth.getSession()
+      const { data: session } = await db.auth.getSession()
       expect(session?.session).toBeDefined()
       expect(session?.session?.user?.email).toBe(testUser.email)
     }, 30000)
 
     it('should clear session after sign out', async () => {
       // Sign in
-      await supabase.auth.signInWithPassword({
+      await db.auth.signInWithPassword({
         email: testUser.email,
         password: testUser.password,
       })
 
       // Sign out
-      const { error: signOutError } = await supabase.auth.signOut()
+      const { error: signOutError } = await db.auth.signOut()
       expect(signOutError).toBeNull()
 
       // Check session is cleared
-      const { data: session } = await supabase.auth.getSession()
+      const { data: session } = await db.auth.getSession()
       expect(session?.session).toBeNull()
     }, 30000)
   })

@@ -3,8 +3,8 @@
  * Ensures tokens are refreshed and sessions are valid before critical operations
  */
 
-import { supabase } from './api-client'
-import type { Session } from '@supabase/supabase-js'
+import { db } from './api-client'
+import type { Session } from '@db/db-js'
 
 /**
  * Check if session is valid and refresh if needed
@@ -15,7 +15,7 @@ import type { Session } from '@supabase/supabase-js'
 export async function ensureValidSession(): Promise<Session | null> {
   try {
     // Get current session
-    const { data: { session }, error } = await supabase.auth.getSession()
+    const { data: { session }, error } = await db.auth.getSession()
     
     if (error) {
       console.error('Error getting session:', error)
@@ -35,7 +35,7 @@ export async function ensureValidSession(): Promise<Session | null> {
     // If session expires within 5 minutes, refresh it
     if (expiresAt - now < bufferMs) {
       console.log('Session expiring soon, refreshing...')
-      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+      const { data: { session: refreshedSession }, error: refreshError } = await db.auth.refreshSession()
       
       if (refreshError) {
         console.error('Error refreshing session:', refreshError)
@@ -115,7 +115,7 @@ export async function forceRefreshSession(): Promise<Session | null> {
   cachedUserIdTimestamp = 0
   
   try {
-    const { data: { session }, error } = await supabase.auth.refreshSession()
+    const { data: { session }, error } = await db.auth.refreshSession()
     
     if (error) {
       console.error('Error forcing session refresh:', error)
@@ -135,7 +135,7 @@ export async function forceRefreshSession(): Promise<Session | null> {
  * @returns Promise<boolean> - True if session is expired or will expire soon
  */
 export async function isSessionExpired(): Promise<boolean> {
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { session } } = await db.auth.getSession()
   
   if (!session) {
     return true

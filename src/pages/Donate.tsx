@@ -65,7 +65,7 @@ export function Donate() {
       // Try to load user details
       const loadUserDetails = async () => {
         try {
-          const { data } = await (await import('@/lib/api-client')).supabase
+          const { data } = await (await import('@/lib/api-client')).db
             .from('users')
             .select('first_name, last_name')
             .eq('id', user.id)

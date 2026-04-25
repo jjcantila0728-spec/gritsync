@@ -21,7 +21,7 @@ import {
 import { emailCampaignsAPI } from '@/lib/email-campaigns-api'
 import { emailQueueAPI } from '@/lib/email-queue-api'
 import { cn, sanitizeHTML } from '@/lib/utils'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 
 interface NewsletterBuilderProps {
   showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
@@ -154,7 +154,7 @@ export function NewsletterBuilder({ showToast, onClose, onSuccess }: NewsletterB
 
     setAiGenerating(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ai-newsletter-builder', {
+      const { data, error } = await db.functions.invoke('ai-newsletter-builder', {
         body: JSON.stringify({
           prompt: aiPrompt.trim(),
           focus: newsletter.focus.trim(),

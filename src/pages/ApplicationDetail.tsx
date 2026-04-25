@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Link } from 'react-router-dom'
 import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
 import jsPDF from 'jspdf'
@@ -20,7 +20,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { coverLetterTemplate } from '@/templates/cover-letter-template'
 import { stripePromise } from '@/lib/stripe'
 import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { 
   ArrowLeft, 
   Clock, 
@@ -420,7 +420,7 @@ export function ApplicationDetail() {
       // If application is missing name fields (older records before migration), fetch from users table
       if (!appData.first_name && appData.user_id) {
         try {
-          const { data: userData } = await supabase
+          const { data: userData } = await db
             .from('users')
             .select('first_name, middle_name, last_name, mobile')
             .eq('id', appData.user_id)
@@ -2145,7 +2145,7 @@ export function ApplicationDetail() {
       const formsVerifiedData = getStepData('ead_forms_verified')
 
       // Call edge function to generate cover letter
-      const { data, error } = await supabase.functions.invoke('generate-cover-letter', {
+      const { data, error } = await db.functions.invoke('generate-cover-letter', {
         body: {
           applicationData: {
             first_name: application.first_name,

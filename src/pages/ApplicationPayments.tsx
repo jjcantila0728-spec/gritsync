@@ -16,7 +16,7 @@ import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
 import jsPDF from 'jspdf'
 import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@db/db-js'
 import { 
   ArrowLeft, 
   CheckCircle, 

@@ -1,4 +1,4 @@
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface TestResult {
   name: string
@@ -12,7 +12,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 1: Client Initialization
   try {
-    if (!supabase) {
+    if (!db) {
       results.push({
         name: 'Client Initialization',
         status: 'error',
@@ -38,7 +38,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 2: Database Connection (Test Query)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('users')
       .select('count')
       .limit(1)
@@ -68,7 +68,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 3: Authentication Service
   try {
-    const { data: { session }, error } = await supabase.auth.getSession()
+    const { data: { session }, error } = await db.auth.getSession()
 
     if (error) {
       results.push({
@@ -94,7 +94,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 4: Storage Connection
   try {
-    const { data, error } = await supabase.storage.listBuckets()
+    const { data, error } = await db.storage.listBuckets()
 
     if (error) {
       results.push({
@@ -127,7 +127,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 5: Realtime Connection
   try {
-    const channel = supabase.channel('test-connection')
+    const channel = db.channel('test-connection')
     const subscribePromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Realtime subscription timeout'))
@@ -145,7 +145,7 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
     })
 
     await subscribePromise
-    supabase.removeChannel(channel)
+    db.removeChannel(channel)
 
     results.push({
       name: 'Realtime Connection',
@@ -163,10 +163,10 @@ export async function testSupabaseConnections(): Promise<TestResult[]> {
 
   // Test 6: RLS Policies (Test if user can query their own data)
   try {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
     
     if (user) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('users')
         .select('id, email, role')
         .eq('id', user.id)

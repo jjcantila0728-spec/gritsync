@@ -3,7 +3,7 @@
  * Manages multiple email addresses for users and admin addresses
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export interface EmailAddress {
   id: string
@@ -43,7 +43,7 @@ export const emailAddressesAPI = {
    * Get all email addresses (admin only)
    */
   getAll: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('*')
       .order('created_at', { ascending: false })
@@ -56,7 +56,7 @@ export const emailAddressesAPI = {
    * Get active email addresses
    */
   getActive: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('active_email_addresses')
       .select('*')
       .order('email_address')
@@ -69,7 +69,7 @@ export const emailAddressesAPI = {
    * Get admin email addresses
    */
   getAdminAddresses: async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('*')
       .eq('address_type', 'admin')
@@ -84,7 +84,7 @@ export const emailAddressesAPI = {
    * Get user's email addresses
    */
   getUserAddresses: async (userId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('*')
       .eq('user_id', userId)
@@ -99,7 +99,7 @@ export const emailAddressesAPI = {
    * Get user's primary email address
    */
   getUserPrimaryEmail: async (userId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('email_address')
       .eq('user_id', userId)
@@ -111,7 +111,7 @@ export const emailAddressesAPI = {
     if (data) return (data as any).email_address as string
 
     // Fallback: look up the user's actual email
-    const { data: userData } = await supabase
+    const { data: userData } = await db
       .from('users')
       .select('email')
       .eq('id', userId)
@@ -124,7 +124,7 @@ export const emailAddressesAPI = {
    * Get email address by ID
    */
   getById: async (id: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('*')
       .eq('id', id)
@@ -138,7 +138,7 @@ export const emailAddressesAPI = {
    * Get email address by email string
    */
   getByEmail: async (email: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .select('*')
       .eq('email_address', email.toLowerCase())
@@ -155,7 +155,7 @@ export const emailAddressesAPI = {
    * Create email address
    */
   create: async (emailData: Partial<EmailAddress>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .insert(emailData)
       .select()
@@ -169,7 +169,7 @@ export const emailAddressesAPI = {
    * Update email address
    */
   update: async (id: string, updates: Partial<EmailAddress>) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update(updates)
       .eq('id', id)
@@ -184,7 +184,7 @@ export const emailAddressesAPI = {
    * Delete email address
    */
   delete: async (id: string) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_addresses')
       .delete()
       .eq('id', id)
@@ -198,7 +198,7 @@ export const emailAddressesAPI = {
    */
   generateClientEmail: async (userId: string) => {
     // Get user's name to create email
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await db
       .from('users')
       .select('first_name, last_name, email, grit_id')
       .eq('id', userId)
@@ -218,7 +218,7 @@ export const emailAddressesAPI = {
     let emailAddress = baseEmail
     let suffix = 1
     while (true) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('email_addresses')
         .select('id')
         .eq('email_address', emailAddress)
@@ -229,7 +229,7 @@ export const emailAddressesAPI = {
     }
 
     // Insert the new email address
-    const { data: created, error: createError } = await supabase
+    const { data: created, error: createError } = await db
       .from('email_addresses')
       .insert({
         email_address: emailAddress,
@@ -247,7 +247,7 @@ export const emailAddressesAPI = {
     if (createError) {
       // If unique constraint violation, the email already exists — fetch and return it
       if (createError.code === '23505' || (typeof createError.message === 'string' && createError.message.includes('unique constraint'))) {
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from('email_addresses')
           .select('email_address')
           .eq('user_id', userId)
@@ -267,13 +267,13 @@ export const emailAddressesAPI = {
    */
   setPrimary: async (userId: string, emailAddressId: string) => {
     // First, unset all primary flags for this user
-    await supabase
+    await db
       .from('email_addresses')
       .update({ is_primary: false })
       .eq('user_id', userId)
 
     // Then set the new primary
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update({ is_primary: true })
       .eq('id', emailAddressId)
@@ -289,7 +289,7 @@ export const emailAddressesAPI = {
    * Verify email address
    */
   verify: async (id: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update({
         is_verified: true,
@@ -307,7 +307,7 @@ export const emailAddressesAPI = {
    * Update last used timestamp
    */
   updateLastUsed: async (id: string) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_addresses')
       .update({
         last_used_at: new Date().toISOString(),
@@ -325,7 +325,7 @@ export const emailAddressesAPI = {
     // Get current status
     const current = await emailAddressesAPI.getById(id)
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update({ is_active: !current.is_active })
       .eq('id', id)
@@ -340,7 +340,7 @@ export const emailAddressesAPI = {
    * Set auto-reply
    */
   setAutoReply: async (id: string, enabled: boolean, message?: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update({
         auto_reply_enabled: enabled,
@@ -358,7 +358,7 @@ export const emailAddressesAPI = {
    * Set email forwarding
    */
   setForwarding: async (id: string, forwardToEmail: string | null) => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_addresses')
       .update({ forward_to_email: forwardToEmail })
       .eq('id', id)

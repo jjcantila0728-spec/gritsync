@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
 import { sponsorshipsAPI, userDocumentsAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, FileText, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -55,7 +55,7 @@ export function NCLEXSponsorship() {
       // Try to load user details from user_details table
       const loadUserDetails = async () => {
         try {
-          const { data } = await supabase
+          const { data } = await db
             .from('user_details')
             .select('first_name, last_name, mobile_number, date_of_birth, country')
             .eq('user_id', user.id)
@@ -116,7 +116,7 @@ export function NCLEXSponsorship() {
       const fileName = `sponsorship_${type}_${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
-      const { error } = await supabase.storage
+      const { error } = await db.storage
         .from('documents')
         .upload(filePath, compressedFile, {
           cacheControl: '3600',

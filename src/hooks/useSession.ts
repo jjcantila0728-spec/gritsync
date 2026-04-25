@@ -4,8 +4,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/api-client'
-import type { Session } from '@supabase/supabase-js'
+import { db } from '@/lib/api-client'
+import type { Session } from '@db/db-js'
 import {
   ensureValidSession,
   requireAuth,
@@ -158,7 +158,7 @@ export function useSession(options: UseSessionOptions = {}) {
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = db.auth.onAuthStateChange((_event, session) => {
       if (session) {
         const userId = session.user?.id || null
         setState(prev => ({

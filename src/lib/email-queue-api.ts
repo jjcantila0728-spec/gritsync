@@ -3,7 +3,7 @@
  * Handles scheduling and queuing emails for future delivery
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 import { Tables } from './database.types'
 
 export interface EmailQueueItem {
@@ -52,7 +52,7 @@ export const emailQueueAPI = {
    * Schedule an email to be sent at a future time
    */
   async schedule(data: Omit<EmailQueueItem, 'id' | 'created_at' | 'updated_at' | 'status'>): Promise<EmailQueueItem> {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
     
     const queueData: Partial<EmailQueueItem> = {
       ...data,
@@ -66,7 +66,7 @@ export const emailQueueAPI = {
       tags: data.tags || [],
     }
 
-    const { data: result, error } = await supabase
+    const { data: result, error } = await db
       .from('email_queue')
       .insert(queueData)
       .select()
@@ -80,7 +80,7 @@ export const emailQueueAPI = {
    * Get all queued emails with optional filters
    */
   async getAll(filters?: EmailQueueFilters): Promise<EmailQueueItem[]> {
-    let query = supabase
+    let query = db
       .from('email_queue')
       .select('*')
       .order('scheduled_for', { ascending: true })
@@ -127,7 +127,7 @@ export const emailQueueAPI = {
    * Get a single queued email by ID
    */
   async getById(id: string): Promise<EmailQueueItem | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_queue')
       .select('*')
       .eq('id', id)
@@ -145,7 +145,7 @@ export const emailQueueAPI = {
    * Update a queued email
    */
   async update(id: string, updates: Partial<EmailQueueItem>): Promise<EmailQueueItem> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('email_queue')
       .update(updates)
       .eq('id', id)
@@ -170,7 +170,7 @@ export const emailQueueAPI = {
    * Get pending emails ready to send (used by worker)
    */
   async getPendingToSend(limit: number = 50): Promise<EmailQueueItem[]> {
-    const { data, error } = await supabase.rpc('get_pending_emails_to_send', {
+    const { data, error } = await db.rpc('get_pending_emails_to_send', {
       limit_count: limit
     })
 
@@ -182,7 +182,7 @@ export const emailQueueAPI = {
    * Mark email as processing (used by worker)
    */
   async markProcessing(id: string): Promise<void> {
-    const { error } = await supabase.rpc('mark_email_processing', {
+    const { error } = await db.rpc('mark_email_processing', {
       queue_id: id
     })
 
@@ -193,7 +193,7 @@ export const emailQueueAPI = {
    * Mark email as sent (used by worker)
    */
   async markSent(id: string, providerMessageId?: string, providerResponse?: any): Promise<void> {
-    const { error } = await supabase.rpc('mark_email_sent', {
+    const { error } = await db.rpc('mark_email_sent', {
       queue_id: id,
       provider_message_id: providerMessageId || null,
       provider_response: providerResponse || null
@@ -206,7 +206,7 @@ export const emailQueueAPI = {
    * Mark email as failed (used by worker)
    */
   async markFailed(id: string, errorMessage: string, providerResponse?: any): Promise<void> {
-    const { error } = await supabase.rpc('mark_email_failed', {
+    const { error } = await db.rpc('mark_email_failed', {
       queue_id: id,
       error_message: errorMessage,
       provider_response: providerResponse || null
@@ -234,17 +234,17 @@ export const emailQueueAPI = {
     weekStart.setDate(weekStart.getDate() - weekStart.getDay()) // Start of week
 
     const [all, pending, processing, sent, failed, cancelled, today, thisWeek] = await Promise.all([
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'processing'),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'sent'),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'cancelled'),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true })
+      db.from('email_queue').select('id', { count: 'exact', head: true }),
+      db.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      db.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'processing'),
+      db.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'sent'),
+      db.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
+      db.from('email_queue').select('id', { count: 'exact', head: true }).eq('status', 'cancelled'),
+      db.from('email_queue').select('id', { count: 'exact', head: true })
         .eq('status', 'pending')
         .gte('scheduled_for', todayStart.toISOString())
         .lt('scheduled_for', new Date(todayStart.getTime() + 24 * 60 * 60 * 1000).toISOString()),
-      supabase.from('email_queue').select('id', { count: 'exact', head: true })
+      db.from('email_queue').select('id', { count: 'exact', head: true })
         .eq('status', 'pending')
         .gte('scheduled_for', weekStart.toISOString())
         .lt('scheduled_for', new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()),
@@ -266,7 +266,7 @@ export const emailQueueAPI = {
    * Delete a queued email (only if not sent)
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('email_queue')
       .delete()
       .eq('id', id)

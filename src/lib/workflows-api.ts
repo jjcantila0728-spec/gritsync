@@ -3,7 +3,7 @@
  * Handles automated workflow management and execution
  */
 
-import { supabase } from './api-client'
+import { db } from './api-client'
 
 export type WorkflowTriggerType = 
   | 'application_status_change'
@@ -93,7 +93,7 @@ export const workflowsAPI = {
    * Get all workflows
    */
   async getAll(): Promise<Workflow[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .select('*')
       .order('created_at', { ascending: false })
@@ -106,7 +106,7 @@ export const workflowsAPI = {
    * Get a single workflow by ID
    */
   async getById(id: string): Promise<Workflow | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .select('*')
       .eq('id', id)
@@ -124,7 +124,7 @@ export const workflowsAPI = {
    * Create a new workflow
    */
   async create(workflow: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Promise<Workflow> {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await db.auth.getUser()
     
     const workflowData: Partial<Workflow> = {
       ...workflow,
@@ -134,7 +134,7 @@ export const workflowsAPI = {
       failure_count: 0,
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .insert(workflowData)
       .select()
@@ -148,7 +148,7 @@ export const workflowsAPI = {
    * Update a workflow
    */
   async update(id: string, updates: Partial<Workflow>): Promise<Workflow> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflows')
       .update(updates)
       .eq('id', id)
@@ -163,7 +163,7 @@ export const workflowsAPI = {
    * Delete a workflow
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from('workflows')
       .delete()
       .eq('id', id)
@@ -185,7 +185,7 @@ export const workflowsAPI = {
    * Get workflow runs
    */
   async getRuns(workflowId?: string, limit: number = 50): Promise<WorkflowRun[]> {
-    let query = supabase
+    let query = db
       .from('workflow_runs')
       .select('*')
       .order('created_at', { ascending: false })
@@ -205,7 +205,7 @@ export const workflowsAPI = {
    * Get workflow run by ID
    */
   async getRunById(id: string): Promise<WorkflowRun | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('workflow_runs')
       .select('*')
       .eq('id', id)
@@ -223,7 +223,7 @@ export const workflowsAPI = {
    * Get active workflows for a trigger type
    */
   async getActiveForTrigger(triggerType: WorkflowTriggerType): Promise<Workflow[]> {
-    const { data, error } = await supabase.rpc('get_active_workflows_for_trigger', {
+    const { data, error } = await db.rpc('get_active_workflows_for_trigger', {
       p_trigger_type: triggerType
     })
 
@@ -244,13 +244,13 @@ export const workflowsAPI = {
     success_rate: number
   }> {
     const [all, active, inactive] = await Promise.all([
-      supabase.from('workflows').select('id', { count: 'exact', head: true }),
-      supabase.from('workflows').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('workflows').select('id', { count: 'exact', head: true }).eq('is_active', false),
+      db.from('workflows').select('id', { count: 'exact', head: true }),
+      db.from('workflows').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      db.from('workflows').select('id', { count: 'exact', head: true }).eq('is_active', false),
     ])
 
     // Get execution stats
-    const { data: workflows } = await supabase
+    const { data: workflows } = await db
       .from('workflows')
       .select('execution_count, success_count, failure_count')
 

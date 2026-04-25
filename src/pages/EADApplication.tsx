@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
 import { applicationsAPI, userDetailsAPI, servicesAPI, applicationPaymentsAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 
 // Helper function to format MM/DD/YYYY input
 const formatMMDDYYYY = (value: string): string => {
@@ -195,7 +195,7 @@ export function EADApplication() {
       // Query Supabase directly for only the most recent EAD application (draft)
       // This ensures only 1 record is fetched from Supabase
       // First try to get pending EAD applications
-      let { data, error } = await supabase
+      let { data, error } = await db
         .from('applications')
         .select('*')
         .eq('user_id', userId)
@@ -207,7 +207,7 @@ export function EADApplication() {
       
       // If no pending application found, try to get one without signature
       if (!data && !error) {
-        const result = await supabase
+        const result = await db
           .from('applications')
           .select('*')
           .eq('user_id', userId)

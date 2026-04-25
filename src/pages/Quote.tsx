@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { quotationsAPI, servicesAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
@@ -636,7 +636,7 @@ export function Quote() {
       } else {
         // For non-logged-in users, try to fetch public quotations only
         try {
-          const { data, error } = await supabase
+          const { data, error } = await db
             .from('quotations')
             .select('*')
             .is('user_id', null)

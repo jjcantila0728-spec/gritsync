@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/Select'
 import { CheckCircle, ChevronDown, ChevronRight, FileText, Download, Upload, Clock, Copy, Loader2, PenTool, Eye, Info } from 'lucide-react'
 import { formatDate, formatCurrency, sanitizeHTML } from '@/lib/utils'
 import { userDocumentsAPI, getSignedFileUrl, processingAccountsAPI } from '@/lib/api'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { useErrorHandler } from '@/lib/use-error-handler'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -1377,7 +1377,7 @@ export function TimelineStep({
                                     const fileName = `Final_Application_Package_${clientName}_${dateStr}.pdf`
                                     const filePath = `${application.user_id}/final_package.pdf`
                                     
-                                    const { error: uploadError } = await supabase.storage
+                                    const { error: uploadError } = await db.storage
                                       .from('documents')
                                       .upload(filePath, finalPdfBytes, {
                                         contentType: 'application/pdf',
@@ -1457,7 +1457,7 @@ export function TimelineStep({
                                       
                                       // Upload to documents folder (same path as generate)
                                       const filePath = `${application.user_id}/final_package.pdf`
-                                      const { error: uploadError } = await supabase.storage
+                                      const { error: uploadError } = await db.storage
                                         .from('documents')
                                         .upload(filePath, pdfFile, {
                                           cacheControl: '3600',
@@ -3127,7 +3127,7 @@ export function TimelineStep({
                                 if (showToast) showToast('Merging all documents...', 'info')
                                 
                                 // Call merge-documents edge function
-                                const { data, error } = await supabase.functions.invoke('merge-documents', {
+                                const { data, error } = await db.functions.invoke('merge-documents', {
                                   body: {
                                     application_id: application.id,
                                   },
@@ -4181,7 +4181,7 @@ export function TimelineStep({
                 const signatureFilePath = `${application.user_id}/ead_preparer_signature.png`
                 
                 // Upload to Supabase storage - admins can upload to any user's folder (Policy 5)
-                const { error: signatureUploadError } = await supabase.storage
+                const { error: signatureUploadError } = await db.storage
                   .from('documents')
                   .upload(signatureFilePath, signatureFile, {
                     cacheControl: '3600',
@@ -4272,7 +4272,7 @@ export function TimelineStep({
                 const signatureFilePath = `${application.user_id}/ead_client_signature.png`
                 
                 // Upload to Supabase storage
-                const { error: signatureUploadError } = await supabase.storage
+                const { error: signatureUploadError } = await db.storage
                   .from('documents')
                   .upload(signatureFilePath, signatureFile, {
                     cacheControl: '3600',

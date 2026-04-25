@@ -8,7 +8,7 @@ import { Mail, Clock, CheckCircle2, XCircle, AlertCircle, Eye, Trash2, User } fr
 import { cn } from '@/lib/utils'
 import { EmailLog } from '@/lib/email-api'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 
 interface SenderInfo {
   avatar_path: string | null
@@ -178,7 +178,7 @@ function InboxEmailCard({
         const senderEmail = getSenderEmail()
         
         // Try to find user by email in email_addresses table
-        const { data: emailAddress } = await supabase
+        const { data: emailAddress } = await db
           .from('email_addresses')
           .select('user_id')
           .eq('email_address', senderEmail)
@@ -186,7 +186,7 @@ function InboxEmailCard({
 
         if (emailAddress?.user_id) {
           // Fetch user info
-          const { data: userData } = await supabase
+          const { data: userData } = await db
             .from('users')
             .select('avatar_path, first_name, last_name')
             .eq('id', emailAddress.user_id)
@@ -197,7 +197,7 @@ function InboxEmailCard({
 
             // If user has avatar, get signed URL
             if (userData.avatar_path) {
-              const { data: { publicUrl } } = supabase.storage
+              const { data: { publicUrl } } = db.storage
                 .from('documents')
                 .getPublicUrl(userData.avatar_path)
               

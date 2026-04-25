@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
-import { supabase } from '@/lib/api-client'
+import { db } from '@/lib/api-client'
 import { useToast } from '@/components/ui/Toast'
 import { Plus, Trash2, Copy, Loader2, Tag, Info } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
@@ -43,7 +43,7 @@ export function PromoCodeSettings() {
   const loadPromoCodes = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('promo_codes')
         .select('*')
         .order('created_at', { ascending: false })
@@ -92,7 +92,7 @@ export function PromoCodeSettings() {
     
     try {
       setSubmitting(true)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('promo_codes')
         .insert({
           code: code.toUpperCase(),
@@ -126,7 +126,7 @@ export function PromoCodeSettings() {
   
   const togglePromoCode = async (id: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('promo_codes')
         .update({ is_active: !isActive })
         .eq('id', id)
@@ -145,7 +145,7 @@ export function PromoCodeSettings() {
     if (!confirm(`Are you sure you want to delete the promo code "${code}"?`)) return
     
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('promo_codes')
         .delete()
         .eq('id', id)
