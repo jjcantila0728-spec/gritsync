@@ -445,6 +445,12 @@ export function NCLEXApplication() {
           full: firstTakeFull,
           staggered: firstTakeFull,
         })
+      } else if (firstTakeStaggered) {
+        // If only staggered payment exists, use it for both
+        setFirstTakeService({
+          full: firstTakeStaggered,
+          staggered: firstTakeStaggered,
+        })
       }
       
       setRetakeService(retakeServiceData)
