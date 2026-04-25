@@ -509,14 +509,12 @@ export function Header() {
     if (!user) return
     setLoadingNotifications(true)
     try {
-      // Optimize: Limit initial fetch to recent 20 notifications for better performance
-      // Full list can be loaded on demand if needed
-      const [notifs, count] = await Promise.all([
-        notificationsAPI.getAll(false, 20),
-        notificationsAPI.getUnreadCount()
-      ])
-      setNotifications(notifs || [])
-      setUnreadCount(count || 0)
+      const notifs = await notificationsAPI.getAll(false, 50)
+      const list = notifs || []
+      setNotifications(list)
+      // Derive count directly from fetched data — avoids the broken head-count API
+      const unread = list.filter((n: any) => !n.read).length
+      setUnreadCount(unread)
     } catch (error) {
       console.error('Error fetching notifications:', error)
     } finally {
@@ -534,20 +532,14 @@ export function Header() {
       })
       notificationChannelRef.current = notificationChannel
 
-      // Poll every 15 seconds as a reliable fallback (real-time may not always fire)
-      const pollInterval = setInterval(async () => {
-        try {
-          const count = await notificationsAPI.getUnreadCount(true)
-          setUnreadCount(count || 0)
-        } catch { /* silent */ }
+      // Poll every 15 seconds as a reliable fallback (no real-time in this setup)
+      const pollInterval = setInterval(() => {
+        fetchNotifications().catch(() => {})
       }, 15000)
 
-      // Refresh count whenever documents are uploaded/deleted
-      const handleExternalUpdate = async () => {
-        try {
-          const count = await notificationsAPI.getUnreadCount(true)
-          setUnreadCount(count || 0)
-        } catch { /* silent */ }
+      // Refresh immediately whenever documents are uploaded/deleted
+      const handleExternalUpdate = () => {
+        fetchNotifications().catch(() => {})
       }
       window.addEventListener('documentsUpdated', handleExternalUpdate)
 

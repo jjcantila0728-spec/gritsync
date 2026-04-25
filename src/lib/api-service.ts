@@ -1754,15 +1754,15 @@ export const notificationsAPI = {
       }
     }
     
-    // Use optimized count query with head: true for better performance
-    const { count, error } = await supabase
+    // Fetch unread notification IDs and count them (compatible with custom API client)
+    const { data, error } = await supabase
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('user_id', userId)
       .eq('read', false)
     
     if (error) throw new Error(error.message)
-    const countValue = count || 0
+    const countValue = (data || []).length
     
     // Update cache
     notificationCountCache.set(userId, {
