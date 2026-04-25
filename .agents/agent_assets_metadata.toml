@@ -24,3 +24,51 @@ id = "mVEGp-qwc8DKg4MrRxQzM"
 uri = "file://public/assets/nurses/nurse-female-2.png"
 type = "image"
 title = "Filipino female nurse 2"
+
+[[generated]]
+id = "Ey5xV1d9DDOPTuk2lreaB"
+uri = "file://public/assets/pages/quote-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "8zYpVrDBjw7KOysSZT-4F"
+uri = "file://public/assets/pages/tracking-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "bIJLl5ZrjyGMwc6z6Hf-H"
+uri = "file://public/assets/pages/sponsorship-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "BBIv5u15UhUoSGSK9Q9Zn"
+uri = "file://public/assets/pages/career-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "AU7PBt9yIcZtEpdVRoMGN"
+uri = "file://public/assets/pages/donate-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "-rG98oWlHTmYQuRhuSRwT"
+uri = "file://public/assets/pages/about-hero.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "guoMVyv14shOMjrNtzIQw"
+uri = "file://public/assets/pages/dashboard-preview.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "6UBipgRvdpxPbooMpk_s0"
+uri = "file://public/assets/pages/nclex-timeline.png"
+type = "image"
+title = "generated_image"

@@ -900,19 +900,31 @@ export function Tracking() {
               </div>
             </section>
           ) : (
-            <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-              <div className="container mx-auto px-4 py-12 md:py-16">
+            <section className="relative overflow-hidden min-h-[60vh] flex items-center bg-gray-950">
+              <div className="absolute inset-0">
+                <img src="/assets/pages/tracking-hero.png" alt="Track Your NCLEX Application" className="w-full h-full object-cover opacity-35" />
+                <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/80 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-gray-950/20" />
+              </div>
+              <div className="absolute top-1/4 right-1/3 w-72 h-72 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="container mx-auto px-4 py-16 relative z-10">
                 <div className="max-w-4xl mx-auto text-center">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-900/60 border border-blue-800 text-blue-300 text-sm font-medium mb-6">
                     <FileText className="h-4 w-4" />
                     <span>Real-Time Tracking</span>
                   </div>
-                  <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                    Application Tracking
+                  <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight">
+                    Track Your<br />
+                    <span className="text-blue-400">Application Status</span>
                   </h1>
-                  <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                    Track your NCLEX application status in real-time. Enter your application ID to view progress and updates.
+                  <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
+                    Enter your GritSync application ID below to get real-time updates on your NCLEX journey — from submission to your ATT.
                   </p>
+                  <div className="flex flex-wrap justify-center gap-4 mb-8">
+                    {['📋 Submission Status', '🎓 Credentialing', '🏛️ BON Review', '🎫 ATT Status'].map(tag => (
+                      <span key={tag} className="px-4 py-2 rounded-full bg-white/10 border border-white/20 text-white text-sm backdrop-blur-sm">{tag}</span>
+                    ))}
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
                     {/* Buttons only for authenticated users; none for public */}
                   </div>

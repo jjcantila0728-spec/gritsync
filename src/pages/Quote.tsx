@@ -1179,22 +1179,29 @@ export function Quote() {
         {user && <Sidebar />}
         <main className="flex-1">
           {/* Banner Section */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-gray-900 dark:to-primary-900/20">
-            <div className="container mx-auto px-4 py-12 md:py-16">
+          <section className="relative overflow-hidden min-h-[55vh] flex items-center bg-gray-950">
+            <div className="absolute inset-0">
+              <img src="/assets/pages/quote-hero.png" alt="Get Your NCLEX Service Quote" className="w-full h-full object-cover opacity-35" />
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/80 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-gray-950/20" />
+            </div>
+            <div className="absolute top-1/3 right-1/3 w-72 h-72 bg-primary-600/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="container mx-auto px-4 py-14 relative z-10">
               <div className="max-w-4xl mx-auto text-center">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-900/60 border border-primary-800 text-primary-300 text-sm font-medium mb-6">
                   <DollarSign className="h-4 w-4" />
-                  <span>Get Instant Quotes</span>
+                  <span>Transparent Pricing</span>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-                  Get Your Service Quotation
+                <h1 className="text-4xl md:text-6xl font-black mb-4 text-white leading-tight">
+                  Get Your<br />
+                  <span className="text-primary-400">Service Quotation</span>
                 </h1>
-                <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                  Get transparent, instant quotes for NCLEX Processing and more. No hidden fees, clear pricing upfront.
+                <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
+                  Instant, transparent quotes for NCLEX Processing services. No hidden fees — clear pricing upfront, downloadable as PDF.
                 </p>
                 {user && !isAdmin() && (
                   <Link to="/quotations/new">
-                    <Button size="lg" className="text-lg px-8 py-6">
+                    <Button size="lg" className="text-lg px-8 py-6 bg-primary-600 hover:bg-primary-500">
                       <Plus className="h-5 w-5 mr-2" />
                       Create New Quotation
                     </Button>
@@ -1839,17 +1846,23 @@ export function Quote() {
             // Non-logged-in user: Show generator or empty state
             <div className="max-w-7xl mx-auto space-y-6">
               {!showGenerator ? (
-                <Card>
-                  <div className="text-center py-12">
-                    <FileText className="h-16 w-16 text-primary-600 dark:text-primary-400 mx-auto mb-6" />
-                    <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+                <div className="text-center py-16 px-4">
+                  <div className="max-w-2xl mx-auto">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-600 to-primary-400 flex items-center justify-center mx-auto mb-6 shadow-xl">
+                      <FileText className="h-10 w-10 text-white" />
+                    </div>
+                    <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
                       Professional Quotation Generator
                     </h2>
-                    <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                      Create professional, downloadable quotations with detailed line items, pricing, and terms. 
-                      Generate PDF quotes instantly for your clients.
+                    <p className="text-lg text-gray-500 dark:text-gray-400 mb-8 max-w-xl mx-auto leading-relaxed">
+                      Create professional, downloadable PDF quotations with detailed line items, transparent pricing, and clear payment terms — in minutes.
                     </p>
-                    <Button size="lg" onClick={() => {
+                    <div className="flex flex-wrap justify-center gap-4 mb-8">
+                      {['📄 PDF Download', '💰 Transparent Pricing', '⚡ Instant Generation', '🔒 Secure'].map(feat => (
+                        <span key={feat} className="px-4 py-2 rounded-full bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300 text-sm font-medium">{feat}</span>
+                      ))}
+                    </div>
+                    <Button size="lg" className="text-lg px-8 py-6 bg-primary-600 hover:bg-primary-500" onClick={() => {
                       setShowGenerator(true)
                       setCurrentStep(1)
                     }}>
@@ -1857,7 +1870,7 @@ export function Quote() {
                       Create New Quotation
                     </Button>
                   </div>
-                </Card>
+                </div>
               ) : (
                 // Show generator steps for non-logged-in users
                 <div className="max-w-3xl mx-auto">

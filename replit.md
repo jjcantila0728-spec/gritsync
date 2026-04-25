@@ -144,6 +144,26 @@ Admin page at `src/pages/AdminNCLEXSubscriptions.tsx`:
 - `src/lib/email-service.ts` calls `/api/emails/send` directly (not Supabase functions)
 - `src/pages/ClientEmails.tsx` filters inbox by both GritSync address AND user's real email
 
+## Page Redesigns (Completed)
+All public-facing pages have been redesigned with dark cinematic hero sections using AI-generated images:
+- `src/pages/Home.tsx` — Quick Stats bar, features grid, dashboard preview (browser mockup), 8-step NCLEX timeline, testimonials, CTA
+- `src/pages/AboutUs.tsx` — Hero with `about-hero.png`, count-up stats strip, mission + Grit+Sync naming sections, values grid, team cards, trust strip, CTA
+- `src/pages/CareerListing.tsx` — Hero with `career-hero.png`, perks strip, animated job listings, open-application CTA
+- `src/pages/SponsorshipLanding.tsx` — Hero with `sponsorship-hero.png`, benefits grid, eligibility/process sections, CTA
+- `src/pages/Donate.tsx` — Hero with `donate-hero.png` (image overlay on dark background), existing form/payment flow preserved intact
+- `src/pages/Tracking.tsx` — Public hero with `tracking-hero.png`, tracking form below; authenticated view unchanged
+- `src/pages/Quote.tsx` — Hero with `quote-hero.png`, wizard unchanged; improved non-logged-in empty state
+
+Hero images are all stored in `public/assets/pages/` and served at `/assets/pages/*.png`.
+
+## EAD Removal (Completed)
+All EAD (Employment Authorization Document) routes, UI, and references have been removed. The platform is now NCLEX-only:
+- Removed EAD routes from `App.tsx`
+- Removed EAD timeline block from `ApplicationDetail.tsx`
+- Updated type definitions to NCLEX-only
+- Cleaned up `PromoCodeSettings`, `ServiceSettings`, `ApplicationCheckout`, `AdminApplicationPayments`
+- Updated `DetailsTab` to NCLEX-only tabs
+
 ## Development Scripts
 - `npm run dev` — Start Vite frontend + Express backend concurrently
 - `npm run server` — Start only the Express backend

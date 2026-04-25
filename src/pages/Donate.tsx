@@ -251,25 +251,29 @@ export function Donate() {
       <Header />
       <main className="flex-1">
         {/* Hero Banner Section */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 dark:from-primary-800 dark:via-primary-900 dark:to-primary-950 text-white">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-primary-900/50 to-transparent"></div>
+        <section className="relative overflow-hidden min-h-[70vh] flex items-center bg-gray-950 text-white">
+          <div className="absolute inset-0">
+            <img src="/assets/pages/donate-hero.png" alt="Support Filipino Nurses" className="w-full h-full object-cover opacity-35" />
+            <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-gray-950/20" />
+          </div>
+          <div className="absolute top-1/3 right-1/4 w-80 h-80 bg-primary-600/15 rounded-full blur-3xl pointer-events-none" />
           <div className="container mx-auto px-4 py-16 md:py-24 relative z-10">
             <div className="max-w-4xl mx-auto text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full mb-6 animate-pulse">
-                <Heart className="h-10 w-10 text-white" fill="currentColor" />
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-primary-600/30 backdrop-blur-sm rounded-2xl mb-6 border border-primary-600/50">
+                <Heart className="h-10 w-10 text-primary-400" fill="currentColor" />
               </div>
-              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium mb-6 border border-white/30">
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary-900/60 backdrop-blur-sm text-primary-300 text-sm font-medium mb-6 border border-primary-800">
                 <Sparkles className="h-4 w-4" />
                 <span>Transform Lives Today</span>
               </div>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight">
                 Help Nurses Achieve Their
-                <span className="block text-yellow-300 mt-2">USRN Dreams</span>
+                <span className="block text-primary-400 mt-2">USRN Dreams</span>
               </h1>
-              <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed">
+              <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
                 Your donation removes financial barriers and opens doors for aspiring nurses. 
-                <span className="block mt-2 font-semibold">Every dollar brings someone closer to their dream career.</span>
+                <span className="block mt-2 font-semibold text-white">Every dollar brings someone closer to their dream career.</span>
               </p>
               
               {/* Impact Stats */}
