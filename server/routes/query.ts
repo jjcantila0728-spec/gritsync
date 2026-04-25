@@ -207,6 +207,7 @@ router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res
 // Allowed RPC functions (PostgreSQL stored procedures/functions)
 const ALLOWED_RPC_FUNCTIONS = new Set([
   'validate_promo_code',
+  'get_dashboard_stats',
 ])
 
 // POST /api/db/rpc/:fn — call a PostgreSQL function
@@ -227,6 +228,54 @@ router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Res
       const values = [p_code, p_amount, p_service_fee_amount ?? null, p_application_type ?? null]
       const rows = await query(sql, values)
       result = rows.rows[0]?.result ?? null
+
+    } else if (fn === 'get_dashboard_stats') {
+      const isAdminUser = args.is_admin === true
+      const statsResult = await query(`
+        SELECT
+          COUNT(*) FILTER (WHERE TRUE) AS total_applications,
+          COUNT(*) FILTER (WHERE status = 'pending') AS pending_applications,
+          COUNT(*) FILTER (WHERE status IN ('completed', 'Completed')) AS completed_applications,
+          COUNT(*) FILTER (WHERE status = 'rejected') AS rejected_applications
+        FROM applications
+        ${isAdminUser ? '' : 'WHERE FALSE'}
+      `, [])
+
+      const paymentsResult = await query(`
+        SELECT COALESCE(SUM(amount), 0) AS revenue
+        FROM application_payments
+        WHERE status = 'paid'
+      `, [])
+
+      const quotationsResult = await query(`
+        SELECT
+          COUNT(*) AS total_quotations,
+          COUNT(*) FILTER (WHERE status = 'pending') AS pending_quotations,
+          COUNT(*) FILTER (WHERE status = 'paid') AS paid_quotations
+        FROM quotations
+      `, [])
+
+      const clientsResult = await query(`
+        SELECT COUNT(*) AS total_clients FROM users WHERE role = 'client'
+      `, [])
+
+      const stats = statsResult.rows[0] || {}
+      const payments = paymentsResult.rows[0] || {}
+      const quotations = quotationsResult.rows[0] || {}
+      const clients = clientsResult.rows[0] || {}
+
+      result = [{
+        total_applications: parseInt(stats.total_applications || '0'),
+        pending_applications: parseInt(stats.pending_applications || '0'),
+        completed_applications: parseInt(stats.completed_applications || '0'),
+        rejected_applications: parseInt(stats.rejected_applications || '0'),
+        total_quotations: parseInt(quotations.total_quotations || '0'),
+        pending_quotations: parseInt(quotations.pending_quotations || '0'),
+        paid_quotations: parseInt(quotations.paid_quotations || '0'),
+        total_clients: parseInt(clients.total_clients || '0'),
+        revenue: parseFloat(payments.revenue || '0'),
+      }]
+
     } else {
       result = null
     }
