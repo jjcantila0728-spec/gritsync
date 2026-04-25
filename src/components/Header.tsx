@@ -534,12 +534,31 @@ export function Header() {
       })
       notificationChannelRef.current = notificationChannel
 
+      // Poll every 15 seconds as a reliable fallback (real-time may not always fire)
+      const pollInterval = setInterval(async () => {
+        try {
+          const count = await notificationsAPI.getUnreadCount(true)
+          setUnreadCount(count || 0)
+        } catch { /* silent */ }
+      }, 15000)
+
+      // Refresh count whenever documents are uploaded/deleted
+      const handleExternalUpdate = async () => {
+        try {
+          const count = await notificationsAPI.getUnreadCount(true)
+          setUnreadCount(count || 0)
+        } catch { /* silent */ }
+      }
+      window.addEventListener('documentsUpdated', handleExternalUpdate)
+
       // Cleanup on unmount
       return () => {
         if (notificationChannelRef.current) {
           unsubscribe(notificationChannelRef.current)
           notificationChannelRef.current = null
         }
+        clearInterval(pollInterval)
+        window.removeEventListener('documentsUpdated', handleExternalUpdate)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
