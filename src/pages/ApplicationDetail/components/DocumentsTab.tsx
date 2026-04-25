@@ -1,5 +1,5 @@
 ﻿import { Card } from '@/components/ui/Card'
-import { FileText, ImageIcon } from 'lucide-react'
+import { FileText, ImageIcon, GraduationCap } from 'lucide-react'
 import { DocumentImagePreview } from '@/components/ui/DocumentImagePreview'
 import { DocumentPDFPreview } from './DocumentPDFPreview'
 import { getSignedFileUrl } from '@/lib/api'
@@ -248,7 +248,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Infection Control and Barrier Precautions
                               </p>
-                              {isAdmin() && (
+                              {isAdmin && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -362,7 +362,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin() && (
+                                    {isAdmin && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
@@ -398,7 +398,7 @@ export function DocumentsTab({
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Child Abuse: New York Mandated Reporter Training
                               </p>
-                              {isAdmin() && (
+                              {isAdmin && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -512,7 +512,7 @@ export function DocumentsTab({
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
                                       <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                    {isAdmin() && (
+                                    {isAdmin && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
