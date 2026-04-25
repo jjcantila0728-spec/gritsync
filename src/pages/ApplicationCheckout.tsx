@@ -12,7 +12,8 @@ import { formatCurrency } from '@/lib/utils'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
-import { ArrowLeft, CreditCard, Clock, Info, CheckCircle, Loader2 } from 'lucide-react'
+import { MobileBankingCheckoutForm } from '@/components/MobileBankingCheckoutForm'
+import { ArrowLeft, CreditCard, Clock, CheckCircle } from 'lucide-react'
 
 export function ApplicationCheckout() {
   const { id } = useParams<{ id: string }>()
@@ -363,16 +364,14 @@ export function ApplicationCheckout() {
                         />
                       </Elements>
                     ) : (
-                      <div className="space-y-4 text-center py-6">
-                        <Info className="h-10 w-10 text-primary-500 mx-auto" />
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Card Payment Not Available</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Online card payment is not configured. Please go back to your payments page and choose <strong>GCash</strong> or <strong>Mobile Banking</strong> to complete your payment.
-                        </p>
-                        <Button onClick={() => navigate(`/applications/${id}/payments`)} className="mt-2">
-                          Go to Payments Page
-                        </Button>
-                      </div>
+                      <MobileBankingCheckoutForm
+                        amount={payment.amount || 0}
+                        serviceFeeAmount={payment.service_fee_amount}
+                        applicationType={application?.application_type as 'NCLEX' | undefined}
+                        onSuccess={handlePaymentSuccess}
+                        onError={handlePaymentError}
+                        processingPayment={processingPayment}
+                      />
                     )}
                   </div>
               </Card>
