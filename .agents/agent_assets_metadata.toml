@@ -1,0 +1,26 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "gIoBn7AiA7wphxtszybui"
+uri = "file://public/assets/nurses/hero-bg.png"
+type = "image"
+title = "Hero background"
+
+[[generated]]
+id = "advyGjVFuFftZyMcbn6Yu"
+uri = "file://public/assets/nurses/nurse-male.png"
+type = "image"
+title = "Filipino male nurse"
+
+[[generated]]
+id = "dVwxKgmIg6hkvSE2DT_hX"
+uri = "file://public/assets/nurses/nurse-female-1.png"
+type = "image"
+title = "Filipino female nurse 1"
+
+[[generated]]
+id = "mVEGp-qwc8DKg4MrRxQzM"
+uri = "file://public/assets/nurses/nurse-female-2.png"
+type = "image"
+title = "Filipino female nurse 2"
