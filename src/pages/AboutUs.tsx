@@ -238,7 +238,7 @@ export function AboutUs() {
                       "Every nurse who walks through this journey deserves someone in their corner. That's what GritSync is — your corner."
                     </blockquote>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-600 to-primary-400 flex items-center justify-center text-white font-bold text-sm">JJ</div>
+                      <img src="/gritsyncfounder.png" alt="JJ Cantila" className="w-10 h-10 rounded-full object-cover object-top border border-primary-700 flex-shrink-0" />
                       <div>
                         <p className="text-white font-bold text-sm">JJ Cantila</p>
                         <p className="text-gray-400 text-xs">Founder, GritSync</p>
