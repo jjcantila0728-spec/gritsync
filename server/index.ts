@@ -16,19 +16,16 @@ import { getSeedQuestions } from './data/nclex-seed'
 async function runStartupMigrations() {
   try {
     // Fix test_sessions.user_id type: migrate from INTEGER to UUID to match users.id.
-    // Integer values cannot be cast to UUID, so existing integer rows are nulled out.
-    // In practice this table was empty when this migration was first introduced.
+    // The column is dropped and re-added as UUID with a FK reference to users(id).
+    // This is safe because the table had 0 rows when this migration was first introduced.
     const colTypeResult = await query(
       `SELECT data_type FROM information_schema.columns
        WHERE table_name = 'test_sessions' AND column_name = 'user_id'`
     )
     if (colTypeResult.rows[0]?.data_type === 'integer') {
       console.log('Migrating test_sessions.user_id from INTEGER to UUID...')
-      await query(
-        `ALTER TABLE test_sessions
-         ALTER COLUMN user_id TYPE UUID
-         USING CASE WHEN user_id IS NULL THEN NULL ELSE NULL::UUID END`
-      )
+      await query(`ALTER TABLE test_sessions DROP COLUMN user_id`)
+      await query(`ALTER TABLE test_sessions ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE`)
       console.log('test_sessions.user_id migrated to UUID successfully.')
     }
   } catch (err) {
