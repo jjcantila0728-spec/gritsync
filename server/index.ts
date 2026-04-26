@@ -193,7 +193,9 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 app.listen(PORT, () => {
   console.log(`API Server running on port ${PORT} (${isProd ? 'production' : 'development'})`)
-  runStartupMigrations()
+  runStartupMigrations().catch((err) => {
+    console.error('Unhandled error in startup migrations (non-fatal):', err)
+  })
 })
 
 export default app
