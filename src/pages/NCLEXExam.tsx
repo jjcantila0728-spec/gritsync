@@ -902,27 +902,47 @@ export function NCLEXExam() {
               <div className="mt-6 pt-4 border-t border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Statistics</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  {feedback?.difficulty && (
+                  {(feedback?.difficulty || currentQuestion.difficulty) && (
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500">Difficulty level –</span>
-                      <DifficultyBadge difficulty={feedback.difficulty} />
+                      <DifficultyBadge difficulty={feedback?.difficulty || currentQuestion.difficulty} />
                     </div>
                   )}
-                  {feedback?.content_area && (
+                  {(feedback?.content_area || currentQuestion.content_area) && (
                     <div className="flex items-center gap-1.5 text-gray-500">
                       <span>Subject</span>
                       <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium capitalize">
-                        {feedback.content_area.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        {(feedback?.content_area || currentQuestion.content_area).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                       </span>
                     </div>
                   )}
-                  {feedback?.subcategory && (
+                  {(feedback?.subcategory || currentQuestion.subcategory) && (
                     <div className="flex items-center gap-1.5 text-gray-500">
                       <span>Lesson</span>
-                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">{feedback.subcategory}</span>
+                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">{feedback?.subcategory || currentQuestion.subcategory}</span>
                     </div>
                   )}
                 </div>
+                {(() => {
+                  const rawTags = currentQuestion.tags
+                  if (!rawTags) return null
+                  const tagList: string[] = Array.isArray(rawTags)
+                    ? rawTags.filter(Boolean)
+                    : String(rawTags).split(',').map((t: string) => t.trim()).filter(Boolean)
+                  if (tagList.length === 0) return null
+                  return (
+                    <div className="mt-3">
+                      <p className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Tags</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tagList.map((tag) => (
+                          <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -947,18 +967,26 @@ export function NCLEXExam() {
                 {currentQuestion.rationale}
               </div>
 
-              {currentQuestion.tags && (
-                <div className="mt-5 pt-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Key Topics</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {currentQuestion.tags.split(',').map((tag: string) => (
-                      <span key={tag} className="text-xs bg-[#17c3b2]/10 text-[#17c3b2] px-2 py-0.5 rounded-full font-medium">
-                        {tag.trim()}
-                      </span>
-                    ))}
+              {(() => {
+                const rawTags = currentQuestion.tags
+                if (!rawTags) return null
+                const tagList: string[] = Array.isArray(rawTags)
+                  ? rawTags.filter(Boolean)
+                  : String(rawTags).split(',').map((t: string) => t.trim()).filter(Boolean)
+                if (tagList.length === 0) return null
+                return (
+                  <div className="mt-5 pt-4 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Key Topics</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tagList.map((tag) => (
+                        <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-gray-400">
