@@ -491,13 +491,15 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-    // Enforce daily limit before creating session
-    const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId)
-    if (!canAnswer) {
-      return res.status(403).json({
-        error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to Premium or VIP for more questions.`,
-        daily_limit_reached: true,
-      })
+    // Admins have unlimited access — skip daily limit enforcement
+    if (req.user?.role !== 'admin') {
+      const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId)
+      if (!canAnswer) {
+        return res.status(403).json({
+          error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to Premium or VIP for more questions.`,
+          daily_limit_reached: true,
+        })
+      }
     }
 
     const {
@@ -732,13 +734,15 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
     const sessionId = parseInt(req.params.id)
     const { question_id, user_answer, time_spent = 0 } = req.body
 
-    // Enforce daily limit server-side before accepting answer
-    const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId!)
-    if (!canAnswer) {
-      return res.status(403).json({
-        error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to continue.`,
-        daily_limit_reached: true,
-      })
+    // Admins have unlimited access — skip daily limit enforcement
+    if (req.user?.role !== 'admin') {
+      const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId!)
+      if (!canAnswer) {
+        return res.status(403).json({
+          error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to continue.`,
+          daily_limit_reached: true,
+        })
+      }
     }
 
     const sessionResult = await query(
@@ -1125,6 +1129,19 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res) =
 router.get('/subscription/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id
+
+    // Admins have unlimited access — return a synthetic admin plan
+    if (req.user?.role === 'admin') {
+      return res.json({
+        plan: 'admin',
+        status: 'active',
+        expires_at: null,
+        questions_today: 0,
+        daily_limit: null,
+        can_answer: true,
+      })
+    }
+
     const today = new Date().toISOString().split('T')[0]
 
     const subResult = await query(

@@ -25,6 +25,13 @@ const NAV_ITEMS = [
 ]
 
 function PlanBadge({ plan }: { plan: string }) {
+  if (plan === 'admin') {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-purple-500 text-white">
+        Admin
+      </span>
+    )
+  }
   if (plan === 'vip') {
     return (
       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-400 text-amber-900">
