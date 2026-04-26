@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { NCLEXExamLayout } from '@/layouts/NCLEXLayout'
@@ -480,11 +480,33 @@ export function NCLEXExam() {
   const [showScore, setShowScore] = useState(initialTab === 'score')
   const [markedQuestions, setMarkedQuestions] = useState<Set<number>>(new Set())
   const [scenarioExpanded, setScenarioExpanded] = useState(true)
+  const [caseStudyFilter, setCaseStudyFilter] = useState<string | null>(null)
 
   const currentQuestion = questions[qIndex] || null
   const sessionMode = session?.settings?.mode || 'tutorial'
   const isTutorial = sessionMode === 'tutorial'
   const sessionId = parseInt(id || '0')
+
+  // Unique case studies in this session (used for review-mode filter)
+  const caseStudiesInSession = useMemo(() => {
+    if (!isReviewMode) return []
+    const seen = new Set<string>()
+    const result: { id: string; title: string }[] = []
+    for (const q of questions) {
+      const csId = q.case_study_id ? String(q.case_study_id) : null
+      if (csId && !seen.has(csId)) {
+        seen.add(csId)
+        result.push({ id: csId, title: q.case_study_title || `Case Study ${csId}` })
+      }
+    }
+    return result
+  }, [questions, isReviewMode])
+
+  // Questions visible in the bottom-nav (filtered by case study when a filter is active)
+  const navQuestions = useMemo(() => {
+    if (!caseStudyFilter) return questions
+    return questions.filter(q => String(q.case_study_id) === caseStudyFilter)
+  }, [questions, caseStudyFilter])
 
   // Load session data
   const loadSession = useCallback(async () => {
@@ -518,6 +540,14 @@ export function NCLEXExam() {
   }, [id, user, isReviewMode])
 
   useEffect(() => { loadSession() }, [loadSession])
+
+  // When the case study filter changes, jump to the first question in the filtered set
+  useEffect(() => {
+    if (caseStudyFilter) {
+      const firstIdx = questions.findIndex(q => String(q.case_study_id) === caseStudyFilter)
+      if (firstIdx >= 0) setQIndex(firstIdx)
+    }
+  }, [caseStudyFilter, questions])
 
   // Timer
   useEffect(() => {
@@ -1050,6 +1080,38 @@ export function NCLEXExam() {
         </div>
       </div>
 
+      {/* ── Case Study Filter Bar (review mode only) ── */}
+      {isReviewMode && caseStudiesInSession.length > 0 && (
+        <div className="bg-[#0a1a2e] border-t border-white/10 px-4 py-2 flex items-center gap-2 flex-shrink-0 overflow-x-auto">
+          <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wide flex-shrink-0">Filter:</span>
+          <button
+            onClick={() => setCaseStudyFilter(null)}
+            className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
+              caseStudyFilter === null
+                ? 'bg-[#17c3b2] text-white'
+                : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+            }`}
+          >
+            All Questions
+          </button>
+          {caseStudiesInSession.map(cs => (
+            <button
+              key={cs.id}
+              onClick={() => setCaseStudyFilter(cs.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[160px] ${
+                caseStudyFilter === cs.id
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+              }`}
+              title={cs.title}
+            >
+              <BookOpen className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{cs.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Bottom Navigation Bar ── */}
       <div className="bg-[#0d2137] text-white h-12 flex items-center px-4 gap-3 flex-shrink-0">
         <button
@@ -1059,23 +1121,26 @@ export function NCLEXExam() {
           ✕ Close
         </button>
 
-        {/* Progress dots */}
+        {/* Progress dots — filtered when a case study filter is active */}
         <div className="flex-1 flex items-center justify-center gap-1 overflow-hidden">
-          {questions.slice(0, 20).map((q, i) => (
-            <button
-              key={i}
-              onClick={() => setQIndex(i)}
-              className={`flex-shrink-0 h-2.5 w-2.5 rounded-full transition-all ${
-                i === qIndex ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30' :
-                q.answered_at ? (q.is_correct ? 'bg-green-400' : 'bg-red-400') :
-                markedQuestions.has(q.question_id) ? 'bg-amber-400' :
-                'bg-white/20'
-              }`}
-              title={`Question ${i + 1}`}
-            />
-          ))}
-          {questions.length > 20 && (
-            <span className="text-xs text-white/40 ml-1">+{questions.length - 20} more</span>
+          {navQuestions.slice(0, 20).map((q) => {
+            const realIdx = questions.findIndex(rq => rq.question_id === q.question_id)
+            return (
+              <button
+                key={q.question_id}
+                onClick={() => setQIndex(realIdx)}
+                className={`flex-shrink-0 h-2.5 w-2.5 rounded-full transition-all ${
+                  realIdx === qIndex ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30' :
+                  q.answered_at ? (q.is_correct ? 'bg-green-400' : 'bg-red-400') :
+                  markedQuestions.has(q.question_id) ? 'bg-amber-400' :
+                  'bg-white/20'
+                }`}
+                title={`Question ${realIdx + 1}`}
+              />
+            )
+          })}
+          {navQuestions.length > 20 && (
+            <span className="text-xs text-white/40 ml-1">+{navQuestions.length - 20} more</span>
           )}
         </div>
 
@@ -1089,31 +1154,64 @@ export function NCLEXExam() {
             </button>
           )}
 
-          <button
-            onClick={() => setQIndex(Math.max(0, qIndex - 1))}
-            disabled={qIndex === 0}
-            className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4" /> Previous
-          </button>
+          {(() => {
+            const navQIndex = navQuestions.findIndex(q => q.question_id === currentQuestion?.question_id)
+            const prevNavQ = navQIndex > 0 ? navQuestions[navQIndex - 1] : null
+            const nextNavQ = navQIndex >= 0 && navQIndex < navQuestions.length - 1 ? navQuestions[navQIndex + 1] : null
 
-          {!isReviewMode && !feedback && !isDisabled ? (
-            <button
-              onClick={submitAnswer}
-              disabled={!hasAnswer || submitting}
-              className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {submitting ? 'Submitting...' : 'Submit'}
-            </button>
-          ) : (
-            <button
-              onClick={advanceQuestion}
-              disabled={qIndex + 1 >= questions.length && !feedback}
-              className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 transition-colors"
-            >
-              Next <ChevronRight className="h-4 w-4" />
-            </button>
-          )}
+            const goPrev = () => {
+              if (prevNavQ) {
+                const idx = questions.findIndex(q => q.question_id === prevNavQ.question_id)
+                if (idx >= 0) setQIndex(idx)
+              } else if (!caseStudyFilter) {
+                setQIndex(Math.max(0, qIndex - 1))
+              }
+            }
+            const goNext = () => {
+              if (nextNavQ) {
+                const idx = questions.findIndex(q => q.question_id === nextNavQ.question_id)
+                if (idx >= 0) setQIndex(idx)
+              } else if (!caseStudyFilter) {
+                advanceQuestion()
+              }
+            }
+            const atStart = navQIndex <= 0
+            // When a filter is active, disable Next unconditionally at the boundary;
+            // otherwise only disable when no feedback has been shown yet.
+            const atEnd = caseStudyFilter
+              ? !nextNavQ
+              : qIndex + 1 >= questions.length && !feedback
+
+            return (
+              <>
+                <button
+                  onClick={goPrev}
+                  disabled={atStart}
+                  className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Previous
+                </button>
+
+                {!isReviewMode && !feedback && !isDisabled ? (
+                  <button
+                    onClick={submitAnswer}
+                    disabled={!hasAnswer || submitting}
+                    className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {submitting ? 'Submitting...' : 'Submit'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={goNext}
+                    disabled={atEnd}
+                    className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 transition-colors"
+                  >
+                    Next <ChevronRight className="h-4 w-4" />
+                  </button>
+                )}
+              </>
+            )
+          })()}
         </div>
       </div>
     </NCLEXExamLayout>
