@@ -171,7 +171,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         JSON.stringify(options || []),
         JSON.stringify(correct_answer || {}),
         rationale || null,
-        tags || null,
+        parseTags(tags),
         is_active,
       ]
     )
@@ -231,7 +231,7 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
         options ? JSON.stringify(options) : null,
         correct_answer ? JSON.stringify(correct_answer) : null,
         rationale ?? null,
-        tags ?? null,
+        parseTags(tags),
         is_active ?? null,
         id,
       ]
