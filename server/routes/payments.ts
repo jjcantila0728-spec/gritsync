@@ -52,7 +52,7 @@ router.post('/create-application-intent', optionalAuth, async (req: Authenticate
     // Fetch payment record to get amount and metadata
     // application_payments has no user_id — join with applications to get it
     const result = await query(
-      `SELECT ap.id, ap.amount, ap.currency, ap.description, ap.application_id, a.user_id
+      `SELECT ap.id, ap.amount, ap.currency, ap.payment_type, ap.notes, ap.application_id, a.user_id
        FROM application_payments ap
        LEFT JOIN applications a ON a.id = ap.application_id
        WHERE ap.id = $1`,
@@ -69,7 +69,7 @@ router.post('/create-application-intent', optionalAuth, async (req: Authenticate
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: (payment.currency || 'usd').toLowerCase(),
-      description: payment.description || `Application payment ${payment_id}`,
+      description: payment.notes || payment.payment_type || `Application payment ${payment_id}`,
       metadata: {
         payment_id,
         application_id: payment.application_id || '',

@@ -5168,6 +5168,36 @@ export const donationsAPI = {
       currency: 'USD',
     }
   },
+
+  createPaymentIntent: async (donationId: string, amount: number) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch('/api/payments/create-donation-intent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ amount, metadata: { donation_id: donationId } }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Failed to create donation payment intent')
+    return {
+      client_secret: data.clientSecret || data.client_secret,
+      payment_intent_id: data.paymentIntentId || data.payment_intent_id,
+    }
+  },
+
+  updateStatus: async (id: string, status: 'pending' | 'completed' | 'failed') => {
+    const { data, error } = await db
+      .from('donations')
+      .update({ status })
+      .eq('id', id)
+      .select('*')
+      .single()
+    
+    if (error) throw new Error(error.message)
+    return data
+  },
 }
 
 // Partner Agencies API
