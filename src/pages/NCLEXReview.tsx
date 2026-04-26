@@ -110,7 +110,7 @@ function DonutChart({ segments, label, centerLabel, centerSub }: {
 // ── Create Test Modal ─────────────────────────────────────────────────────────
 type TestMode = 'tutorial' | 'timed' | 'cat' | 'readiness'
 type TestType = 'classic' | 'ngn' | 'mixed'
-type QuestionPool = 'unused' | 'incorrect' | 'marked' | 'all'
+type QuestionPool = 'unused' | 'incorrect' | 'marked' | 'all' | 'case_studies'
 
 interface CreateTestConfig {
   mode: TestMode
@@ -301,6 +301,7 @@ function CreateTestModal({ onClose, onStart, stats }: {
                       { value: 'unused', label: 'Unused', sub: `${stats?.unused ?? '—'} questions` },
                       { value: 'incorrect', label: 'Incorrect', sub: `${stats?.incorrect ?? '—'} questions` },
                       { value: 'all', label: 'All', sub: `${stats?.total_questions ?? '—'} questions` },
+                      { value: 'case_studies', label: 'Case Studies', sub: 'NGN cluster sets' },
                     ].map(opt => (
                       <label key={opt.value} className="cursor-pointer">
                         <div
@@ -343,6 +344,17 @@ function CreateTestModal({ onClose, onStart, stats }: {
                       className="w-32 px-3 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:border-[#17c3b2] outline-none"
                     />
                   </div>
+                </div>
+              )}
+
+              {pool === 'case_studies' && (
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-xl p-4 text-sm text-indigo-800 dark:text-indigo-300 space-y-2">
+                  <p className="font-semibold">NGN Case Study Mode</p>
+                  <p>Each question is linked to a detailed clinical scenario. The shared patient scenario appears at the top of the screen while you answer all 6 related questions — just like the real Next-Generation NCLEX.</p>
+                  <ul className="list-disc list-inside space-y-1 text-indigo-700 dark:text-indigo-400">
+                    <li>Questions are delivered as <strong>complete 6-question clusters</strong> — the actual count may be slightly more than the number you enter to preserve each cluster.</li>
+                    <li>Content area and difficulty filters are not applied — case studies span multiple areas by design.</li>
+                  </ul>
                 </div>
               )}
 
@@ -640,6 +652,7 @@ export function NCLEXReview() {
   const [eligibility, setEligibility] = useState<any>(null)
   const [showClassic, setShowClassic] = useState(true)
   const [seedingLoading, setSeedingLoading] = useState(false)
+  const [seedingCaseStudiesLoading, setSeedingCaseStudiesLoading] = useState(false)
   const [filterPending, setFilterPending] = useState(false)
 
   useEffect(() => {
@@ -677,6 +690,23 @@ export function NCLEXReview() {
       alert(err.message)
     } finally {
       setSeedingLoading(false)
+    }
+  }
+
+  async function seedCaseStudies() {
+    setSeedingCaseStudiesLoading(true)
+    try {
+      const result = await apiFetch('/api/questions/seed-case-studies', { method: 'POST' })
+      await loadAll()
+      if (result.insertedStudies > 0) {
+        alert(`Seeded ${result.insertedStudies} case studies with ${result.insertedQuestions} questions.`)
+      } else {
+        alert(result.message || 'Case studies already exist.')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setSeedingCaseStudiesLoading(false)
     }
   }
 
@@ -746,6 +776,15 @@ export function NCLEXReview() {
                 className="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 {seedingLoading ? 'Seeding...' : 'Seed Questions'}
+              </button>
+            )}
+            {user?.role === 'admin' && (
+              <button
+                onClick={seedCaseStudies}
+                disabled={seedingCaseStudiesLoading}
+                className="px-3 py-2 rounded-xl border border-indigo-300 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors"
+              >
+                {seedingCaseStudiesLoading ? 'Seeding...' : 'Seed Case Studies'}
               </button>
             )}
             <button
@@ -858,13 +897,22 @@ export function NCLEXReview() {
                   <BookOpen className="h-10 w-10 opacity-30" />
                   <p className="text-sm">No questions in the bank yet.</p>
                   {user?.role === 'admin' && (
-                    <button
-                      onClick={seedQuestions}
-                      disabled={seedingLoading}
-                      className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold hover:bg-[#14a99a]"
-                    >
-                      {seedingLoading ? 'Seeding...' : 'Seed Sample Questions'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={seedQuestions}
+                        disabled={seedingLoading}
+                        className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold hover:bg-[#14a99a]"
+                      >
+                        {seedingLoading ? 'Seeding...' : 'Seed Sample Questions'}
+                      </button>
+                      <button
+                        onClick={seedCaseStudies}
+                        disabled={seedingCaseStudiesLoading}
+                        className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+                      >
+                        {seedingCaseStudiesLoading ? 'Seeding...' : 'Seed Case Studies'}
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (

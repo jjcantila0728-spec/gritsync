@@ -71,7 +71,28 @@ async function runStartupMigrations() {
       console.log(`Auto-seeded ${inserted} questions into the question bank.`)
     }
   } catch (err) {
-    console.warn('Startup migration warning:', err)
+    console.warn('Startup migration warning (marked_for_review):', err)
+  }
+
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS case_studies (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        scenario TEXT NOT NULL,
+        content_area TEXT,
+        difficulty TEXT DEFAULT 'medium',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+  } catch (err) {
+    console.warn('Startup migration warning (case_studies table):', err)
+  }
+
+  try {
+    await query(`ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS case_study_id INTEGER REFERENCES case_studies(id) ON DELETE SET NULL`)
+  } catch (err) {
+    console.warn('Startup migration warning (case_study_id column):', err)
   }
   await autoSeedIfEmpty()
 }

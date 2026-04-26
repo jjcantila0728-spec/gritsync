@@ -443,6 +443,7 @@ export function NCLEXExam() {
   // UI state
   const [showScore, setShowScore] = useState(initialTab === 'score')
   const [markedQuestions, setMarkedQuestions] = useState<Set<number>>(new Set())
+  const [scenarioExpanded, setScenarioExpanded] = useState(true)
 
   const currentQuestion = questions[qIndex] || null
   const sessionMode = session?.settings?.mode || 'tutorial'
@@ -496,6 +497,7 @@ export function NCLEXExam() {
     if (!q) return
     setFeedback(null)
     setSubmitError(null)
+    setScenarioExpanded(true)
 
     if (isReviewMode && q.answered_at) {
       // Pre-fill with submitted answer and show feedback
@@ -749,8 +751,42 @@ export function NCLEXExam() {
               )}
             </div>
 
-            {/* Subcategory tab */}
-            {currentQuestion.subcategory && (
+            {/* NGN Case Study Scenario Panel */}
+            {currentQuestion.case_study_id && currentQuestion.case_study_scenario && (
+              <div className="mb-5 rounded-xl border-2 border-blue-200 bg-blue-50 overflow-hidden">
+                <button
+                  onClick={() => setScenarioExpanded(e => !e)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Clinical Scenario</span>
+                      {currentQuestion.case_study_title && (
+                        <p className="text-xs text-blue-600 font-medium mt-0.5">{currentQuestion.case_study_title}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-blue-500 font-medium">{scenarioExpanded ? 'Collapse' : 'Expand'}</span>
+                    {scenarioExpanded
+                      ? <ChevronLeft className="h-4 w-4 text-blue-500 rotate-90" />
+                      : <ChevronRight className="h-4 w-4 text-blue-500 rotate-90" />
+                    }
+                  </div>
+                </button>
+                {scenarioExpanded && (
+                  <div className="px-4 pb-4 border-t border-blue-200">
+                    <div className="mt-3 text-xs text-blue-900 leading-relaxed whitespace-pre-line">
+                      {currentQuestion.case_study_scenario}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subcategory tab (hidden for case study questions) */}
+            {currentQuestion.subcategory && !currentQuestion.case_study_id && (
               <div className="flex border-b border-gray-200 mb-4 text-xs gap-0">
                 <div className="px-4 py-2 border-b-2 border-gray-900 font-semibold text-gray-900">
                   {currentQuestion.subcategory}
@@ -758,15 +794,6 @@ export function NCLEXExam() {
               </div>
             )}
 
-            {/* NGN Case Study Scenario Block */}
-            {currentQuestion.case_study_group && currentQuestion.case_study_scenario && (
-              <CaseStudyScenario
-                scenario={currentQuestion.case_study_scenario}
-                group={currentQuestion.case_study_group}
-                questions={questions}
-                currentIndex={qIndex}
-              />
-            )}
 
             {/* Question text */}
             <div className="mb-5">

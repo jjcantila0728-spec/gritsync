@@ -404,6 +404,7 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
       `)
       params.push(userId)
     }
+    // Note: pool === 'case_studies' is handled via a separate CTE query below
 
     const where = `WHERE ${conditions.join(' AND ')}`
     let limit = question_count
@@ -416,14 +417,47 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
       ? `ORDER BY CASE qb.difficulty WHEN 'medium' THEN 0 WHEN 'easy' THEN 1 ELSE 2 END, RANDOM()`
       : `ORDER BY RANDOM()`
 
-    const questionsResult = await query(
-      `SELECT qb.id, qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
-              qb.difficulty, qb.cognitive_level, qb.is_ngn, qb.options, qb.tags
-       FROM question_bank qb ${where}
-       ${orderBy}
-       LIMIT $${paramIdx}`,
-      [...params, limit]
-    )
+    // For case studies pool: use a CTE to select complete, ordered clusters
+    // This ensures questions from the same scenario are always served together in sequence
+    let questionsResult: any
+    if (pool === 'case_studies') {
+      const numCases = Math.max(1, Math.ceil(limit / 6))
+      questionsResult = await query(
+        `WITH selected_cases AS (
+           SELECT qb.case_study_id
+           FROM question_bank qb
+           WHERE qb.is_active = true AND qb.case_study_id IS NOT NULL
+           GROUP BY qb.case_study_id
+           ORDER BY RANDOM()
+           LIMIT $1
+         )
+         SELECT qb.id, qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
+                qb.difficulty, qb.cognitive_level, qb.is_ngn, qb.options, qb.tags,
+                qb.case_study_id,
+                cs.title AS case_study_title,
+                cs.scenario AS case_study_scenario
+         FROM question_bank qb
+         JOIN case_studies cs ON qb.case_study_id = cs.id
+         WHERE qb.case_study_id IN (SELECT case_study_id FROM selected_cases)
+           AND qb.is_active = true
+         ORDER BY qb.case_study_id, qb.id`,
+        [numCases]
+      )
+    } else {
+      questionsResult = await query(
+        `SELECT qb.id, qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
+                qb.difficulty, qb.cognitive_level, qb.is_ngn, qb.options, qb.tags,
+                qb.case_study_id,
+                cs.title AS case_study_title,
+                cs.scenario AS case_study_scenario
+         FROM question_bank qb
+         LEFT JOIN case_studies cs ON qb.case_study_id = cs.id
+         ${where}
+         ${orderBy}
+         LIMIT $${paramIdx}`,
+        [...params, limit]
+      )
+    }
 
     if (questionsResult.rows.length === 0) {
       return res.status(404).json({ error: 'No questions found matching the criteria. Try a different filter.' })
@@ -489,9 +523,12 @@ router.get('/session/:id/questions', authenticateToken, async (req: Authenticate
               qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
               qb.difficulty, qb.cognitive_level, qb.is_ngn, qb.options,
               qb.correct_answer, qb.rationale, qb.tags,
-              qb.case_study_group, qb.case_study_scenario
+              qb.case_study_id,
+              cs.title AS case_study_title,
+              cs.scenario AS case_study_scenario
        FROM session_responses sr
        JOIN question_bank qb ON sr.question_id = qb.id
+       LEFT JOIN case_studies cs ON qb.case_study_id = cs.id
        WHERE sr.session_id = $1
        ORDER BY sr.question_order`,
       [sessionId]
@@ -1203,16 +1240,14 @@ export async function autoSeedIfEmpty(): Promise<void> {
       await query(
         `INSERT INTO question_bank
            (question_text, question_type, content_area, subcategory, difficulty,
-            cognitive_level, is_ngn, options, correct_answer, rationale, tags,
-            case_study_group, case_study_scenario, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true)
+            cognitive_level, is_ngn, options, correct_answer, rationale, tags, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true)
          ON CONFLICT DO NOTHING`,
         [
           q.question_text, q.question_type, q.content_area, q.subcategory || null,
           q.difficulty, q.cognitive_level || 'Application', q.is_ngn,
           JSON.stringify(q.options), JSON.stringify(q.correct_answer),
           q.rationale, parseTags(q.tags),
-          (q as any).case_study_group || null, (q as any).case_study_scenario || null,
         ]
       )
     }
@@ -1220,6 +1255,576 @@ export async function autoSeedIfEmpty(): Promise<void> {
   } catch (err) {
     console.warn('[seed] Auto-seed failed (non-fatal):', err)
   }
+}
+
+// ─── Seed NGN Case Studies (Admin only) ───────────────────────────────────────
+router.post('/seed-case-studies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+
+  try {
+    const existing = await query(`SELECT COUNT(*) FROM case_studies`)
+    if (parseInt(existing.rows[0].count) > 0) {
+      return res.json({ message: 'Case studies already seeded', count: parseInt(existing.rows[0].count) })
+    }
+
+    const caseStudies = getCaseStudySeedData()
+    let insertedStudies = 0
+    let insertedQuestions = 0
+
+    for (const cs of caseStudies) {
+      const csResult = await query(
+        `INSERT INTO case_studies (title, scenario, content_area, difficulty)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [cs.title, cs.scenario, cs.content_area, cs.difficulty]
+      )
+      const csId = csResult.rows[0].id
+      insertedStudies++
+
+      for (const q of cs.questions) {
+        await query(
+          `INSERT INTO question_bank
+             (question_text, question_type, content_area, subcategory, difficulty,
+              cognitive_level, is_ngn, options, correct_answer, rationale, tags, is_active, case_study_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12)`,
+          [
+            q.question_text, q.question_type, q.content_area, q.subcategory || null,
+            q.difficulty, q.cognitive_level || 'Analysis', true,
+            JSON.stringify(q.options), JSON.stringify(q.correct_answer),
+            q.rationale, q.tags || null, csId,
+          ]
+        )
+        insertedQuestions++
+      }
+    }
+
+    res.json({ message: 'Case studies seeded successfully', insertedStudies, insertedQuestions })
+  } catch (error: any) {
+    console.error('Seed case studies error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+function getCaseStudySeedData() {
+  return [
+    // ─────────────────────────────────────────────────────────────────────────
+    // CASE STUDY 1: Post-CABG Hemorrhage
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      title: 'Post-CABG Patient with Excessive Chest Tube Drainage',
+      scenario: `A 67-year-old male (Mr. Rivera) is 6 hours postoperative following a 3-vessel coronary artery bypass graft (CABG) surgery performed under cardiopulmonary bypass. His medical history includes: type 2 diabetes mellitus (on insulin), hypertension (on lisinopril), and hyperlipidemia (on atorvastatin). He is admitted to the cardiac surgery ICU.
+
+Current Vital Signs:
+• BP: 86/54 mmHg (MAP 65)
+• HR: 122 bpm (sinus tachycardia on monitor)
+• RR: 26/min
+• SpO₂: 91% on 4 L/min O₂ via nasal cannula
+• Temperature: 35.8°C (96.4°F)
+• Urine output: 18 mL/hr (Foley catheter in place)
+
+Physical Assessment:
+• Client is restless and reports feeling "cold and shaky"
+• Skin is cool, pale, and diaphoretic
+• Mediastinal chest tube output: 200 mL/hr for the past 2 consecutive hours
+• Sternal wound dressing is dry and intact
+• IV access: two large-bore peripheral IVs and a central venous line
+
+Current Orders:
+• Normal saline IV at 100 mL/hr
+• Insulin drip per protocol
+• Morphine 2 mg IV q4h PRN pain
+• Heparin 800 units/hr IV infusion (resumed 2 hours postoperatively per cardiac surgeon)
+
+Recent Lab Results:
+• Hemoglobin: 7.2 g/dL (preoperative: 13.8 g/dL)
+• Hematocrit: 21%
+• Platelet count: 88,000/mm³
+• PT/INR: 2.1 / 1.9
+• aPTT: 98 seconds (therapeutic range per heparin protocol: 60–100 sec)
+• Serum creatinine: 1.8 mg/dL (baseline: 1.1 mg/dL)
+• Blood glucose: 248 mg/dL`,
+      content_area: 'physiological_integrity',
+      difficulty: 'hard',
+      questions: [
+        {
+          question_text: 'Based on Mr. Rivera\'s clinical presentation, which finding should the nurse identify as the most immediately life-threatening?',
+          question_type: 'traditional_mcq',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: [
+            { id: 'a', text: 'SpO₂ of 91% on 4 L/min nasal cannula' },
+            { id: 'b', text: 'Mediastinal chest tube output of 200 mL/hr × 2 hours' },
+            { id: 'c', text: 'Blood glucose of 248 mg/dL' },
+            { id: 'd', text: 'Serum creatinine of 1.8 mg/dL' },
+          ],
+          correct_answer: { value: 'b' },
+          rationale: 'Mediastinal chest tube drainage of ≥200 mL/hr for 2 consecutive hours following cardiac surgery is a critical indicator of postoperative hemorrhage, which may require surgical re-exploration. Hemorrhage after CABG is immediately life-threatening and the highest priority. The SpO₂ and creatinine elevations are concerning but secondary. Hyperglycemia requires management but is not acutely life-threatening compared to active hemorrhage.',
+          tags: 'post-CABG,hemorrhage,chest-tube,cardiac-surgery,priority',
+        },
+        {
+          question_text: 'The nurse is preparing to notify the cardiac surgeon about Mr. Rivera\'s condition using SBAR communication. Which actions should the nurse take before making the call? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'safe_effective_care_environment',
+          subcategory: 'Management of Care',
+          difficulty: 'hard',
+          cognitive_level: 'Application',
+          options: [
+            { id: 'a', text: 'Pause the heparin infusion and notify the surgeon immediately' },
+            { id: 'b', text: 'Reassess vital signs and document a complete set of current data' },
+            { id: 'c', text: 'Administer morphine 2 mg IV to manage the client\'s restlessness before calling' },
+            { id: 'd', text: 'Have blood products (PRBCs, FFP, platelets) available and crossmatch confirmed' },
+            { id: 'e', text: 'Ensure two large-bore IV sites are patent and functioning' },
+            { id: 'f', text: 'Request a 12-lead ECG to rule out arrhythmia as cause of hypotension' },
+          ],
+          correct_answer: { values: ['a', 'b', 'd', 'e'] },
+          rationale: 'Before calling the surgeon: (A) Pausing heparin is critical — an INR of 1.9 and aPTT of 98 sec in the setting of hemorrhage increases bleeding risk; (B) Current vital signs are essential SBAR data; (D) Blood products should be immediately available given hemoglobin of 7.2 and platelet count of 88,000; (E) Two patent large-bore IVs are needed for rapid volume resuscitation. Administering morphine to a hemodynamically unstable client (BP 86/54) could worsen hypotension and is contraindicated. A 12-lead ECG is not the immediate priority.',
+          tags: 'SBAR,post-CABG,hemorrhage,nursing-actions,heparin,transfusion',
+        },
+        {
+          question_text: 'The nurse reviews Mr. Rivera\'s laboratory findings. For each lab value listed, indicate whether the result is a contributing factor to hemorrhage, a consequence of hemorrhage, or both.',
+          question_type: 'ngn_matrix',
+          content_area: 'physiological_integrity',
+          subcategory: 'Reduction of Risk Potential',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: {
+            rows: [
+              { id: 1, text: 'Platelet count 88,000/mm³' },
+              { id: 2, text: 'INR 1.9 (therapeutic heparin)' },
+              { id: 3, text: 'Hemoglobin 7.2 g/dL (from 13.8 g/dL preoperatively)' },
+              { id: 4, text: 'Serum creatinine 1.8 mg/dL (from 1.1 mg/dL baseline)' },
+            ],
+            columns: [
+              { id: 1, text: 'Contributing factor to hemorrhage' },
+              { id: 2, text: 'Consequence of hemorrhage' },
+              { id: 3, text: 'Both' },
+            ],
+          },
+          correct_answer: {
+            cells: [
+              [1, 1],
+              [2, 1],
+              [3, 2],
+              [4, 2],
+            ],
+          },
+          rationale: 'Thrombocytopenia (platelet count 88,000) and elevated INR from heparin are contributing factors because they impair clotting and increase bleeding risk. The significantly dropped hemoglobin (13.8→7.2) is a direct consequence of hemorrhage — this 6.6 g/dL drop represents major blood loss. The rise in creatinine is a consequence of decreased renal perfusion secondary to hemorrhage and hypotension (prerenal azotemia).',
+          tags: 'lab-values,hemorrhage,post-CABG,matrix,thrombocytopenia,INR',
+        },
+        {
+          question_text: 'The surgeon orders a transfusion of 2 units of packed red blood cells (PRBCs). The nurse is preparing to administer the first unit. Complete the following statement by selecting from the options provided.\n\nBefore initiating the blood transfusion, the nurse must verify the client\'s identity using [1] and confirm the blood type compatibility with [2]. The nurse should initiate the transfusion at a rate of [3] for the first 15 minutes, then adjust to complete the unit within [4] hours.',
+          question_type: 'ngn_cloze',
+          content_area: 'physiological_integrity',
+          subcategory: 'Pharmacological and Parenteral Therapies',
+          difficulty: 'medium',
+          cognitive_level: 'Application',
+          options: {
+            stem: 'Before initiating the blood transfusion, the nurse must verify the client\'s identity using [1] and confirm the blood type compatibility with [2]. The nurse should initiate the transfusion at a rate of [3] for the first 15 minutes, then adjust to complete the unit within [4] hours.',
+            blanks: [
+              { id: '1', choices: ['one patient identifier (name only)', 'two patient identifiers (name and date of birth or MRN)', 'the room number and bed assignment', 'a verbal confirmation from a family member'] },
+              { id: '2', choices: ['the medication administration record', 'a second nurse at the bedside using the blood bank slip and blood bag label', 'the client\'s medical record number alone', 'the attending physician\'s verbal order'] },
+              { id: '3', choices: ['50–75 mL/hr', '200 mL/hr', '10–25 mL/hr', '125 mL/hr'] },
+              { id: '4', choices: ['1', '4', '6', '8'] },
+            ],
+          },
+          correct_answer: {
+            values: {
+              '1': 'two patient identifiers (name and date of birth or MRN)',
+              '2': 'a second nurse at the bedside using the blood bank slip and blood bag label',
+              '3': '10–25 mL/hr',
+              '4': '4',
+            },
+          },
+          rationale: 'Blood transfusion safety requires two patient identifiers per The Joint Commission NPSG.01.01.01. Two nurses must verify the blood product at the bedside using the blood bank slip and bag label. Transfusions must begin at a slow rate (10–25 mL/hr) for the first 15 minutes to monitor for transfusion reactions. Each unit of PRBCs must be completed within 4 hours to prevent bacterial growth and maintain product integrity.',
+          tags: 'blood-transfusion,safety,PRBC,two-nurse-verification,transfusion-rate',
+        },
+        {
+          question_text: 'Twenty minutes after starting the PRBC transfusion, Mr. Rivera develops fever (38.8°C), rigors, and lumbar back pain. His BP drops to 74/46 mmHg. Which interventions should the nurse implement? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'physiological_integrity',
+          subcategory: 'Pharmacological and Parenteral Therapies',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: [
+            { id: 'a', text: 'Stop the transfusion immediately and keep the IV line open with normal saline using new tubing' },
+            { id: 'b', text: 'Slow the transfusion rate to 25 mL/hr and administer diphenhydramine IV' },
+            { id: 'c', text: 'Notify the provider and blood bank immediately' },
+            { id: 'd', text: 'Return the blood bag and tubing to the blood bank for testing' },
+            { id: 'e', text: 'Obtain a urine specimen and monitor for hemoglobinuria' },
+            { id: 'f', text: 'Administer the second unit of PRBCs to compensate for hemolysis' },
+          ],
+          correct_answer: { values: ['a', 'c', 'd', 'e'] },
+          rationale: 'The symptoms (fever, rigors, back pain, hypotension during transfusion) indicate a potential acute hemolytic transfusion reaction — a life-threatening emergency caused by ABO incompatibility. The nurse must: (A) Stop the transfusion immediately — do not slow it — and maintain IV access with normal saline via NEW tubing to prevent infusing more incompatible blood; (C) Notify provider and blood bank immediately; (D) Return blood product and tubing for analysis; (E) Monitor urine for hemoglobinuria (dark/red urine = hemolysis). Slowing the rate (B) is inappropriate for a hemolytic reaction. Administering the second unit (F) is dangerous.',
+          tags: 'hemolytic-transfusion-reaction,blood-transfusion,emergency,PRBC,safety',
+        },
+        {
+          question_text: 'After the acute situation is stabilized, the nurse is completing discharge education with Mr. Rivera\'s wife regarding post-CABG home care. Which statement by the wife indicates a need for further teaching?',
+          question_type: 'traditional_mcq',
+          content_area: 'health_promotion_and_maintenance',
+          subcategory: 'Health Promotion and Disease Prevention',
+          difficulty: 'medium',
+          cognitive_level: 'Evaluation',
+          options: [
+            { id: 'a', text: '"I should call 911 if he develops sudden chest pain or difficulty breathing at home."' },
+            { id: 'b', text: '"He should avoid lifting anything heavier than 10 pounds for at least 6–8 weeks to protect the sternum."' },
+            { id: 'c', text: '"He can stop his cholesterol medication once he is fully recovered since the bypass fixed the blockages."' },
+            { id: 'd', text: '"I should monitor the incision sites daily for redness, swelling, or drainage."' },
+          ],
+          correct_answer: { value: 'c' },
+          rationale: 'CABG does not cure the underlying atherosclerotic disease process. Statin therapy (e.g., atorvastatin) must be continued lifelong because it reduces LDL cholesterol, stabilizes plaques, and reduces the risk of recurrent MI and graft occlusion. Stopping statins post-CABG significantly increases cardiovascular event risk. The other statements demonstrate correct understanding of post-CABG home care.',
+          tags: 'post-CABG,discharge-teaching,statins,health-promotion,atherosclerosis',
+        },
+      ],
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CASE STUDY 2: Septic Shock
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      title: 'Older Adult with Septic Shock from Urinary Source',
+      scenario: `Mrs. Tanaka, a 74-year-old female, is brought to the emergency department by ambulance from her assisted living facility. The paramedics report she was found confused and increasingly lethargic over the past 12 hours. She has not eaten or taken her medications in the past 24 hours. Her medical history includes: heart failure with reduced ejection fraction (EF 30%), type 2 diabetes mellitus, and recurrent urinary tract infections.
+
+Current Vital Signs (on arrival):
+• BP: 78/50 mmHg (MAP 59)
+• HR: 132 bpm (atrial fibrillation with rapid ventricular response)
+• RR: 30/min
+• SpO₂: 88% on room air
+• Temperature: 39.4°C (102.9°F)
+• GCS: 11 (E3V3M5) — confused and lethargic
+
+Physical Assessment:
+• Skin: mottled, warm peripherally, diaphoretic
+• Mucous membranes: dry
+• Capillary refill: 4 seconds
+• No urine output in last 12 hours (Foley catheter inserted in triage — no urine draining)
+
+Diagnostic Findings:
+• Lactate: 5.2 mmol/L
+• WBC: 26,800/mm³ with 18% bands
+• Blood cultures: ×2 drawn (results pending)
+• Urinalysis: cloudy, foul-smelling; nitrites (+), leukocyte esterase (+), >100 WBC/hpf, gram-negative rods on microscopy
+• Procalcitonin: 48 ng/mL (normal <0.5)
+• Serum creatinine: 3.1 mg/dL (baseline: 0.9 mg/dL)
+• Blood glucose: 312 mg/dL
+• Chest X-ray: No infiltrates; mild cardiomegaly
+
+Medications prior to admission:
+• Metformin 1000 mg twice daily
+• Furosemide 40 mg daily
+• Carvedilol 6.25 mg twice daily
+• Warfarin 5 mg daily (INR on file: 2.4)`,
+      content_area: 'physiological_integrity',
+      difficulty: 'hard',
+      questions: [
+        {
+          question_text: 'Based on Mrs. Tanaka\'s clinical presentation and diagnostic findings, the nurse interprets that she is experiencing which condition?',
+          question_type: 'traditional_mcq',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: [
+            { id: 'a', text: 'Systemic inflammatory response syndrome (SIRS) from a urinary source' },
+            { id: 'b', text: 'Septic shock with multi-organ dysfunction' },
+            { id: 'c', text: 'Decompensated heart failure with cardiogenic shock' },
+            { id: 'd', text: 'Hypovolemic shock from inadequate fluid intake' },
+          ],
+          correct_answer: { value: 'b' },
+          rationale: 'Septic shock is defined as sepsis (organ dysfunction from infection) plus vasopressor requirement to maintain MAP ≥65 mmHg AND a serum lactate >2 mmol/L despite adequate fluid resuscitation. Mrs. Tanaka has: suspected urinary source infection (UA findings, procalcitonin 48 ng/mL), MAP of 59 (<65), lactate 5.2 mmol/L, acute kidney injury (creatinine 3.1 from 0.9 baseline), and altered mental status — all consistent with septic shock with MODS. Cardiogenic shock is less likely given the infectious source and elevated lactate.',
+          tags: 'septic-shock,MODS,sepsis,lactate,diagnosis',
+        },
+        {
+          question_text: 'The nurse anticipates implementing the Surviving Sepsis Campaign Hour-1 Bundle for Mrs. Tanaka. Which interventions are included in this bundle? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Application',
+          options: [
+            { id: 'a', text: 'Obtain blood cultures (×2 sets) before administering antibiotics' },
+            { id: 'b', text: 'Administer broad-spectrum IV antibiotics within 1 hour of recognition' },
+            { id: 'c', text: 'Administer 30 mL/kg IV crystalloid bolus for hypotension or lactate ≥4 mmol/L' },
+            { id: 'd', text: 'Measure lactate level (remeasure if initial lactate >2 mmol/L)' },
+            { id: 'e', text: 'Apply vasopressors to maintain MAP ≥65 mmHg if hypotension persists after fluids' },
+            { id: 'f', text: 'Administer corticosteroids empirically to all septic shock patients' },
+          ],
+          correct_answer: { values: ['a', 'b', 'c', 'd', 'e'] },
+          rationale: 'The Surviving Sepsis Campaign Hour-1 Bundle (2018 update) includes: (A) Blood cultures ×2 before antibiotics — to identify organism and guide de-escalation; (B) Broad-spectrum antibiotics within 1 hour — reduces mortality significantly; (C) 30 mL/kg crystalloid bolus — for hypotension or lactate ≥4; (D) Measure lactate — and remeasure if >2 mmol/L to assess response; (E) Vasopressors (norepinephrine first-line) if MAP <65 after fluids. Corticosteroids (F) are NOT part of the standard Hour-1 Bundle — they are considered in refractory septic shock unresponsive to vasopressors.',
+          tags: 'sepsis-bundle,surviving-sepsis,antibiotics,vasopressors,lactate,Hour-1',
+        },
+        {
+          question_text: 'The nurse is monitoring Mrs. Tanaka\'s response to 2 L of normal saline administered over 30 minutes. For each assessment finding below, indicate whether it suggests the fluid resuscitation is effective, ineffective, or requires further evaluation.',
+          question_type: 'ngn_matrix',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: {
+            rows: [
+              { id: 1, text: 'MAP increases from 59 to 68 mmHg' },
+              { id: 2, text: 'HR decreases from 132 to 118 bpm' },
+              { id: 3, text: 'Urine output remains 0 mL over next 30 minutes' },
+              { id: 4, text: 'SpO₂ drops from 88% to 84% and crackles appear at lung bases bilaterally' },
+              { id: 5, text: 'Lactate decreases from 5.2 to 3.8 mmol/L at 2 hours' },
+            ],
+            columns: [
+              { id: 1, text: 'Effective resuscitation' },
+              { id: 2, text: 'Ineffective / ongoing shock' },
+              { id: 3, text: 'Requires further evaluation' },
+            ],
+          },
+          correct_answer: {
+            cells: [
+              [1, 1],
+              [2, 1],
+              [3, 3],
+              [4, 2],
+              [5, 1],
+            ],
+          },
+          rationale: 'MAP ≥65 (row 1) and decreasing HR (row 2) indicate improved perfusion — effective. Decreasing lactate (row 5) indicates improved tissue oxygenation — effective. Persistent anuria (row 3) in the setting of AKI requires further evaluation — could be ATN from ischemia or ongoing hypoperfusion. Worsening oxygenation with pulmonary crackles (row 4) suggests fluid overload in a patient with EF 30% — a complication of aggressive resuscitation indicating inadequate response or fluid toxicity.',
+          tags: 'fluid-resuscitation,sepsis,matrix,assessment,MAP,lactate',
+        },
+        {
+          question_text: 'The provider orders norepinephrine infusion and meropenem IV. The nurse notes that Mrs. Tanaka\'s current medications include metformin 1000 mg twice daily and warfarin 5 mg daily. Complete the following statement.\n\nThe nurse should [1] the metformin because of the risk of [2] in the setting of acute kidney injury and hemodynamic instability. The nurse should also [3] warfarin administration and monitor for [4] given Mrs. Tanaka\'s elevated INR of 2.4 and risk of bleeding.',
+          question_type: 'ngn_cloze',
+          content_area: 'physiological_integrity',
+          subcategory: 'Pharmacological and Parenteral Therapies',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: {
+            stem: 'The nurse should [1] the metformin because of the risk of [2] in the setting of acute kidney injury and hemodynamic instability. The nurse should also [3] warfarin administration and monitor for [4] given Mrs. Tanaka\'s elevated INR of 2.4 and risk of bleeding.',
+            blanks: [
+              { id: '1', choices: ['continue', 'hold', 'double the dose of', 'crush and administer via NG tube'] },
+              { id: '2', choices: ['hypoglycemia', 'lactic acidosis', 'agranulocytosis', 'nephrotoxicity'] },
+              { id: '3', choices: ['continue', 'hold', 'double the dose of', 'switch to heparin for'] },
+              { id: '4', choices: ['thrombotic events', 'signs of bleeding and worsening coagulopathy', 'hepatotoxicity', 'hyperkalemia'] },
+            ],
+          },
+          correct_answer: {
+            values: {
+              '1': 'hold',
+              '2': 'lactic acidosis',
+              '3': 'hold',
+              '4': 'signs of bleeding and worsening coagulopathy',
+            },
+          },
+          rationale: 'Metformin must be held in acute kidney injury because reduced renal clearance leads to drug accumulation, causing potentially fatal lactic acidosis. Warfarin should be held given the elevated INR (2.4) and sepsis-related coagulopathy — INR typically worsens in sepsis due to consumptive coagulopathy and hepatic dysfunction. Monitoring for bleeding is essential. These are critical medication safety decisions in septic shock management.',
+          tags: 'metformin,warfarin,AKI,lactic-acidosis,medication-safety,sepsis,INR',
+        },
+        {
+          question_text: 'Mrs. Tanaka is transferred to the medical ICU. The nurse is assessing for complications of septic shock and MODS. Which findings are consistent with developing acute respiratory distress syndrome (ARDS)? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: [
+            { id: 'a', text: 'PaO₂/FiO₂ (P/F) ratio of 180 mmHg' },
+            { id: 'b', text: 'Bilateral infiltrates on chest X-ray not fully explained by effusions or atelectasis' },
+            { id: 'c', text: 'Pulmonary artery wedge pressure (PAWP) of 28 mmHg' },
+            { id: 'd', text: 'Acute onset within 1 week of a known clinical insult (sepsis)' },
+            { id: 'e', text: 'Worsening hypoxemia refractory to supplemental oxygen' },
+            { id: 'f', text: 'Respiratory alkalosis on ABG (pH 7.52, PaCO₂ 28)' },
+          ],
+          correct_answer: { values: ['a', 'b', 'd', 'e'] },
+          rationale: 'ARDS (Berlin Definition) requires: acute onset within 1 week of insult (D), bilateral opacities on imaging not explained by other causes (B), P/F ratio <300 (moderate <200, severe <100) — P/F of 180 (A) indicates moderate ARDS, and hypoxemia refractory to O₂ (E). PAWP >18 mmHg (C) suggests cardiogenic pulmonary edema, which would exclude the diagnosis of ARDS. Respiratory alkalosis (F) is a nonspecific early sign of hypoxia or anxiety but is not diagnostic of ARDS.',
+          tags: 'ARDS,Berlin-definition,sepsis,MODS,hypoxemia,P/F-ratio',
+        },
+        {
+          question_text: 'The family asks the nurse, "Will my mother be okay? Why is she on so many machines?" The nurse\'s most therapeutic response to the family is:',
+          question_type: 'traditional_mcq',
+          content_area: 'psychosocial_integrity',
+          subcategory: 'Coping and Adaptation',
+          difficulty: 'medium',
+          cognitive_level: 'Application',
+          options: [
+            { id: 'a', text: '"Your mother is very sick, but we are doing everything we can. The machines are supporting her organs while her body fights the infection. Would you like me to explain what each one does?"' },
+            { id: 'b', text: '"Don\'t worry — she\'s in the best hands. She will definitely pull through."' },
+            { id: 'c', text: '"I can\'t share any information until the doctor arrives. You\'ll need to speak with the attending physician."' },
+            { id: 'd', text: '"She\'s on life support. The machines are breathing for her and keeping her heart going."' },
+          ],
+          correct_answer: { value: 'a' },
+          rationale: 'The therapeutic response honestly acknowledges the severity of the situation without giving false reassurance (choice B) or withholding information unnecessarily (choice C). It offers to educate the family (empowering them) and demonstrates compassion and transparency. Choice D uses alarming and imprecise language ("life support," "breathing for her") that may increase fear without being fully accurate — norepinephrine supports BP, not breathing, unless she is intubated.',
+          tags: 'therapeutic-communication,family-education,septic-shock,ICU,coping',
+        },
+      ],
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CASE STUDY 3: Pediatric Status Asthmaticus
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      title: 'Pediatric Patient with Status Asthmaticus',
+      scenario: `Jaylen, an 8-year-old male, is brought to the emergency department by his mother at 11 PM. She reports a 3-day history of increasing cough, wheezing, and shortness of breath. Jaylen has a diagnosis of moderate persistent asthma and uses an albuterol metered-dose inhaler (MDI) as needed and a fluticasone/salmeterol combination inhaler daily. His mother reports he has been using albuterol every 2 hours for the past 12 hours without improvement. He has missed 2 days of school.
+
+Physical Assessment on Arrival:
+• Weight: 28 kg
+• HR: 138 bpm
+• RR: 40/min with nasal flaring
+• BP: 104/68 mmHg
+• SpO₂: 86% on room air
+• Temperature: 37.6°C (99.7°F)
+
+Respiratory Assessment:
+• Audible wheeze bilaterally
+• Significant intercostal, subcostal, and suprasternal retractions
+• Accessory muscle use (sternocleidomastoid) noted
+• Speaking in 2–3 word phrases only
+• Inspiratory:expiratory ratio prolonged (I:E 1:4)
+• Breath sounds: diffuse expiratory wheeze with decreased air entry at bilateral bases
+
+Peak Expiratory Flow Rate (PEFR): 35% of predicted
+
+ABG (obtained after initial treatment failure):
+• pH: 7.26
+• PaCO₂: 54 mmHg
+• PaO₂: 52 mmHg
+• HCO₃⁻: 22 mEq/L
+• SaO₂: 82%
+
+Medications given in triage (prior to ABG):
+• Albuterol 2.5 mg via nebulizer × 2 doses (15 min apart)
+• Ipratropium bromide 0.5 mg via nebulizer × 1 dose`,
+      content_area: 'physiological_integrity',
+      difficulty: 'hard',
+      questions: [
+        {
+          question_text: 'Based on Jaylen\'s clinical presentation, PEFR of 35%, and ABG results, the nurse classifies his asthma exacerbation as which severity?',
+          question_type: 'traditional_mcq',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: [
+            { id: 'a', text: 'Mild exacerbation — PEFR >70%, SpO₂ >95%' },
+            { id: 'b', text: 'Moderate exacerbation — PEFR 40–69%, SpO₂ 90–95%' },
+            { id: 'c', text: 'Severe exacerbation — PEFR <40%, SpO₂ <90%, use of accessory muscles' },
+            { id: 'd', text: 'Impending respiratory failure (status asthmaticus) — PEFR <25%, altered mental status, rising PaCO₂' },
+          ],
+          correct_answer: { value: 'd' },
+          rationale: 'Jaylen has PEFR 35% (approaching <25%), rising PaCO₂ of 54 mmHg (normal 35–45, indicating CO₂ retention = impending respiratory failure), pH 7.26 (respiratory acidosis), SpO₂ 82%, and the inability to speak in full sentences. In asthma, a "normal" or rising PaCO₂ is paradoxically ominous — the child has been hyperventilating to compensate; CO₂ retention signals respiratory muscle fatigue and impending arrest. This is status asthmaticus requiring urgent escalation.',
+          tags: 'asthma,status-asthmaticus,PEFR,respiratory-failure,PaCO2,pediatric',
+        },
+        {
+          question_text: 'The nurse prepares to escalate Jaylen\'s care due to failure to respond to initial bronchodilator therapy. Which interventions should the nurse anticipate? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Application',
+          options: [
+            { id: 'a', text: 'Administer IV methylprednisolone (systemic corticosteroid)' },
+            { id: 'b', text: 'Prepare for possible endotracheal intubation and mechanical ventilation' },
+            { id: 'c', text: 'Administer IV magnesium sulfate as a bronchodilator' },
+            { id: 'd', text: 'Initiate continuous albuterol nebulization' },
+            { id: 'e', text: 'Discontinue albuterol — further doses are contraindicated after tachycardia >120 bpm' },
+            { id: 'f', text: 'Apply a non-rebreather mask at 15 L/min oxygen' },
+          ],
+          correct_answer: { values: ['a', 'b', 'c', 'd', 'f'] },
+          rationale: '(A) IV corticosteroids reduce airway inflammation — essential in status asthmaticus; (B) Impending respiratory failure (rising PaCO₂, acidosis, fatigue) requires preparation for intubation; (C) IV magnesium sulfate is a second-line bronchodilator that causes smooth muscle relaxation — used in severe/refractory asthma; (D) Continuous albuterol nebulization maintains sustained bronchodilation; (F) High-flow O₂ corrects hypoxemia. Albuterol (E) is NOT contraindicated due to tachycardia in status asthmaticus — the tachycardia is from hypoxia and the disease itself, and the benefit outweighs the risk.',
+          tags: 'status-asthmaticus,magnesium-sulfate,corticosteroids,intubation,albuterol,pediatric',
+        },
+        {
+          question_text: 'The nurse is monitoring Jaylen\'s response to escalated treatment. For each assessment finding, indicate whether it suggests improvement, deterioration, or no change in his respiratory status.',
+          question_type: 'ngn_matrix',
+          content_area: 'physiological_integrity',
+          subcategory: 'Physiological Adaptation',
+          difficulty: 'hard',
+          cognitive_level: 'Analysis',
+          options: {
+            rows: [
+              { id: 1, text: 'PEFR improves from 35% to 52% of predicted' },
+              { id: 2, text: 'PaCO₂ increases from 54 mmHg to 62 mmHg' },
+              { id: 3, text: 'SpO₂ improves from 86% to 94% on high-flow O₂' },
+              { id: 4, text: 'Retractions persist; child now only speaking in 1-word answers' },
+              { id: 5, text: 'Wheeze diminishes and the child becomes suddenly quiet with decreased breath sounds' },
+            ],
+            columns: [
+              { id: 1, text: 'Improvement' },
+              { id: 2, text: 'Deterioration' },
+              { id: 3, text: 'No change in status' },
+            ],
+          },
+          correct_answer: {
+            cells: [
+              [1, 1],
+              [2, 2],
+              [3, 1],
+              [4, 2],
+              [5, 2],
+            ],
+          },
+          rationale: 'PEFR improving (row 1) and SpO₂ improving (row 3) indicate positive response to treatment. Rising PaCO₂ (row 2) signals worsening respiratory acidosis and CO₂ retention — deterioration. Worsening speech (row 4) and persistent retractions indicate increasing work of breathing — deterioration. CRITICAL: In asthma, a "quiet chest" with sudden absence of wheeze and decreased breath sounds (row 5) is an ominous sign of severe air trapping or near-complete airway obstruction — NOT improvement. This signals impending respiratory arrest.',
+          tags: 'asthma,assessment,silent-chest,PEFR,deterioration,matrix,pediatric',
+        },
+        {
+          question_text: 'The provider orders IV magnesium sulfate 75 mg/kg (max 2 g) in 20 mL NS over 20 minutes. Jaylen weighs 28 kg. Complete the following.',
+          question_type: 'ngn_cloze',
+          content_area: 'physiological_integrity',
+          subcategory: 'Pharmacological and Parenteral Therapies',
+          difficulty: 'hard',
+          cognitive_level: 'Application',
+          options: {
+            stem: 'The nurse first calculates the weight-based dose as [1] mg. Because this exceeds the maximum dose, the nurse prepares [2] grams of magnesium sulfate to administer. Before and during the infusion, the nurse monitors for [3], which is the earliest sign of magnesium toxicity. The nurse keeps [4] at the bedside as the specific antidote.',
+            blanks: [
+              { id: '1', choices: ['700 mg', '1,400 mg', '2,100 mg', '2,800 mg'] },
+              { id: '2', choices: ['0.5', '1', '2 (capped at maximum)', '4'] },
+              { id: '3', choices: ['bradycardia and hypertension', 'loss of deep tendon reflexes, hypotension, and respiratory depression', 'seizures and rigidity', 'elevated temperature and diaphoresis'] },
+              { id: '4', choices: ['sodium bicarbonate', 'calcium gluconate', 'protamine sulfate', 'flumazenil'] },
+            ],
+          },
+          correct_answer: {
+            values: {
+              '1': '2,100 mg',
+              '2': '2 (capped at maximum)',
+              '3': 'loss of deep tendon reflexes, hypotension, and respiratory depression',
+              '4': 'calcium gluconate',
+            },
+          },
+          rationale: '75 mg/kg × 28 kg = 2,100 mg. Because 2,100 mg exceeds the maximum ordered dose of 2 g (2,000 mg), the nurse applies the cap and prepares exactly 2 g. Signs of magnesium toxicity appear in order of severity: loss of deep tendon reflexes (DTRs) is the earliest sign (serum Mg ≈7 mEq/L), followed by respiratory depression and hypotension at higher levels (>12 mEq/L). Calcium gluconate (10 mL of 10% solution IV) is the specific antidote — it reverses magnesium toxicity through competitive antagonism at neuromuscular junctions and cardiac cell membranes.',
+          tags: 'magnesium-sulfate,dose-calculation,toxicity,calcium-gluconate,antidote,pediatric,asthma',
+        },
+        {
+          question_text: 'Jaylen is stabilized and admitted to the pediatric unit. His mother asks the nurse, "What can I do to prevent this from happening again?" Which instructions should the nurse include in the discharge teaching? Select all that apply.',
+          question_type: 'ngn_sata',
+          content_area: 'health_promotion_and_maintenance',
+          subcategory: 'Health Promotion and Disease Prevention',
+          difficulty: 'medium',
+          cognitive_level: 'Application',
+          options: [
+            { id: 'a', text: 'Use the fluticasone/salmeterol controller inhaler every day, even when Jaylen feels well' },
+            { id: 'b', text: 'Identify and eliminate or reduce known triggers (allergens, smoke, exercise in cold air)' },
+            { id: 'c', text: 'Develop and follow a written asthma action plan with green/yellow/red zones' },
+            { id: 'd', text: 'Stop the controller inhaler once the PEFR stays above 80% for 2 weeks' },
+            { id: 'e', text: 'Ensure Jaylen receives annual influenza vaccination' },
+            { id: 'f', text: 'Use albuterol before exercise as directed by the provider to prevent exercise-induced bronchospasm' },
+          ],
+          correct_answer: { values: ['a', 'b', 'c', 'e', 'f'] },
+          rationale: '(A) Controller inhalers must be used daily — stopping during asymptomatic periods leads to loss of control; (B) Trigger avoidance is a cornerstone of asthma management; (C) A written asthma action plan helps families recognize escalation and take appropriate action; (E) Influenza can trigger severe asthma exacerbations — annual vaccination is recommended for all patients with asthma; (F) Pre-exercise albuterol (15 min before) prevents exercise-induced bronchospasm. (D) is INCORRECT — controller medications should not be stopped based on symptom improvement without provider guidance; stopping controller therapy is a leading cause of exacerbations.',
+          tags: 'asthma-education,controller-inhaler,action-plan,trigger-avoidance,influenza,discharge-teaching',
+        },
+        {
+          question_text: 'The nurse is reviewing Jaylen\'s inhaler technique with his mother using a spacer/valved holding chamber (VHC). Which observation indicates the mother needs additional teaching?',
+          question_type: 'traditional_mcq',
+          content_area: 'health_promotion_and_maintenance',
+          subcategory: 'Health Promotion and Disease Prevention',
+          difficulty: 'medium',
+          cognitive_level: 'Evaluation',
+          options: [
+            { id: 'a', text: 'She shakes the MDI vigorously for 5 seconds before attaching it to the spacer' },
+            { id: 'b', text: 'She fires the MDI once into the spacer and instructs Jaylen to inhale slowly and deeply, then hold his breath for 10 seconds' },
+            { id: 'c', text: 'She fires two puffs simultaneously into the spacer before having Jaylen inhale' },
+            { id: 'd', text: 'She rinses Jaylen\'s mouth with water after the fluticasone/salmeterol inhaler' },
+          ],
+          correct_answer: { value: 'c' },
+          rationale: 'Each puff of a metered-dose inhaler should be fired separately, with a complete inhalation cycle between puffs. Firing two puffs simultaneously into the spacer results in coalescence of larger drug particles, reducing the amount of fine-particle drug that reaches the small airways. Proper technique: shake the inhaler, fire ONE puff into the spacer, inhale slowly over 3–5 seconds, hold breath 10 seconds, wait 30–60 seconds before the second puff. Rinsing the mouth after inhaled corticosteroids (D) is correct to prevent oral candidiasis.',
+          tags: 'inhaler-technique,spacer,MDI,asthma-education,fluticasone,pediatric',
+        },
+      ],
+    },
+  ]
 }
 
 // ─── Seed Questions (Admin only) ──────────────────────────────────────────────
