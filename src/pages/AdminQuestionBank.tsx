@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import {
-  BookOpen, Plus, Search, Edit, Trash2,
+  BookOpen, Plus, Search, Edit, Trash2, Tag,
   ChevronLeft, ChevronRight, CheckCircle, XCircle,
   FileText, Eye, ChevronDown, ChevronUp,
 } from 'lucide-react'
@@ -141,7 +141,9 @@ export function AdminQuestionBank() {
   const [filterDifficulty, setFilterDifficulty] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [filterNGN, setFilterNGN] = useState('all')
+  const [filterTag, setFilterTag] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [availableTags, setAvailableTags] = useState<string[]>([])
 
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
@@ -171,7 +173,20 @@ export function AdminQuestionBank() {
       fetchStats()
       fetchCaseStudies()
     }
-  }, [page, filterContentArea, filterDifficulty, filterType, filterNGN, searchQuery])
+  }, [page, filterContentArea, filterDifficulty, filterType, filterNGN, filterTag, searchQuery])
+
+  useEffect(() => {
+    if (isAdmin()) {
+      fetchAvailableTags()
+    }
+  }, [])
+
+  async function fetchAvailableTags() {
+    try {
+      const data = await apiFetch('/api/questions/tags')
+      setAvailableTags(data.tags || [])
+    } catch {}
+  }
 
   useEffect(() => {
     if (isAdmin() && activeTab === 'case-studies') {
@@ -191,6 +206,7 @@ export function AdminQuestionBank() {
       if (filterDifficulty !== 'all') params.set('difficulty', filterDifficulty)
       if (filterType !== 'all') params.set('question_type', filterType)
       if (filterNGN !== 'all') params.set('is_ngn', filterNGN === 'ngn' ? 'true' : 'false')
+      if (filterTag) params.set('tag', filterTag)
       if (searchQuery) params.set('search', searchQuery)
 
       const data = await apiFetch(`/api/questions?${params}`)
@@ -665,6 +681,33 @@ export function AdminQuestionBank() {
                     <option value="traditional">Traditional Only</option>
                     <option value="ngn">NGN Only</option>
                   </select>
+                </div>
+                <div className="mt-3">
+                  <datalist id="tag-options">
+                    {availableTags.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
+                  <div className="relative">
+                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      list="tag-options"
+                      placeholder="Filter by tag..."
+                      value={filterTag}
+                      onChange={(e) => { setFilterTag(e.target.value); setPage(1) }}
+                      className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    {filterTag && (
+                      <button
+                        onClick={() => { setFilterTag(''); setPage(1) }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none"
+                        aria-label="Clear tag filter"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
               </Card>
 

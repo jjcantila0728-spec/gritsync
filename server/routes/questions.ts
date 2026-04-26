@@ -180,6 +180,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       question_type,
       is_ngn,
       search,
+      tag,
       page = '1',
       limit = '20',
       active_only = 'true',
@@ -212,6 +213,10 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     if (search) {
       conditions.push(`question_text ILIKE $${paramIdx++}`)
       params.push(`%${search}%`)
+    }
+    if (tag && tag.trim()) {
+      conditions.push(`$${paramIdx++} = ANY(tags)`)
+      params.push(tag.trim())
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -1050,6 +1055,21 @@ router.get('/my-sessions', authenticateToken, async (req: AuthenticatedRequest, 
     )
     res.json(result.rows)
   } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/tags', authenticateToken, async (_req, res) => {
+  try {
+    const result = await query(
+      `SELECT DISTINCT UNNEST(tags) AS tag
+       FROM question_bank
+       WHERE tags IS NOT NULL AND array_length(tags, 1) > 0
+       ORDER BY tag`
+    )
+    res.json({ tags: result.rows.map((r: any) => r.tag) })
+  } catch (error: any) {
+    console.error('Get tags error:', error)
     res.status(500).json({ error: error.message })
   }
 })

@@ -1,5 +1,3 @@
-# GritSync - NCLEX Processing Agency
-
 ### Overview
 GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses seeking to work in the US. It offers an end-to-end solution from initial application to NCLEX preparation, including features such as quotation generation, real-time application tracking, secure payment processing, and an integrated NCLEX review platform. The project aims to be the leading platform in its niche, enhancing efficiency and user experience for nurses pursuing international careers.
 
@@ -11,7 +9,7 @@ GritSync is a comprehensive SaaS application designed to streamline the NCLEX ap
 *   Do not make changes to file `package-lock.json`.
 
 ### System Architecture
-The application features a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy. The core architectural decision involves a Supabase compatibility layer (`src/lib/supabase.ts`) on the frontend, which translates Supabase SDK calls into direct API requests to the custom Express backend.
+The application features a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy. The core architectural decision involves a Supabase compatibility layer (`src/lib/supabase.ts`) on the frontend, which translates Supabase SDK calls into direct API requests to the custom Express backend. Data persistence is handled by a PostgreSQL database.
 
 #### Core Architecture
 The system is divided into a React-based frontend and an Express.js backend. A key architectural decision is the frontend's Supabase compatibility layer (`src/lib/supabase.ts`), which translates Supabase SDK calls into direct API requests to the Express backend, allowing the frontend to leverage existing Supabase-oriented code and knowledge while using a custom backend. The system is entirely focused on NCLEX processing, with all EAD (Employment Authorization Document) functionalities removed.
@@ -36,6 +34,17 @@ The NCLEX review platform features distinct layouts for general review and exam 
 
 #### UI/UX Decisions
 Public-facing pages (Home, About Us, Career Listing, Sponsorship Landing, Donate, Tracking, Quote) feature redesigned cinematic hero sections with AI-generated images to enhance user experience. The NCLEX review platform utilizes a dark navy and teal color scheme for a focused study environment. Hero images are stored in `public/assets/pages/`. All EAD functionalities have been removed to maintain a strict focus on NCLEX processing.
+
+#### Key Features
+- User Authentication with role-based access control (admin / client).
+- NCLEX application form with field validation.
+- Real-time application tracking.
+- Quotation generation and management.
+- Stripe payment integration (GCash, mobile banking, card).
+- Document management with server-side storage.
+- Admin dashboard for client and subscription management.
+- Transactional email system using Resend API for verification, welcome, and password reset emails.
+- Fully responsive design with light/dark theme support.
 
 #### Email System
 Transactional emails (verification, welcome, password reset) are sent via the Resend API to the user's `personal_email`. An `email_logs` table tracks system-generated emails. The system includes custom OTP-based password reset flows.
