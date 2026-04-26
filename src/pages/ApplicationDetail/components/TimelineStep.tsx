@@ -174,16 +174,35 @@ export function TimelineStep({
       const safeSet = (fieldName: string, value: string) => {
         try {
           const field = form.getTextField(fieldName)
-          if (value) field.setText(value)
+          if (value) field.setText(value.toUpperCase())
         } catch {
           // field not found or wrong type — skip silently
         }
       }
 
+      const safeCheck = (fieldName: string) => {
+        try {
+          form.getCheckBox(fieldName).check()
+        } catch {
+          // field not found — skip silently
+        }
+      }
+
+      // What are you applying for — auto-check "Registered Professional Nurse" (Option 1)
+      safeCheck('MHC2[0].Page1[0].WhatAreYouApplyingFor[0].Option1[0].OPTPRO[0]')
+
       // Section I — Name
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].Last[0]', application.last_name || '')
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].First[0]', application.first_name || '')
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].Middle[0]', application.middle_name || '')
+
+      // Section I — Birth Date
+      if (application.date_of_birth) {
+        const dob = new Date(application.date_of_birth)
+        safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].BirthDate[0].Month[0]', String(dob.getMonth() + 1).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].BirthDate[0].Day[0]', String(dob.getDate()).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].BirthDate[0].Year[0]', String(dob.getFullYear()))
+      }
 
       // Section I — Address
       const addressLine1 = application.house_number && application.street_name
@@ -207,35 +226,12 @@ export function TimelineStep({
       // Section I — Email
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].EmailAddress[0]', application.email || '')
 
-      // Section I — Name on Diploma / DDC
+      // Question 7 — Name on Diploma / DDC
       const diplomaName = application.single_full_name || application.single_name ||
         `${application.first_name || ''} ${application.middle_name || ''} ${application.last_name || ''}`.replace(/\s+/g, ' ').trim()
       safeSet('MHC2[0].Page1[0].List7-9[0].NameOnDDC[0].Answer[0]', diplomaName)
 
-      // Nursing School info
-      safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].Answer1[0]', application.nursing_school || '')
-      const schoolLocation = [application.nursing_school_city, application.nursing_school_province, application.nursing_school_country]
-        .filter(Boolean).join(', ')
-      safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].Answer2[0]', schoolLocation)
-
-      // Nursing school dates
-      if (application.nursing_school_start_date) {
-        const start = new Date(application.nursing_school_start_date)
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Mo[0]', String(start.getMonth() + 1).padStart(2, '0'))
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Day[0]', String(start.getDate()).padStart(2, '0'))
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Yr[0]', String(start.getFullYear()))
-      }
-      if (application.nursing_school_end_date) {
-        const end = new Date(application.nursing_school_end_date)
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Mo[0]', String(end.getMonth() + 1).padStart(2, '0'))
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Day[0]', String(end.getDate()).padStart(2, '0'))
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Yr[0]', String(end.getFullYear()))
-      }
-      if (application.nursing_school_diploma_date) {
-        const dip = new Date(application.nursing_school_diploma_date)
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DateAwarded[0].Mo[0]', String(dip.getMonth() + 1).padStart(2, '0'))
-        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DateAwarded[0].Yr[0]', String(dip.getFullYear()))
-      }
+      // Question 8 (Section 8 — nursing school info) intentionally left empty per user instruction
 
       // Page 2 — Applicant name repeat
       const fullName = `${application.last_name || ''}, ${application.first_name || ''} ${application.middle_name || ''}`.trim().replace(/,\s*$/, '')
