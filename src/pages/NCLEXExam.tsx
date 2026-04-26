@@ -709,6 +709,15 @@ export function NCLEXExam() {
   const isDisabled = !!feedback || isReviewMode
   const showExplanation = feedback || isReviewMode
 
+  const caseStudyId = currentQuestion.case_study_id
+  const caseStudyQuestions = caseStudyId
+    ? questions.filter(q => q.case_study_id === caseStudyId)
+    : []
+  const caseStudyIndex = caseStudyId
+    ? Math.max(1, caseStudyQuestions.findIndex(q => q.question_id === currentQuestion.question_id) + 1)
+    : 0
+  const caseStudyTotal = caseStudyQuestions.length
+
   return (
     <NCLEXExamLayout
       sessionId={sessionId}
@@ -731,6 +740,12 @@ export function NCLEXExam() {
               <Flag className="h-3.5 w-3.5" />
               {isMarked ? 'Marked' : 'Mark for Later'}
             </button>
+            {caseStudyId && caseStudyTotal > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700">
+                <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+                Case Study {caseStudyIndex}/{caseStudyTotal}
+              </span>
+            )}
             <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
               <Clock className="h-3.5 w-3.5" />
               {formatTime(elapsed)}
