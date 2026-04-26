@@ -34,6 +34,14 @@ interface Subscription {
   can_answer: boolean
 }
 
+interface ContentAreaStat {
+  content_area: string
+  total: number
+  used: number
+  correct: number
+  incorrect: number
+}
+
 interface UserStats {
   total_questions: number
   total_classic: number
@@ -57,6 +65,7 @@ interface UserStats {
   cs_unused: number
   cs_correct: number
   cs_incorrect: number
+  content_area_breakdown?: ContentAreaStat[]
 }
 
 // ── Donut Chart ───────────────────────────────────────────────────────────────
@@ -116,6 +125,149 @@ function DonutChart({ segments, label, centerLabel, centerSub }: {
         </div>
       </div>
       <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</p>
+    </div>
+  )
+}
+
+// ── Content Area Breakdown ────────────────────────────────────────────────────
+const AREA_LABELS: Record<string, { label: string; short: string; color: string; bg: string }> = {
+  safe_effective_care_environment: {
+    label: 'Safe & Effective Care Environment',
+    short: 'Safe & Effective',
+    color: '#6366f1',
+    bg: 'bg-indigo-500',
+  },
+  health_promotion_and_maintenance: {
+    label: 'Health Promotion & Maintenance',
+    short: 'Health Promotion',
+    color: '#17c3b2',
+    bg: 'bg-teal-500',
+  },
+  psychosocial_integrity: {
+    label: 'Psychosocial Integrity',
+    short: 'Psychosocial',
+    color: '#f59e0b',
+    bg: 'bg-amber-500',
+  },
+  physiological_integrity: {
+    label: 'Physiological Integrity',
+    short: 'Physiological',
+    color: '#22c55e',
+    bg: 'bg-green-500',
+  },
+}
+
+function ContentAreaBreakdown({ breakdown }: { breakdown: ContentAreaStat[] }) {
+  if (!breakdown || breakdown.length === 0) return null
+
+  const hasAnyAnswered = breakdown.some(a => a.used > 0)
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <Target className="h-4 w-4 text-[#17c3b2]" />
+        <h2 className="text-base font-bold text-gray-900 dark:text-white">Performance by Content Area</h2>
+        {!hasAnyAnswered && (
+          <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 italic">Complete tests to see your breakdown</span>
+        )}
+      </div>
+
+      <div className="space-y-5">
+        {breakdown.map(area => {
+          const cfg = AREA_LABELS[area.content_area] || {
+            label: area.content_area,
+            short: area.content_area,
+            color: '#94a3b8',
+            bg: 'bg-slate-400',
+          }
+          const accuracy = area.used > 0 ? Math.round((area.correct / area.used) * 100) : null
+          const coveragePct = area.total > 0 ? Math.round((area.used / area.total) * 100) : 0
+
+          const accuracyColor =
+            accuracy === null ? 'text-gray-400'
+            : accuracy >= 75 ? 'text-green-600 dark:text-green-400'
+            : accuracy >= 60 ? 'text-amber-600 dark:text-amber-400'
+            : 'text-red-500 dark:text-red-400'
+
+          return (
+            <div key={area.content_area}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: cfg.color }}
+                  />
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{cfg.label}</span>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                  {accuracy !== null ? (
+                    <span className={`text-sm font-bold ${accuracyColor}`}>{accuracy}% correct</span>
+                  ) : (
+                    <span className="text-xs text-gray-400 dark:text-gray-500">Not started</span>
+                  )}
+                  <span className="text-xs text-gray-400 dark:text-gray-500">{area.used}/{area.total}</span>
+                </div>
+              </div>
+
+              {/*
+                Two-layer bar: outer bar = % of bank attempted (coverage);
+                within the attempted portion, inner segments show correct vs incorrect accuracy.
+                Green = correct/used × coverage%, Orange = incorrect/used × coverage%.
+                Gray = unattempted questions (1 − coverage%).
+              */}
+              <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden flex">
+                {area.used > 0 && area.total > 0 ? (
+                  <>
+                    {/* Green: (correct/used) × coverage% of total bar */}
+                    <div
+                      className="h-full bg-green-500 transition-all duration-500"
+                      style={{ width: `${(area.correct / area.used) * coveragePct}%` }}
+                    />
+                    {/* Orange: (incorrect/used) × coverage% of total bar */}
+                    <div
+                      className="h-full bg-orange-400 transition-all duration-500"
+                      style={{ width: `${(area.incorrect / area.used) * coveragePct}%` }}
+                    />
+                  </>
+                ) : (
+                  <div className="h-full w-0" />
+                )}
+              </div>
+
+              <div className="flex items-center gap-4 mt-1.5">
+                <span className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                  {area.correct} correct
+                </span>
+                <span className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-400" />
+                  {area.incorrect} incorrect
+                </span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-auto">
+                  {coveragePct}% of {area.total} attempted
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {hasAnyAnswered && (
+        <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">Focus tip: </span>
+            {(() => {
+              const weakest = breakdown
+                .filter(a => a.used > 0)
+                .sort((a, b) => (a.correct / a.used) - (b.correct / b.used))[0]
+              if (!weakest) return 'Complete more questions to identify your weak areas.'
+              const cfg = AREA_LABELS[weakest.content_area]
+              const acc = Math.round((weakest.correct / weakest.used) * 100)
+              return `Your lowest accuracy is in ${cfg?.short ?? weakest.content_area} (${acc}%). Consider focusing more practice there.`
+            })()}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -1067,6 +1219,11 @@ export function NCLEXReview() {
                 </div>
               )}
             </div>
+
+            {/* Content Area Breakdown */}
+            {stats?.content_area_breakdown && stats.content_area_breakdown.length > 0 && (
+              <ContentAreaBreakdown breakdown={stats.content_area_breakdown} />
+            )}
 
             {/* Recent sessions preview */}
             {completedSessions.length > 0 && (

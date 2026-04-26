@@ -441,8 +441,55 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
       [userId]
     )
 
+    // Per-content-area bank counts
+    const bankByAreaResult = await query(
+      `SELECT content_area, COUNT(*) as total
+       FROM question_bank WHERE is_active = true
+       GROUP BY content_area`
+    )
+
+    // Per-content-area user performance
+    const answeredByAreaResult = await query(
+      `SELECT
+         qb.content_area,
+         COUNT(DISTINCT sr.question_id) as used,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE sr.is_correct = true) as correct,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE sr.is_correct = false) as incorrect
+       FROM session_responses sr
+       JOIN test_sessions ts ON sr.session_id = ts.id
+       JOIN question_bank qb ON sr.question_id = qb.id
+       WHERE ts.user_id = $1 AND sr.answered_at IS NOT NULL
+       GROUP BY qb.content_area`,
+      [userId]
+    )
+
     const bank = bankResult.rows[0]
     const answered = answeredResult.rows[0]
+
+    // Build content area breakdown map
+    const bankByArea: Record<string, number> = {}
+    for (const row of bankByAreaResult.rows) {
+      bankByArea[row.content_area] = parseInt(row.total) || 0
+    }
+    const answeredByArea: Record<string, { used: number; correct: number; incorrect: number }> = {}
+    for (const row of answeredByAreaResult.rows) {
+      answeredByArea[row.content_area] = {
+        used: parseInt(row.used) || 0,
+        correct: parseInt(row.correct) || 0,
+        incorrect: parseInt(row.incorrect) || 0,
+      }
+    }
+    const contentAreaBreakdown = CONTENT_AREAS.map(area => {
+      const total = bankByArea[area] || 0
+      const perf = answeredByArea[area] || { used: 0, correct: 0, incorrect: 0 }
+      return {
+        content_area: area,
+        total,
+        used: perf.used,
+        correct: perf.correct,
+        incorrect: perf.incorrect,
+      }
+    })
 
     const totalBank = parseInt(bank.total) || 0
     const totalClassic = parseInt(bank.total_classic) || 0
@@ -487,6 +534,7 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
       cs_unused: Math.max(0, totalCaseStudies - csUsed),
       cs_correct: csCorrect,
       cs_incorrect: csIncorrect,
+      content_area_breakdown: contentAreaBreakdown,
     })
   } catch (error: any) {
     console.error('User stats error:', error)
