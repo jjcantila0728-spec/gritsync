@@ -982,25 +982,25 @@ export function ClientEmails() {
         <main className="flex-1 p-4 md:p-8">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Emails</h1>
                     {clientEmailAddress && (
-                      <span className="px-3 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-sm font-medium">
+                      <span className="px-3 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-xs font-medium truncate max-w-[200px] sm:max-w-none">
                         {clientEmailAddress.email_address}
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
                     Manage your emails and communications
                   </p>
                 </div>
                 <button
                   onClick={() => setComposing(true)}
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+                  className="flex-shrink-0 self-start sm:self-auto px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="h-4 w-4" />
                   Compose
                 </button>
               </div>

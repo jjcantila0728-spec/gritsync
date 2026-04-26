@@ -878,20 +878,22 @@ export function Tracking() {
                       Monitor and manage your NCLEX applications. Get instant notifications on status changes and updates.
                     </p>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-row gap-2">
                     <Button
                       variant="outline"
                       onClick={handleRefresh}
                       disabled={refreshing || loading}
-                      className="h-10 w-10 p-0"
+                      className="flex items-center gap-1.5 px-3 h-10"
                       title="Refresh applications"
                     >
-                      <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 flex-shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+                      <span className="text-sm">Refresh</span>
                     </Button>
                     {!isAdmin() && (
                       <Link to="/application/new">
-                        <Button className="h-10 w-10 p-0" title="New Application">
-                          <Plus className="h-5 w-5" />
+                        <Button className="flex items-center gap-1.5 px-3 h-10" title="New Application">
+                          <Plus className="h-4 w-4 flex-shrink-0" />
+                          <span className="text-sm">New</span>
                         </Button>
                       </Link>
                     )}

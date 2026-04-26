@@ -244,46 +244,46 @@ export function NCLEXExamLayout({
         </div>
       </header>
 
-      {/* ── Row 2: Action toolbar ── */}
-      <div className="bg-white border-b border-gray-200 flex-shrink-0 h-10 flex items-center px-3 sm:px-5 gap-1">
+      {/* ── Row 2: Action toolbar (same teal as Row 1 — Archer Review style) ── */}
+      <div className="bg-[#17c3b2] flex-shrink-0 h-10 flex items-center px-3 sm:px-5 gap-1 border-t border-white/20">
         {/* Left: Mark / Bookmark / Navigator */}
         <div className="flex items-center gap-0.5 flex-1 min-w-0">
           <button
             onClick={onToggleMark}
             className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-[11px] font-bold rounded transition-colors min-w-0 ${
-              isMarked ? 'text-amber-600 bg-amber-50' : 'text-gray-600 hover:bg-gray-100'
+              isMarked ? 'text-white bg-white/30' : 'text-white hover:bg-white/20'
             }`}
           >
-            <Flag className={`h-3.5 w-3.5 flex-shrink-0 ${isMarked ? 'fill-amber-500 stroke-amber-500' : ''}`} />
+            <Flag className={`h-3.5 w-3.5 flex-shrink-0 ${isMarked ? 'fill-white stroke-white' : ''}`} />
             <span className="hidden sm:inline uppercase tracking-wide truncate">Mark for Later</span>
           </button>
 
           <button
             onClick={onToggleBookmark}
             className={`flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-bold rounded transition-colors ${
-              isBookmarked ? 'text-[#17c3b2] bg-[#17c3b2]/10' : 'text-gray-500 hover:bg-gray-100'
+              isBookmarked ? 'text-white bg-white/30' : 'text-white hover:bg-white/20'
             }`}
           >
-            <Bookmark className={`h-3.5 w-3.5 flex-shrink-0 ${isBookmarked ? 'fill-[#17c3b2] stroke-[#17c3b2]' : ''}`} />
+            <Bookmark className={`h-3.5 w-3.5 flex-shrink-0 ${isBookmarked ? 'fill-white stroke-white' : ''}`} />
             <span className="hidden md:inline text-[11px]">Bookmark</span>
           </button>
 
-          <div className="w-px h-5 bg-gray-200 mx-1 hidden sm:block flex-shrink-0" />
+          <div className="w-px h-5 bg-white/30 mx-1 hidden sm:block flex-shrink-0" />
 
-          <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded flex-shrink-0" title="Question Navigator">
+          <button className="p-1.5 text-white hover:bg-white/20 rounded flex-shrink-0" title="Question Navigator">
             <AlignLeft className="h-4 w-4" />
           </button>
         </div>
 
         {/* Right: Utilities */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded" title="Settings">
+          <button className="p-1.5 text-white hover:bg-white/20 rounded" title="Settings">
             <Settings className="h-4 w-4" />
           </button>
-          <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded" title="Calculator">
+          <button className="p-1.5 text-white hover:bg-white/20 rounded" title="Calculator">
             <Calculator className="h-4 w-4" />
           </button>
-          <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded" title="Notes">
+          <button className="p-1.5 text-white hover:bg-white/20 rounded" title="Notes">
             <MessageSquare className="h-4 w-4" />
           </button>
         </div>
