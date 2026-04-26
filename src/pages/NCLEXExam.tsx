@@ -810,9 +810,12 @@ export function NCLEXExam() {
                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">NGN</span>
               )}
               {isReviewMode && currentQuestion.case_study_id && currentQuestion.case_study_title && (
-                <span className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-medium">
+                <span
+                  className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-medium max-w-[200px]"
+                  title={currentQuestion.case_study_title}
+                >
                   <BookOpen className="h-3 w-3 flex-shrink-0" />
-                  {currentQuestion.case_study_title}
+                  <span className="truncate">{currentQuestion.case_study_title}</span>
                 </span>
               )}
             </div>
@@ -826,10 +829,15 @@ export function NCLEXExam() {
                 >
                   <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Clinical Scenario</span>
                       {currentQuestion.case_study_title && (
-                        <p className="text-xs text-blue-600 font-medium mt-0.5">{currentQuestion.case_study_title}</p>
+                        <p
+                          className="text-xs text-blue-600 font-medium mt-0.5 truncate"
+                          title={currentQuestion.case_study_title}
+                        >
+                          {currentQuestion.case_study_title}
+                        </p>
                       )}
                     </div>
                   </div>
