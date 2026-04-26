@@ -3,9 +3,9 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { NCLEXExamLayout } from '@/layouts/NCLEXLayout'
 import {
-  ChevronLeft, ChevronRight, Flag, AlignLeft, CheckCircle,
-  XCircle, Lightbulb, AlertCircle, Clock, BarChart2,
-  Award, Star, RotateCcw, BookOpen, Target, Brain, Bookmark,
+  ChevronLeft, ChevronRight, AlertCircle, Clock,
+  BarChart2, Award, Star, RotateCcw, BookOpen, Target,
+  CheckCircle, XCircle, Lightbulb, Brain,
 } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
@@ -40,51 +40,31 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${cfg.cls}`}>{cfg.label}</span>
 }
 
-// ── Case Study Scenario Banner ───────────────────────────────────────────────
-function CaseStudyScenario({ scenario, group, questions, currentIndex }: {
-  scenario: string
-  group: string
-  questions: any[]
-  currentIndex: number
-}) {
-  const [expanded, setExpanded] = useState(true)
-  const groupQuestions = questions.filter(q => q.case_study_group === group)
-  const posInGroup = groupQuestions.findIndex(q => q.question_id === questions[currentIndex]?.question_id) + 1
-  const totalInGroup = groupQuestions.length
-
+// ── Score tracker row (Archer Review style) ──────────────────────────────────
+function ScoreTracker({ correct, total, scoringType }: { correct: number; total: number; scoringType?: string }) {
   return (
-    <div className="mb-5 rounded-xl border-2 border-[#17c3b2]/40 bg-[#17c3b2]/5 overflow-hidden">
-      <button
-        onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-[#17c3b2] flex-shrink-0" />
-          <span className="text-xs font-bold text-[#17c3b2] uppercase tracking-wide">
-            NGN Case Study — Question {posInGroup} of {totalInGroup}
-          </span>
+    <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 mb-4">
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 rounded border-2 border-gray-400 flex items-center justify-center flex-shrink-0">
+          <CheckCircle className="h-3 w-3 text-gray-400" />
         </div>
-        <span className="text-[10px] text-[#17c3b2] font-semibold">
-          {expanded ? '▲ Hide Scenario' : '▼ Show Scenario'}
-        </span>
-      </button>
-      {expanded && (
-        <div className="px-4 pb-4 border-t border-[#17c3b2]/20">
-          <p className="text-sm text-gray-800 leading-relaxed mt-3 whitespace-pre-line">{scenario}</p>
-        </div>
-      )}
+        <span className="text-xs font-semibold text-gray-700">{correct}/{total}</span>
+        <span className="text-xs text-gray-500">Your Score/Max</span>
+      </div>
+      <div className="w-px h-4 bg-gray-300" />
+      <span className="text-xs text-gray-500">{scoringType || '+/- Scoring Rule'}</span>
+      <span className="text-gray-400 cursor-help text-xs" title="Partial credit is given for correct selections">ⓘ</span>
     </div>
   )
 }
 
-// ── Question Type Components ─────────────────────────────────────────────────
-
+// ── MCQ question component ───────────────────────────────────────────────────
 function MCQQuestion({ options, selected, onSelect, disabled, feedback, correctAnswer }: {
   options: any[]; selected: string | null; onSelect: (id: string) => void
   disabled: boolean; feedback: any; correctAnswer: any
 }) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       {options.map((opt: any) => {
         const isSelected = selected === opt.id
         const isCorrect = correctAnswer?.value === opt.id
@@ -104,7 +84,7 @@ function MCQQuestion({ options, selected, onSelect, disabled, feedback, correctA
             key={opt.id}
             onClick={() => !disabled && onSelect(opt.id)}
             disabled={disabled}
-            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${cls} ${disabled && !showResult ? 'cursor-default' : ''}`}
+            className={`w-full text-left px-3 sm:px-4 py-3 rounded-xl border-2 transition-all ${cls} ${disabled && !showResult ? 'cursor-default' : ''}`}
           >
             <div className="flex items-start gap-3">
               <span className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold mt-0.5 ${
@@ -126,12 +106,13 @@ function MCQQuestion({ options, selected, onSelect, disabled, feedback, correctA
   )
 }
 
+// ── SATA question component ──────────────────────────────────────────────────
 function SATAQuestion({ options, selected, onToggle, disabled, feedback, correctAnswer }: {
   options: any[]; selected: string[]; onToggle: (id: string) => void
   disabled: boolean; feedback: any; correctAnswer: any
 }) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       <p className="text-xs text-gray-500 italic mb-3">Select all that apply.</p>
       {options.map((opt: any) => {
         const isSelected = selected.includes(opt.id)
@@ -153,7 +134,7 @@ function SATAQuestion({ options, selected, onToggle, disabled, feedback, correct
             key={opt.id}
             onClick={() => !disabled && onToggle(opt.id)}
             disabled={disabled}
-            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${cls}`}
+            className={`w-full text-left px-3 sm:px-4 py-3 rounded-xl border-2 transition-all ${cls}`}
           >
             <div className="flex items-start gap-3">
               <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
@@ -162,11 +143,13 @@ function SATAQuestion({ options, selected, onToggle, disabled, feedback, correct
                 showResult && !isCorrect && isSelected ? 'border-red-500 bg-red-500' :
                 isSelected ? 'border-[#17c3b2] bg-[#17c3b2]' : 'border-gray-300'
               }`}>
-                {showResult && isCorrect && isSelected && <CheckCircle className="h-3 w-3 text-white" />}
-                {showResult && !isCorrect && isSelected && <XCircle className="h-3 w-3 text-white" />}
-                {!showResult && isSelected && <CheckCircle className="h-3 w-3 text-white" />}
+                {(showResult && isCorrect && isSelected) && <CheckCircle className="h-3 w-3 text-white" />}
+                {(showResult && !isCorrect && isSelected) && <XCircle className="h-3 w-3 text-white" />}
+                {(!showResult && isSelected) && <CheckCircle className="h-3 w-3 text-white" />}
               </div>
-              <span className="text-sm leading-relaxed">{opt.text}</span>
+              <span className="text-sm leading-relaxed">
+                <span className="font-medium mr-1">{opt.id.toUpperCase()}.</span>{opt.text}
+              </span>
             </div>
           </button>
         )
@@ -175,6 +158,7 @@ function SATAQuestion({ options, selected, onToggle, disabled, feedback, correct
   )
 }
 
+// ── Cloze (drop-down) question ───────────────────────────────────────────────
 function ClozeQuestion({ options, selected, onSelect, disabled, feedback, correctAnswer }: {
   options: any; selected: Record<string, string>; onSelect: (blankId: string, value: string) => void
   disabled: boolean; feedback: any; correctAnswer: any
@@ -197,7 +181,7 @@ function ClozeQuestion({ options, selected, onSelect, disabled, feedback, correc
               value={selected[blankId] || ''}
               onChange={e => !disabled && onSelect(blankId, e.target.value)}
               disabled={disabled}
-              className={`inline-block mx-1 border-b-2 px-2 py-0.5 rounded text-sm font-medium cursor-pointer ${
+              className={`inline-block mx-1 border-b-2 px-2 py-0.5 rounded text-sm font-medium cursor-pointer max-w-[200px] ${
                 feedback
                   ? isCorrect ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-500 bg-red-50 text-red-800'
                   : 'border-[#17c3b2] bg-[#17c3b2]/5 text-[#17c3b2]'
@@ -214,28 +198,26 @@ function ClozeQuestion({ options, selected, onSelect, disabled, feedback, correc
   )
 }
 
+// ── Matrix question ──────────────────────────────────────────────────────────
 function MatrixQuestion({ options, selected, onSelect, disabled, feedback, correctAnswer }: {
   options: any; selected: Record<string, string>; onSelect: (row: string, col: string) => void
   disabled: boolean; feedback: any; correctAnswer: any
 }) {
   const rows: any[] = options?.rows || []
   const columns: any[] = options?.columns || []
-
   const correctMap: Record<string, string> = {}
   if (correctAnswer?.cells) {
-    for (const [r, c] of correctAnswer.cells) {
-      correctMap[String(r)] = String(c)
-    }
+    for (const [r, c] of correctAnswer.cells) correctMap[String(r)] = String(c)
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-sm border-collapse min-w-[320px]">
         <thead>
           <tr>
-            <th className="p-3 border border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 w-1/2" />
+            <th className="p-2 sm:p-3 border border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 w-1/2" />
             {columns.map((col: any) => (
-              <th key={col.id} className="p-3 border border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-700">
+              <th key={col.id} className="p-2 sm:p-3 border border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-700">
                 {col.text}
               </th>
             ))}
@@ -248,15 +230,13 @@ function MatrixQuestion({ options, selected, onSelect, disabled, feedback, corre
             const correctCol = correctMap[rowId]
             return (
               <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                <td className="p-3 border border-gray-200 text-xs text-gray-700 font-medium leading-relaxed">
-                  {row.text}
-                </td>
+                <td className="p-2 sm:p-3 border border-gray-200 text-xs text-gray-700 font-medium leading-relaxed">{row.text}</td>
                 {columns.map((col: any) => {
                   const colId = String(col.id)
                   const isSelected = selectedCol === colId
                   const isCorrect = correctCol === colId
                   return (
-                    <td key={col.id} className="p-3 border border-gray-200 text-center">
+                    <td key={col.id} className="p-2 sm:p-3 border border-gray-200 text-center">
                       <input
                         type="radio"
                         name={`matrix-${rowId}`}
@@ -265,12 +245,8 @@ function MatrixQuestion({ options, selected, onSelect, disabled, feedback, corre
                         disabled={disabled}
                         className="accent-[#17c3b2] cursor-pointer w-4 h-4"
                       />
-                      {feedback && isCorrect && (
-                        <span className="ml-1 text-green-500 text-xs">✓</span>
-                      )}
-                      {feedback && isSelected && !isCorrect && (
-                        <span className="ml-1 text-red-500 text-xs">✗</span>
-                      )}
+                      {feedback && isCorrect && <span className="ml-1 text-green-500 text-xs">✓</span>}
+                      {feedback && isSelected && !isCorrect && <span className="ml-1 text-red-500 text-xs">✗</span>}
                     </td>
                   )
                 })}
@@ -283,7 +259,122 @@ function MatrixQuestion({ options, selected, onSelect, disabled, feedback, corre
   )
 }
 
-// ── Score Sheet (Results) ──────────────────────────────────────────────────────
+// ── Statistics panel (Archer Review style) ───────────────────────────────────
+function StatisticsPanel({ question, feedback }: { question: any; feedback: any }) {
+  const AREA_LABELS: Record<string, string> = {
+    safe_effective_care_environment: 'Safe & Effective Care',
+    health_promotion_and_maintenance: 'Health Promotion',
+    psychosocial_integrity: 'Psychosocial Integrity',
+    physiological_integrity: 'Physiological Integrity',
+  }
+
+  const rawTags = question.tags
+  const tagList: string[] = Array.isArray(rawTags)
+    ? rawTags.filter(Boolean)
+    : rawTags ? String(rawTags).split(',').map((t: string) => t.trim()).filter(Boolean) : []
+
+  const diff = feedback?.difficulty || question.difficulty
+  const area = feedback?.content_area || question.content_area
+  const lesson = feedback?.subcategory || question.subcategory
+
+  return (
+    <div className="mt-5 pt-4 border-t border-gray-100">
+      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Statistics</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
+        {diff && (
+          <div className="flex items-center gap-1.5 text-gray-500 col-span-2 sm:col-span-1">
+            <span>Difficulty level –</span>
+            <DifficultyBadge difficulty={diff} />
+          </div>
+        )}
+        {area && (
+          <div className="flex items-center gap-1.5 text-gray-500">
+            <span className="shrink-0">Subject</span>
+            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium capitalize truncate">
+              {AREA_LABELS[area] || area.replace(/_/g, ' ')}
+            </span>
+          </div>
+        )}
+        {lesson && (
+          <div className="flex items-center gap-1.5 text-gray-500">
+            <span className="shrink-0">Lesson</span>
+            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium truncate">{lesson}</span>
+          </div>
+        )}
+        {question.question_type && (
+          <div className="flex items-center gap-1.5 text-gray-500">
+            <span className="shrink-0">Type</span>
+            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium capitalize">
+              {question.question_type === 'traditional_mcq' ? 'MCQ' :
+               question.question_type === 'ngn_sata' ? 'SATA' :
+               question.question_type === 'ngn_cloze' ? 'Cloze' : 'Matrix'}
+            </span>
+          </div>
+        )}
+      </div>
+      {tagList.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {tagList.map(tag => (
+            <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">{tag}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Explanation panel (Archer Review style) ──────────────────────────────────
+function ExplanationPanel({ question, feedback, isTutorial }: {
+  question: any; feedback: any; isTutorial: boolean
+}) {
+  if (!feedback && !question.answered_at) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-gray-400 bg-gray-50">
+        {isTutorial ? (
+          <>
+            <Lightbulb className="h-10 w-10 opacity-30 mb-3" />
+            <p className="text-sm font-medium text-gray-500">Submit your answer to see the explanation</p>
+          </>
+        ) : (
+          <>
+            <BookOpen className="h-10 w-10 opacity-30 mb-3" />
+            <p className="text-sm">Explanation will appear here.</p>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const rationale = question.rationale || ''
+  return (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
+      <h3 className="font-bold text-gray-900 mb-4 text-sm">Explanation</h3>
+
+      {feedback && !feedback.is_correct && (
+        <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+          <span className="text-amber-700 text-sm">ⓘ</span>
+          <span className="text-xs text-amber-700 font-medium">Click the answer box to view the correct answer</span>
+        </div>
+      )}
+
+      <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed text-sm whitespace-pre-line">
+        {rationale || 'No explanation available for this question.'}
+      </div>
+
+      {/* Learning Objective box if rationale contains learning objective marker */}
+      {rationale.toLowerCase().includes('learning objective') && (
+        <div className="mt-5 bg-[#17c3b2]/8 border border-[#17c3b2]/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span>💡</span>
+            <h4 className="text-sm font-bold text-gray-800">Learning Objective</h4>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Score Sheet (Results) ────────────────────────────────────────────────────
 function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
   session: any; questions: any[]; onClose: () => void; onReviewAll: () => void; mode?: string
 }) {
@@ -296,7 +387,6 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
 
   const byArea: Record<string, { total: number; correct: number }> = {}
   const byDiff: Record<string, { total: number; correct: number }> = {}
-  const byCaseStudy: Record<string, { title: string; total: number; correct: number }> = {}
 
   for (const q of questions) {
     if (q.answered_at) {
@@ -306,17 +396,7 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
       if (!byDiff[diff]) byDiff[diff] = { total: 0, correct: 0 }
       byArea[area].total++
       byDiff[diff].total++
-      if (q.is_correct) {
-        byArea[area].correct++
-        byDiff[diff].correct++
-      }
-      if (q.case_study_id) {
-        if (!byCaseStudy[q.case_study_id]) {
-          byCaseStudy[q.case_study_id] = { title: q.case_study_title || 'Untitled Case Study', total: 0, correct: 0 }
-        }
-        byCaseStudy[q.case_study_id].total++
-        if (q.is_correct) byCaseStudy[q.case_study_id].correct++
-      }
+      if (q.is_correct) { byArea[area].correct++; byDiff[diff].correct++ }
     }
   }
 
@@ -328,10 +408,9 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+    <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">
       <div className="max-w-2xl mx-auto space-y-5">
-        {/* Score card */}
-        <div className={`rounded-2xl p-8 text-center border-2 ${
+        <div className={`rounded-2xl p-6 sm:p-8 text-center border-2 ${
           passed ? 'bg-green-50 border-green-300' : score >= 60 ? 'bg-yellow-50 border-yellow-300' : 'bg-red-50 border-red-200'
         }`}>
           <div className={`inline-flex h-16 w-16 rounded-full items-center justify-center mb-4 ${
@@ -351,7 +430,6 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
           )}
         </div>
 
-        {/* By content area */}
         {Object.keys(byArea).length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2 text-sm">
@@ -367,10 +445,7 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
                       <span className="font-semibold">{d.correct}/{d.total} ({pct}%)</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${pct >= 75 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className={`h-full rounded-full ${pct >= 75 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-400'}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 )
@@ -379,7 +454,6 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
           </div>
         )}
 
-        {/* By difficulty */}
         {Object.keys(byDiff).length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
             <h3 className="font-semibold text-gray-900 mb-4 text-sm">Performance by Difficulty</h3>
@@ -400,35 +474,6 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
           </div>
         )}
 
-        {/* By case study */}
-        {Object.keys(byCaseStudy).length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2 text-sm">
-              <BookOpen className="h-4 w-4 text-[#17c3b2]" /> Case Studies
-            </h3>
-            <div className="space-y-3">
-              {Object.entries(byCaseStudy).map(([id, d]) => {
-                const pct = d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0
-                return (
-                  <div key={id}>
-                    <div className="flex justify-between text-xs text-gray-600 mb-1">
-                      <span className="font-medium truncate pr-2">{d.title}</span>
-                      <span className="font-semibold shrink-0">{d.correct}/{d.total} ({pct}%)</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${pct >= 75 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Time per question (timed mode only) */}
         {isTimed && (() => {
           const answeredWithTime = questions.filter(q => q.answered_at && typeof q.time_spent === 'number')
           if (answeredWithTime.length === 0) return null
@@ -439,7 +484,7 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4 text-[#17c3b2]" /> Time Per Question
               </h3>
-              <div className="flex items-center gap-6 mb-4">
+              <div className="flex flex-wrap items-center gap-6 mb-4">
                 <div className="text-center">
                   <p className="text-2xl font-black text-gray-900">{formatTime(avgTime)}</p>
                   <p className="text-xs text-gray-500">Average time</p>
@@ -448,47 +493,16 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
                   <p className="text-2xl font-black text-orange-600">{slowCount}</p>
                   <p className="text-xs text-gray-500">Slow answers (&gt;{SLOW_THRESHOLD}s)</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-black text-gray-900">{answeredWithTime.length - slowCount}</p>
-                  <p className="text-xs text-gray-500">On-time answers</p>
-                </div>
-              </div>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {answeredWithTime.map((q, i) => {
-                  const isSlow = q.time_spent > SLOW_THRESHOLD
-                  const pct = Math.min(100, Math.round((q.time_spent / SLOW_THRESHOLD) * 100))
-                  return (
-                    <div key={q.question_id} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-400 w-8 flex-shrink-0">Q{i + 1}</span>
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${isSlow ? 'bg-orange-400' : 'bg-[#17c3b2]'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className={`w-12 text-right flex-shrink-0 font-medium ${isSlow ? 'text-orange-600' : 'text-gray-600'}`}>
-                        {formatTime(q.time_spent)}
-                      </span>
-                      {isSlow && <span className="text-[10px] text-orange-500 flex-shrink-0">slow</span>}
-                    </div>
-                  )
-                })}
               </div>
             </div>
           )
         })()}
 
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button onClick={onClose} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
             <RotateCcw className="h-4 w-4" /> Back to Q-Bank
           </button>
-          <button
-            onClick={onReviewAll}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#17c3b2] text-white text-sm font-semibold hover:bg-[#14a99a] transition-colors"
-          >
+          <button onClick={onReviewAll} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#17c3b2] text-white text-sm font-semibold hover:bg-[#14a99a] transition-colors">
             <BookOpen className="h-4 w-4" /> Review All Answers
           </button>
         </div>
@@ -513,42 +527,34 @@ export function NCLEXExam() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Answer state
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([])
   const [selectedMatrix, setSelectedMatrix] = useState<Record<string, string>>({})
   const [selectedCloze, setSelectedCloze] = useState<Record<string, string>>({})
 
-  // Feedback / submission
   const [feedback, setFeedback] = useState<any>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Timer — total elapsed seconds since session start
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // Per-question time tracking: elapsed value when the current question started
   const qStartElapsedRef = useRef<number>(0)
-  // Flag to prevent double-triggering the timed auto-end
   const timedEndFiredRef = useRef(false)
 
-  // UI state
   const [showScore, setShowScore] = useState(initialTab === 'score')
   const [markedQuestions, setMarkedQuestions] = useState<Set<number>>(new Set())
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<number>>(new Set())
   const [bookmarkLoading, setBookmarkLoading] = useState(false)
-  const [scenarioExpanded, setScenarioExpanded] = useState(true)
   const [caseStudyFilter, setCaseStudyFilter] = useState<string | null>(searchParams.get('csFilter'))
+  // Mobile: which panel is active ('question' | 'explanation')
+  const [mobilePanel, setMobilePanel] = useState<'question' | 'explanation'>('question')
 
   const updateCaseStudyFilter = (value: string | null) => {
     setCaseStudyFilter(value)
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
-      if (value === null) {
-        next.delete('csFilter')
-      } else {
-        next.set('csFilter', value)
-      }
+      if (value === null) next.delete('csFilter')
+      else next.set('csFilter', value)
       return next
     }, { replace: true })
   }
@@ -559,12 +565,10 @@ export function NCLEXExam() {
   const isTimed = sessionMode === 'timed'
   const sessionId = parseInt(id || '0')
 
-  // Timed mode: 90 seconds per question (NCLEX standard ~1.5 min/question)
   const SECONDS_PER_QUESTION = 90
   const totalTimedSeconds = isTimed && questions.length > 0 ? questions.length * SECONDS_PER_QUESTION : null
   const timedTimeLeft = totalTimedSeconds !== null ? Math.max(0, totalTimedSeconds - elapsed) : null
 
-  // Unique case studies in this session (used for review-mode filter)
   const caseStudiesInSession = useMemo(() => {
     if (!isReviewMode) return []
     const seen = new Set<string>()
@@ -580,19 +584,15 @@ export function NCLEXExam() {
         }
       }
     }
-    for (const cs of result) {
-      cs.count = counts.get(cs.id) ?? 0
-    }
+    for (const cs of result) cs.count = counts.get(cs.id) ?? 0
     return result
   }, [questions, isReviewMode])
 
-  // Questions visible in the bottom-nav (filtered by case study when a filter is active)
   const navQuestions = useMemo(() => {
     if (!caseStudyFilter) return questions
     return questions.filter(q => String(q.case_study_id) === caseStudyFilter)
   }, [questions, caseStudyFilter])
 
-  // Load session data
   const loadSession = useCallback(async () => {
     if (!id || !user) return
     setLoading(true)
@@ -601,8 +601,6 @@ export function NCLEXExam() {
       const data = await apiFetch(`/api/questions/session/${id}/questions`)
       setSession(data.session)
       setQuestions(data.questions || [])
-
-      // Build pre-filled marks and bookmarks
       const marks = new Set<number>()
       const bookmarks = new Set<number>()
       for (const q of (data.questions || [])) {
@@ -611,14 +609,8 @@ export function NCLEXExam() {
       }
       setMarkedQuestions(marks)
       setBookmarkedQuestions(bookmarks)
-
-      // In review mode, start at first question
       setQIndex(0)
-
-      // If session already complete and not explicitly in review mode, show score
-      if (data.session?.status === 'completed' && !isReviewMode) {
-        setShowScore(true)
-      }
+      if (data.session?.status === 'completed' && !isReviewMode) setShowScore(true)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -628,7 +620,6 @@ export function NCLEXExam() {
 
   useEffect(() => { loadSession() }, [loadSession])
 
-  // When the case study filter changes, jump to the first question in the filtered set
   useEffect(() => {
     if (caseStudyFilter) {
       const firstIdx = questions.findIndex(q => String(q.case_study_id) === caseStudyFilter)
@@ -636,7 +627,6 @@ export function NCLEXExam() {
     }
   }, [caseStudyFilter, questions])
 
-  // After questions load, validate the csFilter from the URL; clear it if it doesn't match any case study
   useEffect(() => {
     if (caseStudyFilter && caseStudiesInSession.length > 0) {
       const valid = caseStudiesInSession.some(cs => cs.id === caseStudyFilter)
@@ -644,7 +634,6 @@ export function NCLEXExam() {
     }
   }, [caseStudiesInSession])
 
-  // Timer
   useEffect(() => {
     if (!isReviewMode && session?.status === 'in_progress' && !showScore) {
       timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
@@ -652,7 +641,6 @@ export function NCLEXExam() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [isReviewMode, session?.status, showScore])
 
-  // Auto-end session when timed countdown reaches 0
   useEffect(() => {
     if (!isTimed || isReviewMode || showScore || timedTimeLeft === null) return
     if (timedTimeLeft <= 0 && !timedEndFiredRef.current) {
@@ -661,30 +649,22 @@ export function NCLEXExam() {
     }
   }, [timedTimeLeft, isTimed, isReviewMode, showScore])
 
-  // When question changes, load existing answer if in review mode
   useEffect(() => {
     const q = questions[qIndex]
     if (!q) return
     setFeedback(null)
     setSubmitError(null)
-    setScenarioExpanded(true)
-    // Reset per-question timer
     qStartElapsedRef.current = elapsed
+    setMobilePanel('question')
 
     if (isReviewMode && q.answered_at) {
-      // Pre-fill with submitted answer and show feedback
       const userAnswer = q.user_answer
-      if (q.question_type === 'traditional_mcq') {
-        setSelectedAnswer(userAnswer?.value || null)
-      } else if (q.question_type === 'ngn_sata') {
-        setSelectedAnswers(userAnswer?.values || [])
-      } else if (q.question_type === 'ngn_cloze') {
-        setSelectedCloze(userAnswer?.values || {})
-      } else if (q.question_type === 'ngn_matrix') {
+      if (q.question_type === 'traditional_mcq') setSelectedAnswer(userAnswer?.value || null)
+      else if (q.question_type === 'ngn_sata') setSelectedAnswers(userAnswer?.values || [])
+      else if (q.question_type === 'ngn_cloze') setSelectedCloze(userAnswer?.values || {})
+      else if (q.question_type === 'ngn_matrix') {
         const matrixMap: Record<string, string> = {}
-        for (const [r, c] of (userAnswer?.cells || [])) {
-          matrixMap[String(r)] = String(c)
-        }
+        for (const [r, c] of (userAnswer?.cells || [])) matrixMap[String(r)] = String(c)
         setSelectedMatrix(matrixMap)
       }
       setFeedback({ is_correct: q.is_correct, correct_answer: q.correct_answer })
@@ -703,7 +683,6 @@ export function NCLEXExam() {
     if (newMarked.has(qId)) newMarked.delete(qId)
     else newMarked.add(qId)
     setMarkedQuestions(newMarked)
-
     try {
       await apiFetch(`/api/questions/session/${sessionId}/mark-review`, {
         method: 'POST',
@@ -722,12 +701,8 @@ export function NCLEXExam() {
     else newBookmarked.add(qId)
     setBookmarkedQuestions(newBookmarked)
     try {
-      await apiFetch('/api/questions/bookmarks/toggle', {
-        method: 'POST',
-        body: JSON.stringify({ question_id: qId }),
-      })
+      await apiFetch('/api/questions/bookmarks/toggle', { method: 'POST', body: JSON.stringify({ question_id: qId }) })
     } catch {
-      // Revert on error
       if (wasBookmarked) newBookmarked.add(qId)
       else newBookmarked.delete(qId)
       setBookmarkedQuestions(new Set(newBookmarked))
@@ -767,19 +742,10 @@ export function NCLEXExam() {
         body: JSON.stringify({ question_id: currentQuestion.question_id, user_answer, time_spent: questionTimeSpent }),
       })
 
-      // Update local question with result (including correct_answer/rationale from answer response)
       setQuestions(prev => {
         const updated = prev.map((q, i) =>
-          i === qIndex ? {
-            ...q,
-            is_correct: data.is_correct,
-            user_answer,
-            answered_at: new Date().toISOString(),
-            correct_answer: data.correct_answer,
-            rationale: data.rationale,
-          } : q
+          i === qIndex ? { ...q, is_correct: data.is_correct, user_answer, answered_at: new Date().toISOString(), correct_answer: data.correct_answer, rationale: data.rationale } : q
         )
-        // CAT: if backend swapped a question to be next, reorder local array to match
         if (data.next_question_id && session?.session_type === 'cat') {
           const nextIdx = updated.findIndex(q => q.question_id === data.next_question_id)
           const immediateNext = qIndex + 1
@@ -795,13 +761,13 @@ export function NCLEXExam() {
 
       if (isTutorial) {
         setFeedback({ is_correct: data.is_correct, correct_answer: data.correct_answer, ...data })
+        // Auto-switch to explanation panel on mobile after submitting
+        setMobilePanel('explanation')
       } else {
-        // Auto-advance in non-tutorial modes
         advanceQuestion()
       }
 
       if (data.session_complete) {
-        // Reload session to get final stats
         setTimeout(async () => {
           await loadSession()
           setShowScore(true)
@@ -811,7 +777,6 @@ export function NCLEXExam() {
       if (err.message?.includes('Daily question limit') || err.message?.includes('daily_limit')) {
         setSubmitError('Daily question limit reached. Upgrade your plan to continue.')
       } else if (err.message?.includes('time limit exceeded') || err.message?.includes('time_expired')) {
-        // Server confirmed time expired — end session and show results
         await loadSession()
         setShowScore(true)
       } else {
@@ -823,17 +788,12 @@ export function NCLEXExam() {
   }
 
   function advanceQuestion() {
-    if (qIndex + 1 < questions.length) {
-      setQIndex(qIndex + 1)
-    } else {
-      setShowScore(true)
-    }
+    if (qIndex + 1 < questions.length) setQIndex(qIndex + 1)
+    else setShowScore(true)
   }
 
   async function endSession() {
-    try {
-      await apiFetch(`/api/questions/session/${sessionId}/end`, { method: 'POST' })
-    } catch {}
+    try { await apiFetch(`/api/questions/session/${sessionId}/end`, { method: 'POST' }) } catch {}
     await loadSession()
     setShowScore(true)
   }
@@ -857,11 +817,17 @@ export function NCLEXExam() {
   const isMarked = currentQuestion ? markedQuestions.has(currentQuestion.question_id) : false
   const isBookmarked = currentQuestion ? bookmarkedQuestions.has(currentQuestion.question_id) : false
   const answeredCount = questions.filter(q => q.answered_at).length
+  const showExplanation = !!(feedback || isReviewMode)
 
   if (loading) {
     return (
       <NCLEXExamLayout>
-        <div className="flex items-center justify-center h-full text-gray-500">Loading exam...</div>
+        <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="text-center">
+            <div className="animate-spin h-8 w-8 border-2 border-[#17c3b2] border-t-transparent rounded-full mx-auto mb-3" />
+            <p className="text-sm">Loading exam...</p>
+          </div>
+        </div>
       </NCLEXExamLayout>
     )
   }
@@ -869,9 +835,9 @@ export function NCLEXExam() {
   if (error) {
     return (
       <NCLEXExamLayout>
-        <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500">
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500 p-6">
           <AlertCircle className="h-10 w-10 text-red-400" />
-          <p className="text-sm">{error}</p>
+          <p className="text-sm text-center">{error}</p>
           <button onClick={() => navigate('/nclex-review')} className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold">
             Back to Q-Bank
           </button>
@@ -880,7 +846,6 @@ export function NCLEXExam() {
     )
   }
 
-  // Show score sheet
   if (showScore && !isReviewMode) {
     return (
       <NCLEXExamLayout
@@ -908,372 +873,282 @@ export function NCLEXExam() {
   }
 
   const qtype = currentQuestion.question_type
-  const qOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : currentQuestion.options
+  const qOptions = currentQuestion.options
   const isDisabled = !!feedback || isReviewMode
-  const showExplanation = feedback || isReviewMode
+  const isCaseStudy = !!(currentQuestion.case_study_id && currentQuestion.case_study_scenario)
 
-  const caseStudyId = currentQuestion.case_study_id
-  const caseStudyQuestions = caseStudyId
-    ? questions.filter(q => q.case_study_id === caseStudyId)
+  const caseStudyQuestions = currentQuestion.case_study_id
+    ? questions.filter(q => q.case_study_id === currentQuestion.case_study_id)
     : []
-  const caseStudyIndex = caseStudyId
+  const caseStudyIndex = currentQuestion.case_study_id
     ? Math.max(1, caseStudyQuestions.findIndex(q => q.question_id === currentQuestion.question_id) + 1)
     : 0
   const caseStudyTotal = caseStudyQuestions.length
+
+  // SATA score count
+  const sataCorrect = qtype === 'ngn_sata' && feedback
+    ? selectedAnswers.filter(a => (currentQuestion.correct_answer?.values || []).includes(a)).length
+    : 0
+  const sataTotal = qtype === 'ngn_sata' ? (currentQuestion.correct_answer?.values || []).length : 0
+
+  // ── The question + answer content (shared between case study right and regular left) ──
+  const QuestionContent = () => (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
+      {/* Case study header (for case study right panel) */}
+      {isCaseStudy && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[#17c3b2]">►</span>
+          <span className="text-sm font-semibold text-gray-900">
+            {qtype === 'ngn_sata' ? 'Select all that apply' :
+             qtype === 'ngn_cloze' ? 'Complete the sentence below from the list of options' :
+             qtype === 'ngn_matrix' ? 'Complete the matrix below' :
+             'Select the best answer'}
+          </span>
+        </div>
+      )}
+
+      {/* Item position for case study */}
+      {isCaseStudy && caseStudyTotal > 0 && (
+        <p className="text-xs text-gray-500 mb-3 font-medium">Item {caseStudyIndex} of {caseStudyTotal}</p>
+      )}
+
+      {/* Subcategory tab for non-case-study questions */}
+      {!isCaseStudy && currentQuestion.subcategory && (
+        <div className="flex border-b border-gray-200 mb-4 text-xs gap-0">
+          <div className="px-4 py-2 border-b-2 border-gray-900 font-semibold text-gray-900">
+            {currentQuestion.subcategory}
+          </div>
+        </div>
+      )}
+
+      {/* SATA score tracker (Archer Review style - above options) */}
+      {qtype === 'ngn_sata' && showExplanation && (
+        <ScoreTracker correct={sataCorrect} total={sataTotal} scoringType="+/- Scoring Rule" />
+      )}
+
+      {/* Question text */}
+      <div className="mb-5">
+        <p className="text-gray-900 leading-relaxed text-sm font-medium">{currentQuestion.question_text}</p>
+      </div>
+
+      {/* Answer options */}
+      {qtype === 'traditional_mcq' && (
+        <MCQQuestion
+          options={Array.isArray(qOptions) ? qOptions : []}
+          selected={selectedAnswer}
+          onSelect={setSelectedAnswer}
+          disabled={isDisabled}
+          feedback={feedback}
+          correctAnswer={currentQuestion.correct_answer}
+        />
+      )}
+      {qtype === 'ngn_sata' && (
+        <SATAQuestion
+          options={Array.isArray(qOptions) ? qOptions : []}
+          selected={selectedAnswers}
+          onToggle={id => setSelectedAnswers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+          disabled={isDisabled}
+          feedback={feedback}
+          correctAnswer={currentQuestion.correct_answer}
+        />
+      )}
+      {qtype === 'ngn_cloze' && (
+        <ClozeQuestion
+          options={currentQuestion.options}
+          selected={selectedCloze}
+          onSelect={(blank, val) => setSelectedCloze(prev => ({ ...prev, [blank]: val }))}
+          disabled={isDisabled}
+          feedback={feedback}
+          correctAnswer={currentQuestion.correct_answer}
+        />
+      )}
+      {qtype === 'ngn_matrix' && (
+        <MatrixQuestion
+          options={currentQuestion.options}
+          selected={selectedMatrix}
+          onSelect={(row, col) => setSelectedMatrix(prev => ({ ...prev, [row]: col }))}
+          disabled={isDisabled}
+          feedback={feedback}
+          correctAnswer={currentQuestion.correct_answer}
+        />
+      )}
+
+      {submitError && (
+        <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {submitError}
+        </div>
+      )}
+
+      {/* Submit button (inline for case study right panel on mobile) */}
+      {!isReviewMode && !feedback && !isDisabled && (
+        <div className="mt-4 sm:hidden">
+          <button
+            onClick={submitAnswer}
+            disabled={!hasAnswer || submitting}
+            className="w-full py-3 rounded-xl bg-[#17c3b2] text-white text-sm font-bold hover:bg-[#14a99a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {submitting ? 'Submitting...' : 'Submit Answer'}
+          </button>
+        </div>
+      )}
+
+      {/* Statistics (shown after answering for regular questions) */}
+      {showExplanation && !isCaseStudy && (
+        <StatisticsPanel question={currentQuestion} feedback={feedback} />
+      )}
+
+      {/* For case study right panel — show explanation here after answering on mobile */}
+      {isCaseStudy && showExplanation && (
+        <div className="mt-5 pt-4 border-t border-gray-100 block md:hidden">
+          <ExplanationPanel question={currentQuestion} feedback={feedback} isTutorial={isTutorial} />
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <NCLEXExamLayout
       sessionId={sessionId}
       questionNumber={qIndex + 1}
       totalQuestions={questions.length}
+      qid={currentQuestion.question_id}
       mode={sessionMode}
+      isMarked={isMarked}
+      isBookmarked={isBookmarked}
+      onToggleMark={toggleMark}
+      onToggleBookmark={toggleBookmark}
       onClose={() => navigate('/nclex-review')}
     >
-      <div className="flex h-full overflow-hidden">
-        {/* ── Left Panel: Question ── */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200 overflow-hidden">
-          {/* Question toolbar */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100 bg-white flex-shrink-0">
-            <button
-              onClick={toggleMark}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                isMarked ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
-            >
-              <Flag className="h-3.5 w-3.5" />
-              {isMarked ? 'Marked' : 'Mark for Later'}
-            </button>
-            <button
-              onClick={toggleBookmark}
-              disabled={bookmarkLoading}
-              title={isBookmarked ? 'Remove bookmark' : 'Bookmark this question'}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-60 ${
-                isBookmarked ? 'border-[#17c3b2] bg-[#17c3b2]/10 text-[#17c3b2]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
-            >
-              <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-[#17c3b2]' : ''}`} />
-              {isBookmarked ? 'Bookmarked' : 'Bookmark'}
-            </button>
-            {caseStudyId && caseStudyTotal > 0 && (
-              <span
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 max-w-[220px]"
-                title={currentQuestion.case_study_title
-                  ? `${currentQuestion.case_study_title} – ${caseStudyIndex}/${caseStudyTotal}`
-                  : `Case Study ${caseStudyIndex}/${caseStudyTotal}`}
-              >
-                <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
-                <span className="truncate">
-                  {currentQuestion.case_study_title
-                    ? `${currentQuestion.case_study_title} – ${caseStudyIndex}/${caseStudyTotal}`
-                    : `Case Study ${caseStudyIndex}/${caseStudyTotal}`}
-                </span>
-              </span>
-            )}
-            {isReviewMode && currentQuestion && typeof currentQuestion.time_spent === 'number' ? (
-              <div className={`flex items-center gap-1.5 text-xs font-medium ml-auto px-3 py-1 rounded-lg ${
-                currentQuestion.time_spent > 90 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
-              }`}>
-                <Clock className="h-3.5 w-3.5" />
-                {formatTime(currentQuestion.time_spent)}
-                {currentQuestion.time_spent > 90 && <span className="text-[10px] font-semibold">slow</span>}
-              </div>
-            ) : isTimed && timedTimeLeft !== null ? (
-              <div className={`flex items-center gap-1.5 text-xs font-bold ml-auto px-3 py-1 rounded-lg ${
-                timedTimeLeft <= 30 ? 'bg-red-100 text-red-700 animate-pulse' :
-                timedTimeLeft <= 60 ? 'bg-orange-100 text-orange-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                <Clock className="h-3.5 w-3.5" />
-                {formatTime(timedTimeLeft)}
-                <span className="text-[10px] font-normal opacity-70">remaining</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
-                <Clock className="h-3.5 w-3.5" />
-                {formatTime(elapsed)}
-              </div>
-            )}
-          </div>
+      {/* ── Mobile Panel Tabs (only on small screens) ── */}
+      <div className="flex border-b border-gray-200 bg-white sm:hidden flex-shrink-0">
+        <button
+          onClick={() => setMobilePanel('question')}
+          className={`flex-1 py-2.5 text-xs font-bold transition-colors border-b-2 ${
+            mobilePanel === 'question' ? 'text-[#17c3b2] border-[#17c3b2]' : 'text-gray-500 border-transparent'
+          }`}
+        >
+          {isCaseStudy ? 'Case Study' : 'Question'}
+        </button>
+        <button
+          onClick={() => setMobilePanel('explanation')}
+          className={`flex-1 py-2.5 text-xs font-bold transition-colors border-b-2 ${
+            mobilePanel === 'explanation' ? 'text-[#17c3b2] border-[#17c3b2]' : 'text-gray-500 border-transparent'
+          }`}
+        >
+          {isCaseStudy ? 'Question & Answers' : 'Explanation'}
+        </button>
+      </div>
 
-          {/* Question body */}
-          <div className="flex-1 overflow-y-auto p-5 lg:p-7 bg-white">
-            {/* QID + type badge */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <span className="text-xs text-gray-400 font-mono">QID: {currentQuestion.question_id}</span>
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium capitalize">
-                {qtype === 'traditional_mcq' ? 'MCQ' : qtype === 'ngn_sata' ? 'SATA' : qtype === 'ngn_cloze' ? 'Cloze' : 'Matrix'}
-              </span>
-              <DifficultyBadge difficulty={currentQuestion.difficulty} />
-              {currentQuestion.is_ngn && (
-                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">NGN</span>
-              )}
-              {isReviewMode && currentQuestion.case_study_id && currentQuestion.case_study_title && (
-                <span
-                  className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-medium max-w-[200px]"
-                  title={currentQuestion.case_study_title}
-                >
-                  <BookOpen className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{currentQuestion.case_study_title}</span>
-                </span>
-              )}
-            </div>
+      {/* ── Main Two-Column Content ── */}
+      <div className="flex-1 flex flex-col sm:flex-row overflow-hidden min-h-0">
 
-            {/* NGN Case Study Scenario Panel */}
-            {currentQuestion.case_study_id && currentQuestion.case_study_scenario && (
-              <div className="mb-5 rounded-xl border-2 border-blue-200 bg-blue-50 overflow-hidden">
-                <button
-                  onClick={() => setScenarioExpanded(e => !e)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-100 transition-colors"
-                >
+        {/* ── LEFT PANEL ── */}
+        {/* Desktop: always visible; Mobile: show/hide based on tab */}
+        <div className={`
+          ${isCaseStudy ? 'sm:w-1/2' : 'sm:flex-1'}
+          flex-col overflow-hidden border-r border-gray-200
+          ${isCaseStudy ? 'bg-[#f8f9fa]' : 'bg-white'}
+          ${mobilePanel === 'question' ? 'flex' : 'hidden sm:flex'}
+        `}>
+          {isCaseStudy ? (
+            /* ── CASE STUDY: Left = Clinical Scenario ── */
+            <div className="flex flex-col h-full overflow-hidden min-h-0">
+              {/* Scenario tab bar */}
+              <div className="flex border-b border-gray-300 bg-white flex-shrink-0">
+                {['Clinical Scenario', 'Vital Signs', 'Laboratory'].map((tab, i) => (
+                  <button
+                    key={tab}
+                    className={`px-3 sm:px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                      i === 0
+                        ? 'border-gray-900 text-gray-900 bg-white'
+                        : 'border-transparent text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Case study info */}
+              {currentQuestion.case_study_title && (
+                <div className="px-4 sm:px-6 pt-4 pb-2 bg-white border-b border-gray-200 flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Clinical Scenario</span>
-                      {currentQuestion.case_study_title && (
-                        <p
-                          className="text-xs text-blue-600 font-medium mt-0.5 truncate"
-                          title={currentQuestion.case_study_title}
-                        >
-                          {currentQuestion.case_study_title}
-                        </p>
-                      )}
-                    </div>
+                    <Brain className="h-4 w-4 text-[#17c3b2] flex-shrink-0" />
+                    <span className="text-xs font-bold text-[#17c3b2] uppercase tracking-wide">
+                      {currentQuestion.case_study_title}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-blue-500 font-medium">{scenarioExpanded ? 'Collapse' : 'Expand'}</span>
-                    {scenarioExpanded
-                      ? <ChevronLeft className="h-4 w-4 text-blue-500 rotate-90" />
-                      : <ChevronRight className="h-4 w-4 text-blue-500 rotate-90" />
-                    }
-                  </div>
-                </button>
-                {scenarioExpanded && (
-                  <div className="px-4 pb-4 border-t border-blue-200">
-                    <div className="mt-3 text-xs text-blue-900 leading-relaxed whitespace-pre-line">
-                      {currentQuestion.case_study_scenario}
-                    </div>
-                  </div>
+                </div>
+              )}
+
+              {/* Scenario text */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                  {currentQuestion.case_study_scenario}
+                </p>
+
+                {/* Stats for case study left panel */}
+                {showExplanation && (
+                  <StatisticsPanel question={currentQuestion} feedback={feedback} />
                 )}
               </div>
-            )}
-
-            {/* Subcategory tab (hidden for case study questions) */}
-            {currentQuestion.subcategory && !currentQuestion.case_study_id && (
-              <div className="flex border-b border-gray-200 mb-4 text-xs gap-0">
-                <div className="px-4 py-2 border-b-2 border-gray-900 font-semibold text-gray-900">
-                  {currentQuestion.subcategory}
-                </div>
-              </div>
-            )}
-
-
-            {/* Question text */}
-            <div className="mb-5">
-              <p className="text-gray-900 leading-relaxed text-sm font-medium">{currentQuestion.question_text}</p>
             </div>
-
-            {/* Score tracker for SATA */}
-            {qtype === 'ngn_sata' && feedback && (
-              <div className="mb-4 flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded border-2 border-gray-400 flex items-center justify-center">
-                    <CheckCircle className="h-3 w-3 text-gray-400" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-700">
-                    {selectedAnswers.filter(a => (currentQuestion.correct_answer?.values || []).includes(a)).length}/
-                    {(currentQuestion.correct_answer?.values || []).length} Your Score/Max
-                  </span>
-                </div>
-                <span className="text-xs text-gray-500">+/- Scoring Rule</span>
-              </div>
-            )}
-
-            {/* Answer options */}
-            {qtype === 'traditional_mcq' && (
-              <MCQQuestion
-                options={Array.isArray(qOptions) ? qOptions : []}
-                selected={selectedAnswer}
-                onSelect={setSelectedAnswer}
-                disabled={isDisabled}
-                feedback={feedback}
-                correctAnswer={currentQuestion.correct_answer}
-              />
-            )}
-            {qtype === 'ngn_sata' && (
-              <SATAQuestion
-                options={Array.isArray(qOptions) ? qOptions : []}
-                selected={selectedAnswers}
-                onToggle={id => setSelectedAnswers(prev =>
-                  prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                )}
-                disabled={isDisabled}
-                feedback={feedback}
-                correctAnswer={currentQuestion.correct_answer}
-              />
-            )}
-            {qtype === 'ngn_cloze' && (
-              <ClozeQuestion
-                options={currentQuestion.options}
-                selected={selectedCloze}
-                onSelect={(blank, val) => setSelectedCloze(prev => ({ ...prev, [blank]: val }))}
-                disabled={isDisabled}
-                feedback={feedback}
-                correctAnswer={currentQuestion.correct_answer}
-              />
-            )}
-            {qtype === 'ngn_matrix' && (
-              <MatrixQuestion
-                options={currentQuestion.options}
-                selected={selectedMatrix}
-                onSelect={(row, col) => setSelectedMatrix(prev => ({ ...prev, [row]: col }))}
-                disabled={isDisabled}
-                feedback={feedback}
-                correctAnswer={currentQuestion.correct_answer}
-              />
-            )}
-
-            {submitError && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                {submitError}
-              </div>
-            )}
-
-            {/* Stats section (after answer) */}
-            {showExplanation && (
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Statistics</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  {(feedback?.difficulty || currentQuestion.difficulty) && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500">Difficulty level –</span>
-                      <DifficultyBadge difficulty={feedback?.difficulty || currentQuestion.difficulty} />
-                    </div>
-                  )}
-                  {(feedback?.content_area || currentQuestion.content_area) && (
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <span>Subject</span>
-                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium capitalize">
-                        {(feedback?.content_area || currentQuestion.content_area).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                      </span>
-                    </div>
-                  )}
-                  {(feedback?.subcategory || currentQuestion.subcategory) && (
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <span>Lesson</span>
-                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">{feedback?.subcategory || currentQuestion.subcategory}</span>
-                    </div>
-                  )}
-                </div>
-                {(() => {
-                  const rawTags = currentQuestion.tags
-                  if (!rawTags) return null
-                  const tagList: string[] = Array.isArray(rawTags)
-                    ? rawTags.filter(Boolean)
-                    : String(rawTags).split(',').map((t: string) => t.trim()).filter(Boolean)
-                  if (tagList.length === 0) return null
-                  return (
-                    <div className="mt-3">
-                      <p className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Tags</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {tagList.map((tag) => (
-                          <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
-          </div>
-
-          {/* Submit/Confirmation notice for non-tutorial modes */}
-          {!isTutorial && !isReviewMode && !feedback && (
-            <div className={`border-t px-5 py-2 flex-shrink-0 ${isTimed && timedTimeLeft !== null && timedTimeLeft <= 60 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-              <p className={`text-xs flex items-center gap-1.5 ${isTimed && timedTimeLeft !== null && timedTimeLeft <= 60 ? 'text-red-700' : 'text-amber-700'}`}>
-                <AlertCircle className="h-3.5 w-3.5" />
-                {sessionMode === 'timed'
-                  ? timedTimeLeft !== null && timedTimeLeft <= 60
-                    ? `Time is almost up! ${formatTime(timedTimeLeft)} remaining — submit your answers now.`
-                    : `Timed mode — ${totalTimedSeconds ? formatTime(totalTimedSeconds) : ''} total. Session auto-submits when time expires. Explanations shown after completion.`
-                  : 'CAT mode – difficulty adapts to your performance.'}
-              </p>
-            </div>
+          ) : (
+            /* ── REGULAR: Left = Question + Answers ── */
+            QuestionContent()
           )}
         </div>
 
-        {/* ── Right Panel: Explanation ── */}
-        <div className="w-0 lg:w-[45%] xl:w-[42%] flex-shrink-0 flex flex-col overflow-hidden bg-white">
-          {showExplanation && currentQuestion.rationale ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <h3 className="font-bold text-gray-900 mb-4 text-sm uppercase tracking-wide">Explanation</h3>
-              <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed text-sm whitespace-pre-line">
-                {currentQuestion.rationale}
-              </div>
-
-              {(() => {
-                const rawTags = currentQuestion.tags
-                if (!rawTags) return null
-                const tagList: string[] = Array.isArray(rawTags)
-                  ? rawTags.filter(Boolean)
-                  : String(rawTags).split(',').map((t: string) => t.trim()).filter(Boolean)
-                if (tagList.length === 0) return null
-                return (
-                  <div className="mt-5 pt-4 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wide">Key Topics</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {tagList.map((tag) => (
-                        <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })()}
-            </div>
+        {/* ── RIGHT PANEL ── */}
+        {/* Desktop: always visible; Mobile: show/hide based on tab */}
+        <div className={`
+          ${isCaseStudy ? 'sm:w-1/2' : 'sm:w-[44%] xl:w-[42%] flex-shrink-0'}
+          flex flex-col overflow-hidden bg-white
+          ${mobilePanel === 'explanation' ? 'flex' : 'hidden sm:flex'}
+        `}>
+          {isCaseStudy ? (
+            /* ── CASE STUDY: Right = Question + Answers (+ explanation after) ── */
+            QuestionContent()
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-gray-400">
-              {isTutorial && !feedback ? (
-                <>
-                  <Lightbulb className="h-10 w-10 opacity-30 mb-3" />
-                  <p className="text-sm">Submit your answer to see the explanation.</p>
-                </>
-              ) : (
-                <>
-                  <BookOpen className="h-10 w-10 opacity-30 mb-3" />
-                  <p className="text-sm">Explanation will appear here.</p>
-                </>
-              )}
-            </div>
+            /* ── REGULAR: Right = Explanation ── */
+            <ExplanationPanel
+              question={currentQuestion}
+              feedback={feedback}
+              isTutorial={isTutorial}
+            />
           )}
         </div>
       </div>
 
-      {/* ── Case Study Filter Bar (review mode only) ── */}
+      {/* ── Timed mode warning bar ── */}
+      {!isTutorial && !isReviewMode && !feedback && isTimed && timedTimeLeft !== null && timedTimeLeft <= 120 && (
+        <div className={`px-4 py-2 flex-shrink-0 border-t flex items-center gap-2 ${timedTimeLeft <= 60 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <Clock className={`h-3.5 w-3.5 flex-shrink-0 ${timedTimeLeft <= 60 ? 'text-red-600' : 'text-amber-600'}`} />
+          <p className={`text-xs font-semibold ${timedTimeLeft <= 60 ? 'text-red-700' : 'text-amber-700'}`}>
+            {formatTime(timedTimeLeft)} remaining — submit your answers now!
+          </p>
+        </div>
+      )}
+
+      {/* ── Case Study Filter Bar (review mode) ── */}
       {isReviewMode && caseStudiesInSession.length > 0 && (
         <div className="bg-[#0a1a2e] border-t border-white/10 px-4 py-2 flex items-center gap-2 flex-shrink-0 overflow-x-auto">
           <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wide flex-shrink-0">Filter:</span>
           <button
             onClick={() => updateCaseStudyFilter(null)}
             className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
-              caseStudyFilter === null
-                ? 'bg-[#17c3b2] text-white'
-                : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+              caseStudyFilter === null ? 'bg-[#17c3b2] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
             }`}
           >
-            All Questions — {questions.length}
+            All — {questions.length}
           </button>
           {caseStudiesInSession.map(cs => (
             <button
               key={cs.id}
               onClick={() => updateCaseStudyFilter(cs.id)}
               className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[160px] ${
-                caseStudyFilter === cs.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+                caseStudyFilter === cs.id ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'
               }`}
               title={cs.title}
             >
@@ -1286,46 +1161,43 @@ export function NCLEXExam() {
       )}
 
       {/* ── Bottom Navigation Bar ── */}
-      <div className="bg-[#0d2137] text-white h-12 flex items-center px-4 gap-3 flex-shrink-0">
+      <div className="bg-[#0d2137] text-white h-12 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 flex-shrink-0">
         <button
           onClick={() => navigate('/nclex-review')}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white/70 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/10"
+          className="flex items-center gap-1 text-xs font-semibold text-white/70 hover:text-white transition-colors px-2 sm:px-3 py-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
         >
-          ✕ Close
+          ✕ <span className="hidden sm:inline">Close</span>
         </button>
 
-        {/* Progress dots — filtered when a case study filter is active */}
+        {/* Progress dots */}
         <div className="flex-1 flex items-center justify-center gap-1 overflow-hidden">
           {navQuestions.slice(0, 20).map((q) => {
             const realIdx = questions.findIndex(rq => rq.question_id === q.question_id)
-            const isBookmarked = bookmarkedQuestions.has(q.question_id)
+            const isBookmarkedQ = bookmarkedQuestions.has(q.question_id)
             const isCurrent = realIdx === qIndex
             return (
               <button
                 key={q.question_id}
                 onClick={() => setQIndex(realIdx)}
                 className={`flex-shrink-0 h-2.5 w-2.5 rounded-full transition-all ${
-                  isCurrent ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30' :
+                  isCurrent ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30 scale-125' :
                   q.answered_at ? (q.is_correct ? 'bg-green-400' : 'bg-red-400') :
                   markedQuestions.has(q.question_id) ? 'bg-amber-400' :
-                  isBookmarked ? 'bg-[#17c3b2]/30' :
-                  'bg-white/20'
-                } ${!isCurrent && isBookmarked ? 'ring-1 ring-[#17c3b2]' : ''}`}
-                title={`Question ${realIdx + 1}${isBookmarked ? ' · Bookmarked' : ''}`}
+                  isBookmarkedQ ? 'bg-[#17c3b2]/30' : 'bg-white/20'
+                } ${!isCurrent && isBookmarkedQ ? 'ring-1 ring-[#17c3b2]' : ''}`}
+                title={`Q${realIdx + 1}${isBookmarkedQ ? ' · Bookmarked' : ''}`}
               />
             )
           })}
           {navQuestions.length > 20 && (
-            <span className="text-xs text-white/40 ml-1">+{navQuestions.length - 20} more</span>
+            <span className="text-xs text-white/40 ml-1">+{navQuestions.length - 20}</span>
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Navigation buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {!isReviewMode && session?.status === 'in_progress' && answeredCount > 0 && !feedback && (
-            <button
-              onClick={endSession}
-              className="text-xs text-white/50 hover:text-white px-2 py-1 rounded transition-colors"
-            >
+            <button onClick={endSession} className="text-xs text-white/50 hover:text-white px-2 py-1 rounded transition-colors hidden sm:block">
               End Test
             </button>
           )}
@@ -1352,37 +1224,35 @@ export function NCLEXExam() {
               }
             }
             const atStart = navQIndex <= 0
-            // When a filter is active, disable Next unconditionally at the boundary;
-            // otherwise only disable when no feedback has been shown yet.
-            const atEnd = caseStudyFilter
-              ? !nextNavQ
-              : qIndex + 1 >= questions.length && !feedback
+            const atEnd = caseStudyFilter ? !nextNavQ : qIndex + 1 >= questions.length && !feedback
 
             return (
               <>
                 <button
                   onClick={goPrev}
                   disabled={atStart}
-                  className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-1 text-xs font-semibold px-2 sm:px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronLeft className="h-4 w-4" /> Previous
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Previous</span>
                 </button>
 
                 {!isReviewMode && !feedback && !isDisabled ? (
                   <button
                     onClick={submitAnswer}
                     disabled={!hasAnswer || submitting}
-                    className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1 text-xs font-bold px-3 sm:px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {submitting ? 'Submitting...' : 'Submit'}
+                    {submitting ? '...' : 'Submit'}
                   </button>
                 ) : (
                   <button
                     onClick={goNext}
                     disabled={atEnd}
-                    className="flex items-center gap-1 text-xs font-bold px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 transition-colors"
+                    className="flex items-center gap-1 text-xs font-bold px-3 sm:px-4 py-1.5 rounded-lg bg-[#17c3b2] hover:bg-[#14a99a] disabled:opacity-40 transition-colors"
                   >
-                    Next <ChevronRight className="h-4 w-4" />
+                    <span className="hidden sm:inline">Next</span>
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 )}
               </>

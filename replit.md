@@ -35,6 +35,13 @@ The NCLEX review platform features distinct layouts for general review and exam 
 #### UI/UX Decisions
 Public-facing pages (Home, About Us, Career Listing, Sponsorship Landing, Donate, Tracking, Quote) feature redesigned cinematic hero sections with AI-generated images to enhance user experience. The NCLEX review platform utilizes a dark navy and teal color scheme for a focused study environment. Hero images are stored in `public/assets/pages/`. All EAD functionalities have been removed to maintain a strict focus on NCLEX processing.
 
+The NCLEX exam page (`/nclex-review/exam/:id`) uses an Archer Review–style layout:
+- **Row 1** (teal header): GritSync logo + full name | Session # + QID (center) | Question counter (right)
+- **Row 2** (white toolbar): Mark for Later + Bookmark + Navigator | Settings + Calculator + Notes
+- **Two-column body**: Case study questions show clinical scenario (left) / question+answers (right). Regular questions show question+answers (left) / explanation (right).
+- **Mobile**: Tab-based switching between "Question" and "Explanation" panels.
+- **Bottom nav** (dark): Close button | Progress dots | Previous/Submit/Next
+
 #### Key Features
 - User Authentication with role-based access control (admin / client).
 - NCLEX application form with field validation.

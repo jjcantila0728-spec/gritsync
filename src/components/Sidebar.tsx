@@ -411,6 +411,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const location = useLocation()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
+  const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {

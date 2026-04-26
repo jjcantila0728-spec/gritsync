@@ -285,6 +285,7 @@ export function HeroSlider() {
                   transform: 'translateX(-50%)',
                   animation: isAnimating ? 'gsCharEnterUp 0.55s ease-out forwards' : 'none',
                   filter: 'drop-shadow(0 12px 40px rgba(0,0,0,0.6))',
+                  zIndex: 8,
                 }}
               />
 

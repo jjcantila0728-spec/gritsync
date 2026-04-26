@@ -854,6 +854,18 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
       [user.id]
     )
 
+    // Send welcome email (fire-and-forget) — same as the link-based verification path
+    if (user.personal_email) {
+      query(`UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`, [user.id]).catch(() => {})
+      sendWelcomeEmail(
+        user.personal_email,
+        user.first_name || '',
+        user.last_name || '',
+        user.grit_id || '',
+        user.gritsync_email || ''
+      )
+    }
+
     const accessToken = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
     const refresh_token = signRefreshToken({ id: user.id })
 
