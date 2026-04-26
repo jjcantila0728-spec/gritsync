@@ -1,6 +1,6 @@
 import { NCLEXLayout } from '@/layouts/NCLEXLayout'
-import { useEffect, useState } from 'react'
-import { ShoppingBag, Crown, Zap, CheckCircle, Clock, AlertCircle, Send, XCircle, RefreshCw } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ShoppingBag, Crown, Zap, CheckCircle, Clock, AlertCircle, Send, XCircle, RefreshCw, Image as ImageIcon, X } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
 
@@ -16,6 +16,22 @@ async function apiFetch(path: string, opts?: RequestInit) {
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
+}
+
+async function uploadFile(file: File): Promise<string> {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const path = `payment-screenshots/${Date.now()}.${ext}`
+  const form = new FormData()
+  form.append('file', file)
+  form.append('path', path)
+  const res = await fetch('/api/storage/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: form,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return data.path as string
 }
 
 interface Submission {
@@ -45,6 +61,9 @@ export function NCLEXOrderHistory() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState(false)
+  const [formScreenshot, setFormScreenshot] = useState<File | null>(null)
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = () => {
     setLoading(true)
@@ -69,12 +88,33 @@ export function NCLEXOrderHistory() {
   const isActive = subscription?.status === 'active' || plan === 'free'
   const hasPending = submissions.some(s => s.status === 'pending')
 
+  const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setFormScreenshot(file)
+    if (file) {
+      const url = URL.createObjectURL(file)
+      setScreenshotPreview(url)
+    } else {
+      setScreenshotPreview(null)
+    }
+  }
+
+  const clearScreenshot = () => {
+    setFormScreenshot(null)
+    setScreenshotPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError('')
     setSubmitting(true)
     try {
       const amount = formPlan === 'vip' ? 500 : 250
+      let screenshotUrl: string | null = null
+      if (formScreenshot) {
+        screenshotUrl = await uploadFile(formScreenshot)
+      }
       await apiFetch('/api/questions/subscription/submit-payment', {
         method: 'POST',
         body: JSON.stringify({
@@ -83,12 +123,15 @@ export function NCLEXOrderHistory() {
           payment_reference: formRef || null,
           payment_amount: amount,
           notes: formNotes || null,
+          screenshot_url: screenshotUrl,
         }),
       })
       setFormSuccess(true)
       setShowForm(false)
       setFormRef('')
       setFormNotes('')
+      setFormScreenshot(null)
+      setScreenshotPreview(null)
       loadData()
     } catch (err: any) {
       setFormError(err.message || 'Failed to submit payment')
@@ -400,6 +443,43 @@ export function NCLEXOrderHistory() {
                     placeholder="e.g. Screenshot sent via Facebook Messenger"
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Screenshot (optional)</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScreenshotChange}
+                    className="hidden"
+                    id="screenshot-upload"
+                  />
+                  {!formScreenshot ? (
+                    <label
+                      htmlFor="screenshot-upload"
+                      className="flex items-center justify-center gap-2 w-full border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg px-3 py-4 text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:border-[#17c3b2] hover:text-[#17c3b2] transition-colors"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      Attach GCash / Maya screenshot
+                    </label>
+                  ) : (
+                    <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                      <img
+                        src={screenshotPreview!}
+                        alt="Payment screenshot"
+                        className="w-full max-h-48 object-contain bg-gray-50 dark:bg-gray-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={clearScreenshot}
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <p className="text-xs text-gray-500 px-2 py-1.5 truncate">{formScreenshot.name}</p>
+                    </div>
+                  )}
                 </div>
 
                 {formError && (

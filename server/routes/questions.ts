@@ -1312,7 +1312,7 @@ router.post('/seed-case-studies', authenticateToken, async (req: AuthenticatedRe
 router.post('/subscription/submit-payment', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id
-    const { plan, payment_method, payment_reference, payment_amount, notes } = req.body
+    const { plan, payment_method, payment_reference, payment_amount, notes, screenshot_url } = req.body
 
     if (!plan || !['premium', 'vip'].includes(plan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be premium or vip.' })
@@ -1328,11 +1328,11 @@ router.post('/subscription/submit-payment', authenticateToken, async (req: Authe
 
     const result = await query(
       `INSERT INTO nclex_payment_submissions
-         (user_id, plan, payment_method, payment_reference, payment_amount, notes, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+         (user_id, plan, payment_method, payment_reference, payment_amount, notes, screenshot_url, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
        RETURNING *`,
       [userId, plan, payment_method || null, payment_reference || null,
-       payment_amount || null, notes || null]
+       payment_amount || null, notes || null, screenshot_url || null]
     )
 
     const submission = result.rows[0]

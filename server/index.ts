@@ -41,6 +41,9 @@ async function runStartupMigrations() {
       )
     `)
 
+    // Payment screenshot column
+    await query(`ALTER TABLE nclex_payment_submissions ADD COLUMN IF NOT EXISTS screenshot_url TEXT`)
+
     // Auto-seed question bank if fewer than 10 questions exist
     const countResult = await query(`SELECT COUNT(*) FROM question_bank WHERE is_active = true`)
     const count = parseInt(countResult.rows[0].count, 10)

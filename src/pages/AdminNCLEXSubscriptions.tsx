@@ -8,11 +8,15 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Users, Crown, Zap, BookOpen, TrendingUp, Search,
   CheckCircle, XCircle, Clock, BarChart2,
-  Edit2, RefreshCw,
+  Edit2, RefreshCw, Image as ImageIcon,
 } from 'lucide-react'
 
 function getToken() {
   return localStorage.getItem('gritsync_token')
+}
+
+function screenshotViewUrl(path: string): string {
+  return `/api/storage/file?path=${encodeURIComponent(path)}&t=${getToken()}`
 }
 
 async function apiFetch(path: string, opts?: RequestInit) {
@@ -81,6 +85,7 @@ interface PendingSubmission {
   first_name?: string
   last_name?: string
   grit_id?: string
+  screenshot_url?: string | null
 }
 
 interface ReviewModalState {
@@ -261,6 +266,22 @@ function ReviewModal({
             <span className="text-gray-500">Submitted</span>
             <span className="text-gray-700 dark:text-gray-300">{new Date(submission.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
           </div>
+          {submission.screenshot_url && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-gray-500">Screenshot</span>
+              <a
+                href={screenshotViewUrl(submission.screenshot_url)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  src={screenshotViewUrl(submission.screenshot_url)}
+                  alt="Payment screenshot"
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 object-contain max-h-48 bg-white dark:bg-gray-900 hover:opacity-90 transition-opacity cursor-pointer"
+                />
+              </a>
+            </div>
+          )}
         </div>
 
         {action === 'approve' && (
@@ -535,6 +556,17 @@ export function AdminNCLEXSubscriptions() {
                                 {s.payment_method && <p>{s.payment_method}{s.payment_amount ? ` · ₱${s.payment_amount}` : ''}</p>}
                                 {s.payment_reference && <p className="text-gray-400">Ref: {s.payment_reference}</p>}
                                 {s.notes && <p className="text-gray-400 truncate max-w-xs">{s.notes}</p>}
+                                {s.screenshot_url && (
+                                  <a
+                                    href={screenshotViewUrl(s.screenshot_url)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[#17c3b2] hover:underline font-medium"
+                                  >
+                                    <ImageIcon className="h-3 w-3" />
+                                    View Screenshot
+                                  </a>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3 hidden md:table-cell">
