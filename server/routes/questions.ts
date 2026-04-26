@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, withTransaction } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { getSeedQuestions } from '../data/nclex-seed'
+import { sendEmail, escapeHtml } from '../utils/email'
 
 const router = Router()
 
@@ -1465,21 +1466,89 @@ router.post('/subscription/submit-payment', authenticateToken, async (req: Authe
     const planLabel = plan === 'vip' ? 'VIP' : 'Premium'
     const notifMessage = `${userName} submitted ${planLabel} plan payment proof${payment_method ? ` via ${payment_method}` : ''}${payment_reference ? ` (ref: ${payment_reference})` : ''}. Review in NCLEX Subscriptions → Pending Approvals.`
 
-    const adminUsers = await query(`SELECT id FROM users WHERE role = 'admin'`)
+    const adminUsers = await query(`SELECT id, email FROM users WHERE role = 'admin'`)
     for (const admin of adminUsers.rows) {
       await query(
         `INSERT INTO notifications (user_id, type, title, message, read)
          VALUES ($1, 'payment_pending', 'New Payment Submission', $2, false)`,
         [admin.id, notifMessage]
-      ).catch((err) => {
-        console.warn('Admin notification insert failed (non-fatal):', err?.message || err)
+      ).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn('Admin notification insert failed (non-fatal):', msg)
       })
     }
 
+    // Send email to admin — escape all user-controlled fields before HTML interpolation
+    const safeUserName = escapeHtml(userName)
+    const safeUserEmail = escapeHtml(req.user?.email || '—')
+    const safePlanLabel = escapeHtml(planLabel)
+    const safeMethod = payment_method ? escapeHtml(String(payment_method)) : ''
+    const safeRef = payment_reference ? escapeHtml(String(payment_reference)) : ''
+    const safeAmount = payment_amount ? escapeHtml(String(payment_amount)) : ''
+
+    const adminEmailHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#b91c1c 0%,#dc2626 100%);padding:28px 36px;text-align:center;">
+            <div style="font-size:24px;font-weight:800;color:#ffffff;"><span style="color:#fca5a5;">GRIT</span>SYNC</div>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Admin Notification</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 36px 0;">
+            <p style="margin:0;font-size:18px;font-weight:700;color:#111827;">New Payment Submission</p>
+            <p style="margin:10px 0 0;font-size:14px;color:#6b7280;line-height:1.6;">A user has submitted payment proof and is waiting for your review.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 36px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;width:40%;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">User</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;font-weight:600;">${safeUserName}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Email</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;">${safeUserEmail}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Plan</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;font-weight:600;">${safePlanLabel}</td>
+              </tr>
+              ${safeMethod ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Payment Method</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;">${safeMethod}</td></tr>` : ''}
+              ${safeRef ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Reference No.</td><td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;font-weight:600;">${safeRef}</td></tr>` : ''}
+              ${safeAmount ? `<tr><td style="padding:12px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Amount</td><td style="padding:12px 16px;font-size:14px;color:#111827;">&#8369;${safeAmount}</td></tr>` : ''}
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 36px 32px;text-align:center;">
+            <a href="https://gritsync.com/admin/nclex-subscriptions" style="display:inline-block;background:#dc2626;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 32px;border-radius:8px;">Review Submission &#8594;</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">&#169; ${new Date().getFullYear()} GritSync. Admin notification &#8212; do not reply.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+    sendEmail('admin@gritsync.com', `New ${planLabel} Payment Submission from ${userName}`, adminEmailHtml).catch(() => {})
+
     res.status(201).json(submission)
-  } catch (error: any) {
-    console.error('Submit payment error:', error)
-    res.status(500).json({ error: error.message })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('Submit payment error:', err)
+    res.status(500).json({ error: message })
   }
 })
 
@@ -2101,10 +2170,81 @@ router.post('/subscription/admin/approve', authenticateToken, async (req: Authen
       )
     })
 
+    // Send approval email to user
+    const userResult = await query(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [submission.user_id])
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0]
+      const userName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'there'
+      const planLabel = submission.plan === 'vip' ? 'VIP' : 'Premium'
+      const expiresFormatted = expiresAt ? new Date(expiresAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
+
+      // Escape all dynamic content before HTML interpolation
+      const safeName = escapeHtml(userName)
+      const safePlan = escapeHtml(planLabel)
+      const safeExpires = escapeHtml(expiresFormatted)
+      const safeNote = review_notes ? escapeHtml(String(review_notes)) : ''
+
+      const approvalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#b91c1c 0%,#dc2626 100%);padding:28px 36px;text-align:center;">
+            <div style="font-size:24px;font-weight:800;color:#ffffff;"><span style="color:#fca5a5;">GRIT</span>SYNC</div>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Subscription Activated</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 36px 24px;text-align:center;">
+            <div style="display:inline-block;background:#dcfce7;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:32px;margin-bottom:16px;">&#10003;</div>
+            <p style="margin:0;font-size:22px;font-weight:800;color:#111827;">Your ${safePlan} Plan is Active!</p>
+            <p style="margin:12px 0 0;font-size:15px;color:#6b7280;line-height:1.6;">Hello <strong>${safeName}</strong>, your payment has been verified and your subscription is now live.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 36px 24px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;width:40%;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Plan</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;font-weight:700;">${safePlan}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Status</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#16a34a;font-weight:700;">Active</td>
+              </tr>
+              ${safeExpires ? `<tr><td style="padding:12px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Expires</td><td style="padding:12px 16px;font-size:14px;color:#111827;">${safeExpires}</td></tr>` : ''}
+            </table>
+          </td>
+        </tr>
+        ${safeNote ? `<tr><td style="padding:0 36px 24px;"><div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;"><p style="margin:0;font-size:13px;color:#1e40af;line-height:1.5;"><strong>Note from admin:</strong> ${safeNote}</p></div></td></tr>` : ''}
+        <tr>
+          <td style="padding:0 36px 32px;text-align:center;">
+            <a href="https://gritsync.com/nclex" style="display:inline-block;background:#dc2626;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 32px;border-radius:8px;">Start Studying Now &#8594;</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+            <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">GritSync &#8212; NCLEX Application Processing</p>
+            <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">&#169; ${new Date().getFullYear()} GritSync. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+      sendEmail(user.email, `Your GritSync ${planLabel} Plan Has Been Activated!`, approvalHtml).catch(() => {})
+    }
+
     res.json({ success: true })
-  } catch (error: any) {
-    console.error('Approve submission error:', error)
-    res.status(500).json({ error: error.message })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('Approve submission error:', err)
+    res.status(500).json({ error: message })
   }
 })
 
@@ -2114,15 +2254,20 @@ router.post('/subscription/admin/reject', authenticateToken, async (req: Authent
 
     const { submission_id, review_notes } = req.body
     if (!submission_id) return res.status(400).json({ error: 'submission_id is required' })
+    if (!review_notes || !String(review_notes).trim()) {
+      return res.status(400).json({ error: 'A rejection reason (review_notes) is required.' })
+    }
 
     const subResult = await query(
-      `SELECT status FROM nclex_payment_submissions WHERE id = $1`,
+      `SELECT status, user_id, plan FROM nclex_payment_submissions WHERE id = $1`,
       [submission_id]
     )
     if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' })
     if (subResult.rows[0].status !== 'pending') {
       return res.status(409).json({ error: `Submission is already ${subResult.rows[0].status}. Only pending submissions can be rejected.` })
     }
+
+    const rejectedSub = subResult.rows[0]
 
     await query(
       `UPDATE nclex_payment_submissions
@@ -2131,9 +2276,81 @@ router.post('/subscription/admin/reject', authenticateToken, async (req: Authent
       [req.user?.id, review_notes || null, submission_id]
     )
 
+    // Send rejection email to user
+    const userResult = await query(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [rejectedSub.user_id])
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0]
+      const userName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'there'
+      const planLabel = rejectedSub.plan === 'vip' ? 'VIP' : 'Premium'
+
+      // Escape all dynamic content before HTML interpolation
+      const safeName = escapeHtml(userName)
+      const safePlan = escapeHtml(planLabel)
+      const safeReason = review_notes ? escapeHtml(String(review_notes)) : ''
+
+      const rejectionHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#b91c1c 0%,#dc2626 100%);padding:28px 36px;text-align:center;">
+            <div style="font-size:24px;font-weight:800;color:#ffffff;"><span style="color:#fca5a5;">GRIT</span>SYNC</div>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Payment Review Update</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 36px 24px;">
+            <p style="margin:0;font-size:16px;color:#111827;">Hello <strong>${safeName}</strong>,</p>
+            <p style="margin:12px 0 0;font-size:14px;color:#6b7280;line-height:1.6;">
+              We were unable to verify your payment submission for the <strong>${safePlan}</strong> plan. Unfortunately, your submission has been rejected.
+            </p>
+          </td>
+        </tr>
+        ${safeReason ? `
+        <tr>
+          <td style="padding:0 36px 24px;">
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;">
+              <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:0.5px;">Reason for Rejection</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#374151;line-height:1.6;">${safeReason}</p>
+            </div>
+          </td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:0 36px 24px;">
+            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;">
+              <p style="margin:0;font-size:13px;color:#92400e;line-height:1.5;">
+                <strong>What to do next:</strong> Please verify your payment details and resubmit. If you believe this is an error, contact our support team.
+              </p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 36px 32px;text-align:center;">
+            <a href="https://gritsync.com/nclex/order-history" style="display:inline-block;background:#dc2626;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 32px;border-radius:8px;">Resubmit Payment &#8594;</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+            <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">GritSync &#8212; NCLEX Application Processing</p>
+            <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">&#169; ${new Date().getFullYear()} GritSync. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+      sendEmail(user.email, `Update on Your GritSync ${planLabel} Payment Submission`, rejectionHtml).catch(() => {})
+    }
+
     res.json({ success: true })
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    res.status(500).json({ error: message })
   }
 })
 

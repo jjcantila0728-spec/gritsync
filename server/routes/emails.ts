@@ -1,22 +1,9 @@
 import { Router } from 'express'
 import { query } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
+import { getResendApiKey } from '../utils/email'
 
 const router = Router()
-
-async function getResendApiKey(): Promise<string | null> {
-  if (process.env.RESEND_API_KEY) {
-    return process.env.RESEND_API_KEY
-  }
-  try {
-    const result = await query(
-      `SELECT value FROM settings WHERE key = 'resendApiKey' LIMIT 1`
-    )
-    return result.rows[0]?.value || null
-  } catch {
-    return null
-  }
-}
 
 router.post('/inbox/list', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
