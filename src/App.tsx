@@ -51,6 +51,7 @@ const TestProofOfPaymentUpload = lazy(() => import('./pages/TestProofOfPaymentUp
 const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })))
 const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })))
+const FAQs = lazy(() => import('./pages/FAQs').then(m => ({ default: m.FAQs })))
 const NCLEXSponsorship = lazy(() => import('./pages/NCLEXSponsorship').then(m => ({ default: m.NCLEXSponsorship })))
 const SignaturePage = lazy(() => import('./pages/SignaturePage').then(m => ({ default: m.SignaturePage })))
 const SponsorshipLanding = lazy(() => import('./pages/SponsorshipLanding').then(m => ({ default: m.SponsorshipLanding })))
@@ -250,6 +251,7 @@ function AppRoutes() {
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/faqs" element={<FAQs />} />
         <Route path="/nclex-review" element={<NCLEXReview />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />

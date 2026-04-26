@@ -260,9 +260,6 @@ export function Register() {
                 <div className="absolute left-3 top-[38px] text-gray-400 pointer-events-none">
                   <Mail className="h-5 w-5" />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
-                  Use your Gmail, Yahoo, or other personal email for verification.
-                </p>
               </div>
 
               <div className="relative">
@@ -319,15 +316,6 @@ export function Register() {
                   <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                 </div>
               )}
-
-              <div className="bg-primary-50 dark:bg-primary-900/20 rounded-lg p-3 border border-primary-100 dark:border-primary-800">
-                <div className="flex items-start gap-2">
-                  <Mail className="h-4 w-4 text-primary-600 dark:text-primary-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-primary-700 dark:text-primary-300 leading-relaxed">
-                    A <strong>free GritSync business email</strong> (e.g. <em>juan.delacruz@gritsync.com</em>) will be generated for your NCLEX processing — no action needed.
-                  </p>
-                </div>
-              </div>
 
               <div className="flex items-start">
                 <input

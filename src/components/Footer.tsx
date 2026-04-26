@@ -236,7 +236,7 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link to="/#faq" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <Link to="/faqs" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>FAQs</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Link>

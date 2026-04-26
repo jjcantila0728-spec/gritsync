@@ -42,28 +42,6 @@ const values = [
   { icon: Globe, color: 'from-green-500 to-emerald-700', title: 'Community Minded', desc: 'Beyond processing — we build a community of nurses supporting each other toward achieving the USRN dream.' },
 ]
 
-const team = [
-  {
-    name: 'JJ Cantila',
-    title: 'RM, RN, SGRN, USRN, PN (RES)',
-    role: 'Founder & CEO',
-    desc: 'A licensed USRN with extensive experience navigating the NCLEX process. JJ founded GritSync to give every Filipino nurse the same fighting chance he had.',
-    initials: 'JJ',
-    color: 'from-primary-600 to-primary-400',
-    photo: '/gritsyncfounder.png',
-    board: 'Texas Board of Nursing'
-  },
-  {
-    name: 'Krizza Mae Cantila',
-    title: 'BSN, RN',
-    role: 'Co-Founder & Operations',
-    desc: 'With deep expertise in nursing licensure requirements, Krizza ensures every application meets the highest standards of accuracy and completeness.',
-    initials: 'KC',
-    color: 'from-blue-600 to-blue-400',
-    photo: null,
-    board: null
-  },
-]
 
 const advisors = [
   {
@@ -110,10 +88,8 @@ export function AboutUs() {
 
   const statsRef = useRef<HTMLDivElement>(null)
   const valuesRef = useRef<HTMLDivElement>(null)
-  const teamRef = useRef<HTMLDivElement>(null)
   const statsInView = useInView(statsRef)
   const valuesInView = useInView(valuesRef)
-  const teamInView = useInView(teamRef)
   const count500 = useCountUp(500, 1800, statsInView)
   const count98 = useCountUp(98, 1600, statsInView)
   const count5 = useCountUp(5, 1200, statsInView)
@@ -300,56 +276,6 @@ export function AboutUs() {
                 </div>
                 <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{v.title}</h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{v.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team Section */}
-      <section className="py-24 bg-gray-50 dark:bg-gray-800/50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-4">
-              <Users className="h-4 w-4" />
-              <span>Our Founders</span>
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">The People Behind GritSync</h2>
-            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-xl mx-auto">USRNs who've been through the journey themselves</p>
-          </div>
-
-          <div ref={teamRef} className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {team.map((member, i) => (
-              <div
-                key={member.name}
-                className={`bg-white dark:bg-gray-800 rounded-3xl p-8 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-500 ${teamInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-                style={{ transitionDelay: `${i * 150}ms` }}
-              >
-                <div className="flex items-start gap-5 mb-5">
-                  {member.photo ? (
-                    <img
-                      src={member.photo}
-                      alt={member.name}
-                      className="w-20 h-20 rounded-2xl object-cover object-top shadow-lg flex-shrink-0 border-2 border-primary-100 dark:border-primary-900"
-                    />
-                  ) : (
-                    <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${member.color} flex items-center justify-center text-white font-black text-2xl flex-shrink-0 shadow-lg`}>
-                      {member.initials}
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{member.name}</h3>
-                    <p className="text-primary-600 dark:text-primary-400 font-semibold text-sm">{member.role}</p>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">{member.title}</p>
-                    {member.board && <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">{member.board}</p>}
-                  </div>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{member.desc}</p>
-                <div className="flex gap-1 mt-4">
-                  {[...Array(5)].map((_, j) => (
-                    <Star key={j} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  ))}
-                </div>
               </div>
             ))}
           </div>

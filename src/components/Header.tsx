@@ -701,6 +701,7 @@ export function Header() {
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },
     { label: 'About Us', path: '/about-us', hash: '' },
+    { label: 'FAQs', path: '/faqs', hash: '' },
   ]
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string, hash: string) => {
