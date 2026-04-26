@@ -495,9 +495,22 @@ router.get('/session/:id/questions', authenticateToken, async (req: Authenticate
       [sessionId]
     )
 
+    const session = sessionResult.rows[0]
+    const isInProgress = session.status === 'in_progress'
+
+    // For in-progress sessions, redact correct_answer and rationale for unanswered questions
+    // to prevent answer key leakage via network inspection during active exams
+    const questions = responsesResult.rows.map((q: any) => {
+      if (isInProgress && !q.answered_at) {
+        const { correct_answer: _ca, rationale: _r, ...safe } = q
+        return safe
+      }
+      return q
+    })
+
     res.json({
-      session: sessionResult.rows[0],
-      questions: responsesResult.rows,
+      session,
+      questions,
     })
   } catch (error: any) {
     console.error('Get session questions error:', error)

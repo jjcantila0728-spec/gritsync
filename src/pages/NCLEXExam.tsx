@@ -531,10 +531,17 @@ export function NCLEXExam() {
         body: JSON.stringify({ question_id: currentQuestion.question_id, user_answer, time_spent: elapsed }),
       })
 
-      // Update local question with result
+      // Update local question with result (including correct_answer/rationale from answer response)
       setQuestions(prev => {
         const updated = prev.map((q, i) =>
-          i === qIndex ? { ...q, is_correct: data.is_correct, user_answer, answered_at: new Date().toISOString() } : q
+          i === qIndex ? {
+            ...q,
+            is_correct: data.is_correct,
+            user_answer,
+            answered_at: new Date().toISOString(),
+            correct_answer: data.correct_answer,
+            rationale: data.rationale,
+          } : q
         )
         // CAT: if backend swapped a question to be next, reorder local array to match
         if (data.next_question_id && session?.session_type === 'cat') {
