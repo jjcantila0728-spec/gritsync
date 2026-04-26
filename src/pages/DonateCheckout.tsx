@@ -35,6 +35,13 @@ function DonationPaymentForm({
       return
     }
 
+    // Must call elements.submit() immediately (before any async work) per Stripe requirements
+    const { error: submitError } = await elements.submit()
+    if (submitError) {
+      setError(submitError.message || 'Please check your payment details and try again.')
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -42,7 +49,7 @@ function DonationPaymentForm({
       // Confirm payment using the existing client secret
       const { error: confirmError, paymentIntent: confirmedPayment } = await stripe.confirmPayment({
         elements,
-        clientSecret: clientSecret,
+        clientSecret,
         confirmParams: {
           return_url: `${window.location.origin}/donate/success?donation_id=${donationId}`,
         },
