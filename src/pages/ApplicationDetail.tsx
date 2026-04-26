@@ -3837,7 +3837,6 @@ export function ApplicationDetail() {
               {activeTab === 'details' && application && (
                 <DetailsTab
                   application={application}
-                  isEADApplication={isEADApplication}
                   detailsSubTab={detailsSubTab}
                   setDetailsSubTab={setDetailsSubTab}
                   setApplication={setApplication}
@@ -3847,7 +3846,7 @@ export function ApplicationDetail() {
                 />
               )}
 
-              {activeTab === 'documents' && !isEADApplication && (
+              {activeTab === 'documents' && (
                 <DocumentsTab
                   application={application}
                   latestDocuments={latestDocuments}
@@ -3855,7 +3854,7 @@ export function ApplicationDetail() {
                 />
               )}
 
-              {activeTab === 'processing-accounts' && !isEADApplication && (
+              {activeTab === 'processing-accounts' && (
                 <ProcessingAccountsTab
                   processingAccounts={processingAccounts}
                   loadingAccounts={loadingAccounts}
