@@ -4,8 +4,6 @@ import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { sendEmail } from '@/lib/email-service'
-import { generalSettings } from '@/lib/settings'
 import { SEO, generateOrganizationSchema, generateWebSiteSchema, generateFAQSchema } from '@/components/SEO'
 import { HeroSlider } from '@/components/HeroSlider'
 import { 
@@ -151,21 +149,19 @@ export function Home() {
     }
     setIsSubmitting(true)
     try {
-      const adminEmail = await generalSettings.getAdminEmail()
-      const emailHtml = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;"><h2 style="color: #2563eb; margin-bottom: 20px;">New Contact Form Submission</h2><div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;"><p><strong>Name:</strong> ${formData.name}</p><p><strong>Email:</strong> ${formData.email}</p><p><strong>Subject:</strong> ${formData.subject}</p></div><div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;"><h3 style="color: #111827; margin-bottom: 10px;">Message:</h3><p style="color: #374151; white-space: pre-wrap; line-height: 1.6;">${formData.message}</p></div></div>`
-      const success = await sendEmail({
-        to: adminEmail,
-        subject: `Contact Form: ${formData.subject}`,
-        html: emailHtml,
-        text: `Name: ${formData.name}\nEmail: ${formData.email}\nSubject: ${formData.subject}\n\nMessage:\n${formData.message}`
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
       })
-      if (success) {
+      const data = await res.json()
+      if (res.ok && data.success) {
         showToast('Thank you! Your message has been sent successfully.', 'success')
         setFormData({ name: '', email: '', subject: '', message: '' })
       } else {
-        showToast('Failed to send message. Please try again or contact us directly.', 'error')
+        showToast(data.error || 'Failed to send message. Please try again or contact us directly.', 'error')
       }
-    } catch (error) {
+    } catch {
       showToast('An error occurred. Please try again later.', 'error')
     } finally {
       setIsSubmitting(false)
@@ -662,7 +658,7 @@ export function Home() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Support</p>
-                      <a href="tel:+1234567890" className="text-primary-600 dark:text-primary-400 hover:underline">+1 (234) 567-890</a>
+                      <a href="tel:+15092703437" className="text-primary-600 dark:text-primary-400 hover:underline">+1 (509) 270-3437</a>
                     </div>
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                       <p className="text-gray-500 dark:text-gray-400 text-xs">Available 24/7 for urgent inquiries</p>

@@ -700,8 +700,8 @@ export function Header() {
     { label: 'Sponsorship', path: '/sponsorship', hash: '' },
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },
-    { label: 'About Us', path: '/about-us', hash: '' },
     { label: 'FAQs', path: '/faqs', hash: '' },
+    { label: 'About Us', path: '/about-us', hash: '' },
   ]
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string, hash: string) => {

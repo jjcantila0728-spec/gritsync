@@ -9,6 +9,7 @@ import paymentRoutes from './routes/payments'
 import emailRoutes from './routes/emails'
 import questionRoutes from './routes/questions'
 import storageRoutes from './routes/storage'
+import contactRoutes from './routes/contact'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -36,6 +37,7 @@ app.use('/api/payments', paymentRoutes)
 app.use('/api/emails', emailRoutes)
 app.use('/api/questions', questionRoutes)
 app.use('/api/storage', storageRoutes)
+app.use('/api/contact', contactRoutes)
 
 if (isProd) {
   // Serve built frontend static files
