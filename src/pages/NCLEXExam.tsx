@@ -764,7 +764,7 @@ export function NCLEXExam() {
           {/* Question body */}
           <div className="flex-1 overflow-y-auto p-5 lg:p-7 bg-white">
             {/* QID + type badge */}
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <span className="text-xs text-gray-400 font-mono">QID: {currentQuestion.question_id}</span>
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium capitalize">
                 {qtype === 'traditional_mcq' ? 'MCQ' : qtype === 'ngn_sata' ? 'SATA' : qtype === 'ngn_cloze' ? 'Cloze' : 'Matrix'}
@@ -772,6 +772,12 @@ export function NCLEXExam() {
               <DifficultyBadge difficulty={currentQuestion.difficulty} />
               {currentQuestion.is_ngn && (
                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">NGN</span>
+              )}
+              {isReviewMode && currentQuestion.case_study_id && currentQuestion.case_study_title && (
+                <span className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-medium">
+                  <BookOpen className="h-3 w-3 flex-shrink-0" />
+                  {currentQuestion.case_study_title}
+                </span>
               )}
             </div>
 
