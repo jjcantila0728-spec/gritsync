@@ -284,9 +284,11 @@ function MatrixQuestion({ options, selected, onSelect, disabled, feedback, corre
 }
 
 // ── Score Sheet (Results) ──────────────────────────────────────────────────────
-function ScoreSheet({ session, questions, onClose, onReviewAll }: {
-  session: any; questions: any[]; onClose: () => void; onReviewAll: () => void
+function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
+  session: any; questions: any[]; onClose: () => void; onReviewAll: () => void; mode?: string
 }) {
+  const isTimed = mode === 'timed'
+  const SLOW_THRESHOLD = 90
   const total = session.total_questions || questions.length
   const correct = session.correct_answers || 0
   const score = total > 0 ? Math.round((correct / total) * 100) : 0
@@ -426,6 +428,56 @@ function ScoreSheet({ session, questions, onClose, onReviewAll }: {
           </div>
         )}
 
+        {/* Time per question (timed mode only) */}
+        {isTimed && (() => {
+          const answeredWithTime = questions.filter(q => q.answered_at && typeof q.time_spent === 'number')
+          if (answeredWithTime.length === 0) return null
+          const slowCount = answeredWithTime.filter(q => q.time_spent > SLOW_THRESHOLD).length
+          const avgTime = Math.round(answeredWithTime.reduce((s, q) => s + q.time_spent, 0) / answeredWithTime.length)
+          return (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-[#17c3b2]" /> Time Per Question
+              </h3>
+              <div className="flex items-center gap-6 mb-4">
+                <div className="text-center">
+                  <p className="text-2xl font-black text-gray-900">{formatTime(avgTime)}</p>
+                  <p className="text-xs text-gray-500">Average time</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black text-orange-600">{slowCount}</p>
+                  <p className="text-xs text-gray-500">Slow answers (&gt;{SLOW_THRESHOLD}s)</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black text-gray-900">{answeredWithTime.length - slowCount}</p>
+                  <p className="text-xs text-gray-500">On-time answers</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {answeredWithTime.map((q, i) => {
+                  const isSlow = q.time_spent > SLOW_THRESHOLD
+                  const pct = Math.min(100, Math.round((q.time_spent / SLOW_THRESHOLD) * 100))
+                  return (
+                    <div key={q.question_id} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-400 w-8 flex-shrink-0">Q{i + 1}</span>
+                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${isSlow ? 'bg-orange-400' : 'bg-[#17c3b2]'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={`w-12 text-right flex-shrink-0 font-medium ${isSlow ? 'text-orange-600' : 'text-gray-600'}`}>
+                        {formatTime(q.time_spent)}
+                      </span>
+                      {isSlow && <span className="text-[10px] text-orange-500 flex-shrink-0">slow</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
         <div className="flex gap-3">
           <button
             onClick={onClose}
@@ -472,9 +524,13 @@ export function NCLEXExam() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Timer
+  // Timer — total elapsed seconds since session start
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Per-question time tracking: elapsed value when the current question started
+  const qStartElapsedRef = useRef<number>(0)
+  // Flag to prevent double-triggering the timed auto-end
+  const timedEndFiredRef = useRef(false)
 
   // UI state
   const [showScore, setShowScore] = useState(initialTab === 'score')
@@ -485,7 +541,13 @@ export function NCLEXExam() {
   const currentQuestion = questions[qIndex] || null
   const sessionMode = session?.settings?.mode || 'tutorial'
   const isTutorial = sessionMode === 'tutorial'
+  const isTimed = sessionMode === 'timed'
   const sessionId = parseInt(id || '0')
+
+  // Timed mode: 90 seconds per question (NCLEX standard ~1.5 min/question)
+  const SECONDS_PER_QUESTION = 90
+  const totalTimedSeconds = isTimed && questions.length > 0 ? questions.length * SECONDS_PER_QUESTION : null
+  const timedTimeLeft = totalTimedSeconds !== null ? Math.max(0, totalTimedSeconds - elapsed) : null
 
   // Unique case studies in this session (used for review-mode filter)
   const caseStudiesInSession = useMemo(() => {
@@ -564,6 +626,15 @@ export function NCLEXExam() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [isReviewMode, session?.status, showScore])
 
+  // Auto-end session when timed countdown reaches 0
+  useEffect(() => {
+    if (!isTimed || isReviewMode || showScore || timedTimeLeft === null) return
+    if (timedTimeLeft <= 0 && !timedEndFiredRef.current) {
+      timedEndFiredRef.current = true
+      endSession()
+    }
+  }, [timedTimeLeft, isTimed, isReviewMode, showScore])
+
   // When question changes, load existing answer if in review mode
   useEffect(() => {
     const q = questions[qIndex]
@@ -571,6 +642,8 @@ export function NCLEXExam() {
     setFeedback(null)
     setSubmitError(null)
     setScenarioExpanded(true)
+    // Reset per-question timer
+    qStartElapsedRef.current = elapsed
 
     if (isReviewMode && q.answered_at) {
       // Pre-fill with submitted answer and show feedback
@@ -638,9 +711,10 @@ export function NCLEXExam() {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      const questionTimeSpent = elapsed - qStartElapsedRef.current
       const data = await apiFetch(`/api/questions/session/${sessionId}/answer`, {
         method: 'POST',
-        body: JSON.stringify({ question_id: currentQuestion.question_id, user_answer, time_spent: elapsed }),
+        body: JSON.stringify({ question_id: currentQuestion.question_id, user_answer, time_spent: questionTimeSpent }),
       })
 
       // Update local question with result (including correct_answer/rationale from answer response)
@@ -686,6 +760,10 @@ export function NCLEXExam() {
     } catch (err: any) {
       if (err.message?.includes('Daily question limit') || err.message?.includes('daily_limit')) {
         setSubmitError('Daily question limit reached. Upgrade your plan to continue.')
+      } else if (err.message?.includes('time limit exceeded') || err.message?.includes('time_expired')) {
+        // Server confirmed time expired — end session and show results
+        await loadSession()
+        setShowScore(true)
       } else {
         setSubmitError(err.message)
       }
@@ -764,6 +842,7 @@ export function NCLEXExam() {
           questions={questions}
           onClose={() => navigate('/nclex-review')}
           onReviewAll={() => { setShowScore(false); setQIndex(0) }}
+          mode={sessionMode}
         />
       </NCLEXExamLayout>
     )
@@ -828,10 +907,30 @@ export function NCLEXExam() {
                 </span>
               </span>
             )}
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
-              <Clock className="h-3.5 w-3.5" />
-              {formatTime(elapsed)}
-            </div>
+            {isReviewMode && currentQuestion && typeof currentQuestion.time_spent === 'number' ? (
+              <div className={`flex items-center gap-1.5 text-xs font-medium ml-auto px-3 py-1 rounded-lg ${
+                currentQuestion.time_spent > 90 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                <Clock className="h-3.5 w-3.5" />
+                {formatTime(currentQuestion.time_spent)}
+                {currentQuestion.time_spent > 90 && <span className="text-[10px] font-semibold">slow</span>}
+              </div>
+            ) : isTimed && timedTimeLeft !== null ? (
+              <div className={`flex items-center gap-1.5 text-xs font-bold ml-auto px-3 py-1 rounded-lg ${
+                timedTimeLeft <= 30 ? 'bg-red-100 text-red-700 animate-pulse' :
+                timedTimeLeft <= 60 ? 'bg-orange-100 text-orange-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                <Clock className="h-3.5 w-3.5" />
+                {formatTime(timedTimeLeft)}
+                <span className="text-[10px] font-normal opacity-70">remaining</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
+                <Clock className="h-3.5 w-3.5" />
+                {formatTime(elapsed)}
+              </div>
+            )}
           </div>
 
           {/* Question body */}
@@ -1030,10 +1129,14 @@ export function NCLEXExam() {
 
           {/* Submit/Confirmation notice for non-tutorial modes */}
           {!isTutorial && !isReviewMode && !feedback && (
-            <div className="bg-amber-50 border-t border-amber-200 px-5 py-2 flex-shrink-0">
-              <p className="text-xs text-amber-700 flex items-center gap-1.5">
+            <div className={`border-t px-5 py-2 flex-shrink-0 ${isTimed && timedTimeLeft !== null && timedTimeLeft <= 60 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+              <p className={`text-xs flex items-center gap-1.5 ${isTimed && timedTimeLeft !== null && timedTimeLeft <= 60 ? 'text-red-700' : 'text-amber-700'}`}>
                 <AlertCircle className="h-3.5 w-3.5" />
-                {sessionMode === 'timed' ? 'Timed mode – explanations shown after completion.' : 'CAT mode – difficulty adapts to your performance.'}
+                {sessionMode === 'timed'
+                  ? timedTimeLeft !== null && timedTimeLeft <= 60
+                    ? `Time is almost up! ${formatTime(timedTimeLeft)} remaining — submit your answers now.`
+                    : `Timed mode — ${totalTimedSeconds ? formatTime(totalTimedSeconds) : ''} total. Session auto-submits when time expires. Explanations shown after completion.`
+                  : 'CAT mode – difficulty adapts to your performance.'}
               </p>
             </div>
           )}

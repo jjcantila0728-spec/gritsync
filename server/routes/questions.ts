@@ -750,6 +750,27 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
       return res.status(404).json({ error: 'Session not found or already completed' })
     }
 
+    // Server-side timed mode enforcement — prevents reload/tab bypass
+    const sessionRow = sessionResult.rows[0]
+    if (sessionRow.settings?.mode === 'timed' && sessionRow.time_started) {
+      const SECONDS_PER_QUESTION = 90
+      const totalAllowedSeconds = sessionRow.total_questions * SECONDS_PER_QUESTION
+      const elapsedSeconds = (Date.now() - new Date(sessionRow.time_started).getTime()) / 1000
+      if (elapsedSeconds > totalAllowedSeconds) {
+        // Time expired — auto-complete the session
+        await query(
+          `UPDATE test_sessions
+           SET status = 'completed', time_completed = NOW()
+           WHERE id = $1 AND status = 'in_progress'`,
+          [sessionId]
+        ).catch(() => {})
+        return res.status(403).json({
+          error: 'Session time limit exceeded. Your answers have been submitted.',
+          time_expired: true,
+        })
+      }
+    }
+
     const questionResult = await query(
       `SELECT correct_answer, rationale, question_type, is_ngn, difficulty,
               content_area, subcategory, cognitive_level, tags FROM question_bank WHERE id = $1`,

@@ -149,7 +149,7 @@ function CreateTestModal({ onClose, onStart, stats }: {
 
   const modeDescriptions: Record<TestMode, string> = {
     tutorial: 'Receive instant explanations after submitting your answers.',
-    timed: 'Take the test under time pressure. Explanations available after completion.',
+    timed: 'Race the clock — 90 seconds per question (1.5 min, NCLEX standard). Auto-submits when time runs out. Explanations available after completion.',
     cat: 'Computer Adaptive Test: difficulty adjusts based on your performance.',
     readiness: '75-question NCLEX simulation that mirrors the real exam format.',
   }
