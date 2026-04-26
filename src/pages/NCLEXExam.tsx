@@ -491,13 +491,20 @@ export function NCLEXExam() {
   const caseStudiesInSession = useMemo(() => {
     if (!isReviewMode) return []
     const seen = new Set<string>()
-    const result: { id: string; title: string }[] = []
+    const counts = new Map<string, number>()
+    const result: { id: string; title: string; count: number }[] = []
     for (const q of questions) {
       const csId = q.case_study_id ? String(q.case_study_id) : null
-      if (csId && !seen.has(csId)) {
-        seen.add(csId)
-        result.push({ id: csId, title: q.case_study_title || `Case Study ${csId}` })
+      if (csId) {
+        counts.set(csId, (counts.get(csId) ?? 0) + 1)
+        if (!seen.has(csId)) {
+          seen.add(csId)
+          result.push({ id: csId, title: q.case_study_title || `Case Study ${csId}`, count: 0 })
+        }
       }
+    }
+    for (const cs of result) {
+      cs.count = counts.get(cs.id) ?? 0
     }
     return result
   }, [questions, isReviewMode])
@@ -1092,13 +1099,13 @@ export function NCLEXExam() {
                 : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
             }`}
           >
-            All Questions
+            All Questions — {questions.length}
           </button>
           {caseStudiesInSession.map(cs => (
             <button
               key={cs.id}
               onClick={() => setCaseStudyFilter(cs.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[160px] ${
+              className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[180px] ${
                 caseStudyFilter === cs.id
                   ? 'bg-blue-500 text-white'
                   : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
@@ -1107,6 +1114,7 @@ export function NCLEXExam() {
             >
               <BookOpen className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{cs.title}</span>
+              <span className="flex-shrink-0 opacity-75">— {cs.count}</span>
             </button>
           ))}
         </div>
