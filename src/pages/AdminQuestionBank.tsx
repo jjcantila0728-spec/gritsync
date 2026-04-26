@@ -112,6 +112,7 @@ export function AdminQuestionBank() {
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -159,6 +160,7 @@ export function AdminQuestionBank() {
   function openAddModal() {
     setEditingQuestion(null)
     setForm({ ...EMPTY_FORM })
+    setTagInput('')
     setShowModal(true)
   }
 
@@ -166,6 +168,7 @@ export function AdminQuestionBank() {
     setEditingQuestion(q)
     const opts = Array.isArray(q.options) ? q.options : []
     const clozeOpts = q.options?.blanks || [{ id: 1, choices: ['', '', ''], correct: '' }]
+    setTagInput('')
     setForm({
       question_text: q.question_text,
       question_type: q.question_type,
@@ -189,6 +192,37 @@ export function AdminQuestionBank() {
       matrix_correct_cells: q.correct_answer?.cells || [],
     })
     setShowModal(true)
+  }
+
+  function parsedTags(): string[] {
+    return form.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+  }
+
+  function addTagFromInput() {
+    const parts = tagInput.split(',').map((t: string) => t.trim()).filter(Boolean)
+    if (parts.length === 0) return
+    const existing = parsedTags()
+    const existingLower = existing.map((t: string) => t.toLowerCase())
+    const toAdd = parts.filter((t: string) => !existingLower.includes(t.toLowerCase()))
+    if (toAdd.length > 0) {
+      setForm(f => ({ ...f, tags: [...existing, ...toAdd].join(', ') }))
+    }
+    setTagInput('')
+  }
+
+  function removeTag(index: number) {
+    const updated = parsedTags().filter((_, i) => i !== index)
+    setForm(f => ({ ...f, tags: updated.join(', ') }))
+  }
+
+  function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTagFromInput()
+    } else if (e.key === 'Backspace' && tagInput === '') {
+      const tags = parsedTags()
+      if (tags.length > 0) removeTag(tags.length - 1)
+    }
   }
 
   async function handleSave() {
@@ -796,14 +830,41 @@ export function AdminQuestionBank() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags (comma-separated)</label>
-            <input
-              type="text"
-              value={form.tags}
-              onChange={(e) => setForm(f => ({ ...f, tags: e.target.value }))}
-              placeholder="medication, pediatric, priority"
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
+            <div
+              className="min-h-[42px] w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 flex flex-wrap gap-1.5 items-center bg-white dark:bg-gray-800 cursor-text focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500"
+              onClick={(e) => {
+                const input = (e.currentTarget as HTMLElement).querySelector('input')
+                if (input) input.focus()
+              }}
+            >
+              {parsedTags().map((tag, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeTag(i) }}
+                    className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-200 leading-none"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                onBlur={addTagFromInput}
+                placeholder={parsedTags().length === 0 ? 'Type a tag and press Enter or comma…' : ''}
+                className="flex-1 min-w-[120px] text-sm bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 py-0.5"
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Press Enter or comma to add a tag. Backspace removes the last tag.</p>
           </div>
 
           <div className="flex gap-3 pt-2">
