@@ -180,11 +180,20 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       question_type,
       is_ngn,
       search,
-      tag,
       page = '1',
       limit = '20',
       active_only = 'true',
     } = req.query as Record<string, string>
+
+    const rawTagArr = req.query['tag[]']
+    const rawTagSingle = req.query['tag']
+    const tagEntries: string[] = [
+      ...(Array.isArray(rawTagArr) ? rawTagArr : rawTagArr ? [rawTagArr] : []),
+      ...(Array.isArray(rawTagSingle) ? rawTagSingle : rawTagSingle ? [rawTagSingle] : []),
+    ].map(String)
+    const filterTagsRaw: string[] = [...new Set(
+      tagEntries.flatMap(e => e.split(',').map(t => t.trim())).filter(Boolean)
+    )]
 
     const conditions: string[] = []
     const params: any[] = []
@@ -214,9 +223,9 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       conditions.push(`question_text ILIKE $${paramIdx++}`)
       params.push(`%${search}%`)
     }
-    if (tag && tag.trim()) {
-      conditions.push(`$${paramIdx++} = ANY(tags)`)
-      params.push(tag.trim())
+    if (filterTagsRaw.length > 0) {
+      conditions.push(`tags @> $${paramIdx++}::text[]`)
+      params.push(filterTagsRaw)
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''

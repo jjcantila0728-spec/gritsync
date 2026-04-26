@@ -141,7 +141,8 @@ export function AdminQuestionBank() {
   const [filterDifficulty, setFilterDifficulty] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [filterNGN, setFilterNGN] = useState('all')
-  const [filterTag, setFilterTag] = useState('')
+  const [filterTags, setFilterTags] = useState<string[]>([])
+  const [filterTagInput, setFilterTagInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [availableTags, setAvailableTags] = useState<string[]>([])
 
@@ -182,7 +183,7 @@ export function AdminQuestionBank() {
       fetchStats()
       fetchCaseStudies()
     }
-  }, [page, filterContentArea, filterDifficulty, filterType, filterNGN, filterTag, searchQuery])
+  }, [page, filterContentArea, filterDifficulty, filterType, filterNGN, filterTags, searchQuery])
 
   useEffect(() => {
     if (isAdmin()) {
@@ -257,7 +258,7 @@ export function AdminQuestionBank() {
       if (filterDifficulty !== 'all') params.set('difficulty', filterDifficulty)
       if (filterType !== 'all') params.set('question_type', filterType)
       if (filterNGN !== 'all') params.set('is_ngn', filterNGN === 'ngn' ? 'true' : 'false')
-      if (filterTag) params.set('tag', filterTag)
+      filterTags.forEach(t => params.append('tag[]', t))
       if (searchQuery) params.set('search', searchQuery)
 
       const data = await apiFetch(`/api/questions?${params}`)
@@ -750,26 +751,63 @@ export function AdminQuestionBank() {
                   </select>
                 </div>
                 <div className="mt-3">
-                  <datalist id="tag-options">
-                    {availableTags.map((t) => (
+                  <datalist id="filter-tag-options">
+                    {availableTags.filter(t => !filterTags.includes(t)).map((t) => (
                       <option key={t} value={t} />
                     ))}
                   </datalist>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <div className="flex flex-wrap items-center gap-1.5 min-h-[38px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+                    <Tag className="h-4 w-4 text-gray-400 shrink-0" />
+                    {filterTags.map((t) => (
+                      <span
+                        key={t}
+                        className="inline-flex items-center gap-1 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs px-2 py-0.5 rounded-full"
+                      >
+                        {t}
+                        <button
+                          onClick={() => { setFilterTags(prev => prev.filter(x => x !== t)); setPage(1) }}
+                          className="hover:text-primary-900 dark:hover:text-primary-100 leading-none"
+                          aria-label={`Remove ${t} filter`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
                     <input
                       type="text"
-                      list="tag-options"
-                      placeholder="Filter by tag..."
-                      value={filterTag}
-                      onChange={(e) => { setFilterTag(e.target.value); setPage(1) }}
-                      className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      list="filter-tag-options"
+                      placeholder={filterTags.length === 0 ? 'Filter by tag...' : 'Add another tag...'}
+                      value={filterTagInput}
+                      onChange={(e) => setFilterTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ',') && filterTagInput.trim()) {
+                          e.preventDefault()
+                          const val = filterTagInput.trim().replace(/,$/, '')
+                          if (val && !filterTags.includes(val)) {
+                            setFilterTags(prev => [...prev, val])
+                            setPage(1)
+                          }
+                          setFilterTagInput('')
+                        } else if (e.key === 'Backspace' && filterTagInput === '' && filterTags.length > 0) {
+                          setFilterTags(prev => prev.slice(0, -1))
+                          setPage(1)
+                        }
+                      }}
+                      onBlur={() => {
+                        const val = filterTagInput.trim()
+                        if (val && availableTags.includes(val) && !filterTags.includes(val)) {
+                          setFilterTags(prev => [...prev, val])
+                          setPage(1)
+                          setFilterTagInput('')
+                        }
+                      }}
+                      className="flex-1 min-w-[120px] text-sm bg-transparent text-gray-900 dark:text-white outline-none"
                     />
-                    {filterTag && (
+                    {filterTags.length > 0 && (
                       <button
-                        onClick={() => { setFilterTag(''); setPage(1) }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none"
-                        aria-label="Clear tag filter"
+                        onClick={() => { setFilterTags([]); setFilterTagInput(''); setPage(1) }}
+                        className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none"
+                        aria-label="Clear all tag filters"
                       >
                         ×
                       </button>
