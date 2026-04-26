@@ -659,7 +659,7 @@ export function NCLEXReview() {
   const [filterPending, setFilterPending] = useState(false)
 
   useEffect(() => {
-    if (location.state?.openUpgrade) setShowUpgrade(true)
+    if (location.state?.openUpgrade) navigate('/nclex-review/checkout')
   }, [location.state])
 
   const loadAll = useCallback(async () => {
@@ -801,7 +801,7 @@ export function NCLEXReview() {
               <p className="text-sm text-gray-500 mt-0.5">
                 Expires in {Math.max(0, Math.ceil((new Date(subscription.expires_at).getTime() - Date.now()) / 86400000))} days
                 &nbsp;·&nbsp;
-                <button onClick={() => setShowUpgrade(true)} className="text-[#17c3b2] hover:underline font-medium">
+                <button onClick={() => navigate('/nclex-review/checkout')} className="text-[#17c3b2] hover:underline font-medium">
                   Extend
                 </button>
               </p>
@@ -829,7 +829,7 @@ export function NCLEXReview() {
             <button
               onClick={() => {
                 if (plan === 'free' && !subscription?.can_answer) {
-                  setShowUpgrade(true)
+                  navigate('/nclex-review/checkout')
                   return
                 }
                 setShowCreateTest(true)
@@ -899,7 +899,7 @@ export function NCLEXReview() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowUpgrade(true)}
+                  onClick={() => navigate('/nclex-review/checkout')}
                   className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#17c3b2] text-white text-sm font-bold hover:bg-[#14a99a] transition-colors"
                 >
                   <Crown className="h-4 w-4" /> Upgrade Plan

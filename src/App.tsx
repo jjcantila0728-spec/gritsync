@@ -79,6 +79,7 @@ const NCLEXVideoLibrary = lazy(() => import('./pages/NCLEXVideoLibrary').then(m 
 const NCLEXCheatSheets = lazy(() => import('./pages/NCLEXCheatSheets').then(m => ({ default: m.NCLEXCheatSheets })))
 const NCLEXLiveLectures = lazy(() => import('./pages/NCLEXLiveLectures').then(m => ({ default: m.NCLEXLiveLectures })))
 const NCLEXOrderHistory = lazy(() => import('./pages/NCLEXOrderHistory').then(m => ({ default: m.NCLEXOrderHistory })))
+const NCLEXCheckout = lazy(() => import('./pages/NCLEXCheckout').then(m => ({ default: m.NCLEXCheckout })))
 
 // Loading fallback component
 function PageLoader() {
@@ -263,6 +264,7 @@ function AppRoutes() {
         <Route path="/nclex-review/cheat-sheets" element={<NCLEXCheatSheets />} />
         <Route path="/nclex-review/live-lectures" element={<NCLEXLiveLectures />} />
         <Route path="/nclex-review/order-history" element={<NCLEXOrderHistory />} />
+        <Route path="/nclex-review/checkout" element={<NCLEXCheckout />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />

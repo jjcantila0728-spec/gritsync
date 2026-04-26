@@ -117,7 +117,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
             <PlanBadge plan={plan} />
             {plan === 'free' && (
               <button
-                onClick={() => navigate('/nclex-review', { state: { openUpgrade: true } })}
+                onClick={() => navigate('/nclex-review/checkout')}
                 className="text-[10px] text-[#17c3b2] hover:underline font-medium"
               >
                 Upgrade →
@@ -188,7 +188,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
           <div className="flex items-center gap-3 flex-shrink-0">
             {plan === 'free' && (
               <button
-                onClick={() => navigate('/nclex-review', { state: { openUpgrade: true } })}
+                onClick={() => navigate('/nclex-review/checkout')}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#17c3b2] text-white text-xs font-semibold hover:bg-[#14a99a] transition-colors"
               >
                 <Crown className="h-3 w-3" /> Upgrade

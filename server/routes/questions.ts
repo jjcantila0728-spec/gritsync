@@ -44,13 +44,130 @@ async function getUserPlanAndUsage(userId: number): Promise<{ plan: string; ques
 
 // ─── Public: Payment Info ─────────────────────────────────────────────────────
 router.get('/payment-info', async (_req, res) => {
-  res.json({
-    accounts: [
-      { method: 'GCash', name: 'Joy Jeric Cantila', number: '09691533239' },
-      { method: 'Maya', name: 'Joy Jeric Cantila', number: '09691533239' },
-    ],
-    note: 'Send payment and message admin with your proof of payment and reference number.',
-  })
+  try {
+    // Pull from admin settings table
+    const rows = await query(
+      `SELECT key, value FROM settings WHERE key IN ('mobileBankingConfigs','mobileBankingEnabled','stripeEnabled','stripePublishableKey')`,
+      []
+    )
+    const map: Record<string, string> = {}
+    for (const r of rows.rows) map[r.key] = r.value
+
+    const DEFAULT_MOBILE_ACCOUNTS = [
+      { id: 'gcash', name: 'GCash', accountName: 'Joy Jeric Cantila', accountNumber: '09691533239', enabled: true },
+      { id: 'bdo', name: 'BDO', accountName: 'Joy Jeric Cantila', accountNumber: '0059 4600 0994', enabled: true },
+    ]
+
+    let mobileBankingAccounts: any[] = []
+    try {
+      const raw = map['mobileBankingConfigs'] || '[]'
+      const parsed: any[] = JSON.parse(raw)
+      const enabled = parsed.filter((c: any) => c.enabled !== false)
+      mobileBankingAccounts = enabled.length > 0 ? enabled : DEFAULT_MOBILE_ACCOUNTS
+    } catch {
+      mobileBankingAccounts = DEFAULT_MOBILE_ACCOUNTS
+    }
+
+    const stripeEnabled = map['stripeEnabled'] === 'true'
+    const stripePublishableKey = map['stripePublishableKey'] || ''
+
+    res.json({
+      mobileBankingEnabled: map['mobileBankingEnabled'] !== 'false',
+      mobileBankingAccounts,
+      stripeEnabled: stripeEnabled && !!stripePublishableKey,
+      stripePublishableKey: stripeEnabled ? stripePublishableKey : '',
+      // legacy accounts field for backward compat
+      accounts: mobileBankingAccounts.map((c: any) => ({ method: c.name, name: c.accountName, number: c.accountNumber })),
+      note: 'Send payment and submit your proof of payment with your reference number.',
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Subscription: Create Stripe Payment Intent ───────────────────────────────
+router.post('/subscription/create-payment-intent', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    const { plan } = req.body
+    if (!plan || !['premium', 'vip'].includes(plan)) {
+      return res.status(400).json({ error: 'plan must be premium or vip' })
+    }
+
+    // Get Stripe secret key from env or settings
+    let stripeSecretKey = process.env.STRIPE_SECRET_KEY || ''
+    if (!stripeSecretKey) {
+      const row = await query(`SELECT value FROM settings WHERE key = 'stripeSecretKey' LIMIT 1`, [])
+      stripeSecretKey = row.rows[0]?.value || ''
+    }
+    if (!stripeSecretKey) return res.status(503).json({ error: 'Stripe is not configured' })
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Stripe = require('stripe')
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2023-10-16' })
+
+    const amountCents = plan === 'vip' ? 50000 : 25000 // ₱500 or ₱250 in centavos
+    const intent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: 'php',
+      description: `GritSync NCLEX ${plan === 'vip' ? 'VIP (6 months)' : 'Premium (2 months)'}`,
+      metadata: { user_id: String(userId), plan },
+    })
+
+    res.json({ clientSecret: intent.client_secret, paymentIntentId: intent.id })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Subscription: Complete Stripe Payment ────────────────────────────────────
+router.post('/subscription/stripe-complete', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    const { paymentIntentId, plan } = req.body
+    if (!paymentIntentId || !plan) return res.status(400).json({ error: 'paymentIntentId and plan are required' })
+
+    // Verify intent with Stripe
+    let stripeSecretKey = process.env.STRIPE_SECRET_KEY || ''
+    if (!stripeSecretKey) {
+      const row = await query(`SELECT value FROM settings WHERE key = 'stripeSecretKey' LIMIT 1`, [])
+      stripeSecretKey = row.rows[0]?.value || ''
+    }
+    if (!stripeSecretKey) return res.status(503).json({ error: 'Stripe is not configured' })
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Stripe = require('stripe')
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2023-10-16' })
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+
+    if (intent.status !== 'succeeded') {
+      return res.status(400).json({ error: `Payment not completed (status: ${intent.status})` })
+    }
+
+    // Expire existing active subscription
+    await query(
+      `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+      [String(userId)]
+    )
+
+    const months = plan === 'vip' ? 6 : 2
+    const amount = plan === 'vip' ? 500 : 250
+    const result = await query(
+      `INSERT INTO nclex_subscriptions
+         (user_id, plan, status, expires_at, payment_amount, payment_currency, payment_method, payment_reference, activated_by)
+       VALUES ($1, $2, 'active', NOW() + ($3 || ' months')::INTERVAL, $4, 'PHP', 'stripe', $5, 'stripe')
+       RETURNING id, plan, expires_at`,
+      [String(userId), plan, String(months), amount, paymentIntentId]
+    )
+
+    res.json({ success: true, subscription: result.rows[0] })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // ─── Questions CRUD ───────────────────────────────────────────────────────────
