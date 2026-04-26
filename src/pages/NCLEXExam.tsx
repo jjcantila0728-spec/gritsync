@@ -741,9 +741,13 @@ export function NCLEXExam() {
               {isMarked ? 'Marked' : 'Mark for Later'}
             </button>
             {caseStudyId && caseStudyTotal > 0 && (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700">
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 max-w-[220px]">
                 <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
-                Case Study {caseStudyIndex}/{caseStudyTotal}
+                <span className="truncate">
+                  {currentQuestion.case_study_title
+                    ? `${currentQuestion.case_study_title} – ${caseStudyIndex}/${caseStudyTotal}`
+                    : `Case Study ${caseStudyIndex}/${caseStudyTotal}`}
+                </span>
               </span>
             )}
             <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
