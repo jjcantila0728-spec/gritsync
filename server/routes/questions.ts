@@ -228,7 +228,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const result = await query(
       `SELECT id, question_text, question_type, content_area, subcategory,
               difficulty, cognitive_level, is_ngn, options, correct_answer,
-              rationale, tags, is_active, created_at, updated_at
+              rationale, tags, is_active, case_study_id, created_at, updated_at
        FROM question_bank ${where}
        ORDER BY created_at DESC
        LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
@@ -265,6 +265,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       rationale,
       tags,
       is_active = true,
+      case_study_id,
     } = req.body
 
     if (!question_text || !question_type || !content_area || !difficulty) {
@@ -274,8 +275,8 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const result = await query(
       `INSERT INTO question_bank
          (question_text, question_type, content_area, subcategory, difficulty,
-          cognitive_level, is_ngn, options, correct_answer, rationale, tags, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          cognitive_level, is_ngn, options, correct_answer, rationale, tags, is_active, case_study_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         question_text,
@@ -290,6 +291,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
         rationale || null,
         parseTags(tags),
         is_active,
+        case_study_id || null,
       ]
     )
 
@@ -318,8 +320,10 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
       rationale,
       tags,
       is_active,
+      case_study_id,
     } = req.body
 
+    const hasCaseStudyId = 'case_study_id' in req.body
     const result = await query(
       `UPDATE question_bank SET
          question_text = COALESCE($1, question_text),
@@ -334,8 +338,9 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
          rationale = $10,
          tags = $11,
          is_active = COALESCE($12, is_active),
+         case_study_id = CASE WHEN $13 THEN $14::integer ELSE case_study_id END,
          updated_at = NOW()
-       WHERE id = $13
+       WHERE id = $15
        RETURNING *`,
       [
         question_text ?? null,
@@ -350,6 +355,8 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
         rationale ?? null,
         parseTags(tags),
         is_active ?? null,
+        hasCaseStudyId,
+        case_study_id || null,
         id,
       ]
     )
@@ -2174,6 +2181,96 @@ router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) =
     const action = force && existingCount > 0 ? 'Reset and re-seeded' : 'Seeded'
     res.json({ message: `${action} successfully`, inserted, replaced: force ? existingCount : 0 })
   } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ─── Case Studies CRUD ────────────────────────────────────────────────────────
+router.get('/case-studies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+  try {
+    const result = await query(
+      `SELECT cs.id, cs.title, cs.scenario, cs.created_at, cs.updated_at,
+              COUNT(qb.id)::int AS question_count
+       FROM case_studies cs
+       LEFT JOIN question_bank qb ON qb.case_study_id = cs.id AND qb.is_active = true
+       GROUP BY cs.id
+       ORDER BY cs.created_at DESC`
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    console.error('Get case studies error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/case-studies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+  const { title, scenario } = req.body
+  if (!title || !scenario) {
+    return res.status(400).json({ error: 'title and scenario are required' })
+  }
+  try {
+    const result = await query(
+      `INSERT INTO case_studies (title, scenario) VALUES ($1, $2) RETURNING *`,
+      [title.trim(), scenario.trim()]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (error: any) {
+    console.error('Create case study error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.put('/case-studies/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+  const { id } = req.params
+  const { title, scenario } = req.body
+  try {
+    const result = await query(
+      `UPDATE case_studies SET
+         title = COALESCE($1, title),
+         scenario = COALESCE($2, scenario),
+         updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [title?.trim() || null, scenario?.trim() || null, id]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Case study not found' })
+    res.json(result.rows[0])
+  } catch (error: any) {
+    console.error('Update case study error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/case-studies/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+  const { id } = req.params
+  try {
+    await query(`UPDATE question_bank SET case_study_id = NULL WHERE case_study_id = $1`, [id])
+    await query(`DELETE FROM case_studies WHERE id = $1`, [id])
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('Delete case study error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/case-studies/:id/questions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+  const { id } = req.params
+  try {
+    const result = await query(
+      `SELECT id, question_text, question_type, difficulty, is_ngn, is_active
+       FROM question_bank
+       WHERE case_study_id = $1
+       ORDER BY id ASC`,
+      [id]
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    console.error('Get case study questions error:', error)
     res.status(500).json({ error: error.message })
   }
 })

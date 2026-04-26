@@ -98,6 +98,13 @@ async function runStartupMigrations() {
   } catch (err) {
     console.warn('Startup migration warning (case_study_id column):', err)
   }
+
+  try {
+    await query(`ALTER TABLE case_studies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`)
+  } catch (err) {
+    console.warn('Startup migration warning (case_studies updated_at):', err)
+  }
+
   await autoSeedIfEmpty()
 }
 

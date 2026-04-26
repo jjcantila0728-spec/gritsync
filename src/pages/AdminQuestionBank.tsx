@@ -5,11 +5,11 @@ import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import {
-  BookOpen, Plus, Search, Edit, Trash2, Tag, BarChart2,
-  ChevronLeft, ChevronRight, Filter, RefreshCw, CheckCircle, XCircle,
+  BookOpen, Plus, Search, Edit, Trash2,
+  ChevronLeft, ChevronRight, CheckCircle, XCircle,
+  FileText, Eye, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 const CONTENT_AREA_LABELS: Record<string, string> = {
@@ -26,12 +26,6 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   ngn_matrix: 'NGN – Matrix',
 }
 
-const DIFFICULTY_LABELS: Record<string, string> = {
-  easy: 'Easy',
-  medium: 'Medium',
-  hard: 'Hard',
-}
-
 interface Question {
   id: number
   question_text: string
@@ -46,7 +40,41 @@ interface Question {
   rationale?: string
   tags: string[]
   is_active: boolean
+  case_study_id?: number | null
   created_at: string
+}
+
+interface CaseStudy {
+  id: number
+  title: string
+  scenario: string
+  question_count: number
+  created_at: string
+  updated_at: string
+}
+
+interface CaseStudyQuestion {
+  id: number
+  question_text: string
+  question_type: string
+  difficulty: string
+  is_ngn: boolean
+  is_active: boolean
+}
+
+interface QuestionPayload {
+  question_text: string
+  question_type: string
+  content_area: string
+  subcategory: string | null
+  difficulty: string
+  cognitive_level: string
+  is_ngn: boolean
+  options: any[]  | { stem: string; blanks: any[] } | { rows: string[]; columns: string[] }
+  correct_answer: { type: string; value?: string; values?: string[]; values_map?: Record<string, string>; cells?: number[][] } | null
+  rationale: string | null
+  tags: string[]
+  case_study_id: number | null
 }
 
 const EMPTY_FORM = {
@@ -59,6 +87,7 @@ const EMPTY_FORM = {
   is_ngn: false,
   rationale: '',
   tags: '',
+  case_study_id: '' as string | number,
   options: [
     { id: 'a', text: '', is_correct: false },
     { id: 'b', text: '', is_correct: false },
@@ -73,6 +102,8 @@ const EMPTY_FORM = {
   matrix_columns: ['', ''],
   matrix_correct_cells: [] as number[][],
 }
+
+const EMPTY_CS_FORM = { title: '', scenario: '' }
 
 function getToken() {
   return localStorage.getItem('gritsync_token')
@@ -96,6 +127,9 @@ export function AdminQuestionBank() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
 
+  const [activeTab, setActiveTab] = useState<'questions' | 'case-studies'>('questions')
+
+  // ─── Questions state ───────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -118,12 +152,32 @@ export function AdminQuestionBank() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [questionToDelete, setQuestionToDelete] = useState<Question | null>(null)
 
+  // ─── Case Studies state ────────────────────────────────────────────────────
+  const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([])
+  const [csLoading, setCsLoading] = useState(false)
+  const [showCsModal, setShowCsModal] = useState(false)
+  const [editingCs, setEditingCs] = useState<CaseStudy | null>(null)
+  const [csForm, setCsForm] = useState({ ...EMPTY_CS_FORM })
+  const [csSaving, setCsSaving] = useState(false)
+  const [showCsDeleteConfirm, setShowCsDeleteConfirm] = useState(false)
+  const [csToDelete, setCsToDelete] = useState<CaseStudy | null>(null)
+  const [expandedCsId, setExpandedCsId] = useState<number | null>(null)
+  const [csQuestions, setCsQuestions] = useState<Record<number, CaseStudyQuestion[]>>({})
+  const [csQuestionsLoading, setCsQuestionsLoading] = useState<Record<number, boolean>>({})
+
   useEffect(() => {
     if (isAdmin()) {
       fetchQuestions()
       fetchStats()
+      fetchCaseStudies()
     }
   }, [page, filterContentArea, filterDifficulty, filterType, filterNGN, searchQuery])
+
+  useEffect(() => {
+    if (isAdmin() && activeTab === 'case-studies') {
+      fetchCaseStudies()
+    }
+  }, [activeTab])
 
   async function fetchQuestions() {
     setLoading(true)
@@ -143,7 +197,7 @@ export function AdminQuestionBank() {
       setQuestions(data.questions)
       setTotal(data.total)
       setPages(data.pages)
-    } catch (e: any) {
+    } catch {
       showToast('Failed to load questions', 'error')
     } finally {
       setLoading(false)
@@ -157,6 +211,41 @@ export function AdminQuestionBank() {
     } catch {}
   }
 
+  async function fetchCaseStudies() {
+    setCsLoading(true)
+    try {
+      const data = await apiFetch('/api/questions/case-studies')
+      setCaseStudies(data)
+    } catch {
+      showToast('Failed to load case studies', 'error')
+    } finally {
+      setCsLoading(false)
+    }
+  }
+
+  async function fetchCsQuestions(csId: number) {
+    if (csQuestions[csId]) return
+    setCsQuestionsLoading(prev => ({ ...prev, [csId]: true }))
+    try {
+      const data = await apiFetch(`/api/questions/case-studies/${csId}/questions`)
+      setCsQuestions(prev => ({ ...prev, [csId]: data }))
+    } catch {
+      showToast('Failed to load questions for this case study', 'error')
+    } finally {
+      setCsQuestionsLoading(prev => ({ ...prev, [csId]: false }))
+    }
+  }
+
+  function toggleCsExpand(csId: number) {
+    if (expandedCsId === csId) {
+      setExpandedCsId(null)
+    } else {
+      setExpandedCsId(csId)
+      fetchCsQuestions(csId)
+    }
+  }
+
+  // ─── Question modal ────────────────────────────────────────────────────────
   function openAddModal() {
     setEditingQuestion(null)
     setForm({ ...EMPTY_FORM })
@@ -179,6 +268,7 @@ export function AdminQuestionBank() {
       is_ngn: q.is_ngn,
       rationale: q.rationale || '',
       tags: (q.tags || []).join(', '),
+      case_study_id: q.case_study_id ?? '',
       options:
         q.question_type === 'traditional_mcq' || q.question_type === 'ngn_sata'
           ? opts.length >= 4
@@ -257,7 +347,7 @@ export function AdminQuestionBank() {
         correct_answer = { type: 'matrix', cells: form.matrix_correct_cells }
       }
 
-      const payload = {
+      const payload: QuestionPayload = {
         question_text: form.question_text,
         question_type: form.question_type,
         content_area: form.content_area,
@@ -269,6 +359,7 @@ export function AdminQuestionBank() {
         correct_answer,
         rationale: form.rationale || null,
         tags: form.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
+        case_study_id: form.case_study_id === '' ? null : Number(form.case_study_id),
       }
 
       if (editingQuestion) {
@@ -288,6 +379,7 @@ export function AdminQuestionBank() {
       setShowModal(false)
       fetchQuestions()
       fetchStats()
+      setCsQuestions({})
     } catch (e: any) {
       showToast(e.message || 'Failed to save question', 'error')
     } finally {
@@ -372,12 +464,68 @@ export function AdminQuestionBank() {
 
   function toggleMatrixCell(row: number, col: number) {
     const cells = form.matrix_correct_cells
-    const key = `${row},${col}`
     const exists = cells.some((c: number[]) => c[0] === row && c[1] === col)
     const newCells = exists
       ? cells.filter((c: number[]) => !(c[0] === row && c[1] === col))
       : [...cells, [row, col]]
     setForm((f) => ({ ...f, matrix_correct_cells: newCells }))
+  }
+
+  // ─── Case Study modal ──────────────────────────────────────────────────────
+  function openAddCsModal() {
+    setEditingCs(null)
+    setCsForm({ ...EMPTY_CS_FORM })
+    setShowCsModal(true)
+  }
+
+  function openEditCsModal(cs: CaseStudy) {
+    setEditingCs(cs)
+    setCsForm({ title: cs.title, scenario: cs.scenario })
+    setShowCsModal(true)
+  }
+
+  async function handleCsSave() {
+    if (!csForm.title.trim() || !csForm.scenario.trim()) {
+      showToast('Title and scenario are required', 'error')
+      return
+    }
+    setCsSaving(true)
+    try {
+      if (editingCs) {
+        await apiFetch(`/api/questions/case-studies/${editingCs.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(csForm),
+        })
+        showToast('Case study updated', 'success')
+      } else {
+        await apiFetch('/api/questions/case-studies', {
+          method: 'POST',
+          body: JSON.stringify(csForm),
+        })
+        showToast('Case study created', 'success')
+      }
+      setShowCsModal(false)
+      fetchCaseStudies()
+    } catch (e: any) {
+      showToast(e.message || 'Failed to save case study', 'error')
+    } finally {
+      setCsSaving(false)
+    }
+  }
+
+  async function confirmDeleteCs() {
+    if (!csToDelete) return
+    try {
+      await apiFetch(`/api/questions/case-studies/${csToDelete.id}`, { method: 'DELETE' })
+      showToast('Case study deleted', 'success')
+      setShowCsDeleteConfirm(false)
+      setCsToDelete(null)
+      setExpandedCsId(null)
+      setCsQuestions({})
+      fetchCaseStudies()
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete', 'error')
+    }
   }
 
   if (!isAdmin()) {
@@ -398,192 +546,355 @@ export function AdminQuestionBank() {
             <div className="flex items-center gap-3">
               <BookOpen className="h-6 w-6 text-primary-600" />
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Question Bank</h1>
-              <span className="bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 px-2 py-0.5 rounded-full text-sm font-medium">
-                {total} questions
-              </span>
+              {activeTab === 'questions' && (
+                <span className="bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 px-2 py-0.5 rounded-full text-sm font-medium">
+                  {total} questions
+                </span>
+              )}
+              {activeTab === 'case-studies' && (
+                <span className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-2 py-0.5 rounded-full text-sm font-medium">
+                  {caseStudies.length} case studies
+                </span>
+              )}
             </div>
-            <Button onClick={openAddModal}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Question
-            </Button>
+            {activeTab === 'questions' ? (
+              <Button onClick={openAddModal}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Question
+              </Button>
+            ) : (
+              <Button onClick={openAddCsModal}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Case Study
+              </Button>
+            )}
           </div>
 
-          {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="p-4 text-center">
-                <div className="text-2xl font-bold text-primary-600">{stats.total}</div>
-                <div className="text-sm text-gray-500">Active Questions</div>
-              </Card>
-              {stats.by_type?.slice(0, 3).map((t: any) => (
-                <Card key={t.question_type} className="p-4 text-center">
-                  <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">{t.count}</div>
-                  <div className="text-sm text-gray-500">{QUESTION_TYPE_LABELS[t.question_type] || t.question_type}</div>
-                </Card>
-              ))}
-            </div>
-          )}
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setActiveTab('questions')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'questions'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <BookOpen className="h-4 w-4" />
+              Questions
+            </button>
+            <button
+              onClick={() => setActiveTab('case-studies')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'case-studies'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Case Studies
+            </button>
+          </div>
 
-          <Card className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search questions..."
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
-                  className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                />
-              </div>
-              <select
-                value={filterContentArea}
-                onChange={(e) => { setFilterContentArea(e.target.value); setPage(1) }}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">All Content Areas</option>
-                {Object.entries(CONTENT_AREA_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <select
-                value={filterDifficulty}
-                onChange={(e) => { setFilterDifficulty(e.target.value); setPage(1) }}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">All Difficulties</option>
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-              <select
-                value={filterType}
-                onChange={(e) => { setFilterType(e.target.value); setPage(1) }}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">All Types</option>
-                {Object.entries(QUESTION_TYPE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <select
-                value={filterNGN}
-                onChange={(e) => { setFilterNGN(e.target.value); setPage(1) }}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">Traditional & NGN</option>
-                <option value="traditional">Traditional Only</option>
-                <option value="ngn">NGN Only</option>
-              </select>
-            </div>
-          </Card>
+          {/* ── Questions Tab ── */}
+          {activeTab === 'questions' && (
+            <>
+              {stats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold text-primary-600">{stats.total}</div>
+                    <div className="text-sm text-gray-500">Active Questions</div>
+                  </Card>
+                  {stats.by_type?.slice(0, 3).map((t: any) => (
+                    <Card key={t.question_type} className="p-4 text-center">
+                      <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">{t.count}</div>
+                      <div className="text-sm text-gray-500">{QUESTION_TYPE_LABELS[t.question_type] || t.question_type}</div>
+                    </Card>
+                  ))}
+                </div>
+              )}
 
-          <Card className="overflow-hidden">
-            {loading ? (
-              <div className="p-8 text-center text-gray-500">Loading questions...</div>
-            ) : questions.length === 0 ? (
-              <div className="p-12 text-center">
-                <BookOpen className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 mb-4">No questions found</p>
-                <Button onClick={openAddModal}>
-                  <Plus className="h-4 w-4 mr-2" />Add First Question
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Question</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-32">Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-28">Content Area</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-20">Difficulty</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-20">Status</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-28">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {questions.map((q) => (
-                      <tr key={q.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <td className="px-4 py-3">
-                          <p className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-md">
-                            {q.question_text}
-                          </p>
-                          {q.tags && q.tags.length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {q.tags.slice(0, 3).map((tag) => (
-                                <span key={tag} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${q.is_ngn ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
-                            {QUESTION_TYPE_LABELS[q.question_type] || q.question_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-gray-600 dark:text-gray-400">
-                            {CONTENT_AREA_LABELS[q.content_area] || q.content_area}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
-                            q.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                            q.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                          }`}>
-                            {q.difficulty}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => toggleActive(q)} className="flex items-center gap-1 text-xs">
-                            {q.is_active
-                              ? <CheckCircle className="h-4 w-4 text-green-500" />
-                              : <XCircle className="h-4 w-4 text-gray-400" />
-                            }
-                            <span className={q.is_active ? 'text-green-600' : 'text-gray-400'}>
-                              {q.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => openEditModal(q)} className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700">
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button onClick={() => handleDelete(q)} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+              <Card className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search questions..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+                      className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <select
+                    value={filterContentArea}
+                    onChange={(e) => { setFilterContentArea(e.target.value); setPage(1) }}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    <option value="all">All Content Areas</option>
+                    {Object.entries(CONTENT_AREA_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
                     ))}
-                  </tbody>
-                </table>
+                  </select>
+                  <select
+                    value={filterDifficulty}
+                    onChange={(e) => { setFilterDifficulty(e.target.value); setPage(1) }}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    <option value="all">All Difficulties</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                  <select
+                    value={filterType}
+                    onChange={(e) => { setFilterType(e.target.value); setPage(1) }}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    <option value="all">All Types</option>
+                    {Object.entries(QUESTION_TYPE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterNGN}
+                    onChange={(e) => { setFilterNGN(e.target.value); setPage(1) }}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    <option value="all">Traditional & NGN</option>
+                    <option value="traditional">Traditional Only</option>
+                    <option value="ngn">NGN Only</option>
+                  </select>
+                </div>
+              </Card>
 
-                {pages > 1 && (
-                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-sm text-gray-500">
-                      Page {page} of {pages} ({total} total)
-                    </p>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+              <Card className="overflow-hidden">
+                {loading ? (
+                  <div className="p-8 text-center text-gray-500">Loading questions...</div>
+                ) : questions.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <BookOpen className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 mb-4">No questions found</p>
+                    <Button onClick={openAddModal}>
+                      <Plus className="h-4 w-4 mr-2" />Add First Question
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Question</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-32">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-28">Content Area</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-20">Difficulty</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-20">Status</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-28">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {questions.map((q) => (
+                          <tr key={q.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="px-4 py-3">
+                              <p className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-md">
+                                {q.question_text}
+                              </p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {q.case_study_id && (
+                                  <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <FileText className="h-3 w-3" /> Case Study
+                                  </span>
+                                )}
+                                {q.tags && q.tags.slice(0, 3).map((tag) => (
+                                  <span key={tag} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${q.is_ngn ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
+                                {QUESTION_TYPE_LABELS[q.question_type] || q.question_type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-gray-600 dark:text-gray-400">
+                                {CONTENT_AREA_LABELS[q.content_area] || q.content_area}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
+                                q.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                q.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                              }`}>
+                                {q.difficulty}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <button onClick={() => toggleActive(q)} className="flex items-center gap-1 text-xs">
+                                {q.is_active
+                                  ? <CheckCircle className="h-4 w-4 text-green-500" />
+                                  : <XCircle className="h-4 w-4 text-gray-400" />
+                                }
+                                <span className={q.is_active ? 'text-green-600' : 'text-gray-400'}>
+                                  {q.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-2">
+                                <button onClick={() => openEditModal(q)} className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => handleDelete(q)} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {pages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+                        <p className="text-sm text-gray-500">
+                          Page {page} of {pages} ({total} total)
+                        </p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </Card>
+              </Card>
+            </>
+          )}
+
+          {/* ── Case Studies Tab ── */}
+          {activeTab === 'case-studies' && (
+            <div className="space-y-4">
+              {csLoading ? (
+                <div className="p-8 text-center text-gray-500">Loading case studies...</div>
+              ) : caseStudies.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">No case studies yet</p>
+                  <Button onClick={openAddCsModal}>
+                    <Plus className="h-4 w-4 mr-2" />Create First Case Study
+                  </Button>
+                </Card>
+              ) : (
+                caseStudies.map((cs) => (
+                  <Card key={cs.id} className="overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">{cs.title}</h3>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              cs.question_count >= 6
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                : cs.question_count > 0
+                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            }`}>
+                              {cs.question_count} question{cs.question_count !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{cs.scenario}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => toggleCsExpand(cs.id)}
+                            className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            title="Preview questions"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => openEditCsModal(cs)}
+                            className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => { setCsToDelete(cs); setShowCsDeleteConfirm(true) }}
+                            className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleCsExpand(cs.id)}
+                            className="p-1.5 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                          >
+                            {expandedCsId === cs.id
+                              ? <ChevronUp className="h-4 w-4" />
+                              : <ChevronDown className="h-4 w-4" />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {expandedCsId === cs.id && (
+                      <div className="border-t border-gray-100 dark:border-gray-700">
+                        <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800">
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Scenario</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{cs.scenario}</p>
+                        </div>
+                        <div className="px-4 py-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
+                            Linked Questions ({cs.question_count})
+                          </p>
+                          {csQuestionsLoading[cs.id] ? (
+                            <p className="text-sm text-gray-400">Loading questions...</p>
+                          ) : (csQuestions[cs.id] || []).length === 0 ? (
+                            <p className="text-sm text-gray-400 italic">
+                              No questions linked yet. Use the question form to link questions to this case study.
+                            </p>
+                          ) : (
+                            <ol className="space-y-2">
+                              {(csQuestions[cs.id] || []).map((q, idx) => (
+                                <li key={q.id} className="flex items-start gap-3 text-sm">
+                                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 flex items-center justify-center text-xs font-bold">
+                                    {idx + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-gray-800 dark:text-gray-200 line-clamp-2 ${!q.is_active ? 'opacity-50 line-through' : ''}`}>
+                                      {q.question_text}
+                                    </p>
+                                    <div className="flex gap-2 mt-1">
+                                      <span className="text-xs text-gray-500">{QUESTION_TYPE_LABELS[q.question_type] || q.question_type}</span>
+                                      <span className={`text-xs capitalize ${
+                                        q.difficulty === 'easy' ? 'text-green-600' :
+                                        q.difficulty === 'medium' ? 'text-yellow-600' : 'text-red-600'
+                                      }`}>{q.difficulty}</span>
+                                    </div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
         </main>
       </div>
 
+      {/* ── Add/Edit Question Modal ── */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingQuestion ? 'Edit Question' : 'Add Question'} size="lg">
         <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
           <div>
@@ -660,6 +971,28 @@ export function AdminQuestionBank() {
                 placeholder="Optional"
               />
             </div>
+          </div>
+
+          {/* Case Study Link */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Link to Case Study <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <select
+              value={String(form.case_study_id ?? '')}
+              onChange={(e) => setForm(f => ({ ...f, case_study_id: e.target.value }))}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              <option value="">— None —</option>
+              {caseStudies.map((cs) => (
+                <option key={cs.id} value={cs.id}>{cs.title}</option>
+              ))}
+            </select>
+            {caseStudies.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                No case studies exist yet. Create one in the Case Studies tab first.
+              </p>
+            )}
           </div>
 
           {(form.question_type === 'traditional_mcq' || form.question_type === 'ngn_sata') && (
@@ -878,6 +1211,7 @@ export function AdminQuestionBank() {
         </div>
       </Modal>
 
+      {/* ── Delete Question Confirm ── */}
       <Modal isOpen={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} title="Delete Question">
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -893,6 +1227,62 @@ export function AdminQuestionBank() {
               {deletingId !== null ? 'Deleting...' : 'Delete Question'}
             </Button>
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Add/Edit Case Study Modal ── */}
+      <Modal isOpen={showCsModal} onClose={() => setShowCsModal(false)} title={editingCs ? 'Edit Case Study' : 'New Case Study'} size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+            <input
+              type="text"
+              value={csForm.title}
+              onChange={(e) => setCsForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Postoperative Care – Hip Replacement"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Clinical Scenario *
+            </label>
+            <textarea
+              value={csForm.scenario}
+              onChange={(e) => setCsForm(f => ({ ...f, scenario: e.target.value }))}
+              rows={8}
+              placeholder="Write the shared clinical scenario that all linked questions will reference. Include patient history, vitals, lab values, and any relevant context..."
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              This scenario text is shown to students above all questions in this case study cluster.
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button onClick={handleCsSave} disabled={csSaving} className="flex-1">
+              {csSaving ? 'Saving...' : editingCs ? 'Save Changes' : 'Create Case Study'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowCsModal(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Delete Case Study Confirm ── */}
+      <Modal isOpen={showCsDeleteConfirm} onClose={() => setShowCsDeleteConfirm(false)} title="Delete Case Study">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Are you sure you want to delete <strong>{csToDelete?.title}</strong>? This will unlink all associated questions (the questions themselves will not be deleted).
+          </p>
+          <div className="flex gap-3">
+            <Button variant="destructive" onClick={confirmDeleteCs} className="flex-1">
+              Delete Case Study
+            </Button>
+            <Button variant="outline" onClick={() => { setShowCsDeleteConfirm(false); setCsToDelete(null) }} className="flex-1">
               Cancel
             </Button>
           </div>
