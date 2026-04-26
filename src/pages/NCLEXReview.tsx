@@ -39,6 +39,7 @@ interface UserStats {
   total_classic: number
   total_ngn: number
   total_sata: number
+  total_case_studies: number
   used: number
   unused: number
   correct: number
@@ -650,7 +651,7 @@ export function NCLEXReview() {
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showFreeActivate, setShowFreeActivate] = useState(false)
   const [eligibility, setEligibility] = useState<any>(null)
-  const [showClassic, setShowClassic] = useState(true)
+  const [statsTab, setStatsTab] = useState<'classic' | 'ngn' | 'case_studies'>('classic')
   const [seedingLoading, setSeedingLoading] = useState(false)
   const [seedingCaseStudiesLoading, setSeedingCaseStudiesLoading] = useState(false)
   const [showReseedConfirm, setShowReseedConfirm] = useState(false)
@@ -914,16 +915,22 @@ export function NCLEXReview() {
                 </h2>
                 <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
                   <button
-                    onClick={() => setShowClassic(true)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${showClassic ? 'bg-white dark:bg-gray-700 text-[#17c3b2] shadow-sm' : 'text-gray-500'}`}
+                    onClick={() => setStatsTab('classic')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${statsTab === 'classic' ? 'bg-white dark:bg-gray-700 text-[#17c3b2] shadow-sm' : 'text-gray-500'}`}
                   >
                     Classic ({stats?.total_classic ?? '—'})
                   </button>
                   <button
-                    onClick={() => setShowClassic(false)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${!showClassic ? 'bg-white dark:bg-gray-700 text-[#17c3b2] shadow-sm' : 'text-gray-500'}`}
+                    onClick={() => setStatsTab('ngn')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${statsTab === 'ngn' ? 'bg-white dark:bg-gray-700 text-[#17c3b2] shadow-sm' : 'text-gray-500'}`}
                   >
                     NGN ({stats?.total_ngn ?? '—'})
+                  </button>
+                  <button
+                    onClick={() => setStatsTab('case_studies')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${statsTab === 'case_studies' ? 'bg-white dark:bg-gray-700 text-[#17c3b2] shadow-sm' : 'text-gray-500'}`}
+                  >
+                    Case Studies ({stats?.total_case_studies ?? '—'})
                   </button>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 # GritSync - NCLEX Processing Agency
 
 ### Overview
-GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses aspiring to work in the US. It aims to be the leading platform for NCLEX processing, offering features such as quotation generation, real-time application tracking, secure payment processing, and an integrated NCLEX review platform. The project aims to provide an end-to-end solution for nurses, from initial application to NCLEX preparation, enhancing efficiency and user experience.
+GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses aspiring to work in the US. It aims to be the leading platform for NCLEX processing, offering features such as quotation generation, real-time application tracking, secure payment processing, and an integrated NCLEX review platform. The project aims to provide an end-to-end solution for nurses, from initial application to NCLEX preparation, enhancing efficiency and user experience. GritSync is a SaaS application designed to streamline the NCLEX application process for Filipino nurses seeking to work in the US. It aims to be the leading platform by offering quotation generation, real-time application tracking, secure payment processing, and an integrated NCLEX review platform. The project's vision is to simplify the journey for nurses pursuing international careers.
 
 ### User Preferences
 *   I prefer detailed explanations.
@@ -11,7 +11,6 @@ GritSync is a comprehensive SaaS application designed to streamline the NCLEX ap
 *   Do not make changes to file \`package-lock.json\`.
 
 ### System Architecture
-
 #### Technical Stack
 The application is built with a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a \`/api\` proxy.
 *   **Frontend**: React 18, TypeScript, Vite
@@ -238,3 +237,19 @@ To promote a user to admin:
 \`\`\`sql
 UPDATE users SET role = 'admin' WHERE email = 'your-email@example.com';
 \`\`\`
+
+The application uses a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy. PostgreSQL is used for data persistence. Authentication is handled with custom JWTs, and payments are integrated via Stripe. File storage is within the PostgreSQL database in a `file_storage` table. The UI utilizes Tailwind CSS and Lucide Icons for a responsive design.
+
+A key architectural decision is the frontend's Supabase compatibility layer (`src/lib/supabase.ts`), which translates Supabase SDK calls into direct API requests to the Express backend.
+
+The NCLEX review platform offers distinct layouts for general review and exam modes, supporting various test modes (Tutorial, Timed, CAT, Readiness) and question types (traditional MCQ, NGN SATA, NGN Cloze, NGN Matrix). It includes subscription tiers (Free, Premium, VIP) that unlock access to questions, video libraries, cheat sheets, and live lectures. NGN Case Study Clusters are supported, presenting questions linked to shared clinical scenarios.
+
+Public-facing pages like Home, About Us, Career Listing, Sponsorship Landing, Donate, Tracking, and Quote feature redesigned cinematic hero sections with AI-generated images. All EAD (Employment Authorization Document) functionalities have been removed to focus exclusively on NCLEX processing.
+
+### External Dependencies
+*   **Database**: Replit PostgreSQL
+*   **Authentication**: `bcryptjs`, `jsonwebtoken`
+*   **Payments**: Stripe (Client SDK)
+*   **Email Service**: Resend API
+*   **UI Framework**: Tailwind CSS
+*   **Icons**: Lucide Icons

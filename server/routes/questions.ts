@@ -272,7 +272,8 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
          COUNT(*) as total,
          COUNT(*) FILTER (WHERE is_ngn = false) as total_classic,
          COUNT(*) FILTER (WHERE is_ngn = true) as total_ngn,
-         COUNT(*) FILTER (WHERE question_type = 'ngn_sata') as total_sata
+         COUNT(*) FILTER (WHERE question_type = 'ngn_sata') as total_sata,
+         COUNT(*) FILTER (WHERE case_study_id IS NOT NULL) as total_case_study_questions
        FROM question_bank WHERE is_active = true`
     )
 
@@ -295,6 +296,7 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
     const totalClassic = parseInt(bank.total_classic) || 0
     const totalNgn = parseInt(bank.total_ngn) || 0
     const totalSata = parseInt(bank.total_sata) || 0
+    const totalCaseStudies = parseInt(bank.total_case_study_questions) || 0
     const used = parseInt(answered.total_used) || 0
     const correct = parseInt(answered.total_correct) || 0
     const incorrect = parseInt(answered.total_incorrect) || 0
@@ -305,6 +307,7 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
       total_classic: totalClassic,
       total_ngn: totalNgn,
       total_sata: totalSata,
+      total_case_studies: totalCaseStudies,
       used,
       unused,
       correct,
