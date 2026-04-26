@@ -74,6 +74,11 @@ const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const AdminQuestionBank = lazy(() => import('./pages/AdminQuestionBank').then(m => ({ default: m.AdminQuestionBank })))
 const AdminNCLEXSubscriptions = lazy(() => import('./pages/AdminNCLEXSubscriptions').then(m => ({ default: m.AdminNCLEXSubscriptions })))
+const NCLEXExam = lazy(() => import('./pages/NCLEXExam').then(m => ({ default: m.NCLEXExam })))
+const NCLEXVideoLibrary = lazy(() => import('./pages/NCLEXVideoLibrary').then(m => ({ default: m.NCLEXVideoLibrary })))
+const NCLEXCheatSheets = lazy(() => import('./pages/NCLEXCheatSheets').then(m => ({ default: m.NCLEXCheatSheets })))
+const NCLEXLiveLectures = lazy(() => import('./pages/NCLEXLiveLectures').then(m => ({ default: m.NCLEXLiveLectures })))
+const NCLEXOrderHistory = lazy(() => import('./pages/NCLEXOrderHistory').then(m => ({ default: m.NCLEXOrderHistory })))
 
 // Loading fallback component
 function PageLoader() {
@@ -253,6 +258,11 @@ function AppRoutes() {
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/faqs" element={<FAQs />} />
         <Route path="/nclex-review" element={<NCLEXReview />} />
+        <Route path="/nclex-review/exam/:id" element={<NCLEXExam />} />
+        <Route path="/nclex-review/video-library" element={<NCLEXVideoLibrary />} />
+        <Route path="/nclex-review/cheat-sheets" element={<NCLEXCheatSheets />} />
+        <Route path="/nclex-review/live-lectures" element={<NCLEXLiveLectures />} />
+        <Route path="/nclex-review/order-history" element={<NCLEXOrderHistory />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />
