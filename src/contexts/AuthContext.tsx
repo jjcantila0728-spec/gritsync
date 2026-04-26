@@ -154,58 +154,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function requestPasswordReset(email: string) {
-    try {
-      // Get user info first to get their name
-      const { data: userData } = await db
-        .from('users')
-        .select('id, first_name, last_name, email')
-        .eq('email', email)
-        .maybeSingle()
-
-      // Generate password reset token via Express backend
-      const res = await fetch('/api/auth/reset-password-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      const resetData = await res.json()
-
-      if (!res.ok) {
-        throw new Error(resetData.error || 'Failed to generate reset link')
-      }
-
-      // Build reset link from the token returned by the backend
-      const resetToken = resetData.token
-      if (!resetToken) {
-        // Backend returns the generic message even if email not found — that's fine
-        return
-      }
-      const resetLink = `${window.location.origin}/reset-password?token=${resetToken}`
-
-      // Get user name and ID for email
-      const userName = userData
-        ? [userData.first_name, userData.last_name].filter(Boolean).join(' ') || email.split('@')[0]
-        : email.split('@')[0]
-      const recipientUserId = userData?.id || null
-
-      // Send email using our custom template
-      const { sendForgotPasswordEmail } = await import('@/lib/email-notifications')
-      await sendForgotPasswordEmail(email, userName, resetLink, '1 hour', recipientUserId)
-    } catch (error: any) {
-      console.error('Error in requestPasswordReset:', error)
-      throw new Error(error.message || 'Failed to send password reset email')
+    const res = await fetch('/api/auth/reset-password-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to send reset email')
     }
   }
 
-  async function resetPassword(_token: string, newPassword: string) {
-    // Supabase handles password reset through email links
-    // This function is kept for compatibility but may need adjustment
-    const { error } = await db.auth.updateUser({
-      password: newPassword,
+  async function resetPassword(token: string, newPassword: string) {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
     })
-
-    if (error) {
-      throw new Error(error.message)
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to reset password')
     }
   }
 

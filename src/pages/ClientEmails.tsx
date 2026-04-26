@@ -52,6 +52,7 @@ interface EnrichedReceivedEmail extends ReceivedEmail {
   senderName?: string
   senderAvatar?: string
   isRead?: boolean
+  isGritSyncSystem?: boolean
 }
 
 export function ClientEmails() {
@@ -440,27 +441,66 @@ export function ClientEmails() {
         })
       )
       
-      // Update unread count in localStorage for sidebar badge
-      const unreadCount = enrichedEmails.filter(e => !e.isRead).length
+      // Also fetch GritSync system emails (transactional) from email_logs
+      let systemEmails: EnrichedReceivedEmail[] = []
+      try {
+        const token = localStorage.getItem('gritsync_token')
+        if (token) {
+          const sysRes = await fetch('/api/emails/my-received', {
+            headers: { 'Authorization': `Bearer ${token}` },
+          })
+          if (sysRes.ok) {
+            const sysData = await sysRes.json()
+            const hiddenIds = JSON.parse(localStorage.getItem('hiddenEmails') || '[]')
+            systemEmails = (sysData.data || [])
+              .filter((log: any) => !hiddenIds.includes(`sys_${log.id}`))
+              .map((log: any): EnrichedReceivedEmail => ({
+                id: `sys_${log.id}`,
+                object: 'email' as const,
+                from: log.sender_name ? `${log.sender_name} <${log.sender_email || 'no-reply@gritsync.com'}>` : (log.sender_email || 'GritSync <no-reply@gritsync.com>'),
+                to: [log.recipient_email],
+                subject: log.subject || '(no subject)',
+                html: log.body_html || undefined,
+                text: log.body_text || undefined,
+                created_at: log.created_at,
+                attachments: [],
+                bcc: [],
+                cc: [],
+                reply_to: [],
+                message_id: log.id,
+                senderName: log.sender_name || 'GritSync',
+                senderAvatar: undefined,
+                isRead: readEmailIds.has(`sys_${log.id}`),
+                isGritSyncSystem: true,
+              }))
+          }
+        }
+      } catch (sysErr) {
+        console.error('Error loading GritSync system emails:', sysErr)
+      }
+
+      // Merge and sort by date (newest first)
+      const allEmails = [...enrichedEmails, ...systemEmails].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      const unreadCount = allEmails.filter(e => !e.isRead).length
       if (user?.id) {
         try {
           localStorage.setItem(`unreadEmailsCount_${user.id}`, JSON.stringify({
             count: unreadCount,
             timestamp: Date.now(),
           }))
-          // Trigger event for sidebar to update
           window.dispatchEvent(new CustomEvent('emailsUpdated'))
-        } catch {
-          // Ignore errors
-        }
+        } catch { }
       }
-      
-      setReceivedEmails(enrichedEmails)
+
+      setReceivedEmails(allEmails)
       setInboxHasMore(emails.length >= 50)
     } catch (error: any) {
       console.error('Error loading inbox emails:', error)
       const errorMessage = error?.message || 'Failed to load inbox emails'
-      
+
       if (errorMessage.includes('not configured') || errorMessage.includes('API key')) {
         showToast('❌ Email system not configured. Contact admin to set up Resend API key.', 'error')
       } else if (errorMessage.includes('Invalid')) {
@@ -862,29 +902,28 @@ export function ClientEmails() {
   }
 
   const handleDeleteInboxEmail = async (emailId: string, subject: string) => {
-    if (!confirm(`Hide "${subject || '(no subject)'}"?\n\nNote: This will hide the email from your view. Resend does not support permanent deletion of received emails.`)) {
+    if (!confirm(`Hide "${subject || '(no subject)'}"?\n\nThis will hide the email from your view.`)) {
       return
     }
 
     try {
-      await resendInboxAPI.delete(emailId)
-      showToast('✅ Email hidden from inbox', 'success')
-      
-      // Remove from local state
+      if (!emailId.startsWith('sys_')) {
+        await resendInboxAPI.delete(emailId)
+      }
+      showToast('Email hidden from inbox', 'success')
+
       setReceivedEmails(prev => prev.filter(e => e.id !== emailId))
-      
-      // Remove from selection
+
       const newSelectedIds = new Set(selectedInboxIds)
       newSelectedIds.delete(emailId)
       setSelectedInboxIds(newSelectedIds)
-      
-      // Store hidden email ID in localStorage
+
       const hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails') || '[]')
       hiddenEmails.push(emailId)
       localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails))
     } catch (error: any) {
       console.error('Error hiding inbox email:', error)
-      showToast(`❌ Failed to hide email: ${error.message}`, 'error')
+      showToast(`Failed to hide email: ${error.message}`, 'error')
     }
   }
 
@@ -1107,19 +1146,24 @@ export function ClientEmails() {
                           <div className="flex-1 min-w-0 pr-2">
                             {/* Sender & Read Status (Mobile: stacked, Desktop: inline) */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0 mb-1 sm:mb-0">
-                              <div className="sm:w-40 flex-shrink-0 sm:px-2">
+                              <div className="sm:w-48 flex-shrink-0 sm:px-2">
                                 <div className="flex items-center gap-2">
                                   {!email.isRead && (
                                     <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
                                   )}
                                   <span className={cn(
-                                    'text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[160px] sm:max-w-none',
+                                    'text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[140px] sm:max-w-none',
                                     email.isRead && 'font-normal text-gray-700 dark:text-gray-300'
                                   )}>
-                                    {email.senderName && email.senderName.length > 20 
-                                      ? email.senderName.substring(0, 20) + '...' 
+                                    {email.senderName && email.senderName.length > 20
+                                      ? email.senderName.substring(0, 20) + '...'
                                       : email.senderName}
                                   </span>
+                                  {email.isGritSyncSystem && (
+                                    <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 flex-shrink-0">
+                                      GritSync
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 

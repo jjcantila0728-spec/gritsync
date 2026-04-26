@@ -410,4 +410,31 @@ router.post('/send-quote', async (req, res) => {
   }
 })
 
+// GET /api/emails/my-received — returns GritSync system emails sent to the authenticated user
+// These are transactional emails stored in email_logs (verification, welcome, password reset, etc.)
+router.get('/my-received', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { limit = 50, offset = 0 } = req.query
+
+    const result = await query(
+      `SELECT id, subject, body_html, body_text, sender_email, sender_name,
+              recipient_email, recipient_name, status, email_type, email_category,
+              created_at, sent_at, delivered_at
+       FROM email_logs
+       WHERE recipient_user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, Number(limit), Number(offset)]
+    )
+
+    res.json({ data: result.rows, total: result.rowCount })
+  } catch (error: any) {
+    console.error('my-received error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router

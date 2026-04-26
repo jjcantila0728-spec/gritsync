@@ -22,30 +22,18 @@ export function ResetPassword() {
   const { resetPassword } = useAuth()
   const { showToast } = useToast()
 
-  // Supabase uses hash fragments for auth callbacks (access_token, type, etc.)
-  // When user clicks reset link, Supabase automatically authenticates them
-  // We just need to check if we're in a password reset flow
-  const isPasswordResetFlow = window.location.hash.includes('type=recovery') || 
-                               searchParams.get('type') === 'recovery' ||
-                               window.location.hash.includes('access_token')
+  const token = searchParams.get('token')
 
   useEffect(() => {
-    // Check if Supabase has authenticated the user via the reset link
-    // If not, show error after a short delay
-    const checkSession = async () => {
-      const { db } = await import('@/lib/api-client')
-      const { data: { session } } = await db.auth.getSession()
-      if (!session && !isPasswordResetFlow) {
-        showToast('Invalid or expired reset link. Please request a new password reset.', 'error')
-        setTimeout(() => navigate('/forgot-password'), 3000)
-      }
+    if (!token) {
+      showToast('Invalid or missing reset link. Please request a new password reset.', 'error')
+      setTimeout(() => navigate('/forgot-password'), 2500)
     }
-    checkSession()
-  }, [isPasswordResetFlow, navigate, showToast])
+  }, [token, navigate, showToast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!password.trim()) {
       showToast('Please enter a new password', 'error')
       return
@@ -61,17 +49,20 @@ export function ResetPassword() {
       return
     }
 
+    if (!token) {
+      showToast('Missing reset token. Please request a new password reset.', 'error')
+      return
+    }
+
     setLoading(true)
     try {
-      // Supabase automatically authenticates the user when they click the reset link
-      // So we can directly update the password using updateUser
-      await resetPassword('', password)
+      await resetPassword(token, password)
       setSuccess(true)
       showToast('Password reset successfully!', 'success')
       setTimeout(() => navigate('/login'), 3000)
     } catch (error: any) {
       showToast(error.message || 'Failed to reset password. The link may have expired.', 'error')
-      if (error.message?.includes('session') || error.message?.includes('expired')) {
+      if (error.message?.includes('expired') || error.message?.includes('invalid') || error.message?.includes('used')) {
         setTimeout(() => navigate('/forgot-password'), 3000)
       }
     } finally {
@@ -86,7 +77,7 @@ export function ResetPassword() {
     { name: 'Reset Password', url: currentUrl },
   ]
 
-  if (!isPasswordResetFlow) {
+  if (!token) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
         <SEO
@@ -143,7 +134,7 @@ export function ResetPassword() {
                 Password Reset Successful!
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Your password has been successfully reset. You can now log in with your new password.
+                Your password has been successfully reset. Redirecting you to login...
               </p>
               <Link to="/login">
                 <Button className="w-full">
@@ -176,10 +167,10 @@ export function ResetPassword() {
                 <Lock className="h-8 w-8 text-primary-600 dark:text-primary-400" />
               </div>
               <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                Reset Password
+                Set New Password
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Enter your new password below
+                Enter and confirm your new password below
               </p>
             </div>
 
@@ -218,6 +209,10 @@ export function ResetPassword() {
                 </div>
               </div>
 
+              {password && confirmPassword && password !== confirmPassword && (
+                <p className="text-sm text-red-500 dark:text-red-400">Passwords do not match</p>
+              )}
+
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
                   <>
@@ -249,4 +244,3 @@ export function ResetPassword() {
     </div>
   )
 }
-

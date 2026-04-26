@@ -50,11 +50,22 @@ The `@supabase/supabase-js` package is aliased in `vite.config.ts` to `src/lib/s
 ## Email System
 - Emails sent via Resend API (`RESEND_API_KEY` env secret or `settings` table `resendApiKey`)
 - From address: `no-reply@gritsync.com` / `JJ Cantila at GritSync <no-reply@gritsync.com>`
-- `server/routes/auth.ts` — Contains `sendVerificationEmail()` and `sendWelcomeEmail()` inline HTML functions
-- `src/lib/email-templates.ts` — Frontend email template system with `createWelcomeOnboardingEmail()` and many other template functions (uses branding from settings table)
-- Welcome/onboarding email is sent automatically after email verification, attributed to JJ Cantila (Founder)
+- **ALL transactional emails go to `personal_email`** (user's real email), never to `gritsync_email`
+- `server/routes/auth.ts` — Contains `sendVerificationEmail()`, `sendWelcomeEmail()`, `sendPasswordResetEmail()` inline HTML functions
+- `src/lib/email-templates.ts` — Frontend email template system with many template functions
+- Welcome email is sent automatically after email verification, attributed to JJ Cantila (Founder)
 - Admin backfill endpoint: `POST /api/auth/backfill-welcome-emails` — sends welcome emails to existing verified clients who haven't received one
 - `users.welcome_email_sent_at` — timestamp column tracking when welcome email was sent
+- Client inbox (`/client/emails/inbox`) shows BOTH: Resend received emails + GritSync system emails from `email_logs` (`GET /api/emails/my-received`)
+
+## Password Reset Flow (Custom OTP — Fixed)
+1. `POST /api/auth/reset-password-request` — finds user by `personal_email` OR `gritsync_email`, generates crypto token + 6-digit OTP, stores in `password_reset_tokens` table, sends HTML email to `personal_email`
+2. `POST /api/auth/verify-reset-otp` — verifies the 6-digit OTP (15 min expiry), returns the reset token
+3. `POST /api/auth/reset-password` — accepts token + new password, hashes and saves, marks token as used
+- `password_reset_tokens` table has columns: `id, user_id, token, expires_at, used, otp, otp_expires_at, created_at`
+- Frontend: `ForgotPassword.tsx` (step 1: email input → step 2: OTP entry with 6-digit boxes), `ResetPassword.tsx` (token-based, no Supabase dependency)
+- `AuthContext.requestPasswordReset()` — calls the request endpoint
+- `AuthContext.resetPassword(token, password)` — calls the reset endpoint
 
 ## Project Structure
 ```
