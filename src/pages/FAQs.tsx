@@ -92,9 +92,7 @@ const faqCategories: FAQCategory[] = [
             <ol className="list-decimal list-inside space-y-1.5 mt-2 text-sm">
               <li><strong>Documents Collection</strong> — We gather and verify all required documents</li>
               <li><strong>Documents Review</strong> — Our team reviews and checks document completeness</li>
-              <li><strong>CGFNS Application</strong> — We apply to CGFNS for credential evaluation</li>
-              <li><strong>CGFNS Processing</strong> — CGFNS evaluates your nursing credentials</li>
-              <li><strong>CGFNS Approval</strong> — CGFNS confirms your credentials are verified</li>
+              <li><strong>NYSED Document Review</strong> — GritSync submits your documents directly to NYSED for review</li>
               <li><strong>BON Application</strong> — We submit your application to the New York Board of Nursing</li>
               <li><strong>BON Processing</strong> — NYSBON reviews your application</li>
               <li><strong>Pearson VUE Registration</strong> — We register you with Pearson VUE for the NCLEX exam</li>
@@ -110,8 +108,8 @@ const faqCategories: FAQCategory[] = [
         ),
       },
       {
-        question: 'What is CGFNS and why is it required for New York?',
-        answer: 'CGFNS (Commission on Graduates of Foreign Nursing Schools) is an organization that evaluates the educational credentials of internationally educated nurses. The New York State Board of Nursing requires a CGFNS credential evaluation as part of the NCLEX application process for Filipino nurses. GritSync handles the CGFNS application on your behalf and monitors its progress.',
+        question: 'How does GritSync process my documents with NYSED?',
+        answer: 'GritSync streamlines the document review process by submitting your credentials directly to the New York State Education Department (NYSED) for review — without routing through CGFNS. Our team prepares and coordinates the submission, monitors progress, and updates your dashboard at each stage. This direct pathway helps reduce delays and simplifies the overall process for Filipino nurses.',
       },
       {
         question: 'What are the Mandatory Courses required by New York?',
@@ -149,7 +147,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'Why does GritSync only require 3 documents in the application form?',
-        answer: 'The 3 documents you upload at the time of application (2x2 picture, nursing diploma, and passport) are the core documents needed to initiate your processing. Additional documents that may be required by CGFNS or the New York BON (such as official transcripts or letters of verification) are coordinated separately by our processing team as your application progresses through each stage. We will notify you if and when additional documents are needed.',
+        answer: 'The 3 documents you upload at the time of application (2x2 picture, nursing diploma, and passport) are the core documents needed to initiate your processing. Additional documents that may be required by NYSED or the New York BON (such as official transcripts or letters of verification) are coordinated separately by our processing team as your application progresses through each stage. We will notify you if and when additional documents are needed.',
       },
       {
         question: 'What specifications should my 2x2 picture meet?',
@@ -185,23 +183,23 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'How long does the entire NCLEX process take from application to license?',
-        answer: 'The total timeline varies, but as a general estimate: CGFNS processing typically takes 8–16 weeks, New York BON processing takes 4–12 weeks after CGFNS approval, and ATT issuance follows 1–4 weeks after BON approval. In total, most clients receive their ATT within 6–9 months from the time their complete application is submitted. The actual exam and license issuance add additional time.',
+        answer: 'The total timeline varies, but as a general estimate: NYSED document review typically takes 8–16 weeks, New York BON processing takes 4–12 weeks after NYSED review is complete, and ATT issuance follows 1–4 weeks after BON approval. In total, most clients receive their ATT within 6–9 months from the time their complete application is submitted. The actual exam and license issuance add additional time.',
       },
       {
         question: 'How can I track the status of my application?',
-        answer: 'Your GritSync dashboard shows your real-time application status at every stage — from Documents Collection all the way to License Issued. Each of the 15 timeline milestones is clearly marked as pending, in progress, or completed. You also receive email notifications for major updates.',
+        answer: 'Your GritSync dashboard shows your real-time application status at every stage — from Documents Collection all the way to License Issued. Each of the 13 timeline milestones is clearly marked as pending, in progress, or completed. You also receive email notifications for major updates.',
       },
       {
         question: 'What can slow down my NCLEX application?',
-        answer: 'Common causes of delays include: incomplete or unclear document uploads, delays in receiving official transcript verifications directly from your nursing school to CGFNS, high processing volumes at CGFNS or the New York BON, and missing completion of mandatory NY courses. GritSync proactively monitors your application and alerts you as soon as action is needed on your end.',
+        answer: 'Common causes of delays include: incomplete or unclear document uploads, delays in receiving official transcript verifications from your nursing school, high processing volumes at NYSED or the New York BON, and missing completion of mandatory NY courses. GritSync proactively monitors your application and alerts you as soon as action is needed on your end.',
       },
       {
-        question: 'How long does CGFNS processing take?',
-        answer: 'CGFNS credential evaluation for the New York pathway typically takes 8–16 weeks from the time your application is submitted. Delays can occur if your nursing school takes longer to send official transcripts or if additional verification is needed. Our team monitors CGFNS status and will update you when it is approved.',
+        question: 'How long does NYSED document review take?',
+        answer: 'NYSED document review for the New York NCLEX pathway typically takes 8–16 weeks from the time GritSync submits your documents. Delays can occur if your nursing school takes longer to provide official transcripts or if additional verification is needed. Our team monitors NYSED status and will update your dashboard when it is complete.',
       },
       {
-        question: 'How long does the New York BON take to process my application after CGFNS?',
-        answer: 'After CGFNS approval, the New York State Board of Nursing typically takes 4–12 weeks to review and process your application. Processing times can vary based on their current application volume. GritSync tracks your BON status and updates your dashboard accordingly.',
+        question: 'How long does the New York BON take to process my application after NYSED review?',
+        answer: 'After NYSED document review is complete, the New York State Board of Nursing typically takes 4–12 weeks to review and process your application. Processing times can vary based on their current application volume. GritSync tracks your BON status and updates your dashboard accordingly.',
       },
       {
         question: 'What happens between receiving my ATT and taking the exam?',
@@ -259,7 +257,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'What does the GritSync Service Fee ($150) cover?',
-        answer: 'The GritSync Service Fee covers our professional processing and coordination services throughout your entire NCLEX journey — from document review and CGFNS application coordination to BON filing, status monitoring, and support from start to license issuance.',
+        answer: 'The GritSync Service Fee covers our professional processing and coordination services throughout your entire NCLEX journey — from document review and NYSED coordination to BON filing, status monitoring, and support from start to license issuance.',
       },
       {
         question: 'Are there any fees not included in the GritSync package?',
@@ -275,7 +273,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'What is the refund policy?',
-        answer: 'If you cancel before our team has begun work on your application, a partial or full refund may be available. Once your application has been submitted to CGFNS or the BON and fees have been disbursed, those costs cannot be refunded as they are paid to third-party agencies. The GritSync Service Fee portion is reviewed on a case-by-case basis. Contact support@gritsync.com for your specific situation.',
+        answer: 'If you cancel before our team has begun work on your application, a partial or full refund may be available. Once your application has been submitted to NYSED or the BON and fees have been disbursed, those costs cannot be refunded as they are paid to third-party agencies. The GritSync Service Fee portion is reviewed on a case-by-case basis. Contact support@gritsync.com for your specific situation.',
       },
     ],
   },
@@ -383,7 +381,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'How will I be updated about my application status?',
-        answer: 'You will receive email notifications for major milestones in your application (e.g., Documents Approved, CGFNS Application Submitted, ATT Issued, etc.). You can also check your real-time status at any time by logging in to your GritSync dashboard.',
+        answer: 'You will receive email notifications for major milestones in your application (e.g., Documents Approved, NYSED Review Complete, ATT Issued, etc.). You can also check your real-time status at any time by logging in to your GritSync dashboard.',
       },
       {
         question: 'What if I have a question not covered in these FAQs?',
@@ -411,7 +409,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'What does the sponsorship cover?',
-        answer: 'Sponsorship may cover the full $775.99 package or specific components (e.g., BON fees, CGFNS fees, GritSync Service Fee). The exact coverage depends on the sponsoring employer. All terms are clearly disclosed before you sign any agreement.',
+        answer: 'Sponsorship may cover the full $775.99 package or specific components (e.g., BON fees, GritSync Service Fee, NYSED-related costs). The exact coverage depends on the sponsoring employer. All terms are clearly disclosed before you sign any agreement.',
       },
       {
         question: 'How do I apply for the sponsorship program?',

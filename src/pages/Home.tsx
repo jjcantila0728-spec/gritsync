@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
@@ -672,57 +673,7 @@ export function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-950 text-gray-400 py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-5 gap-8 mb-10">
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="logo-container">
-                  <img src="/gritsync_logo.png" alt="GritSync Logo" className="rounded-lg" />
-                </div>
-                <span className="text-xl font-bold text-white">GritSync</span>
-              </div>
-              <p className="text-sm leading-relaxed mb-4 max-w-xs">
-                Your trusted partner for NCLEX application processing. Helping Filipino nurses achieve their USRN dreams.
-              </p>
-              <div className="flex gap-3">
-                {['FB', 'IG', 'LI'].map(s => (
-                  <div key={s} className="w-9 h-9 rounded-lg bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400 hover:bg-primary-900 hover:text-primary-400 transition-colors cursor-pointer">{s}</div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/application/new" className="hover:text-primary-400 transition-colors">New Application</Link></li>
-                <li><Link to="/tracking" className="hover:text-primary-400 transition-colors">Track Applications</Link></li>
-                <li><Link to="/quote" className="hover:text-primary-400 transition-colors">Get a Quote</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/about-us" className="hover:text-primary-400 transition-colors">About Us</Link></li>
-                <li><Link to="/career" className="hover:text-primary-400 transition-colors">Careers</Link></li>
-                <li><Link to="/sponsorship" className="hover:text-primary-400 transition-colors">Sponsorship</Link></li>
-                <li><a href="#contact" className="hover:text-primary-400 transition-colors">Contact</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/privacy" className="hover:text-primary-400 transition-colors">Privacy Policy</Link></li>
-                <li><Link to="/terms" className="hover:text-primary-400 transition-colors">Terms of Service</Link></li>
-                <li><a href="#" className="hover:text-primary-400 transition-colors">FAQs</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm">
-            <p>&copy; {new Date().getFullYear()} GritSync. All rights reserved.</p>
-            <p className="text-gray-600">Made with ❤️ for Filipino Nurses worldwide</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }
