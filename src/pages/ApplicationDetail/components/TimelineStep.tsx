@@ -79,6 +79,7 @@ export function TimelineStep({
   const [showSignaturePreviewModal, setShowSignaturePreviewModal] = useState(false)
   const [signaturePreviewDataUrl, setSignaturePreviewDataUrl] = useState<string | null>(null)
   const [signaturePreviewTitle, setSignaturePreviewTitle] = useState<string>('')
+  const [generatingForm2F, setGeneratingForm2F] = useState(false)
   
   // Initialize review state from sub-step data
   useEffect(() => {
@@ -159,6 +160,106 @@ export function TimelineStep({
       setForm1Date(form1Step.date.split('T')[0])
     }
   }, [subSteps])
+
+  const generateForm2F = async () => {
+    if (!application) return
+    setGeneratingForm2F(true)
+    try {
+      const response = await fetch('/nurse2f.pdf')
+      if (!response.ok) throw new Error('Failed to fetch Form 2F PDF')
+      const pdfBytes = await response.arrayBuffer()
+      const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
+      const form = pdfDoc.getForm()
+
+      const safeSet = (fieldName: string, value: string) => {
+        try {
+          const field = form.getTextField(fieldName)
+          if (value) field.setText(value)
+        } catch {
+          // field not found or wrong type — skip silently
+        }
+      }
+
+      // Section I — Name
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].Last[0]', application.last_name || '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].First[0]', application.first_name || '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].Name[0].Middle[0]', application.middle_name || '')
+
+      // Section I — Address
+      const addressLine1 = application.house_number && application.street_name
+        ? `${application.house_number} ${application.street_name}`.trim()
+        : application.mailing_address || ''
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].Line1[0]', addressLine1)
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].City[0]', application.city || '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].State[0]', application.province || '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].CountryProvince[0]', application.country || '')
+      // ZIP: split "12345-6789" into ZIPCode1 + ZIPCode2
+      const zipParts = (application.zipcode || '').split('-')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode1[0]', zipParts[0] || '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode2[0]', zipParts[1] || '')
+
+      // Section I — Phone
+      const rawPhone = (application.mobile_number || '').replace(/\D/g, '')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].Telephone[0].AreaCode[0]', rawPhone.slice(0, 3))
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].Telephone[0].Phone1[0]', rawPhone.slice(3, 6))
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].Telephone[0].Phone2[0]', rawPhone.slice(6, 10))
+
+      // Section I — Email
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].EmailAddress[0]', application.email || '')
+
+      // Section I — Name on Diploma / DDC
+      const diplomaName = application.single_full_name || application.single_name ||
+        `${application.first_name || ''} ${application.middle_name || ''} ${application.last_name || ''}`.replace(/\s+/g, ' ').trim()
+      safeSet('MHC2[0].Page1[0].List7-9[0].NameOnDDC[0].Answer[0]', diplomaName)
+
+      // Nursing School info
+      safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].Answer1[0]', application.nursing_school || '')
+      const schoolLocation = [application.nursing_school_city, application.nursing_school_province, application.nursing_school_country]
+        .filter(Boolean).join(', ')
+      safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].Answer2[0]', schoolLocation)
+
+      // Nursing school dates
+      if (application.nursing_school_start_date) {
+        const start = new Date(application.nursing_school_start_date)
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Mo[0]', String(start.getMonth() + 1).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Day[0]', String(start.getDate()).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].From[0].Yr[0]', String(start.getFullYear()))
+      }
+      if (application.nursing_school_end_date) {
+        const end = new Date(application.nursing_school_end_date)
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Mo[0]', String(end.getMonth() + 1).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Day[0]', String(end.getDate()).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DatesOfAttendance[0].To[0].Yr[0]', String(end.getFullYear()))
+      }
+      if (application.nursing_school_diploma_date) {
+        const dip = new Date(application.nursing_school_diploma_date)
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DateAwarded[0].Mo[0]', String(dip.getMonth() + 1).padStart(2, '0'))
+        safeSet('MHC2[0].Page1[0].List7-9[0].InstitutionInfo[0].DateAwarded[0].Yr[0]', String(dip.getFullYear()))
+      }
+
+      // Page 2 — Applicant name repeat
+      const fullName = `${application.last_name || ''}, ${application.first_name || ''} ${application.middle_name || ''}`.trim().replace(/,\s*$/, '')
+      safeSet('MHC2[0].Page2[0].ApplicantName[0].Answer[0]', fullName)
+
+      const filledBytes = await pdfDoc.save()
+      const blob = new Blob([filledBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const safeName = `${(application.last_name || 'applicant').replace(/[^a-zA-Z0-9]/g, '_')}_Form2F.pdf`
+      link.download = safeName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      showToast?.('Form 2F downloaded with your information pre-filled.', 'success')
+    } catch (err) {
+      console.error('Form 2F generation error:', err)
+      showToast?.('Could not generate Form 2F. Please try again.', 'error')
+    } finally {
+      setGeneratingForm2F(false)
+    }
+  }
 
   const handleSubStepToggle = async (subStepKey: string, currentStatus: boolean) => {
     if (onUpdateSubStep && application?.id) {
@@ -3949,16 +4050,19 @@ export function TimelineStep({
               {/* Download Form 2F Button for Step 2 */}
               {stepNumber === 2 && showGenerateLetter && (
                 <div className="mt-4 flex gap-2 flex-wrap">
-                    <Button
-                    onClick={() => {
-                      window.open('https://www.op.nysed.gov/sites/op/files/2023-03/nurse2f.pdf', '_blank')
-                    }}
+                  <Button
+                    onClick={generateForm2F}
+                    disabled={generatingForm2F}
                     variant="outline"
-                      size="sm"
-                    >
-                    <Download className="h-4 w-4 mr-2" />
-                    DOWNLOAD FORM 2F
-                    </Button>
+                    size="sm"
+                  >
+                    {generatingForm2F ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    {generatingForm2F ? 'GENERATING...' : 'DOWNLOAD FORM 2F'}
+                  </Button>
                 </div>
               )}
 
