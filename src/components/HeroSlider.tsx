@@ -239,72 +239,147 @@ export function HeroSlider() {
 
         {/* ===== MOBILE LAYOUT ===== */}
         {isMobile ? (
-          <div className="relative h-full flex flex-col" style={{ zIndex: 1, minHeight: '100svh' }}>
-            {/* Nurse image — top half background */}
-            <div className="relative flex-shrink-0" style={{ height: '45vw', maxHeight: '240px', overflow: 'hidden' }}>
-              {prevSlide && (
-                <img
-                  key={`mob-prev-${prev}`}
-                  src={prevSlide.nurse}
-                  alt={prevSlide.nurseName}
-                  className="absolute bottom-0 right-4 h-full w-auto object-contain object-bottom"
-                  style={{ animation: 'gsCharExitDown 0.5s ease-in forwards', filter: 'drop-shadow(0 8px 30px rgba(0,0,0,0.5))' }}
-                />
-              )}
-              <img
-                key={`mob-curr-${current}`}
-                src={slide.nurse}
-                alt={slide.nurseName}
-                className="absolute bottom-0 right-4 h-full w-auto object-contain object-bottom"
-                style={{
-                  animation: isAnimating ? 'gsCharEnterUp 0.55s ease-out forwards' : 'none',
-                  filter: 'drop-shadow(0 8px 30px rgba(0,0,0,0.5))',
-                }}
-              />
-              {/* Glow */}
-              <div
-                className="absolute bottom-0 right-1/3"
-                style={{
-                  width: '60%', height: '40px',
-                  background: 'radial-gradient(ellipse at center, rgba(220,38,38,0.3) 0%, transparent 70%)',
-                  filter: 'blur(10px)',
-                }}
-              />
-              {/* Inline stats on mobile */}
-              <div className="absolute top-3 left-4 flex flex-col gap-2" style={{ zIndex: 5 }}>
-                {slideStats.map((s, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{
-                      background: 'rgba(10,22,40,0.85)',
-                      border: `1px solid ${i === 0 ? 'rgba(220,38,38,0.4)' : 'rgba(29,78,216,0.4)'}`,
-                      backdropFilter: 'blur(8px)',
-                    }}
-                  >
-                    <span className="text-base font-black" style={{ color: i === 0 ? '#DC2626' : '#60a5fa' }}>{s.value}</span>
-                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>{s.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="relative flex flex-col" style={{ zIndex: 1, minHeight: '100svh' }}>
 
-            {/* Text content — bottom half */}
-            <div className="flex-1 flex flex-col justify-center px-5 pb-20 pt-4" style={{ position: 'relative' }}>
+            {/* TOP: Text content */}
+            <div className="flex-shrink-0 px-5 pt-6 pb-4" style={{ position: 'relative', zIndex: 2 }}>
               {prevSlide && (
                 <div
                   key={`mob-prev-text-${prev}`}
-                  className="absolute inset-x-5 top-4"
-                  style={{ animation: 'gsSlideOutDown 0.5s ease-in forwards', zIndex: 1 }}
+                  className="absolute inset-x-5 top-6"
+                  style={{ animation: 'gsSlideOutLeft 0.5s ease-in forwards', zIndex: 1 }}
                 >
                   <MobileSlideText slide={prevSlide} />
                 </div>
               )}
               <div
                 key={`mob-curr-text-${current}`}
-                style={{ animation: isAnimating ? 'gsSlideInUp 0.5s ease-out forwards' : 'none', position: 'relative', zIndex: 2 }}
+                style={{ animation: isAnimating ? 'gsSlideInRight 0.5s ease-out forwards' : 'none', position: 'relative', zIndex: 2 }}
               >
                 <MobileSlideText slide={slide} />
+              </div>
+            </div>
+
+            {/* BOTTOM: Nurse image with overlays */}
+            <div className="relative flex-1" style={{ minHeight: '52vw' }}>
+              {/* Nurse image */}
+              {prevSlide && (
+                <img
+                  key={`mob-prev-${prev}`}
+                  src={prevSlide.nurse}
+                  alt={prevSlide.nurseName}
+                  className="absolute bottom-0 left-1/2 h-full w-auto object-contain object-bottom"
+                  style={{
+                    transform: 'translateX(-50%)',
+                    animation: 'gsCharExitDown 0.5s ease-in forwards',
+                    filter: 'drop-shadow(0 12px 40px rgba(0,0,0,0.6))',
+                  }}
+                />
+              )}
+              <img
+                key={`mob-curr-${current}`}
+                src={slide.nurse}
+                alt={slide.nurseName}
+                className="absolute bottom-0 left-1/2 h-full w-auto object-contain object-bottom"
+                style={{
+                  transform: 'translateX(-50%)',
+                  animation: isAnimating ? 'gsCharEnterUp 0.55s ease-out forwards' : 'none',
+                  filter: 'drop-shadow(0 12px 40px rgba(0,0,0,0.6))',
+                }}
+              />
+
+              {/* Glow under nurse */}
+              <div
+                className="absolute bottom-0 left-1/2"
+                style={{
+                  transform: 'translateX(-50%)',
+                  width: '70%', height: '50px',
+                  background: 'radial-gradient(ellipse at center, rgba(220,38,38,0.3) 0%, transparent 70%)',
+                  filter: 'blur(12px)',
+                }}
+              />
+
+              {/* Quote bubble — top-left of image area */}
+              <div
+                className="absolute"
+                style={{
+                  top: '10%',
+                  left: '4%',
+                  maxWidth: '48%',
+                  background: 'rgba(10,22,40,0.88)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
+                  backdropFilter: 'blur(8px)',
+                  zIndex: 5,
+                  animation: isAnimating ? 'gsBadgePop 0.5s 0.3s ease-out both' : 'gsFloat 5s ease-in-out infinite',
+                }}
+              >
+                <span style={{ color: '#DC2626', fontSize: '1rem', lineHeight: 1 }}>"</span>
+                <p className="text-xs italic leading-snug" style={{ color: 'rgba(255,255,255,0.8)', marginTop: '2px' }}>
+                  {slide.quote}
+                </p>
+              </div>
+
+              {/* Stat badge — left */}
+              <div
+                className="absolute"
+                style={{
+                  bottom: '38%',
+                  left: '4%',
+                  background: 'rgba(10,22,40,0.90)',
+                  border: '1px solid rgba(220,38,38,0.45)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+                  animation: isAnimating ? 'gsBadgePop 0.5s 0.2s ease-out both' : 'gsFloat 4s ease-in-out infinite',
+                  zIndex: 5,
+                  minWidth: '90px',
+                }}
+              >
+                <p className="text-lg font-black leading-none" style={{ color: '#DC2626' }}>{slideStats[0].value}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{slideStats[0].label}</p>
+              </div>
+
+              {/* Stat badge — right */}
+              <div
+                className="absolute"
+                style={{
+                  bottom: '48%',
+                  right: '4%',
+                  background: 'rgba(10,22,40,0.90)',
+                  border: '1px solid rgba(29,78,216,0.45)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+                  animation: isAnimating ? 'gsBadgePop 0.5s 0.4s ease-out both' : 'gsFloat 4.5s 0.5s ease-in-out infinite',
+                  zIndex: 5,
+                  minWidth: '90px',
+                }}
+              >
+                <p className="text-lg font-black leading-none" style={{ color: '#60a5fa' }}>{slideStats[1].value}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{slideStats[1].label}</p>
+              </div>
+
+              {/* Name card — bottom center */}
+              <div
+                className="absolute bottom-4 left-1/2"
+                style={{
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(10,22,40,0.92)',
+                  border: '1px solid rgba(220,38,38,0.4)',
+                  borderRadius: '10px',
+                  padding: '8px 18px',
+                  whiteSpace: 'nowrap',
+                  backdropFilter: 'blur(8px)',
+                  zIndex: 5,
+                  animation: isAnimating ? 'gsFadeInUp 0.5s 0.4s ease-out both' : 'none',
+                }}
+              >
+                <p className="text-white font-bold text-xs">{slide.nurseName}</p>
+                <p className="text-xs font-medium" style={{ color: '#DC2626' }}>{slide.nurseTitle}</p>
               </div>
             </div>
           </div>
@@ -563,18 +638,6 @@ function MobileSlideText({ slide }: { slide: (typeof slides)[0] }) {
       <p className="leading-relaxed text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
         {slide.sub}
       </p>
-
-      <div
-        className="flex items-start gap-2 p-3 rounded-xl"
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          backdropFilter: 'blur(4px)',
-        }}
-      >
-        <span style={{ color: '#DC2626', fontSize: '1.25rem', lineHeight: 1 }}>"</span>
-        <p className="text-xs italic" style={{ color: 'rgba(255,255,255,0.75)' }}>{slide.quote}</p>
-      </div>
 
       <div className="flex gap-3 pt-1">
         <Link to="/register" className="flex-1">
