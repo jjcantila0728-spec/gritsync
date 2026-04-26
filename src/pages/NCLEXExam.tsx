@@ -294,6 +294,7 @@ function ScoreSheet({ session, questions, onClose, onReviewAll }: {
 
   const byArea: Record<string, { total: number; correct: number }> = {}
   const byDiff: Record<string, { total: number; correct: number }> = {}
+  const byCaseStudy: Record<string, { title: string; total: number; correct: number }> = {}
 
   for (const q of questions) {
     if (q.answered_at) {
@@ -306,6 +307,13 @@ function ScoreSheet({ session, questions, onClose, onReviewAll }: {
       if (q.is_correct) {
         byArea[area].correct++
         byDiff[diff].correct++
+      }
+      if (q.case_study_id) {
+        if (!byCaseStudy[q.case_study_id]) {
+          byCaseStudy[q.case_study_id] = { title: q.case_study_title || 'Untitled Case Study', total: 0, correct: 0 }
+        }
+        byCaseStudy[q.case_study_id].total++
+        if (q.is_correct) byCaseStudy[q.case_study_id].correct++
       }
     }
   }
@@ -383,6 +391,34 @@ function ScoreSheet({ session, questions, onClose, onReviewAll }: {
                     <DifficultyBadge difficulty={diff} />
                     <p className="text-2xl font-black text-gray-900 mt-2">{pct}%</p>
                     <p className="text-xs text-gray-500">{d.correct}/{d.total}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* By case study */}
+        {Object.keys(byCaseStudy).length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2 text-sm">
+              <BookOpen className="h-4 w-4 text-[#17c3b2]" /> Case Studies
+            </h3>
+            <div className="space-y-3">
+              {Object.entries(byCaseStudy).map(([id, d]) => {
+                const pct = d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0
+                return (
+                  <div key={id}>
+                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                      <span className="font-medium truncate pr-2">{d.title}</span>
+                      <span className="font-semibold shrink-0">{d.correct}/{d.total} ({pct}%)</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${pct >= 75 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   </div>
                 )
               })}
