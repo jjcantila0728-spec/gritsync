@@ -5,7 +5,7 @@ import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { SEO, generateOrganizationSchema, generateWebSiteSchema, generateFAQSchema } from '@/components/SEO'
+import { SEO, generateOrganizationSchema, generateWebSiteSchema, generateFAQSchema, generateHowToSchema, generateLocalBusinessSchema } from '@/components/SEO'
 import { HeroSlider } from '@/components/HeroSlider'
 import { 
   FileText, 
@@ -183,29 +183,44 @@ export function Home() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
-        title="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
-        description="Professional NCLEX application processing service. Get expert assistance with NCLEX applications, document management, and payment processing. Fast, secure, and reliable. Trusted by nurses worldwide."
-        keywords="NCLEX, NCLEX application, nursing license, US nursing, NCLEX processing, nursing exam, registered nurse, NCLEX assistance, NCLEX sponsorship, nursing career, healthcare jobs, NCLEX tracking, nursing application"
+        title="GritSync | NCLEX Processing for Filipino Nurses — US Nursing Licensure Made Simple"
+        description="GritSync is the trusted NCLEX application processing agency for Filipino nurses. We handle NYSED submissions, BON applications, Pearson VUE registration, and ATT acquisition — so you can focus on passing the exam."
+        keywords="NCLEX processing Philippines, Filipino nurse USA, NCLEX application Philippines, NCLEX processing agency, Filipino nurses US nursing license, NCLEX Philippines to USA, nursing licensure USA, PRC to US nursing license, NCLEX ATT Philippines, NYSED nursing application, BON application nurses, Pearson VUE registration nurses, USRN processing, Philippine nurses NCLEX, NCLEX sponsorship Philippines"
         canonicalUrl={currentUrl}
-        ogTitle="GritSync - NCLEX Processing Agency | Your Trusted Partner for US Nursing Licensure"
-        ogDescription="Professional NCLEX application processing service. Get expert assistance with NCLEX applications, document management, and payment processing. Trusted by nurses worldwide."
+        ogTitle="GritSync | NCLEX Processing for Filipino Nurses — US Nursing Licensure Made Simple"
+        ogDescription="GritSync is the trusted NCLEX application processing agency for Filipino nurses. We handle NYSED submissions, BON applications, Pearson VUE registration, and ATT acquisition — so you can focus on passing the exam."
         ogImage={`${baseUrl}/gritsync_logo.png`}
         ogUrl={currentUrl}
-        twitterTitle="GritSync - NCLEX Processing Agency"
-        twitterDescription="Professional NCLEX application processing service. Fast, secure, and reliable."
+        twitterTitle="GritSync | NCLEX Processing for Filipino Nurses"
+        twitterDescription="Trusted NCLEX application processing agency for Filipino nurses. NYSED, BON, Pearson VUE, and ATT — fully handled for you."
         twitterImage={`${baseUrl}/gritsync_logo.png`}
         structuredData={[
           generateOrganizationSchema(),
           generateWebSiteSchema(),
+          generateLocalBusinessSchema(),
+          generateHowToSchema(),
           generateFAQSchema(faqData),
           {
             '@context': 'https://schema.org',
             '@type': 'Service',
+            '@id': 'https://gritsync.com/#nclex-processing-service',
+            name: 'NCLEX Application Processing for Filipino Nurses',
             serviceType: 'NCLEX Application Processing',
-            description: 'Professional NCLEX application processing service helping nurses navigate the NCLEX process to become registered nurses in the United States.',
-            provider: { '@type': 'Organization', name: 'GritSync' },
-            areaServed: { '@type': 'Country', name: 'United States' },
-            offers: { '@type': 'Offer', description: 'NCLEX application processing with real-time tracking and expert support' },
+            description: 'End-to-end NCLEX application processing for Filipino nurses — document collection, NYSED submission, BON application, Pearson VUE registration, and ATT acquisition.',
+            provider: { '@id': 'https://gritsync.com/#organization' },
+            areaServed: [
+              { '@type': 'Country', name: 'United States' },
+              { '@type': 'Country', name: 'Philippines' },
+            ],
+            audience: {
+              '@type': 'Audience',
+              audienceType: 'Filipino nurses and internationally educated nurses seeking US nursing licensure',
+            },
+            offers: {
+              '@type': 'Offer',
+              description: 'NCLEX application processing with real-time tracking, expert support, and NCLEX sponsorship available',
+              url: 'https://gritsync.com/quote',
+            },
           },
         ]}
       />

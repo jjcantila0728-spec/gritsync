@@ -101,9 +101,9 @@ export function SponsorshipLanding() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
-        title="NCLEX Sponsorship Program - Financial Support for Aspiring USRNs | GritSync"
-        description="Apply for NCLEX sponsorship to receive financial support for your NCLEX exam fees. Our program helps nurses overcome financial barriers and achieve their dream of becoming a USRN in the United States."
-        keywords="NCLEX sponsorship, NCLEX financial aid, USRN sponsorship, nursing exam funding, NCLEX support, nursing sponsorship program"
+        title="NCLEX Sponsorship Program for Filipino Nurses — Financial Support | GritSync"
+        description="Apply for GritSync's NCLEX sponsorship program. Qualified Filipino nurses receive financial assistance covering NCLEX processing fees in exchange for a service commitment. Limited slots available."
+        keywords="NCLEX sponsorship Philippines, NCLEX financial aid Filipino nurses, USRN sponsorship program, nursing exam sponsorship Philippines, NCLEX funding Filipino, NCLEX scholarship Philippines, sponsored USRN program"
         canonicalUrl={currentUrl}
         ogTitle="NCLEX Sponsorship Program - Financial Support for Aspiring USRNs | GritSync"
         ogDescription="Apply for NCLEX sponsorship to receive financial support for your NCLEX exam fees."

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
-import { SEO } from '@/components/SEO'
+import { SEO, generateFAQSchema, generateBreadcrumbSchema } from '@/components/SEO'
 import { ChevronDown, ChevronUp, Search, HelpCircle, FileText, CreditCard, Clock, Globe, User, Shield, MessageCircle, BookOpen, CheckCircle, AlertCircle } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 interface FAQItem {
   question: string
@@ -486,11 +486,34 @@ export function FAQs() {
 
   const totalFAQs = faqCategories.reduce((sum, cat) => sum + cat.faqs.length, 0)
 
+  const location = useLocation()
+  const currentUrl = `https://gritsync.com${location.pathname}`
+
+  const schemaFAQs = faqCategories.flatMap((cat) =>
+    cat.faqs
+      .filter((f) => typeof f.answer === 'string')
+      .map((f) => ({ question: f.question, answer: f.answer as string }))
+  )
+
+  const breadcrumbs = [
+    { name: 'Home', url: 'https://gritsync.com/' },
+    { name: 'FAQs', url: 'https://gritsync.com/faqs' },
+  ]
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
-        title="Frequently Asked Questions | GritSync"
-        description="Everything you need to know about NCLEX application processing for Filipino nurses — documents, timeline, fees, the exam, and more."
+        title="NCLEX FAQs for Filipino Nurses | GritSync — All Your Questions Answered"
+        description={`${totalFAQs} frequently asked questions about NCLEX application processing for Filipino nurses — documents, timeline, fees, the exam, sponsorship, tracking, and more. Get clear answers from GritSync.`}
+        keywords="NCLEX FAQ Philippines, NCLEX questions Filipino nurses, NCLEX application questions, NCLEX processing questions, NCLEX documents required Philippines, NCLEX timeline Philippines, NCLEX sponsorship questions, USRN FAQ, PRC to USRN questions"
+        canonicalUrl={currentUrl}
+        ogTitle="NCLEX FAQs for Filipino Nurses | GritSync"
+        ogDescription={`${totalFAQs} FAQs about NCLEX application processing for Filipino nurses — documents, timeline, fees, sponsorship, and more.`}
+        ogUrl={currentUrl}
+        structuredData={[
+          generateFAQSchema(schemaFAQs),
+          generateBreadcrumbSchema(breadcrumbs),
+        ]}
       />
       <Header />
 

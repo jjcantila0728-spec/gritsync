@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <url>
+    <loc>https://gritsync.com/</loc>
+    <image:image>
+      <image:loc>https://gritsync.com/gritsync_logo.png</image:loc>
+      <image:title>GritSync Logo — NCLEX Processing Agency</image:title>
+      <image:caption>GritSync is a professional NCLEX application processing agency for Filipino nurses seeking US nursing licensure.</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://gritsync.com/assets/nurses/nurse-female-1.png</image:loc>
+      <image:title>Filipino Nurse — GritSync NCLEX Processing Success Story</image:title>
+      <image:caption>Maria Santos, BSN, RN — California Licensed. GritSync helps Filipino nurses become licensed RNs in the USA.</image:caption>
+    </image:image>
+  </url>
+
+  <url>
+    <loc>https://gritsync.com/about-us</loc>
+    <image:image>
+      <image:loc>https://gritsync.com/about-us-banner.png</image:loc>
+      <image:title>GritSync Team — About Us</image:title>
+      <image:caption>The GritSync team is dedicated to helping Filipino nurses navigate the NCLEX application process.</image:caption>
+    </image:image>
+  </url>
+
+</urlset>

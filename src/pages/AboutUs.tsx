@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
-import { SEO, generateOrganizationSchema, generateBreadcrumbSchema } from '@/components/SEO'
+import { SEO, generateOrganizationSchema, generateBreadcrumbSchema, generateLocalBusinessSchema } from '@/components/SEO'
 import { Users, Heart, Target, Award, Globe, Shield, CheckCircle, ArrowRight, Star, Zap, GraduationCap, TrendingUp } from 'lucide-react'
 
 function useInView(ref: React.RefObject<Element>, threshold = 0.2) {
@@ -108,16 +108,15 @@ export function AboutUs() {
         ogUrl={currentUrl}
         structuredData={[
           generateOrganizationSchema(),
+          generateLocalBusinessSchema(),
           generateBreadcrumbSchema(breadcrumbs),
           {
             '@context': 'https://schema.org',
             '@type': 'AboutPage',
-            name: 'About GritSync',
-            description: 'GritSync is a dedicated consultancy service committed to assisting nurses in navigating the NCLEX process to become registered nurses in the United States.',
+            name: 'About GritSync — NCLEX Processing Agency for Filipino Nurses',
+            description: 'GritSync is a professional NCLEX application processing agency founded by experienced USRNs. We are committed to helping Filipino nurses and internationally educated nurses navigate the NCLEX process to become Registered Nurses in the United States.',
             mainEntity: {
-              '@type': 'Organization',
-              name: 'GritSync',
-              founder: { '@type': 'Person', name: 'JJ Cantila', jobTitle: 'RM, RN, SGRN, CADRN, USRN' },
+              '@id': 'https://gritsync.com/#organization',
             },
           },
         ]}

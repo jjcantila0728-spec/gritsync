@@ -1,6 +1,6 @@
-# robots.txt for GritSync
-# Allow all search engines to crawl the site
+# robots.txt for GritSync — https://gritsync.com
 
+# ── Standard crawlers ─────────────────────────────────────────────
 User-agent: *
 Allow: /
 Disallow: /admin/
@@ -12,24 +12,82 @@ Disallow: /account-settings
 Disallow: /documents
 Disallow: /test-supabase
 
-# Allow public pages
+# ── Google ────────────────────────────────────────────────────────
+User-agent: Googlebot
 Allow: /
-Allow: /about-us
-Allow: /donate
-Allow: /career
-Allow: /terms
-Allow: /privacy
-Allow: /quote
-Allow: /quotations
-Allow: /tracking
-Allow: /sponsorship/apply
-Allow: /login
-Allow: /register
-Allow: /forgot-password
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /applications/
+Disallow: /my-details
+Disallow: /account-settings
 
-# Sitemap location
-Sitemap: https://gritsync.com/sitemap.xml
+User-agent: Googlebot-Image
+Allow: /assets/
+Allow: /gritsync_logo.png
+Allow: /about-us-banner.png
 
-# Crawl delay (optional, helps prevent server overload)
+# ── Bing ──────────────────────────────────────────────────────────
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard
+
+# ── AI / LLM crawlers (explicitly allowed for AI search indexing) ─
+User-agent: GPTBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /applications/
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard
+
+User-agent: YouBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: Diffbot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+# ── Crawl delay ───────────────────────────────────────────────────
 Crawl-delay: 1
 
+# ── Sitemaps ──────────────────────────────────────────────────────
+Sitemap: https://gritsync.com/sitemap.xml
+Sitemap: https://gritsync.com/sitemap-images.xml
