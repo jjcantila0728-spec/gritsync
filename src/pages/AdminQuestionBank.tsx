@@ -127,7 +127,7 @@ export function AdminQuestionBank() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
 
-  const [activeTab, setActiveTab] = useState<'questions' | 'case-studies'>('questions')
+  const [activeTab, setActiveTab] = useState<'questions' | 'case-studies' | 'tags'>('questions')
 
   // ─── Questions state ───────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([])
@@ -153,6 +153,15 @@ export function AdminQuestionBank() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [questionToDelete, setQuestionToDelete] = useState<Question | null>(null)
+
+  // ─── Tags state ────────────────────────────────────────────────────────────
+  const [tagsWithCounts, setTagsWithCounts] = useState<{ tag: string; count: number }[]>([])
+  const [tagsLoading, setTagsLoading] = useState(false)
+  const [showRenameModal, setShowRenameModal] = useState(false)
+  const [renamingTag, setRenamingTag] = useState<string | null>(null)
+  const [renameInput, setRenameInput] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
+  const [tagSearch, setTagSearch] = useState('')
 
   // ─── Case Studies state ────────────────────────────────────────────────────
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([])
@@ -192,7 +201,49 @@ export function AdminQuestionBank() {
     if (isAdmin() && activeTab === 'case-studies') {
       fetchCaseStudies()
     }
+    if (isAdmin() && activeTab === 'tags') {
+      fetchTagsWithCounts()
+    }
   }, [activeTab])
+
+  async function fetchTagsWithCounts() {
+    setTagsLoading(true)
+    try {
+      const data = await apiFetch('/api/questions/tags/with-counts')
+      setTagsWithCounts(data.tags || [])
+    } catch {
+      showToast('Failed to load tags', 'error')
+    } finally {
+      setTagsLoading(false)
+    }
+  }
+
+  function openRenameModal(tag: string) {
+    setRenamingTag(tag)
+    setRenameInput(tag)
+    setShowRenameModal(true)
+  }
+
+  async function handleRenameTag() {
+    if (!renamingTag || !renameInput.trim()) return
+    setRenameSaving(true)
+    try {
+      const data = await apiFetch('/api/questions/tags/rename', {
+        method: 'PUT',
+        body: JSON.stringify({ oldTag: renamingTag, newTag: renameInput.trim() }),
+      })
+      showToast(`Renamed "${renamingTag}" to "${data.newTag}" on ${data.updated} question${data.updated !== 1 ? 's' : ''}`, 'success')
+      setShowRenameModal(false)
+      setRenamingTag(null)
+      setRenameInput('')
+      fetchTagsWithCounts()
+      fetchAvailableTags()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to rename tag', 'error')
+    } finally {
+      setRenameSaving(false)
+    }
+  }
 
   async function fetchQuestions() {
     setLoading(true)
@@ -572,18 +623,23 @@ export function AdminQuestionBank() {
                   {caseStudies.length} case studies
                 </span>
               )}
+              {activeTab === 'tags' && (
+                <span className="bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 px-2 py-0.5 rounded-full text-sm font-medium">
+                  {tagsWithCounts.length} tags
+                </span>
+              )}
             </div>
             {activeTab === 'questions' ? (
               <Button onClick={openAddModal}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Question
               </Button>
-            ) : (
+            ) : activeTab === 'case-studies' ? (
               <Button onClick={openAddCsModal}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Case Study
               </Button>
-            )}
+            ) : null}
           </div>
 
           {/* Tab bar */}
@@ -609,6 +665,17 @@ export function AdminQuestionBank() {
             >
               <FileText className="h-4 w-4" />
               Case Studies
+            </button>
+            <button
+              onClick={() => setActiveTab('tags')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'tags'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Tag className="h-4 w-4" />
+              Tags
             </button>
           </div>
 
@@ -934,8 +1001,119 @@ export function AdminQuestionBank() {
               )}
             </div>
           )}
+
+          {/* ── Tags Tab ── */}
+          {activeTab === 'tags' && (
+            <div className="space-y-4">
+              <Card className="p-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search tags..."
+                    value={tagSearch}
+                    onChange={(e) => setTagSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+                </div>
+              </Card>
+
+              {tagsLoading ? (
+                <div className="p-8 text-center text-gray-500">Loading tags...</div>
+              ) : tagsWithCounts.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <Tag className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No tags found. Add tags to questions to see them here.</p>
+                </Card>
+              ) : (
+                <Card className="overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Tag</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-40">Questions</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase w-40">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {tagsWithCounts
+                        .filter((t) => t.tag.toLowerCase().includes(tagSearch.toLowerCase()))
+                        .map((item) => (
+                        <tr key={item.tag} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2.5 py-1 rounded-full text-sm font-medium">
+                              <Tag className="h-3.5 w-3.5" />
+                              {item.tag}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {item.count} question{item.count !== 1 ? 's' : ''}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setFilterTag(item.tag)
+                                  setActiveTab('questions')
+                                  setPage(1)
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-primary-200 dark:border-primary-800 transition-colors"
+                                title="View questions with this tag"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View
+                              </button>
+                              <button
+                                onClick={() => openRenameModal(item.tag)}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600 transition-colors"
+                                title="Rename this tag"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                                Rename
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+              )}
+            </div>
+          )}
         </main>
       </div>
+
+      {/* ── Rename Tag Modal ── */}
+      <Modal isOpen={showRenameModal} onClose={() => setShowRenameModal(false)} title="Rename Tag">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Renaming <strong>"{renamingTag}"</strong> will update this tag on every question that uses it.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Tag Name</label>
+            <input
+              type="text"
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameTag() }}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              placeholder="Enter new tag name..."
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button onClick={handleRenameTag} disabled={renameSaving || !renameInput.trim()} className="flex-1">
+              {renameSaving ? 'Saving...' : 'Rename Tag'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowRenameModal(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Add/Edit Question Modal ── */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingQuestion ? 'Edit Question' : 'Add Question'} size="lg">

@@ -1099,6 +1099,49 @@ router.get('/tags', authenticateToken, async (_req, res) => {
   }
 })
 
+router.get('/tags/with-counts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+    const result = await query(
+      `SELECT t.tag, COUNT(DISTINCT qb.id) AS count
+       FROM question_bank qb, UNNEST(qb.tags) AS t(tag)
+       WHERE qb.tags IS NOT NULL AND array_length(qb.tags, 1) > 0
+       GROUP BY t.tag
+       ORDER BY t.tag`
+    )
+    res.json({ tags: result.rows.map((r: any) => ({ tag: r.tag, count: parseInt(r.count) })) })
+  } catch (error: any) {
+    console.error('Get tags with counts error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.put('/tags/rename', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
+    const { oldTag, newTag } = req.body
+    if (!oldTag || !newTag) return res.status(400).json({ error: 'oldTag and newTag are required' })
+    const trimmedNew = newTag.trim().toLowerCase()
+    if (!trimmedNew) return res.status(400).json({ error: 'newTag cannot be empty' })
+    if (trimmedNew === oldTag.trim().toLowerCase()) return res.status(400).json({ error: 'New tag must be different from the old tag' })
+    // Replace old tag then deduplicate within each row to avoid double-tags when merging
+    const result = await query(
+      `UPDATE question_bank
+       SET tags = (
+         SELECT ARRAY_AGG(DISTINCT t ORDER BY t)
+         FROM UNNEST(array_replace(tags, $1, $2)) AS t
+       )
+       WHERE $1 = ANY(tags)
+       RETURNING id`,
+      [oldTag, trimmedNew]
+    )
+    res.json({ updated: result.rows.length, newTag: trimmedNew })
+  } catch (error: any) {
+    console.error('Rename tag error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const countResult = await query(
