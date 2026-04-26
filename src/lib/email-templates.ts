@@ -1402,3 +1402,104 @@ export async function createDocumentRejectedEmail(data: {
   }
 }
 
+/**
+ * Welcome / Onboarding Email — from JJ Cantila (Founder)
+ * Sent immediately after successful email verification
+ */
+export async function createWelcomeOnboardingEmail(data: {
+  userName: string
+  firstName: string
+  gritId?: string
+  gritsyncEmail?: string
+  myDetailsUrl: string
+  documentsUrl: string
+  dashboardUrl: string
+}): Promise<{ subject: string; html: string }> {
+  const { userName, firstName, gritId, gritsyncEmail, myDetailsUrl, documentsUrl, dashboardUrl } = data
+  const branding = await getBrandingSettings()
+  const colors = {
+    ...defaultColors,
+    primary: branding.primaryColor,
+    primaryDark: branding.primaryDark,
+    secondary: branding.secondaryColor,
+  }
+
+  const content = `
+    <div class="email-content">
+      <h1 style="color:${colors.primary};">Welcome to GritSync, ${firstName}! 🎉</h1>
+
+      <p>Hi ${firstName},</p>
+
+      <p>I'm JJ Cantila — founder of GritSync and a Filipino nurse who has walked this exact path before you. I'm personally reaching out to welcome you and make sure you start your NCLEX journey on the right foot.</p>
+
+      <p>Your email has been verified and your GritSync account is now fully active. We're honored to be part of one of the most important milestones of your nursing career.</p>
+
+      ${gritId || gritsyncEmail ? `
+      <div class="info-box" style="background:#f0fdf4;border-left:4px solid ${colors.primary};padding:20px 24px;border-radius:8px;margin:24px 0;">
+        <h3 style="margin:0 0 12px;color:${colors.primary};font-size:16px;">Your Account Details</h3>
+        ${gritId ? `<p style="margin:4px 0;"><strong>GRIT ID:</strong> <span style="font-family:monospace;font-size:16px;font-weight:700;color:${colors.primary};">${gritId}</span></p>` : ''}
+        ${gritsyncEmail ? `<p style="margin:4px 0;"><strong>GritSync Email:</strong> ${gritsyncEmail}</p>` : ''}
+        <p style="margin:12px 0 0;font-size:13px;color:#6b7280;">Please save these details — you'll need them throughout your application process.</p>
+      </div>
+      ` : ''}
+
+      <div class="warning-box" style="background:#fffbeb;border-left:4px solid #f59e0b;padding:20px 24px;border-radius:8px;margin:24px 0;">
+        <h3 style="margin:0 0 10px;color:#92400e;font-size:16px;">⚠️ Important: Complete These Steps Right Away</h3>
+        <p style="margin:0;color:#78350f;">To begin processing your application, we need two things from you <strong>as soon as possible</strong>. These are required before we can move forward with any processing.</p>
+      </div>
+
+      <h2 style="color:${colors.dark};margin:32px 0 16px;">Your Next Steps</h2>
+
+      <div class="card" style="border-left:4px solid ${colors.primary};margin-bottom:16px;">
+        <div style="display:flex;align-items:flex-start;gap:16px;">
+          <div style="flex-shrink:0;width:40px;height:40px;background:${colors.primary};color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;text-align:center;line-height:40px;">1</div>
+          <div style="flex:1;">
+            <h3 style="margin:0 0 8px;color:${colors.dark};">Complete Your Personal Details</h3>
+            <p style="margin:0 0 12px;color:#374151;line-height:1.6;">Fill in all your personal information, educational background, and contact details. This information is used directly in your NCLEX application — accuracy is critical.</p>
+            <a href="${myDetailsUrl}" style="display:inline-block;background:${colors.primary};color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Complete My Details →</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border-left:4px solid ${colors.secondary};margin-bottom:24px;">
+        <div style="display:flex;align-items:flex-start;gap:16px;">
+          <div style="flex-shrink:0;width:40px;height:40px;background:${colors.secondary};color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;text-align:center;line-height:40px;">2</div>
+          <div style="flex:1;">
+            <h3 style="margin:0 0 8px;color:${colors.dark};">Upload Your Required Documents</h3>
+            <p style="margin:0 0 8px;color:#374151;line-height:1.6;">We need three documents to get started:</p>
+            <ul style="margin:0 0 12px;padding-left:20px;color:#374151;line-height:1.8;">
+              <li><strong>2x2 ID Photo</strong> — recent, white background</li>
+              <li><strong>Nursing Diploma / Transcript of Records</strong></li>
+              <li><strong>Valid Passport</strong> (data page)</li>
+            </ul>
+            <a href="${documentsUrl}" style="display:inline-block;background:${colors.secondary};color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Upload Documents →</a>
+          </div>
+        </div>
+      </div>
+
+      <p style="color:#374151;line-height:1.7;">Once you've completed both steps above, our team will review your submission and reach out with the next steps. The sooner you complete these, the sooner we can begin processing your application.</p>
+
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,${colors.primary},${colors.primaryDark});color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;letter-spacing:0.3px;">Go to My Dashboard</a>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="card" style="background:#f8fafc;">
+        <h3 style="margin:0 0 10px;color:${colors.dark};">About GritSync</h3>
+        <p style="margin:0;color:#374151;line-height:1.7;font-size:14px;">GritSync was built by Filipino nurses, for Filipino nurses. We understand the unique challenges and sacrifices that come with pursuing your US nursing license, and we're committed to making the process as smooth and transparent as possible. You're not alone in this journey — we're with you every step of the way.</p>
+      </div>
+
+      <p style="margin-top:28px;color:#374151;">With all the best for your NCLEX journey,</p>
+      <p style="margin:4px 0 0;"><strong>JJ Cantila</strong><br>
+      <span style="color:#6b7280;font-size:14px;">RM, RN, SGRN, CADRN, USRN<br>Founder &amp; CEO, GritSync</span></p>
+
+      <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:${colors.primary};">admin@gritsync.com</a> or call us at +1 (509) 270-3437. We genuinely love hearing from our nurses.</p>
+    </div>
+  `
+
+  return {
+    subject: `[Important] Welcome to GritSync — Your First Steps, ${firstName}`,
+    html: await createBaseTemplate(content, { userName })
+  }
+}

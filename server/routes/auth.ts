@@ -82,6 +82,103 @@ async function sendVerificationEmail(personalEmail: string, firstName: string, t
   }
 }
 
+async function sendWelcomeEmail(personalEmail: string, firstName: string, lastName: string, gritId: string, gritsyncEmail: string) {
+  const apiKey = await getResendApiKey()
+  if (!apiKey) return
+  const appUrl = process.env.APP_URL || 'https://gritsync.com'
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+      <div style="background:linear-gradient(135deg,#10b981,#059669);padding:40px 32px;border-radius:12px 12px 0 0;text-align:center;">
+        <h1 style="color:#fff;font-size:28px;margin:0;font-weight:700;">Welcome to GritSync! 🎉</h1>
+        <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:16px;">Your NCLEX Journey Starts Here</p>
+      </div>
+      <div style="padding:40px 32px;">
+        <p style="font-size:16px;color:#374151;">Hi <strong>${firstName}</strong>,</p>
+        <p style="font-size:15px;color:#374151;line-height:1.7;">I'm JJ Cantila — founder of GritSync and a Filipino nurse who has walked this exact path before you. I'm personally reaching out to welcome you and make sure you start your NCLEX journey on the right foot.</p>
+        <p style="font-size:15px;color:#374151;line-height:1.7;">Your email has been verified and your GritSync account is now fully active. We're honored to be part of one of the most important milestones of your nursing career.</p>
+
+        <div style="background:#f0fdf4;border-left:4px solid #10b981;border-radius:8px;padding:20px 24px;margin:24px 0;">
+          <h3 style="margin:0 0 12px;color:#10b981;font-size:16px;">Your Account Details</h3>
+          <p style="margin:4px 0;color:#374151;"><strong>GRIT ID:</strong> <span style="font-family:monospace;font-size:16px;font-weight:700;color:#10b981;">${gritId}</span></p>
+          <p style="margin:4px 0;color:#374151;"><strong>GritSync Email:</strong> ${gritsyncEmail}</p>
+          <p style="margin:12px 0 0;font-size:13px;color:#6b7280;">Please save these details — you'll need them throughout your application process.</p>
+        </div>
+
+        <div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;padding:20px 24px;margin:24px 0;">
+          <h3 style="margin:0 0 10px;color:#92400e;font-size:16px;">⚠️ Important: Complete These Steps Right Away</h3>
+          <p style="margin:0;color:#78350f;font-size:15px;">To begin processing your application, we need two things from you <strong>as soon as possible</strong>. These are required before we can move forward with any processing.</p>
+        </div>
+
+        <h2 style="color:#1f2937;margin:32px 0 16px;font-size:20px;">Your Next Steps</h2>
+
+        <div style="background:#fff;border:1px solid #e5e7eb;border-left:4px solid #10b981;border-radius:8px;padding:20px 24px;margin-bottom:16px;">
+          <div style="display:flex;align-items:flex-start;gap:16px;">
+            <div style="flex-shrink:0;width:40px;height:40px;background:#10b981;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;line-height:40px;text-align:center;min-width:40px;">1</div>
+            <div style="flex:1;">
+              <h3 style="margin:0 0 8px;color:#1f2937;font-size:16px;">Complete Your Personal Details</h3>
+              <p style="margin:0 0 12px;color:#374151;line-height:1.6;font-size:14px;">Fill in all your personal information, educational background, and contact details. This information is used directly in your NCLEX application — accuracy is critical.</p>
+              <a href="${appUrl}/my-details" style="display:inline-block;background:#10b981;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Complete My Details →</a>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e5e7eb;border-left:4px solid #3b82f6;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+          <div style="display:flex;align-items:flex-start;gap:16px;">
+            <div style="flex-shrink:0;width:40px;height:40px;background:#3b82f6;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;line-height:40px;text-align:center;min-width:40px;">2</div>
+            <div style="flex:1;">
+              <h3 style="margin:0 0 8px;color:#1f2937;font-size:16px;">Upload Your Required Documents</h3>
+              <p style="margin:0 0 8px;color:#374151;line-height:1.6;font-size:14px;">We need three documents to get started:</p>
+              <ul style="margin:0 0 12px;padding-left:20px;color:#374151;line-height:1.8;font-size:14px;">
+                <li><strong>2x2 ID Photo</strong> — recent, white background</li>
+                <li><strong>Nursing Diploma / Transcript of Records</strong></li>
+                <li><strong>Valid Passport</strong> (data page)</li>
+              </ul>
+              <a href="${appUrl}/documents" style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Upload Documents →</a>
+            </div>
+          </div>
+        </div>
+
+        <p style="color:#374151;line-height:1.7;font-size:15px;">Once you've completed both steps above, our team will review your submission and reach out with the next steps. The sooner you complete these, the sooner we can begin processing your application.</p>
+
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${appUrl}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;">Go to My Dashboard</a>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0;" />
+
+        <div style="background:#f8fafc;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+          <h3 style="margin:0 0 10px;color:#1f2937;font-size:15px;">About GritSync</h3>
+          <p style="margin:0;color:#374151;line-height:1.7;font-size:14px;">GritSync was built by Filipino nurses, for Filipino nurses. We understand the unique challenges and sacrifices that come with pursuing your US nursing license, and we're committed to making the process as smooth and transparent as possible. You're not alone in this journey — we're with you every step of the way.</p>
+        </div>
+
+        <p style="color:#374151;font-size:15px;">With all the best for your NCLEX journey,</p>
+        <p style="margin:4px 0 0;color:#374151;"><strong>JJ Cantila</strong><br>
+        <span style="color:#6b7280;font-size:14px;">RM, RN, SGRN, CADRN, USRN<br>Founder &amp; CEO, GritSync</span></p>
+
+        <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:#10b981;">admin@gritsync.com</a> or call us at +1 (509) 270-3437. We genuinely love hearing from our nurses.</p>
+      </div>
+      <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 32px;border-radius:0 0 12px 12px;text-align:center;">
+        <p style="font-size:12px;color:#9ca3af;margin:0;">GritSync | admin@gritsync.com | +1 (509) 270-3437</p>
+        <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">Empowering Filipino Nurses on Their Path to the US</p>
+      </div>
+    </div>
+  `
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'JJ Cantila at GritSync <no-reply@gritsync.com>',
+        to: [personalEmail],
+        subject: `[Important] Welcome to GritSync — Your First Steps, ${firstName}`,
+        html,
+      }),
+    })
+  } catch (e) {
+    console.error('Failed to send welcome email:', e)
+  }
+}
+
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -180,7 +277,7 @@ router.get('/verify-email', async (req: Request, res: Response) => {
     }
 
     const result = await query(
-      `SELECT id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, email_verified, email_verification_expires_at
+      `SELECT id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, email_verified, email_verification_expires_at, welcome_email_sent_at
        FROM users WHERE email_verification_token = $1`,
       [token]
     )
@@ -203,6 +300,21 @@ router.get('/verify-email', async (req: Request, res: Response) => {
        WHERE id = $1`,
       [user.id]
     )
+
+    // Send welcome email if not already sent (fire-and-forget)
+    if (!user.welcome_email_sent_at && user.personal_email) {
+      query(
+        `UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`,
+        [user.id]
+      ).catch(() => {})
+      sendWelcomeEmail(
+        user.personal_email,
+        user.first_name || '',
+        user.last_name || '',
+        user.grit_id || '',
+        user.gritsync_email || ''
+      )
+    }
 
     const accessToken = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
     const refresh_token = signRefreshToken({ id: user.id })
@@ -646,6 +758,37 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
     sendVerificationEmail(user.personal_email, user.first_name, verification_token, otp)
 
     res.json({ message: 'Verification email resent. Please check your inbox.' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/auth/backfill-welcome-emails  (admin only)
+// Sends welcome emails to verified users who haven't received one yet
+router.post('/backfill-welcome-emails', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const result = await query(
+      `SELECT id, personal_email, first_name, last_name, grit_id, gritsync_email
+       FROM users
+       WHERE email_verified = true AND welcome_email_sent_at IS NULL AND personal_email IS NOT NULL AND role = 'client'
+       LIMIT 50`
+    )
+    const users = result.rows
+    let sent = 0
+    for (const u of users) {
+      try {
+        await query(`UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`, [u.id])
+        sendWelcomeEmail(u.personal_email, u.first_name || '', u.last_name || '', u.grit_id || '', u.gritsync_email || '')
+        sent++
+      } catch (e) {
+        console.error('Backfill welcome email error for user', u.id, e)
+      }
+    }
+    res.json({ message: `Queued welcome emails for ${sent} users`, total: users.length, sent })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

@@ -12,10 +12,7 @@ import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocum
 import { useToast } from '@/components/ui/Toast'
 import { getSignedFileUrl } from '@/lib/api-service'
 import { formatDate, formatCurrency, cn, debounce } from '@/lib/utils'
-import { QuickActionsPanel } from '@/components/QuickActionsPanel'
-import { ActivityFeed, ActivityItem } from '@/components/ActivityFeed'
-import { PersonalizedRecommendations } from '@/components/PersonalizedRecommendations'
-import { subscribeToUserApplications, subscribeToAllApplications, subscribeToQuotations, subscribeToAllQuotations, subscribeToPendingApprovalPayments, unsubscribe } from '@/lib/realtime'
+import { ActivityFeed } from '@/components/ActivityFeed'
 import { subscribeToAdminDashboard, subscribeToClientDashboard, unsubscribe as unsubscribeOptimized } from '@/lib/realtime-optimized'
 import type { RealtimeChannel } from '@db/db-js'
 import { greetingSettings } from '@/lib/settings'
@@ -1131,20 +1128,65 @@ export function Dashboard() {
     )
   }
 
-  // Regular User Dashboard (existing code)
+  // Client Dashboard
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
-  const isAdminDashboard = isAdmin()
+
+  const docsUploaded = [documentsStatus.picture, documentsStatus.diploma, documentsStatus.passport].filter(Boolean).length
+  const allDocsUploaded = docsUploaded === 3
+  const profileComplete = profileCompletion === 100
+  const onboardingDone = profileComplete && allDocsUploaded
+
+  const onboardingSteps = [
+    {
+      id: 'email',
+      label: 'Email Verified',
+      done: true,
+      link: null,
+      description: 'Your account is active',
+    },
+    {
+      id: 'profile',
+      label: 'Personal Details',
+      done: profileComplete,
+      link: '/my-details',
+      description: profileComplete ? 'Profile complete' : `${profileCompletion}% complete`,
+      progress: profileCompletion,
+    },
+    {
+      id: 'photo',
+      label: '2x2 ID Photo',
+      done: documentsStatus.picture,
+      link: '/documents',
+      description: documentsStatus.picture ? 'Uploaded' : 'Required',
+    },
+    {
+      id: 'diploma',
+      label: 'Nursing Diploma / TOR',
+      done: documentsStatus.diploma,
+      link: '/documents',
+      description: documentsStatus.diploma ? 'Uploaded' : 'Required',
+    },
+    {
+      id: 'passport',
+      label: 'Passport (Data Page)',
+      done: documentsStatus.passport,
+      link: '/documents',
+      description: documentsStatus.passport ? 'Uploaded' : 'Required',
+    },
+  ]
+
+  const onboardingProgress = Math.round((onboardingSteps.filter(s => s.done).length / onboardingSteps.length) * 100)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <SEO
-        title={isAdminDashboard ? 'Admin Dashboard - GritSync | NCLEX Processing Agency' : 'Dashboard - My NCLEX Applications | GritSync'}
-        description={isAdminDashboard ? 'Admin dashboard for managing NCLEX applications, clients, quotations, and payments. Comprehensive analytics and management tools.' : 'Your personal dashboard for managing NCLEX applications. View status, track progress, manage documents, and process payments all in one place.'}
-        keywords={isAdminDashboard ? 'admin dashboard, NCLEX admin, application management' : 'dashboard, NCLEX dashboard, my applications, application management'}
+        title="Dashboard - My NCLEX Applications | GritSync"
+        description="Your personal dashboard for managing NCLEX applications. View status, track progress, manage documents, and process payments all in one place."
+        keywords="dashboard, NCLEX dashboard, my applications, application management"
         canonicalUrl={currentUrl}
-        ogTitle={isAdminDashboard ? 'Admin Dashboard - GritSync' : 'Dashboard - My NCLEX Applications | GritSync'}
-        ogDescription={isAdminDashboard ? 'Admin dashboard for managing NCLEX applications and clients' : 'Your personal dashboard for managing NCLEX applications'}
+        ogTitle="Dashboard - My NCLEX Applications | GritSync"
+        ogDescription="Your personal dashboard for managing NCLEX applications"
         ogImage={`${baseUrl}/gritsync_logo.png`}
         ogUrl={currentUrl}
         noindex={true}
@@ -1153,14 +1195,31 @@ export function Dashboard() {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-              {greeting}, {firstName || user?.first_name || 'there'} 👋
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Welcome back! Here's what's happening with your applications.
-            </p>
+
+          {/* Hero Greeting */}
+          <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-primary-600 dark:text-primary-400 mb-1 uppercase tracking-wide">
+                {greeting}
+              </p>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">
+                {firstName || user?.first_name || 'there'} 👋
+              </h1>
+              <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm md:text-base">
+                {onboardingDone
+                  ? 'Your profile is complete — your NCLEX journey is in good hands.'
+                  : 'Complete the steps below to start your NCLEX application processing.'}
+              </p>
+            </div>
+            {stats.applications > 0 && (
+              <Link to="/tracking">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors cursor-pointer">
+                  <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                  <span className="text-sm font-medium text-primary-700 dark:text-primary-300">Track My Applications</span>
+                  <ArrowRight className="h-4 w-4 text-primary-500" />
+                </div>
+              </Link>
+            )}
           </div>
 
           {/* New account welcome banner */}
@@ -1192,219 +1251,245 @@ export function Dashboard() {
             </div>
           )}
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-            {/* Total Applications */}
-            <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-primary-700 dark:text-primary-300 mb-1">Total Applications</p>
-                  <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                    <span>NCLEX: {stats.nclexApplications || 0}</span>
+          {/* Main grid: Onboarding Hub + Stats */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-8">
+
+            {/* Onboarding / Readiness Hub */}
+            <Card className="lg:col-span-1 border-0 shadow-md">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "p-2 rounded-lg",
+                    onboardingDone
+                      ? "bg-green-100 dark:bg-green-900/30"
+                      : "bg-amber-100 dark:bg-amber-900/30"
+                  )}>
+                    {onboardingDone
+                      ? <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      : <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
                   </div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                    {onboardingDone ? 'Ready to Apply!' : 'Getting Started'}
+                  </h2>
                 </div>
-                <div className="p-3 rounded-xl bg-primary-500/10 dark:bg-primary-400/20">
-                  <FileText className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                <span className={cn(
+                  "text-xs font-bold px-2.5 py-1 rounded-full",
+                  onboardingDone
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                )}>
+                  {onboardingProgress}%
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mb-5">
+                <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-700",
+                      onboardingDone
+                        ? "bg-green-500"
+                        : onboardingProgress >= 60
+                        ? "bg-amber-400"
+                        : "bg-red-400"
+                    )}
+                    style={{ width: `${onboardingProgress}%` }}
+                  />
                 </div>
               </div>
-            </Card>
 
-            {/* Pending */}
-            <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/10">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300 mb-1">Pending</p>
-                  <p className="text-3xl font-bold text-yellow-900 dark:text-yellow-100">{stats.pending || 0}</p>
-                  <div className="flex items-center gap-1 mt-2 text-xs text-yellow-600 dark:text-yellow-400">
-                    <Clock className="h-3 w-3" />
-                    <span>In review</span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-yellow-500/10 dark:bg-yellow-400/20">
-                  <ClipboardList className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-                </div>
-              </div>
-            </Card>
-
-            {/* Completed */}
-            <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
-                  <p className="text-3xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
-                  <div className="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
-                    <CheckCircle className="h-3 w-3" />
-                    <span>Completed</span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-green-500/10 dark:bg-green-400/20">
-                  <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-                </div>
-              </div>
-            </Card>
-
-            {/* Total Amount Paid */}
-            <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/10">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">Total Amount Paid</p>
-                  <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">{formatCurrency(stats.revenue || 0)}</p>
-                  <div className="flex items-center gap-1 mt-2 text-xs text-blue-600 dark:text-blue-400">
-                    <TrendingUp className="h-3 w-3" />
-                    <span>All payments</span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-blue-500/10 dark:bg-blue-400/20">
-                  <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Floating Warning Banner - Profile Completion & Required Documents */}
-          {!isAdmin() && (profileCompletion < 100 || !documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport) && (
-            <div className="mb-6 sticky top-4 z-30">
-              <div className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 rounded-xl shadow-2xl border-2 border-red-400 dark:border-red-600 p-4 backdrop-blur-sm">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="p-2 rounded-lg bg-white/20 dark:bg-gray-900/40 flex-shrink-0">
-                      <AlertCircle className="h-5 w-5 text-white" />
+              {/* Steps list */}
+              <div className="space-y-3">
+                {onboardingSteps.map((step) => (
+                  <div key={step.id} className={cn(
+                    "flex items-center gap-3 p-2.5 rounded-lg transition-colors",
+                    !step.done && step.link
+                      ? "hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                      : ""
+                  )}>
+                    <div className={cn(
+                      "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center",
+                      step.done
+                        ? "bg-green-100 dark:bg-green-900/30"
+                        : "bg-gray-100 dark:bg-gray-800"
+                    )}>
+                      {step.done
+                        ? <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        : <XCircle className="h-4 w-4 text-gray-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="text-sm md:text-base font-bold text-white">
-                          ⚠️ Action Required: Complete Your Profile & Documents
-                        </h3>
-                        <div className="flex items-center gap-4 flex-wrap">
-                          {/* Profile Completion */}
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-white/90" />
-                            <span className="text-xs md:text-sm text-white/90">Profile:</span>
-                            <div className="flex items-center gap-2">
-                              <div className="w-20 md:w-24 h-2 bg-white/30 rounded-full overflow-hidden">
-                                <div 
-                                  className={cn(
-                                    "h-full transition-all duration-500 rounded-full",
-                                    profileCompletion >= 80
-                                      ? "bg-green-300"
-                                      : profileCompletion >= 60
-                                      ? "bg-yellow-300"
-                                      : "bg-red-300"
-                                  )}
-                                  style={{ width: `${profileCompletion}%` }}
-                                />
-                              </div>
-                              <span className="text-xs md:text-sm font-bold text-white min-w-[2.5rem]">
-                                {profileCompletion}%
-                              </span>
-                            </div>
+                      <p className={cn(
+                        "text-sm font-medium leading-tight",
+                        step.done
+                          ? "text-gray-700 dark:text-gray-300"
+                          : "text-gray-900 dark:text-gray-100"
+                      )}>
+                        {step.label}
+                      </p>
+                      {step.id === 'profile' && !step.done && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                              style={{ width: `${profileCompletion}%` }}
+                            />
                           </div>
-                          
-                          {/* Documents Status */}
-                          <div className="flex items-center gap-2">
-                            <FileCheck className="h-4 w-4 text-white/90" />
-                            <span className="text-xs md:text-sm text-white/90">Docs:</span>
-                            <div className="flex items-center gap-1">
-                              {documentsStatus.picture ? (
-                                <CheckCircle className="h-4 w-4 text-green-300" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-300" />
-                              )}
-                              {documentsStatus.diploma ? (
-                                <CheckCircle className="h-4 w-4 text-green-300" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-300" />
-                              )}
-                              {documentsStatus.passport ? (
-                                <CheckCircle className="h-4 w-4 text-green-300" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-300" />
-                              )}
-                            </div>
-                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{profileCompletion}%</span>
                         </div>
-                      </div>
+                      )}
+                      {!(step.id === 'profile' && !step.done) && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{step.description}</p>
+                      )}
                     </div>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {profileCompletion < 100 && (
-                      <Link to="/my-details">
-                        <Button 
-                          size="sm" 
-                          className="bg-white text-red-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700 border-0 shadow-md text-xs md:text-sm font-semibold whitespace-nowrap"
-                        >
-                          <User className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                          Complete Profile
-                        </Button>
-                      </Link>
-                    )}
-                    {(!documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport) && (
-                      <Link to="/documents">
-                        <Button 
-                          size="sm" 
-                          className="bg-white text-red-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700 border-0 shadow-md text-xs md:text-sm font-semibold whitespace-nowrap"
-                        >
-                          <FileCheck className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                          Upload Docs
-                        </Button>
+                    {!step.done && step.link && (
+                      <Link to={step.link} className="flex-shrink-0">
+                        <ArrowRight className="h-4 w-4 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors" />
                       </Link>
                     )}
                   </div>
-                </div>
+                ))}
               </div>
-            </div>
-          )}
 
-          {/* Main Content Grid */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Quick Actions & Recommendations - Takes 1 column */}
-            <div className="lg:col-span-1 space-y-6">
-              <Card className="border-0 shadow-md p-6">
-                <QuickActionsPanel
-                  pendingApplications={stats.pending || 0}
-                  pendingPayments={pendingPayments.length}
-                  pendingDocuments={
-                    (!documentsStatus.picture ? 1 : 0) +
-                    (!documentsStatus.diploma ? 1 : 0) +
-                    (!documentsStatus.passport ? 1 : 0)
-                  }
-                  upcomingDeadlines={0}
-                />
+              {/* Action buttons */}
+              {!onboardingDone && (
+                <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                  {!profileComplete && (
+                    <Link to="/my-details">
+                      <Button size="sm" className="w-full text-xs font-semibold">
+                        <User className="h-3.5 w-3.5 mr-1.5" />
+                        Complete My Details
+                      </Button>
+                    </Link>
+                  )}
+                  {!allDocsUploaded && (
+                    <Link to="/documents">
+                      <Button size="sm" variant="outline" className="w-full text-xs font-semibold">
+                        <FileCheck className="h-3.5 w-3.5 mr-1.5" />
+                        Upload Documents ({docsUploaded}/3)
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              )}
+              {onboardingDone && (
+                <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <Link to="/apply">
+                    <Button size="sm" className="w-full text-xs font-semibold bg-green-600 hover:bg-green-700">
+                      <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                      Apply for NCLEX Processing
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </Card>
+
+            {/* Right side: Stats + Quick Actions */}
+            <div className="lg:col-span-2 flex flex-col gap-6">
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10 p-4">
+                  <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
+                  <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
+                  <div className="flex items-center gap-1 mt-1 text-xs text-primary-600 dark:text-primary-400">
+                    <FileText className="h-3 w-3" />
+                    <span>NCLEX: {stats.nclexApplications || 0}</span>
+                  </div>
+                </Card>
+                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/10 p-4">
+                  <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-1">In Progress</p>
+                  <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{stats.pending || 0}</p>
+                  <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                    <Clock className="h-3 w-3" />
+                    <span>Being processed</span>
+                  </div>
+                </Card>
+                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 p-4">
+                  <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
+                  <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
+                  <div className="flex items-center gap-1 mt-1 text-xs text-green-600 dark:text-green-400">
+                    <CheckCircle className="h-3 w-3" />
+                    <span>Licensed</span>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Quick Actions */}
+              <Card className="border-0 shadow-md flex-1">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30">
+                    <Zap className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'My Details', icon: User, href: '/my-details', color: 'primary', description: 'Update personal info' },
+                    { label: 'Documents', icon: FileCheck, href: '/documents', color: 'purple', description: 'Upload & manage docs', badge: 3 - docsUploaded },
+                    { label: 'Applications', icon: ClipboardList, href: '/tracking', color: 'blue', description: 'Track your applications', badge: stats.pending || 0 },
+                    { label: 'Account', icon: Settings, href: '/account-settings', color: 'gray', description: 'Manage account' },
+                  ].map(({ label, icon: Icon, href, color, description, badge }) => (
+                    <Link key={label} to={href}>
+                      <div className={cn(
+                        "group flex flex-col items-center text-center p-3 rounded-xl border-2 border-transparent transition-all duration-200 hover:shadow-md cursor-pointer",
+                        color === 'primary' && "bg-primary-50 dark:bg-primary-900/20 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-100/70",
+                        color === 'purple' && "bg-purple-50 dark:bg-purple-900/20 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-purple-100/70",
+                        color === 'blue' && "bg-blue-50 dark:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-100/70",
+                        color === 'gray' && "bg-gray-50 dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-100/70",
+                      )}>
+                        <div className="relative mb-2">
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center",
+                            color === 'primary' && "bg-primary-100 dark:bg-primary-900/40 group-hover:bg-primary-200",
+                            color === 'purple' && "bg-purple-100 dark:bg-purple-900/40 group-hover:bg-purple-200",
+                            color === 'blue' && "bg-blue-100 dark:bg-blue-900/40 group-hover:bg-blue-200",
+                            color === 'gray' && "bg-gray-200 dark:bg-gray-700 group-hover:bg-gray-300",
+                          )}>
+                            <Icon className={cn(
+                              "h-5 w-5",
+                              color === 'primary' && "text-primary-600 dark:text-primary-400",
+                              color === 'purple' && "text-purple-600 dark:text-purple-400",
+                              color === 'blue' && "text-blue-600 dark:text-blue-400",
+                              color === 'gray' && "text-gray-600 dark:text-gray-400",
+                            )} />
+                          </div>
+                          {badge && badge > 0 ? (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                              {badge}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-tight">{label}</p>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{description}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               </Card>
-              
-              {/* Personalized Recommendations */}
-              <PersonalizedRecommendations maxRecommendations={5} />
-            </div>
-
-            {/* Recent Activity - Takes 2 columns */}
-            <div className="lg:col-span-2">
-              <ActivityFeed
-                activities={recentActivity.map(activity => ({
-                  id: activity.id,
-                  type: activity.type === 'application' ? 'application' : 'payment',
-                  title: activity.type === 'application' 
-                    ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
-                    : activity.title,
-                  description: activity.type === 'application'
-                    ? `Status: ${activity.status}`
-                    : activity.title,
-                  status: activity.status,
-                  date: activity.date,
-                  link: activity.link,
-                }))}
-                maxItems={5}
-                onRefresh={() => {
-                  // Refresh data
-                  if (user) {
-                    fetchData()
-                  }
-                }}
-              />
             </div>
           </div>
+
+          {/* Recent Activity */}
+          <ActivityFeed
+            activities={recentActivity.map(activity => ({
+              id: activity.id,
+              type: activity.type === 'application' ? 'application' : 'payment',
+              title: activity.type === 'application'
+                ? `${activity.service_type || 'NCLEX Processing'} - ${activity.grit_app_id || activity.id}`
+                : activity.title,
+              description: activity.type === 'application'
+                ? `Status: ${activity.status}`
+                : activity.title,
+              status: activity.status,
+              date: activity.date,
+              link: activity.link,
+            }))}
+            maxItems={5}
+            onRefresh={() => {
+              if (user) fetchData()
+            }}
+          />
+
         </main>
       </div>
     </div>

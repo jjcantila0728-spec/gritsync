@@ -44,6 +44,17 @@ The `@supabase/supabase-js` package is aliased in `vite.config.ts` to `src/lib/s
 - `JWT_SECRET` — JWT signing secret (defaults to `gritsync-jwt-secret-key-2024`)
 - `VITE_STRIPE_PUBLISHABLE_KEY` — Stripe publishable key (optional, for payments)
 - `SERVER_PORT` — API server port (defaults to 3001)
+- `RESEND_API_KEY` — Resend email service API key (for transactional emails)
+- `APP_URL` — Production app URL (defaults to `https://gritsync.com`)
+
+## Email System
+- Emails sent via Resend API (`RESEND_API_KEY` env secret or `settings` table `resendApiKey`)
+- From address: `no-reply@gritsync.com` / `JJ Cantila at GritSync <no-reply@gritsync.com>`
+- `server/routes/auth.ts` — Contains `sendVerificationEmail()` and `sendWelcomeEmail()` inline HTML functions
+- `src/lib/email-templates.ts` — Frontend email template system with `createWelcomeOnboardingEmail()` and many other template functions (uses branding from settings table)
+- Welcome/onboarding email is sent automatically after email verification, attributed to JJ Cantila (Founder)
+- Admin backfill endpoint: `POST /api/auth/backfill-welcome-emails` — sends welcome emails to existing verified clients who haven't received one
+- `users.welcome_email_sent_at` — timestamp column tracking when welcome email was sent
 
 ## Project Structure
 ```
