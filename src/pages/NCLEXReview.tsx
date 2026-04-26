@@ -607,7 +607,7 @@ export function NCLEXReview() {
         <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 gap-1">
           {[
             { key: 'statistics', label: 'Statistics' },
-            { key: 'previous', label: 'Previous Tests' },
+            { key: 'previous', label: 'History' },
           ].map(tab => (
             <button
               key={tab.key}

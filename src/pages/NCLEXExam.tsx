@@ -565,7 +565,11 @@ export function NCLEXExam() {
         }, isTutorial ? 0 : 500)
       }
     } catch (err: any) {
-      setSubmitError(err.message)
+      if (err.message?.includes('Daily question limit') || err.message?.includes('daily_limit')) {
+        setSubmitError('Daily question limit reached. Upgrade your plan to continue.')
+      } else {
+        setSubmitError(err.message)
+      }
     } finally {
       setSubmitting(false)
     }

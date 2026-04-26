@@ -22,6 +22,25 @@ function isAdmin(req: AuthenticatedRequest): boolean {
   return req.user?.role === 'admin'
 }
 
+async function getUserPlanAndUsage(userId: number): Promise<{ plan: string; questionsToday: number; dailyLimit: number | null; canAnswer: boolean }> {
+  const today = new Date().toISOString().split('T')[0]
+  const subResult = await query(
+    `SELECT plan FROM nclex_subscriptions
+     WHERE user_id = $1 AND status = 'active'
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  )
+  const plan = subResult.rows[0]?.plan || 'free'
+  const usageResult = await query(
+    `SELECT questions_answered FROM nclex_daily_usage WHERE user_id = $1 AND usage_date = $2`,
+    [userId, today]
+  )
+  const questionsToday = usageResult.rows[0]?.questions_answered || 0
+  const dailyLimit = plan === 'free' ? 25 : null
+  return { plan, questionsToday, dailyLimit, canAnswer: dailyLimit === null || questionsToday < dailyLimit }
+}
+
 // ─── Public: Payment Info ─────────────────────────────────────────────────────
 router.get('/payment-info', async (_req, res) => {
   res.json({
@@ -303,6 +322,15 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
+    // Enforce daily limit before creating session
+    const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId)
+    if (!canAnswer) {
+      return res.status(403).json({
+        error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to Premium or VIP for more questions.`,
+        daily_limit_reached: true,
+      })
+    }
+
     const {
       session_type = 'practice',
       mode = 'tutorial',
@@ -483,6 +511,15 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
     const userId = req.user?.id
     const sessionId = parseInt(req.params.id)
     const { question_id, user_answer, time_spent = 0 } = req.body
+
+    // Enforce daily limit server-side before accepting answer
+    const { canAnswer, dailyLimit, questionsToday } = await getUserPlanAndUsage(userId!)
+    if (!canAnswer) {
+      return res.status(403).json({
+        error: `Daily question limit reached (${questionsToday}/${dailyLimit}). Upgrade to continue.`,
+        daily_limit_reached: true,
+      })
+    }
 
     const sessionResult = await query(
       `SELECT * FROM test_sessions WHERE id = $1 AND user_id = $2 AND status = 'in_progress'`,
@@ -670,11 +707,6 @@ router.post('/session/:id/mark-review', authenticateToken, async (req: Authentic
     const userId = req.user?.id
     const sessionId = parseInt(req.params.id)
     const { question_id, marked } = req.body
-
-    // Ensure column exists
-    await query(
-      `ALTER TABLE session_responses ADD COLUMN IF NOT EXISTS marked_for_review BOOLEAN DEFAULT false`
-    ).catch(() => {})
 
     const sessionResult = await query(
       `SELECT id FROM test_sessions WHERE id = $1 AND user_id = $2`,

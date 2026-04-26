@@ -10,6 +10,15 @@ import emailRoutes from './routes/emails'
 import questionRoutes from './routes/questions'
 import storageRoutes from './routes/storage'
 import contactRoutes from './routes/contact'
+import { query } from './db'
+
+async function runStartupMigrations() {
+  try {
+    await query(`ALTER TABLE session_responses ADD COLUMN IF NOT EXISTS marked_for_review BOOLEAN DEFAULT false`)
+  } catch (err) {
+    console.warn('Startup migration warning:', err)
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -63,6 +72,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 app.listen(PORT, () => {
   console.log(`API Server running on port ${PORT} (${isProd ? 'production' : 'development'})`)
+  runStartupMigrations()
 })
 
 export default app
