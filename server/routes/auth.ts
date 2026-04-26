@@ -19,10 +19,24 @@ async function getResendApiKey(): Promise<string | null> {
   } catch { return null }
 }
 
-async function sendVerificationEmail(personalEmail: string, firstName: string, token: string) {
+function generateOTP(): string {
+  return String(Math.floor(100000 + Math.random() * 900000))
+}
+
+async function sendVerificationEmail(personalEmail: string, firstName: string, token: string, otp?: string) {
   const apiKey = await getResendApiKey()
   if (!apiKey) return
   const verifyUrl = `${process.env.APP_URL || 'https://gritsync.com'}/verify-email?token=${token}`
+  const otpSection = otp ? `
+        <div style="text-align:center;margin:28px 0;">
+          <p style="font-size:14px;color:#6b7280;margin:0 0 10px;">Or enter this verification code on the website:</p>
+          <div style="display:inline-block;background:#f3f4f6;border:2px dashed #dc2626;border-radius:12px;padding:18px 36px;">
+            <span style="font-size:36px;font-weight:800;color:#dc2626;letter-spacing:10px;font-family:monospace;">${otp}</span>
+          </div>
+          <p style="font-size:12px;color:#9ca3af;margin:10px 0 0;">This code expires in <strong>15 minutes</strong></p>
+        </div>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+  ` : ''
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
       <div style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:40px 32px;border-radius:12px 12px 0 0;text-align:center;">
@@ -32,19 +46,21 @@ async function sendVerificationEmail(personalEmail: string, firstName: string, t
       <div style="padding:40px 32px;">
         <p style="font-size:16px;color:#374151;">Hi <strong>${firstName}</strong>,</p>
         <p style="font-size:15px;color:#374151;line-height:1.6;">
-          Thank you for registering with GritSync! Please verify your email address to complete your account setup and receive your business email for NCLEX processing.
+          Thank you for registering with GritSync! Please verify your email address to complete your account setup.
         </p>
-        <div style="text-align:center;margin:32px 0;">
+        <div style="text-align:center;margin:32px 0 16px;">
           <a href="${verifyUrl}" style="background:#dc2626;color:#fff;padding:16px 40px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;">
             Verify My Email
           </a>
+          <p style="font-size:12px;color:#9ca3af;margin:10px 0 0;">This button expires in <strong>24 hours</strong></p>
         </div>
+        ${otpSection}
         <p style="font-size:13px;color:#6b7280;line-height:1.5;">
-          This link will expire in <strong>24 hours</strong>. If you didn't create a GritSync account, you can safely ignore this email.
+          If you didn't create a GritSync account, you can safely ignore this email.
         </p>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
         <p style="font-size:12px;color:#9ca3af;text-align:center;">
-          Having trouble? Copy and paste this link into your browser:<br />
+          Having trouble clicking the button? Copy and paste this link into your browser:<br />
           <span style="color:#dc2626;word-break:break-all;">${verifyUrl}</span>
         </p>
       </div>
@@ -125,21 +141,23 @@ router.post('/register', async (req: Request, res: Response) => {
     const password_hash = await bcrypt.hash(password, 12)
     const personal_email_normalized = personal_email.trim().toLowerCase()
 
-    // Generate email verification token (valid 24 hours)
+    // Generate email verification token (valid 24 hours) + OTP (valid 15 minutes)
     const verification_token = crypto.randomBytes(32).toString('hex')
     const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const otp = generateOTP()
+    const otp_expires = new Date(Date.now() + 15 * 60 * 1000)
 
     const result = await query(
-      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11, $12)
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at, email_otp, email_otp_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11, $12, $13, $14)
        RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, created_at`,
-      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, verification_token, verification_expires]
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, verification_token, verification_expires, otp, otp_expires]
     )
 
     const user = result.rows[0]
 
     // Send verification email asynchronously (don't await, don't block registration)
-    sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token)
+    sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token, otp)
 
     // Do NOT create a session — user must verify email first
     res.status(201).json({
@@ -511,6 +529,88 @@ router.post('/reset-password-request', async (req: Request, res: Response) => {
   }
 })
 
+// POST /api/auth/verify-otp
+router.post('/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const { personal_email, otp } = req.body
+    if (!personal_email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP code are required' })
+    }
+
+    const result = await query(
+      `SELECT id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, email_verified, email_otp, email_otp_expires_at
+       FROM users WHERE personal_email = $1`,
+      [personal_email.trim().toLowerCase()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid verification code' })
+    }
+
+    const user = result.rows[0]
+
+    if (user.email_verified) {
+      // Already verified — just log them in
+      const accessToken = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
+      const refresh_token = signRefreshToken({ id: user.id })
+      return res.json({
+        verified: true,
+        message: 'Email already verified. Logging you in.',
+        user: {
+          id: user.id,
+          email: user.email,
+          gritsync_email: user.gritsync_email,
+          personal_email: user.personal_email,
+          role: user.role,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          grit_id: user.grit_id,
+        },
+        token: accessToken,
+        refresh_token,
+      })
+    }
+
+    if (!user.email_otp || user.email_otp !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' })
+    }
+
+    if (new Date(user.email_otp_expires_at) < new Date()) {
+      return res.status(400).json({ error: 'This code has expired. Please request a new code.' })
+    }
+
+    // Mark email as verified, clear token and OTP
+    await query(
+      `UPDATE users SET email_verified = true, email_verification_token = NULL, email_verification_expires_at = NULL, email_otp = NULL, email_otp_expires_at = NULL, updated_at = NOW()
+       WHERE id = $1`,
+      [user.id]
+    )
+
+    const accessToken = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
+    const refresh_token = signRefreshToken({ id: user.id })
+
+    res.json({
+      verified: true,
+      message: 'Email verified successfully! Your account is now active.',
+      user: {
+        id: user.id,
+        email: user.email,
+        gritsync_email: user.gritsync_email,
+        personal_email: user.personal_email,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        grit_id: user.grit_id,
+      },
+      token: accessToken,
+      refresh_token,
+    })
+  } catch (err: any) {
+    console.error('Verify OTP error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/auth/resend-verification
 router.post('/resend-verification', async (req: Request, res: Response) => {
   try {
@@ -535,13 +635,15 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
 
     const verification_token = crypto.randomBytes(32).toString('hex')
     const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const otp = generateOTP()
+    const otp_expires = new Date(Date.now() + 15 * 60 * 1000)
 
     await query(
-      `UPDATE users SET email_verification_token = $1, email_verification_expires_at = $2, updated_at = NOW() WHERE id = $3`,
-      [verification_token, verification_expires, user.id]
+      `UPDATE users SET email_verification_token = $1, email_verification_expires_at = $2, email_otp = $3, email_otp_expires_at = $4, updated_at = NOW() WHERE id = $5`,
+      [verification_token, verification_expires, otp, otp_expires, user.id]
     )
 
-    sendVerificationEmail(user.personal_email, user.first_name, verification_token)
+    sendVerificationEmail(user.personal_email, user.first_name, verification_token, otp)
 
     res.json({ message: 'Verification email resent. Please check your inbox.' })
   } catch (err: any) {
