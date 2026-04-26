@@ -1298,17 +1298,20 @@ export function NCLEXExam() {
         <div className="flex-1 flex items-center justify-center gap-1 overflow-hidden">
           {navQuestions.slice(0, 20).map((q) => {
             const realIdx = questions.findIndex(rq => rq.question_id === q.question_id)
+            const isBookmarked = bookmarkedQuestions.has(q.question_id)
+            const isCurrent = realIdx === qIndex
             return (
               <button
                 key={q.question_id}
                 onClick={() => setQIndex(realIdx)}
                 className={`flex-shrink-0 h-2.5 w-2.5 rounded-full transition-all ${
-                  realIdx === qIndex ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30' :
+                  isCurrent ? 'bg-[#17c3b2] ring-2 ring-[#17c3b2]/30' :
                   q.answered_at ? (q.is_correct ? 'bg-green-400' : 'bg-red-400') :
                   markedQuestions.has(q.question_id) ? 'bg-amber-400' :
+                  isBookmarked ? 'bg-[#17c3b2]/30' :
                   'bg-white/20'
-                }`}
-                title={`Question ${realIdx + 1}`}
+                } ${!isCurrent && isBookmarked ? 'ring-1 ring-[#17c3b2]' : ''}`}
+                title={`Question ${realIdx + 1}${isBookmarked ? ' · Bookmarked' : ''}`}
               />
             )
           })}

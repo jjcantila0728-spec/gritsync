@@ -834,6 +834,8 @@ export function NCLEXReview() {
   const [bookmarks, setBookmarks] = useState<any[]>([])
   const [bookmarksLoading, setBookmarksLoading] = useState(false)
   const [removingBookmark, setRemovingBookmark] = useState<number | null>(null)
+  const [bookmarkSearch, setBookmarkSearch] = useState('')
+  const [bookmarkDiffFilter, setBookmarkDiffFilter] = useState<'all' | 'easy' | 'medium' | 'hard'>('all')
   const [createTestInitialPool, setCreateTestInitialPool] = useState<QuestionPool | undefined>(undefined)
 
   useEffect(() => {
@@ -938,6 +940,16 @@ export function NCLEXReview() {
   const plan = subscription?.plan || 'free'
   const completedSessions = sessions.filter(s => s.status === 'completed')
   const pendingSessions = sessions.filter(s => s.status === 'in_progress')
+
+  const filteredBookmarks = bookmarks.filter(b => {
+    const searchLower = bookmarkSearch.toLowerCase()
+    const matchesSearch = !bookmarkSearch || 
+      b.question_text?.toLowerCase().includes(searchLower) ||
+      b.content_area?.toLowerCase().includes(searchLower) ||
+      (Array.isArray(b.tags) && b.tags.some((t: string) => t?.toLowerCase().includes(searchLower)))
+    const matchesDiff = bookmarkDiffFilter === 'all' || b.difficulty === bookmarkDiffFilter
+    return matchesSearch && matchesDiff
+  })
 
   const totalBank = stats?.total_questions ?? 0
 
@@ -1282,6 +1294,38 @@ export function NCLEXReview() {
                   </button>
                 )}
               </div>
+
+              {/* Search + filter controls — only shown when there are bookmarks */}
+              {bookmarks.length > 0 && (
+                <div className="flex flex-col gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={bookmarkSearch}
+                    onChange={e => setBookmarkSearch(e.target.value)}
+                    placeholder="Search bookmarks…"
+                    className="w-full text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[#17c3b2]"
+                  />
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['all', 'easy', 'medium', 'hard'] as const).map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setBookmarkDiffFilter(d)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors capitalize ${
+                          bookmarkDiffFilter === d
+                            ? d === 'all' ? 'bg-gray-700 text-white border-gray-700'
+                              : d === 'easy' ? 'bg-green-500 text-white border-green-500'
+                              : d === 'medium' ? 'bg-yellow-500 text-white border-yellow-500'
+                              : 'bg-red-500 text-white border-red-500'
+                            : 'bg-transparent text-gray-500 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                        }`}
+                      >
+                        {d === 'all' ? `All (${bookmarks.length})` : d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {bookmarksLoading ? (
                 <div className="text-sm text-gray-400 text-center py-6">Loading bookmarks...</div>
               ) : bookmarks.length === 0 ? (
@@ -1290,9 +1334,14 @@ export function NCLEXReview() {
                   <p className="text-sm">No bookmarks yet.</p>
                   <p className="text-xs text-gray-400">Click the Bookmark button on any question during a test to save it here.</p>
                 </div>
+              ) : filteredBookmarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 gap-2 text-gray-400">
+                  <p className="text-sm">No bookmarks match your filter.</p>
+                  <button onClick={() => { setBookmarkSearch(''); setBookmarkDiffFilter('all') }} className="text-xs text-[#17c3b2] hover:underline">Clear filters</button>
+                </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {bookmarks.map(b => {
+                  {filteredBookmarks.map(b => {
                     const tagList: string[] = Array.isArray(b.tags) ? b.tags.filter(Boolean) : []
                     return (
                       <div key={b.question_id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
@@ -1309,6 +1358,9 @@ export function NCLEXReview() {
                             <span className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded capitalize">
                               {b.question_type === 'traditional_mcq' ? 'MCQ' : b.question_type === 'ngn_sata' ? 'SATA' : b.question_type === 'ngn_cloze' ? 'Cloze' : b.question_type === 'ngn_matrix' ? 'Matrix' : b.question_type}
                             </span>
+                            {b.content_area && (
+                              <span className="text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">{b.content_area}</span>
+                            )}
                             {tagList.slice(0, 2).map(tag => (
                               <span key={tag} className="text-[10px] bg-[#17c3b2]/10 text-[#17c3b2] px-1.5 py-0.5 rounded">{tag}</span>
                             ))}
