@@ -349,9 +349,8 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
       params.push(is_ngn)
     }
 
-    if (session_type === 'cat') {
-      conditions.push(`qb.difficulty = 'medium'`)
-    }
+    // CAT: no difficulty constraint — select from all tiers, medium-first ordering
+    // Adaptive reordering happens question-by-question in the answer endpoint
 
     // Pool filter
     if (pool === 'unused') {
@@ -383,11 +382,16 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
     if (session_type === 'readiness') limit = 75
     if (session_type === 'cat') limit = 85
 
+    // CAT mode: order medium-first so adaptive reordering has all tiers available
+    const orderBy = session_type === 'cat'
+      ? `ORDER BY CASE qb.difficulty WHEN 'medium' THEN 0 WHEN 'easy' THEN 1 ELSE 2 END, RANDOM()`
+      : `ORDER BY RANDOM()`
+
     const questionsResult = await query(
       `SELECT qb.id, qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
               qb.difficulty, qb.cognitive_level, qb.is_ngn, qb.options, qb.tags
        FROM question_bank qb ${where}
-       ORDER BY RANDOM()
+       ${orderBy}
        LIMIT $${paramIdx}`,
       [...params, limit]
     )
@@ -520,30 +524,31 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
       is_correct = JSON.stringify(userCells) === JSON.stringify(correctCells)
     }
 
-    // Try to update with marked_for_review column (may not exist yet, handle gracefully)
-    try {
-      await query(
-        `UPDATE session_responses
-         SET user_answer = $1, is_correct = $2, time_spent = $3, answered_at = NOW()
-         WHERE session_id = $4 AND question_id = $5`,
-        [JSON.stringify(user_answer), is_correct, time_spent, sessionId, question_id]
-      )
-    } catch {
-      await query(
-        `UPDATE session_responses
-         SET user_answer = $1, is_correct = $2, time_spent = $3, answered_at = NOW()
-         WHERE session_id = $4 AND question_id = $5`,
-        [JSON.stringify(user_answer), is_correct, time_spent, sessionId, question_id]
-      )
-    }
+    await query(
+      `UPDATE session_responses
+       SET user_answer = $1, is_correct = $2, time_spent = $3, answered_at = NOW()
+       WHERE session_id = $4 AND question_id = $5`,
+      [JSON.stringify(user_answer), is_correct, time_spent, sessionId, question_id]
+    )
 
     const session = sessionResult.rows[0]
     const newAnswered = session.questions_answered + 1
     const newCorrect = session.correct_answers + (is_correct ? 1 : 0)
     const isComplete = newAnswered >= session.total_questions
 
+    // Increment daily usage (server-side, so enforcement is reliable regardless of client)
+    await query(
+      `INSERT INTO nclex_daily_usage (user_id, usage_date, questions_answered)
+       VALUES ($1, CURRENT_DATE, 1)
+       ON CONFLICT (user_id, usage_date)
+       DO UPDATE SET questions_answered = nclex_daily_usage.questions_answered + 1,
+                     updated_at = NOW()`,
+      [userId]
+    ).catch(() => {}) // Non-fatal: don't fail the answer submission if tracking fails
+
     // CAT adaptive difficulty with 3-tier logic
     let catNextDifficulty: string | null = null
+    let nextQuestionId: number | null = null
     if (session.session_type === 'cat' && !isComplete) {
       const settings = session.settings || {}
       const currentDifficulty = settings.cat_current_difficulty || 'medium'
@@ -564,6 +569,60 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
          WHERE id = $2`,
         [JSON.stringify({ cat_current_difficulty: catNextDifficulty, cat_streak: newStreak }), sessionId]
       )
+
+      // Adaptive reordering: swap the upcoming question to match catNextDifficulty
+      try {
+        const currentOrderResult = await query(
+          `SELECT question_order FROM session_responses WHERE session_id = $1 AND question_id = $2`,
+          [sessionId, question_id]
+        )
+        const currentOrder = currentOrderResult.rows[0]?.question_order
+
+        if (currentOrder !== undefined) {
+          // Find the actual next unanswered question (regardless of difficulty)
+          const actualNextResult = await query(
+            `SELECT sr.question_id, sr.question_order
+             FROM session_responses sr
+             WHERE sr.session_id = $1 AND sr.answered_at IS NULL
+               AND sr.question_order > $2
+             ORDER BY sr.question_order LIMIT 1`,
+            [sessionId, currentOrder]
+          )
+          const actualNext = actualNextResult.rows[0]
+
+          // Find the nearest unanswered question matching the desired difficulty
+          const bestNextResult = await query(
+            `SELECT sr.question_id, sr.question_order
+             FROM session_responses sr
+             JOIN question_bank qb ON sr.question_id = qb.id
+             WHERE sr.session_id = $1 AND sr.answered_at IS NULL
+               AND sr.question_order > $2 AND qb.difficulty = $3
+             ORDER BY sr.question_order LIMIT 1`,
+            [sessionId, currentOrder, catNextDifficulty]
+          )
+          const bestNext = bestNextResult.rows[0]
+
+          if (actualNext && bestNext && actualNext.question_id !== bestNext.question_id) {
+            // Swap question_order so the best-difficulty question comes next
+            await query(
+              `UPDATE session_responses
+               SET question_order = CASE
+                 WHEN question_id = $1 THEN $2
+                 WHEN question_id = $3 THEN $4
+               END
+               WHERE session_id = $5 AND question_id IN ($1, $3)`,
+              [actualNext.question_id, bestNext.question_order,
+               bestNext.question_id, actualNext.question_order,
+               sessionId]
+            )
+            nextQuestionId = bestNext.question_id
+          } else if (actualNext) {
+            nextQuestionId = actualNext.question_id
+          }
+        }
+      } catch (catErr) {
+        console.warn('CAT reorder warning (non-fatal):', catErr)
+      }
     }
 
     if (isComplete) {
@@ -597,6 +656,7 @@ router.post('/session/:id/answer', authenticateToken, async (req: AuthenticatedR
       questions_answered: newAnswered,
       correct_answers: newCorrect,
       cat_next_difficulty: catNextDifficulty,
+      next_question_id: nextQuestionId,
     })
   } catch (error: any) {
     console.error('Submit answer error:', error)

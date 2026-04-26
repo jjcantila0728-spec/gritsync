@@ -400,12 +400,13 @@ function CreateTestModal({ onClose, onStart, stats }: {
 // ── Upgrade Modal ─────────────────────────────────────────────────────────────
 function UpgradeModal({ onClose }: { onClose: () => void }) {
   const [paymentInfo, setPaymentInfo] = useState<{ accounts: { method: string; name: string; number: string }[] } | null>(null)
+  const [paymentError, setPaymentError] = useState(false)
 
   useEffect(() => {
     fetch('/api/questions/payment-info')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('fetch failed'); return r.json() })
       .then(setPaymentInfo)
-      .catch(() => {})
+      .catch(() => setPaymentError(true))
   }, [])
 
   return (
@@ -449,14 +450,16 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           {/* Payment info */}
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
             <p className="text-xs text-gray-500 mb-2 font-medium">Send payment to:</p>
-            {paymentInfo ? (
+            {paymentError ? (
+              <p className="text-sm font-medium text-red-500">Unable to load payment info — contact admin to upgrade.</p>
+            ) : paymentInfo ? (
               paymentInfo.accounts.map(a => (
                 <p key={a.method} className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                   {a.method}: {a.number} ({a.name})
                 </p>
               ))
             ) : (
-              <p className="text-sm text-gray-400">Loading payment info...</p>
+              <p className="text-sm text-gray-400 animate-pulse">Loading payment info...</p>
             )}
             <p className="text-xs text-gray-400 mt-2">Message admin with proof of payment and your email address.</p>
           </div>
@@ -841,6 +844,7 @@ export function NCLEXReview() {
                     <tr className="bg-gray-900 dark:bg-gray-800 text-white">
                       <th className="px-5 py-3 text-xs font-semibold text-left uppercase tracking-wide">Test ID</th>
                       <th className="px-4 py-3 text-xs font-semibold text-left uppercase tracking-wide">Score</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-left uppercase tracking-wide">Questions</th>
                       <th className="px-4 py-3 text-xs font-semibold text-left uppercase tracking-wide">
                         <div className="flex items-center gap-2">
                           Date
@@ -870,6 +874,10 @@ export function NCLEXReview() {
                             ) : (
                               <span className="text-sm text-gray-400">—</span>
                             )}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                            <span className="font-semibold">{s.questions_answered || 0}</span>
+                            <span className="text-gray-400">/{total}</span>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
                             {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}

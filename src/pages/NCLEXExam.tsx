@@ -532,9 +532,23 @@ export function NCLEXExam() {
       })
 
       // Update local question with result
-      setQuestions(prev => prev.map((q, i) =>
-        i === qIndex ? { ...q, is_correct: data.is_correct, user_answer, answered_at: new Date().toISOString() } : q
-      ))
+      setQuestions(prev => {
+        const updated = prev.map((q, i) =>
+          i === qIndex ? { ...q, is_correct: data.is_correct, user_answer, answered_at: new Date().toISOString() } : q
+        )
+        // CAT: if backend swapped a question to be next, reorder local array to match
+        if (data.next_question_id && session?.session_type === 'cat') {
+          const nextIdx = updated.findIndex(q => q.question_id === data.next_question_id)
+          const immediateNext = qIndex + 1
+          if (nextIdx > immediateNext) {
+            const reordered = [...updated]
+            const [moved] = reordered.splice(nextIdx, 1)
+            reordered.splice(immediateNext, 0, moved)
+            return reordered
+          }
+        }
+        return updated
+      })
 
       if (isTutorial) {
         setFeedback({ is_correct: data.is_correct, correct_answer: data.correct_answer, ...data })
