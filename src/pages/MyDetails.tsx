@@ -1218,45 +1218,49 @@ export function MyDetails() {
       <Header />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-4 md:p-8 lg:p-10 max-w-5xl mx-auto w-full">
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => navigate(-1)}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                  aria-label="Go back"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
+        <main className="flex-1 p-4 md:p-8">
+          <div className="mb-8">
+            <div className="mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                  <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">
                     My Details
                   </h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                    {editing
-                      ? 'Saved details will auto-fill your application forms.'
-                      : 'Your information auto-fills NCLEX application forms.'}
-                  </p>
                 </div>
-              </div>
-              {!editing && (
-                <div className="flex gap-2 flex-shrink-0">
-                  <Link to="/application/new">
-                    <Button variant="outline" size="sm" className="hover:bg-primary-50 dark:hover:bg-primary-900/20">
-                      <FileText className="h-4 w-4 mr-2" />
-                      New Application
+                {!editing && (
+                  <div className="flex gap-3 flex-shrink-0">
+                    <Link to="/application/new">
+                      <Button variant="outline" size="sm" className="hover:bg-primary-50 dark:hover:bg-primary-900/20">
+                        <FileText className="h-4 w-4 mr-2" />
+                        New Application
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditing(true)}
+                      className="hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      Edit Details
                     </Button>
-                  </Link>
-                  <Button
-                    size="sm"
-                    onClick={() => setEditing(true)}
-                  >
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    Edit Details
-                  </Button>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
+              <p className="text-gray-600 dark:text-gray-400">
+                {editing 
+                  ? 'Update your information. Saved details will auto-fill your application forms.'
+                  : 'View and manage your personal information. These details will auto-fill your application forms.'}
+              </p>
             </div>
           </div>
 
@@ -1361,124 +1365,117 @@ export function MyDetails() {
             )}
 
             {/* Profile Header */}
-            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden p-0">
-              {/* Gradient Banner */}
-              <div className="h-28 bg-gradient-to-br from-primary-700 via-primary-600 to-red-500 relative overflow-hidden">
-                <div className="absolute inset-0 opacity-20"
-                  style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 0%, transparent 60%), radial-gradient(circle at 80% 20%, white 0%, transparent 50%)' }}
-                />
-                <div className="absolute bottom-3 right-4">
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm",
-                    completionPercentage === 100
-                      ? "bg-green-500/30 text-white border border-green-300/40"
-                      : "bg-white/20 text-white border border-white/30"
-                  )}>
-                    <Sparkles className="h-3 w-3" />
-                    {completionPercentage}% profile complete
-                  </span>
-                </div>
-              </div>
-
-              {/* Content overlapping banner */}
-              <div className="px-6 pb-6">
-                <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
-                  {/* Avatar with ring */}
-                  <div className="relative group flex-shrink-0">
-                    {(() => {
-                      const fullNameForAvatar = [firstName, lastName].filter(Boolean).join(' ') || user?.email || ''
-                      return (
-                        <div className={cn(
-                          "w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold shadow-xl overflow-hidden ring-4 ring-white dark:ring-gray-800",
-                          !avatarUrl && getAvatarColor(fullNameForAvatar, defaultAvatarDesign),
-                          !avatarUrl && getAvatarColorDark(fullNameForAvatar, defaultAvatarDesign),
-                          !avatarUrl && getAvatarTextColor(fullNameForAvatar, defaultAvatarDesign),
-                          !avatarUrl && getAvatarTextColorDark(fullNameForAvatar, defaultAvatarDesign)
-                        )}>
-                          {avatarUrl ? (
-                            <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-                          ) : (
-                            getInitials(fullNameForAvatar)
-                          )}
-                        </div>
-                      )
-                    })()}
-                    <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/50 opacity-0 group-hover:opacity-100 rounded-full transition-opacity">
-                      <label className="cursor-pointer p-1.5 hover:bg-black/20 rounded-full transition-colors">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleAvatarUpload}
-                          disabled={uploadingAvatar || deletingAvatar}
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow duration-300">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                <div className="relative group">
+                {(() => {
+                  // Generate avatar based on first name + last name only (no middle name)
+                  // This is the source of truth for avatar generation - uniform across all components
+                  const fullNameForAvatar = [firstName, lastName].filter(Boolean).join(' ') || user?.email || ''
+                  
+                  return (
+                    <div className={cn(
+                      "w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold flex-shrink-0 shadow-lg overflow-hidden",
+                      !avatarUrl && getAvatarColor(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarColorDark(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarTextColor(fullNameForAvatar, defaultAvatarDesign),
+                      !avatarUrl && getAvatarTextColorDark(fullNameForAvatar, defaultAvatarDesign)
+                    )}>
+                      {avatarUrl ? (
+                        <img 
+                          src={avatarUrl} 
+                          alt="Profile" 
+                          className="w-full h-full object-cover"
                         />
-                        {uploadingAvatar ? <Loading className="text-white h-4 w-4" /> : <Camera className="h-4 w-4 text-white" />}
-                      </label>
-                      {avatarUrl && (
-                        <button
-                          type="button"
-                          onClick={handleDeleteAvatar}
-                          disabled={deletingAvatar}
-                          className="cursor-pointer p-1.5 hover:bg-red-500/50 rounded-full transition-colors"
-                          title="Delete avatar"
-                        >
-                          {deletingAvatar ? <Loading className="text-white h-4 w-4" /> : <Trash2 className="h-4 w-4 text-white" />}
-                        </button>
-                      )}
-                      {!avatarUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setShowDesignModal(true)}
-                          className="cursor-pointer p-1.5 hover:bg-primary-500/50 rounded-full transition-colors"
-                          title="Choose avatar design"
-                        >
-                          <Palette className="h-4 w-4 text-white" />
-                        </button>
+                      ) : (
+                        getInitials(fullNameForAvatar)
                       )}
                     </div>
+                  )
+                })()}
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 rounded-full transition-opacity">
+                    <label className="cursor-pointer p-2 hover:bg-black/20 rounded-full transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAvatarUpload}
+                        disabled={uploadingAvatar || deletingAvatar}
+                      />
+                      {uploadingAvatar ? (
+                        <Loading className="text-white h-5 w-5" />
+                      ) : (
+                        <Camera className="h-5 w-5 text-white" />
+                      )}
+                    </label>
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteAvatar}
+                        disabled={deletingAvatar}
+                        className="cursor-pointer p-2 hover:bg-red-500/50 rounded-full transition-colors"
+                        title="Delete avatar"
+                      >
+                        {deletingAvatar ? (
+                          <Loading className="text-white h-5 w-5" />
+                        ) : (
+                          <Trash2 className="h-5 w-5 text-white" />
+                        )}
+                      </button>
+                    )}
+                    {!avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDesignModal(true)}
+                        className="cursor-pointer p-2 hover:bg-primary-500/50 rounded-full transition-colors"
+                        title="Choose avatar design"
+                      >
+                        <Palette className="h-5 w-5 text-white" />
+                      </button>
+                    )}
                   </div>
-
-                  {/* Name & info */}
-                  <div className="flex-1 min-w-0 pb-1 text-center sm:text-left">
-                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
-                        {getFullNameWithMiddle(firstName, middleName, lastName, '') || 'User'}
-                      </h2>
-                      {!avatarUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setShowDesignModal(true)}
-                          className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0"
-                          title="Change avatar design"
-                        >
-                          <Palette className="h-3.5 w-3.5 text-gray-400" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 justify-center sm:justify-start mb-2 text-sm text-gray-500 dark:text-gray-400">
-                      <Mail className="h-3.5 w-3.5 flex-shrink-0" />
-                      <span className="truncate">{clientEmail || user.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
-                      {user.role === 'admin' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
-                          <Shield className="h-3 w-3" />
-                          Administrator
-                        </span>
-                      )}
-                      {user.role === 'client' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
-                          <User className="h-3 w-3" />
-                          Client
-                        </span>
-                      )}
-                      {user.grit_id && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          <Award className="h-3 w-3" />
-                          {user.grit_id}
-                        </span>
-                      )}
-                    </div>
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      {getFullNameWithMiddle(firstName, middleName, lastName, '') || 'User'}
+                    </h2>
+                    {!avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDesignModal(true)}
+                        className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title="Change avatar design"
+                      >
+                        <Palette className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
+                    <Mail className="h-4 w-4 text-gray-400" />
+                    <p className="text-gray-600 dark:text-gray-400">
+                      {clientEmail || user.email}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
+                    {user.role === 'admin' && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                        <Shield className="h-3 w-3" />
+                        Administrator
+                      </span>
+                    )}
+                    {user.role === 'client' && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                        <User className="h-3 w-3" />
+                        Client
+                      </span>
+                    )}
+                    {user.grit_id && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                        <Award className="h-3 w-3" />
+                        ID: {user.grit_id}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
