@@ -27,84 +27,103 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'What is GritSync?',
-        answer: 'GritSync is a professional NCLEX application processing platform built specifically for Filipino nurses aspiring to become US Registered Nurses (USRNs). We guide you through every step — from document preparation and board of nursing application to NCLEX scheduling — so you can focus on studying rather than paperwork.',
+        answer: 'GritSync is a professional NCLEX application processing platform built specifically for Filipino nurses aspiring to become US Registered Nurses (USRNs). We handle the paperwork, coordinate with the Board of Nursing, and guide you through every milestone — so you can focus on studying rather than administrative stress.',
       },
       {
         question: 'Who can use GritSync?',
-        answer: 'GritSync is designed for Filipino nurses (RNs with PRC license) who want to apply for NCLEX licensure in the United States. Whether you are applying for the first time or retaking the NCLEX, our platform can support your journey.',
+        answer: 'GritSync is designed for Filipino nurses with a valid PRC Nursing License who want to apply for NCLEX licensure in the United States. Whether you are applying for the first time or retaking the NCLEX, our platform can support your journey.',
       },
       {
         question: 'How do I create an account?',
-        answer: 'Click "Sign Up" on the top navigation bar. Fill in your personal details including your name, personal email address, and mobile number, then set a password. After submitting, a verification link will be sent to your email — click it to activate your account. Once verified, you can log in and start your application.',
+        answer: 'Click "Sign Up" on the top navigation bar. Fill in your name, personal email address, and mobile number, then set a password. After submitting, a verification link will be sent to your email — click it to activate your account. Once verified, you can log in and start your application.',
       },
       {
         question: 'What email should I use to register?',
-        answer: 'Use your personal email address (e.g., Gmail, Yahoo, Outlook, etc.). This will be your primary communication address for GritSync notifications, updates, and important messages.',
+        answer: 'Use your personal email address (e.g., Gmail, Yahoo, Outlook, etc.). This will be your primary address for GritSync notifications, updates, and important messages.',
       },
       {
         question: 'I did not receive a verification email. What should I do?',
-        answer: 'First, check your spam or junk folder. If it is not there, wait a few minutes and check again. If you still cannot find it, log in to your account and look for a "Resend Verification Email" option, or contact our support team at support@gritsync.com.',
+        answer: 'First, check your spam or junk folder. If you still cannot find it, contact our support team at support@gritsync.com and we will assist you.',
       },
       {
         question: 'Can I use GritSync on my mobile phone?',
-        answer: 'Yes! GritSync is a Progressive Web App (PWA) fully optimized for mobile devices. You can install it on your phone\'s home screen from your browser for an app-like experience without downloading from an app store.',
+        answer: 'Yes. GritSync is a Progressive Web App (PWA) fully optimized for mobile. You can install it on your phone\'s home screen from your browser for an app-like experience without downloading from an app store.',
       },
     ],
   },
   {
     id: 'application-process',
     icon: FileText,
-    title: 'The NCLEX Application Process',
+    title: 'The GritSync Application Process',
     color: 'from-primary-500 to-primary-700',
     faqs: [
       {
-        question: 'What is the overall NCLEX application process for Filipino nurses?',
+        question: 'Which US state does GritSync currently process applications for?',
+        answer: 'GritSync currently processes NCLEX applications for the New York State Board of Nursing (NYSBON). New York is one of the most recognized and widely accepted RN licenses in the US, and its NCLEX pathway is well-established for internationally educated nurses.',
+      },
+      {
+        question: 'What are the steps to submit my NCLEX application through GritSync?',
         answer: (
           <div className="space-y-2">
-            <p>The NCLEX process for Filipino nurses generally follows these steps:</p>
-            <ol className="list-decimal list-inside space-y-1 mt-2 text-sm">
-              <li><strong>Submit your application to your chosen US State Board of Nursing (BON)</strong></li>
-              <li><strong>Credential evaluation</strong> — the BON reviews your PRC license and transcripts</li>
-              <li><strong>Authorization to Test (ATT)</strong> — issued once your application is approved</li>
-              <li><strong>Schedule your NCLEX exam</strong> with Pearson VUE using your ATT</li>
-              <li><strong>Take and pass the NCLEX-RN</strong></li>
-              <li><strong>Receive your US RN license</strong> from the state BON</li>
+            <p>When you click "New Application" in your dashboard, you will be guided through 8 steps:</p>
+            <ol className="list-decimal list-inside space-y-1.5 mt-2 text-sm">
+              <li><strong>Personal Information</strong> — Your name (as per passport), gender, marital status, date of birth, and place of birth</li>
+              <li><strong>Address</strong> — Your current residential address in the Philippines</li>
+              <li><strong>Elementary School</strong> — Name, location, and years attended</li>
+              <li><strong>High School</strong> — Name, location, and years attended</li>
+              <li><strong>Nursing School</strong> — Name, location, years attended, major, and diploma date</li>
+              <li><strong>Required Documents</strong> — Upload your 2x2 ID picture, Nursing Diploma, and valid Passport</li>
+              <li><strong>Review & Signature</strong> — Review your application and provide your digital signature</li>
+              <li><strong>Payment Selection</strong> — Select and pay for the service package</li>
             </ol>
-            <p className="mt-2">GritSync assists with Steps 1–3, helping you prepare documents, file the application correctly, and track your status at every stage.</p>
+            <p className="mt-2">Once submitted, our team takes over and tracks everything from there.</p>
           </div>
         ),
       },
       {
-        question: 'What services does GritSync provide?',
-        answer: 'GritSync handles the application paperwork and submission process on your behalf. This includes: reviewing and organizing your required documents, completing the state BON application form accurately, submitting your application and coordinating with the BON, tracking your application status, and notifying you of updates and next steps.',
-      },
-      {
-        question: 'Which US states does GritSync support?',
-        answer: 'GritSync supports applications to all 50 US states and territories. However, we specialize in states with streamlined processes for internationally educated nurses such as California, Texas, New York, Illinois, and Florida. During your quotation, we will advise which state best fits your situation.',
-      },
-      {
-        question: 'What is a Compact State (NLC) and should I apply there?',
-        answer: 'The Nurse Licensure Compact (NLC) allows nurses to hold one multi-state license valid in all compact member states. If you intend to live and work in a compact state, applying there can give you greater flexibility. However, for internationally educated nurses, some compact states have stricter initial licensure requirements. Our team will help you evaluate the best option for your specific goals.',
-      },
-      {
-        question: 'How do I start my NCLEX application with GritSync?',
-        answer: 'Log in to your dashboard, then click "New Application." You will be guided through the service selection, document upload, and payment steps. Once your application is submitted, our team begins processing and you can track the status in real time from your dashboard.',
+        question: 'Why do you need my elementary and high school information?',
+        answer: 'The New York State Board of Nursing requires a complete educational history as part of the NCLEX application. This includes all educational institutions attended — from elementary through nursing school. Our application form mirrors the BON\'s requirements so your submission is complete and accurate from the start.',
       },
       {
         question: 'What happens after I submit my application through GritSync?',
-        answer: 'Our processing team reviews your documents for completeness and accuracy. We then prepare and submit your application to the chosen BON. You will receive status updates directly to your email and on your GritSync dashboard as your application progresses through each stage.',
+        answer: (
+          <div className="space-y-2">
+            <p>After you submit, GritSync manages your application through the following processing stages — all trackable in real time on your dashboard:</p>
+            <ol className="list-decimal list-inside space-y-1.5 mt-2 text-sm">
+              <li><strong>Documents Collection</strong> — We gather and verify all required documents</li>
+              <li><strong>Documents Review</strong> — Our team reviews and checks document completeness</li>
+              <li><strong>CGFNS Application</strong> — We apply to CGFNS for credential evaluation</li>
+              <li><strong>CGFNS Processing</strong> — CGFNS evaluates your nursing credentials</li>
+              <li><strong>CGFNS Approval</strong> — CGFNS confirms your credentials are verified</li>
+              <li><strong>BON Application</strong> — We submit your application to the New York Board of Nursing</li>
+              <li><strong>BON Processing</strong> — NYSBON reviews your application</li>
+              <li><strong>Pearson VUE Registration</strong> — We register you with Pearson VUE for the NCLEX exam</li>
+              <li><strong>Mandatory Courses</strong> — Completion of required NY State online courses</li>
+              <li><strong>ATT Issued</strong> — Your Authorization to Test is released</li>
+              <li><strong>Exam Scheduled</strong> — You schedule your NCLEX exam using your ATT</li>
+              <li><strong>Exam Taken</strong> — You sit for the NCLEX-RN</li>
+              <li><strong>Results Pending</strong> — Awaiting official results</li>
+              <li><strong>Results Received</strong> — Your NCLEX results are confirmed</li>
+              <li><strong>License Issued</strong> — Your New York RN license is granted</li>
+            </ol>
+          </div>
+        ),
       },
       {
-        question: 'Can I apply to multiple states at the same time?',
-        answer: 'Yes, you can submit separate applications for different states. Each application is processed independently and may have different fees and timelines. Our team can advise you on whether applying to multiple states makes sense for your situation.',
+        question: 'What is CGFNS and why is it required for New York?',
+        answer: 'CGFNS (Commission on Graduates of Foreign Nursing Schools) is an organization that evaluates the educational credentials of internationally educated nurses. The New York State Board of Nursing requires a CGFNS credential evaluation as part of the NCLEX application process for Filipino nurses. GritSync handles the CGFNS application on your behalf and monitors its progress.',
+      },
+      {
+        question: 'What are the Mandatory Courses required by New York?',
+        answer: 'New York State requires NCLEX applicants to complete mandatory online courses as a condition of licensure. These currently include courses on infection control, child abuse identification, and/or other state-mandated topics. The cost of these courses ($54.99) is included in your Step 1 payment. GritSync tracks the completion of these courses as part of your processing timeline.',
       },
       {
         question: 'What is an Authorization to Test (ATT)?',
-        answer: 'An ATT (Authorization to Test) is an official document issued by Pearson VUE after the Board of Nursing approves your eligibility. It contains a unique registration number and expiration date that you use to schedule your NCLEX exam. Your ATT is typically valid for 90 days — you must schedule and take your exam within this window.',
+        answer: 'An ATT (Authorization to Test) is an official document issued by Pearson VUE after the Board of Nursing confirms your eligibility. It contains a unique registration number and expiration date that you need to schedule your NCLEX exam. Your ATT is valid for 90 days — you must take your exam within this window.',
       },
       {
         question: 'How do I schedule my NCLEX exam after receiving my ATT?',
-        answer: 'Once you receive your ATT, visit the Pearson VUE website (www.pearsonvue.com/nclex) to schedule your exam at a test center near you. GritSync will notify you when your ATT is issued and provide step-by-step guidance for scheduling.',
+        answer: 'Once GritSync notifies you that your ATT has been issued (shown on your dashboard), visit the Pearson VUE website at www.pearsonvue.com/nclex to schedule your exam. You can choose a test center in the Philippines or elsewhere. GritSync will provide step-by-step guidance at this stage.',
       },
     ],
   },
@@ -115,76 +134,82 @@ const faqCategories: FAQCategory[] = [
     color: 'from-emerald-500 to-emerald-700',
     faqs: [
       {
-        question: 'What documents are required to apply for NCLEX as a Filipino nurse?',
+        question: 'What documents do I need to upload to my GritSync application?',
         answer: (
           <div className="space-y-2">
-            <p>Requirements vary slightly by state, but generally include:</p>
-            <ul className="list-disc list-inside space-y-1 mt-2 text-sm">
-              <li>Valid PRC Nursing License (Certificate of Registration)</li>
-              <li>PRC Board Rating / License Verification</li>
-              <li>Official Nursing School Transcript of Records (TOR)</li>
-              <li>Certificate of Graduation / Diploma</li>
-              <li>Valid government-issued ID (passport recommended)</li>
-              <li>Completed BON application form</li>
-              <li>Criminal Background Check (CGFNS or state-specific)</li>
-              <li>CGFNS Certificate or VisaScreen (required by some states)</li>
-              <li>English Proficiency Exam results (IELTS/TOEFL) — required by certain states</li>
+            <p>When filling out your NCLEX application on GritSync, you are required to upload the following 3 documents:</p>
+            <ul className="list-disc list-inside space-y-1.5 mt-2 text-sm">
+              <li><strong>2x2 ID Picture</strong> — A recent, clear 2x2 photo with white background (image file)</li>
+              <li><strong>Nursing Diploma</strong> — Your original nursing school diploma (PDF or image)</li>
+              <li><strong>Valid Passport</strong> — A clear copy of your valid Philippine passport (PDF or image)</li>
             </ul>
-            <p className="mt-2">Our team will provide you a personalized checklist for your target state after you request a quotation.</p>
+            <p className="mt-2">All files must be clear, complete, and legible. Maximum file size is 5MB per document.</p>
           </div>
         ),
       },
       {
-        question: 'Do my documents need to be authenticated or apostilled?',
-        answer: 'Yes. Most US state Boards of Nursing require documents to be authenticated or apostilled. Philippine documents typically need to be authenticated by the Philippine Statistics Authority (PSA) and then apostilled by the Department of Foreign Affairs (DFA). GritSync will guide you through the exact authentication requirements for your target state.',
+        question: 'Why does GritSync only require 3 documents in the application form?',
+        answer: 'The 3 documents you upload at the time of application (2x2 picture, nursing diploma, and passport) are the core documents needed to initiate your processing. Additional documents that may be required by CGFNS or the New York BON (such as official transcripts or letters of verification) are coordinated separately by our processing team as your application progresses through each stage. We will notify you if and when additional documents are needed.',
       },
       {
-        question: 'What is CGFNS and do I need it?',
-        answer: 'CGFNS (Commission on Graduates of Foreign Nursing Schools) is an organization that evaluates the credentials of internationally educated nurses. Some US states require a CGFNS Certificate before they process your NCLEX application. Others accept direct endorsement. During your quotation, we will tell you exactly what is required for your chosen state.',
+        question: 'What specifications should my 2x2 picture meet?',
+        answer: 'Your 2x2 picture should be a recent photo (taken within the last 6 months), with a plain white or off-white background. The photo should show your face clearly, front-facing, with no heavy filters or edits. Upload it as a JPG or PNG image file.',
       },
       {
-        question: 'Is an English proficiency exam required?',
-        answer: 'It depends on the state. Some states (e.g., California) require proof of English proficiency (IELTS Academic with a minimum score, or TOEFL) for internationally educated nurses. Others do not. GritSync will clarify this requirement upfront during the quotation process so you are not caught off guard.',
+        question: 'What version of my Nursing Diploma do I need to provide?',
+        answer: 'Upload a clear, complete scan or photo of your original nursing school diploma. The document must show the school name, your full name, the degree conferred, and the graduation date. A blurry, cropped, or incomplete copy will delay processing.',
       },
       {
-        question: 'How do I upload my documents to GritSync?',
-        answer: 'After starting your application, go to the Documents section of your dashboard. You can upload files directly from your computer or mobile phone. Supported formats include PDF, JPG, and PNG. Make sure scans are clear, complete, and legible — blurry or cropped documents will be rejected by the BON.',
+        question: 'My passport is expired. Can I still apply?',
+        answer: 'Your passport must be valid at the time of application. An expired passport may cause issues with your BON application and identity verification. We strongly recommend renewing your passport before starting your NCLEX application.',
       },
       {
-        question: 'What if a document is rejected or needs resubmission?',
-        answer: 'If a document does not meet requirements, our team will notify you immediately through your dashboard and by email, with specific instructions on what needs to be corrected. You can upload a replacement document directly from your dashboard.',
+        question: 'Can I upload documents I previously uploaded to GritSync?',
+        answer: 'Yes. If you have previously uploaded documents to your GritSync account (from a prior application or your profile), the system will automatically detect them and let you use those existing files. You do not need to re-upload the same document each time.',
       },
       {
-        question: 'How long does document verification take?',
-        answer: 'Our team typically reviews uploaded documents within 1–3 business days. Once all documents are verified and complete, we proceed to file your application with the BON.',
+        question: 'What file formats are accepted for document uploads?',
+        answer: 'GritSync accepts PDF, JPG, JPEG, PNG, DOC, and DOCX files for most documents. The 2x2 picture must be an image file (JPG or PNG). Each file must be 5MB or smaller.',
+      },
+      {
+        question: 'What if a document I upload is rejected?',
+        answer: 'If a document does not meet the requirements, our team will notify you through your dashboard and by email with specific instructions on what needs to be corrected. You can upload a replacement document directly from your application details page.',
       },
     ],
   },
   {
     id: 'timeline',
     icon: Clock,
-    title: 'Timeline & Processing Times',
+    title: 'Timeline & Processing',
     color: 'from-amber-500 to-orange-600',
     faqs: [
       {
-        question: 'How long does the entire NCLEX process take?',
-        answer: 'The total timeline varies by state and individual circumstances, but on average: BON application processing takes 4–12 weeks, credential evaluation (CGFNS, if required) takes 8–16 weeks, and ATT issuance typically follows 1–2 weeks after BON approval. In total, expect 3–6 months from submission to receiving your ATT, not including the time to prepare for and take the exam.',
+        question: 'How long does the entire NCLEX process take from application to license?',
+        answer: 'The total timeline varies, but as a general estimate: CGFNS processing typically takes 8–16 weeks, New York BON processing takes 4–12 weeks after CGFNS approval, and ATT issuance follows 1–4 weeks after BON approval. In total, most clients receive their ATT within 6–9 months from the time their complete application is submitted. The actual exam and license issuance add additional time.',
       },
       {
-        question: 'Which state has the fastest processing time?',
-        answer: 'Processing times change frequently and depend on the current BON workload. States like Texas, Illinois, and New York are often cited as having relatively faster processing for internationally educated nurses. However, speed should not be the only factor — eligibility requirements and your long-term work goals also matter. Our team will help you find the best balance.',
+        question: 'How can I track the status of my application?',
+        answer: 'Your GritSync dashboard shows your real-time application status at every stage — from Documents Collection all the way to License Issued. Each of the 15 timeline milestones is clearly marked as pending, in progress, or completed. You also receive email notifications for major updates.',
       },
       {
-        question: 'What can slow down my application?',
-        answer: 'Common delays include: incomplete or incorrectly authenticated documents, delays in receiving official transcripts directly from your school to the BON, pending criminal background check results, and high application volumes at the BON. GritSync proactively monitors your application and alerts you to any issues that require attention.',
+        question: 'What can slow down my NCLEX application?',
+        answer: 'Common causes of delays include: incomplete or unclear document uploads, delays in receiving official transcript verifications directly from your nursing school to CGFNS, high processing volumes at CGFNS or the New York BON, and missing completion of mandatory NY courses. GritSync proactively monitors your application and alerts you as soon as action is needed on your end.',
       },
       {
-        question: 'How will I know the status of my application?',
-        answer: 'You can check your real-time application status at any time from your GritSync dashboard. We update your status at every milestone — document review, BON submission, credential evaluation, ATT issuance, and beyond. You will also receive email notifications for major updates.',
+        question: 'How long does CGFNS processing take?',
+        answer: 'CGFNS credential evaluation for the New York pathway typically takes 8–16 weeks from the time your application is submitted. Delays can occur if your nursing school takes longer to send official transcripts or if additional verification is needed. Our team monitors CGFNS status and will update you when it is approved.',
       },
       {
-        question: 'Can I track my application even after GritSync submits it to the BON?',
-        answer: 'Yes. We continue monitoring your application status with the BON and update your dashboard accordingly. For some states, we can check directly with the BON on your behalf; for others, we will guide you to check using your BON applicant portal.',
+        question: 'How long does the New York BON take to process my application after CGFNS?',
+        answer: 'After CGFNS approval, the New York State Board of Nursing typically takes 4–12 weeks to review and process your application. Processing times can vary based on their current application volume. GritSync tracks your BON status and updates your dashboard accordingly.',
+      },
+      {
+        question: 'What happens between receiving my ATT and taking the exam?',
+        answer: 'Once your ATT is issued, GritSync will notify you. You then schedule your NCLEX exam directly on the Pearson VUE website using your ATT registration number. Your ATT is valid for 90 days — you must sit for the exam within that window. GritSync records your scheduled exam date and exam results on your dashboard.',
+      },
+      {
+        question: 'How long after the exam will I receive my results?',
+        answer: 'Unofficial Quick Results are typically available on the Pearson VUE website approximately 48 hours after your exam for a small fee ($8, included in your Step 2 payment). The official result from the New York BON is usually available within 4–6 weeks. GritSync tracks and records your results as reported.',
       },
     ],
   },
@@ -195,68 +220,94 @@ const faqCategories: FAQCategory[] = [
     color: 'from-violet-500 to-violet-700',
     faqs: [
       {
-        question: 'How much does it cost to process my NCLEX application through GritSync?',
-        answer: 'GritSync service fees vary based on your target state and the specific services required (e.g., CGFNS assistance, state application filing, document review). You can get a personalized, no-obligation quote by visiting the Quote page on our website. All fees are clearly itemized — no hidden charges.',
+        question: 'How much does it cost to process my NCLEX application through GritSync (New York)?',
+        answer: (
+          <div className="space-y-3">
+            <p>GritSync uses a <strong>staggered 2-step payment</strong> for the New York NCLEX processing package. Here is the full breakdown:</p>
+            <div className="mt-2 space-y-3 text-sm">
+              <div className="p-3 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800">
+                <p className="font-semibold text-primary-700 dark:text-primary-300 mb-1">Step 1 Payment — $267.99</p>
+                <ul className="space-y-0.5 text-gray-600 dark:text-gray-400">
+                  <li>• NCLEX NY BON Application Fee: $143.00</li>
+                  <li>• NCLEX NY Mandatory Courses: $54.99</li>
+                  <li>• NCLEX NY Bond Fee: $70.00</li>
+                </ul>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Paid at the start to initiate your BON application</p>
+              </div>
+              <div className="p-3 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800">
+                <p className="font-semibold text-primary-700 dark:text-primary-300 mb-1">Step 2 Payment — $508.00</p>
+                <ul className="space-y-0.5 text-gray-600 dark:text-gray-400">
+                  <li>• NCLEX Pearson VUE Application Fee: $200.00</li>
+                  <li>• NCLEX Pearson VUE (NCSBN) Exam Fee: $150.00</li>
+                  <li>• GritSync Service Fee: $150.00</li>
+                  <li>• NCLEX NY Quick Results: $8.00</li>
+                </ul>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Paid when you are ready to register with Pearson VUE</p>
+              </div>
+              <p className="font-semibold text-gray-700 dark:text-gray-300">Total: $775.99 USD</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        question: 'Why are payments split into two steps?',
+        answer: 'The staggered payment structure reflects the actual two phases of the NCLEX process. Step 1 covers your BON application fees that are needed upfront to begin your application with New York. Step 2 covers the Pearson VUE registration and exam fees, which are only needed once your BON application has been approved and you are ready to take the exam.',
+      },
+      {
+        question: 'When do I pay Step 1 and Step 2?',
+        answer: 'Step 1 is paid when you submit your NCLEX application through GritSync. Step 2 is paid after your BON application is approved and your processing reaches the Pearson VUE Registration stage — when you are ready to be registered for the exam.',
+      },
+      {
+        question: 'What does the GritSync Service Fee ($150) cover?',
+        answer: 'The GritSync Service Fee covers our professional processing and coordination services throughout your entire NCLEX journey — from document review and CGFNS application coordination to BON filing, status monitoring, and support from start to license issuance.',
+      },
+      {
+        question: 'Are there any fees not included in the GritSync package?',
+        answer: 'All standard New York NCLEX processing fees are included in the two-step package totaling $775.99. There are no hidden fees. However, if any additional state-specific requirements arise or if you need a retake, additional fees would apply and will be communicated to you in advance.',
       },
       {
         question: 'What payment methods does GritSync accept?',
-        answer: 'GritSync accepts credit and debit cards (Visa, Mastercard, Amex) through our secure Stripe payment gateway. Payments are processed securely and encrypted. We do not store your card details.',
-      },
-      {
-        question: 'Are the BON application fees included in the GritSync service fee?',
-        answer: 'No. GritSync service fees cover our professional processing and support services. BON application fees (payable directly to the state Board of Nursing) and NCLEX exam fees (payable to Pearson VUE) are separate costs paid by you directly to those organizations. These amounts vary by state and will be clearly communicated in your quotation.',
-      },
-      {
-        question: 'What are the typical BON and NCLEX fees I should budget for?',
-        answer: 'BON application fees typically range from $100–$300 USD depending on the state. The NCLEX-RN exam fee charged by Pearson VUE is currently $200 USD. CGFNS fees (if required) range from $200–$400 USD. GritSync will provide you a full cost breakdown in your personalized quotation.',
-      },
-      {
-        question: 'Is there a refund policy if I change my mind?',
-        answer: 'Refund eligibility depends on how far your application has progressed. If you cancel before we have submitted any work on your behalf, a partial or full refund may be available. Once documents have been reviewed and your application has been submitted to the BON, fees are generally non-refundable. Please review our Terms of Service for full details or contact support@gritsync.com for your specific situation.',
+        answer: 'GritSync accepts credit and debit cards (Visa, Mastercard, American Express) through our secure Stripe payment gateway. All transactions are encrypted and PCI-compliant. We do not store your card details.',
       },
       {
         question: 'Can I pay in Philippine Pesos (PHP)?',
-        answer: 'GritSync processes payments in US Dollars (USD). However, your card issuer or bank will handle the currency conversion from PHP to USD at their prevailing exchange rate. Check with your bank for any foreign transaction fees.',
+        answer: 'GritSync processes payments in US Dollars (USD). Your bank or card issuer will handle the currency conversion from PHP to USD at their prevailing exchange rate. Please check with your bank for any foreign transaction fees.',
       },
       {
-        question: 'Is my payment information secure?',
-        answer: 'Yes. All payments are processed through Stripe, a PCI DSS-compliant payment processor. Your card details are never stored on our servers. All data transmitted between your browser and our payment system is encrypted using TLS.',
+        question: 'What is the refund policy?',
+        answer: 'If you cancel before our team has begun work on your application, a partial or full refund may be available. Once your application has been submitted to CGFNS or the BON and fees have been disbursed, those costs cannot be refunded as they are paid to third-party agencies. The GritSync Service Fee portion is reviewed on a case-by-case basis. Contact support@gritsync.com for your specific situation.',
       },
     ],
   },
   {
     id: 'nclex-exam',
     icon: BookOpen,
-    title: 'The NCLEX Exam Itself',
+    title: 'The NCLEX Exam',
     color: 'from-cyan-500 to-cyan-700',
     faqs: [
       {
         question: 'What is the NCLEX-RN exam?',
-        answer: 'The NCLEX-RN (National Council Licensure Examination for Registered Nurses) is the standardized exam that all nursing graduates in the US must pass to obtain their RN license. It tests a candidate\'s knowledge and competence in nursing practice. The exam is administered by Pearson VUE at authorized test centers worldwide.',
+        answer: 'The NCLEX-RN (National Council Licensure Examination for Registered Nurses) is the standardized exam all nursing graduates must pass to obtain a US RN license. It is administered by Pearson VUE at authorized testing centers worldwide. Passing the NCLEX is the final requirement before your US RN license is issued.',
       },
       {
         question: 'Can I take the NCLEX exam in the Philippines?',
-        answer: 'Yes. Pearson VUE has authorized testing centers in the Philippines where Filipino nurses can take the NCLEX exam. This means you do not need to travel to the US just to sit for the exam. GritSync will guide you on how to select a Philippine testing center when scheduling your exam.',
+        answer: 'Yes. Pearson VUE has authorized testing centers in the Philippines. You do not need to travel to the US to take the NCLEX. When your ATT is issued, you can schedule your exam at a Philippine Pearson VUE center via www.pearsonvue.com/nclex.',
       },
       {
         question: 'How is the NCLEX-RN structured?',
-        answer: 'The NCLEX-RN uses a Computer Adaptive Testing (CAT) format. The exam adapts in difficulty based on your answers. Under the current Next Generation NCLEX (NGN) format, the exam includes a minimum of 85 items and a maximum of 150 items. New item types include case studies, extended multiple response, and clinical judgment questions. There is a 5-hour time limit.',
-      },
-      {
-        question: 'What is the passing standard for the NCLEX?',
-        answer: 'The NCLEX uses a pass/fail system based on a logistic model — there is no specific number you need to "get right." The exam stops when the computer has sufficient confidence (above a threshold) that you are either above or below the passing standard. The National Council of State Boards of Nursing (NCSBN) sets the passing standard.',
+        answer: 'The NCLEX-RN uses Computer Adaptive Testing (CAT). The exam adapts in difficulty based on your responses. Under the current Next Generation NCLEX (NGN) format, the exam includes a minimum of 85 items and a maximum of 150 items. New question types include case studies, extended multiple response, and clinical judgment questions. The total time limit is 5 hours.',
       },
       {
         question: 'What is the Next Generation NCLEX (NGN)?',
-        answer: 'The NGN is the updated version of the NCLEX launched in April 2023. It focuses on Clinical Judgment and includes new item types such as extended multiple response, drag-and-drop, matrix questions, and unfolding case studies that test higher-order thinking. GritSync can point you to NGN-specific study resources.',
+        answer: 'The NGN is the updated NCLEX format launched in April 2023. It places strong emphasis on Clinical Judgment and includes new item types: extended multiple response, drag-and-drop, matrix grids, and unfolding case studies. These test higher-order thinking and clinical decision-making. Make sure your review materials are updated for the NGN format.',
       },
       {
         question: 'How many times can I retake the NCLEX if I fail?',
-        answer: 'There is no limit on the number of times you can attempt the NCLEX. However, you must wait 45 days between attempts and re-apply for a new ATT each time. Fees apply for each retake. GritSync can assist with retake applications.',
+        answer: 'There is no limit on the number of attempts. However, you must wait 45 days between attempts and apply for a new ATT each time. The Pearson VUE exam fee applies for each attempt. GritSync can assist with retake applications.',
       },
       {
-        question: 'When will I receive my NCLEX results?',
-        answer: 'Quick Results are available on the Pearson VUE website approximately 48 hours after your exam for a small fee. Official results are sent by the BON, typically within 4–6 weeks of passing. Some states post license verification online within 1–2 weeks of passing.',
+        question: 'When will I know if I passed the NCLEX?',
+        answer: 'Unofficial Quick Results are available on the Pearson VUE website approximately 48 hours after your exam (the $8 Quick Results fee is included in your Step 2 payment). The official result and license from the New York BON typically becomes available within 4–6 weeks of passing.',
       },
     ],
   },
@@ -268,23 +319,23 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'What happens after I pass the NCLEX?',
-        answer: 'Congratulations! After passing, the BON will issue your US RN license. The license number will be posted in the state\'s online verification database. You can then begin working as a Registered Nurse in that state (and any compact states if applicable). GritSync will notify you when your license is posted and guide you through the next steps.',
+        answer: 'After you pass, the New York Board of Nursing issues your US RN license. Your license number is posted in the state\'s online verification database. GritSync will update your dashboard to "License Issued" and notify you. You are now a licensed US Registered Nurse (USRN).',
       },
       {
-        question: 'How do I verify my US RN license?',
-        answer: 'All US state RN licenses can be verified through the Nursys database (www.nursys.com) or directly through the state BON\'s license verification portal. GritSync will provide you the direct link for your state.',
+        question: 'How do I verify my New York RN license?',
+        answer: 'Your New York RN license can be verified through the New York State Education Department Office of the Professions online license verification system at www.op.nysed.gov, or through the national Nursys database at www.nursys.com.',
       },
       {
-        question: 'Can I work in the US after passing the NCLEX in the Philippines?',
-        answer: 'Passing the NCLEX makes you eligible to work as a USRN, but you still need the appropriate US work visa (typically EB-3 immigrant visa for permanent employment or TN/H-1B for temporary work). The NCLEX is a key credential required by US employers and immigration petitions. GritSync focuses on the NCLEX process; for visa processing, you will work with a separate immigration attorney or agency.',
+        question: 'Can I work in the US immediately after passing the NCLEX?',
+        answer: 'Passing the NCLEX and holding a US RN license qualifies you to work as a Registered Nurse in the US — but you still need the appropriate US work visa (such as an EB-3 immigrant visa or H-1B). The USRN license is a key credential required by US employers and immigration petitions. GritSync focuses on the NCLEX processing; for immigration and visa matters, you will work with an immigration attorney or agency.',
       },
       {
-        question: 'What if I want to transfer my license to another state?',
-        answer: 'You can apply for a license by endorsement in another state once you hold an active US RN license. The process varies by state and is separate from the initial NCLEX application. GritSync can assist with endorsement applications.',
+        question: 'What if I want to transfer my NY RN license to another US state?',
+        answer: 'Once you hold an active New York RN license, you can apply for a license by endorsement in other states. The process and requirements vary by state. GritSync can assist with endorsement applications in the future.',
       },
       {
-        question: 'Does GritSync offer any sponsorship or VisaScreen services?',
-        answer: 'GritSync offers an NCLEX Sponsorship program that connects qualified nurses with funding support for their NCLEX processing fees. For VisaScreen (required for US work visas), we can guide you to the appropriate CGFNS services. Visit the Sponsorship page on our site for more details.',
+        question: 'Does GritSync offer NCLEX Sponsorship?',
+        answer: 'Yes. GritSync has an NCLEX Sponsorship program that connects qualified Filipino nurses with funding support to cover their processing fees. Sponsored nurses commit to a work arrangement with the sponsoring US employer after obtaining their USRN license. Visit the Sponsorship page for full details.',
       },
     ],
   },
@@ -296,23 +347,23 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'What can I do in my GritSync dashboard?',
-        answer: 'Your dashboard is your central hub. You can: start and manage applications, upload and review required documents, view payment history and receipts, track your application status in real time, receive and read notifications from our team, and update your personal information.',
+        answer: 'Your dashboard is your central hub. You can: start and track applications, upload required documents, view payment history, follow your real-time timeline progress across all 15 stages, receive notifications from our team, and update your personal information and profile.',
       },
       {
-        question: 'Can I have multiple applications at the same time?',
-        answer: 'Yes. You can have multiple active applications — for example, if you are applying to more than one state simultaneously or if you are reapplying after a failed NCLEX attempt. Each application is tracked independently in your dashboard.',
+        question: 'Can I have multiple NCLEX applications at the same time?',
+        answer: 'Yes. You can have multiple applications — for example if you are applying to more than one state or if you are reapplying after a failed NCLEX attempt. Each application is tracked independently in your dashboard.',
       },
       {
         question: 'How do I update my personal information?',
-        answer: 'Log in to your dashboard, then navigate to "My Details" or "Account Settings." You can update your name, contact number, address, and profile photo from there.',
+        answer: 'Log in to your dashboard, then go to "My Details" or "Account Settings." You can update your name, contact number, address, and profile photo from there.',
       },
       {
         question: 'What if I forget my password?',
-        answer: 'Click "Forgot Password" on the login page. Enter your registered email address and we will send you a password reset link. The link is valid for 24 hours. If you do not receive it, check your spam folder or contact support@gritsync.com.',
+        answer: 'Click "Forgot Password" on the login page. Enter your registered email address and we will send you a reset link. If you do not receive it, check your spam folder or contact support@gritsync.com.',
       },
       {
         question: 'Is my personal data safe with GritSync?',
-        answer: 'Yes. GritSync takes data security seriously. Your personal information and documents are stored securely with encryption. We do not sell or share your data with third parties without your consent. For full details, please read our Privacy Policy.',
+        answer: 'Yes. Your personal information and uploaded documents are stored securely with encryption. We do not sell or share your data with third parties without your consent. For full details, read our Privacy Policy.',
       },
     ],
   },
@@ -324,23 +375,23 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'How can I contact GritSync support?',
-        answer: 'You can reach our support team by email at support@gritsync.com or by phone at +1 (509) 270-3437. We also communicate through in-app notifications and email for all application-related updates.',
+        answer: 'You can reach our support team by email at support@gritsync.com or by phone at +1 (509) 270-3437. All application-related updates are also communicated directly through your dashboard and email notifications.',
       },
       {
         question: 'What are GritSync\'s support hours?',
-        answer: 'Our support team is available Monday through Friday, 9 AM – 6 PM (Philippine Standard Time / PST). For urgent matters, you can send an email and we will respond as quickly as possible.',
+        answer: 'Our support team is available Monday through Friday. For urgent matters, send us an email and we will respond as soon as possible.',
       },
       {
-        question: 'Can I message my assigned processor directly?',
-        answer: 'All communication goes through the GritSync platform to ensure proper documentation and continuity. Our team monitors all applications and will reach out to you proactively. You can also send messages or questions through the support channel in your dashboard.',
+        question: 'How will I be updated about my application status?',
+        answer: 'You will receive email notifications for major milestones in your application (e.g., Documents Approved, CGFNS Application Submitted, ATT Issued, etc.). You can also check your real-time status at any time by logging in to your GritSync dashboard.',
       },
       {
-        question: 'What if I have a question not answered in these FAQs?',
-        answer: 'Send us an email at support@gritsync.com or call us at +1 (509) 270-3437. Our team is happy to answer any questions about your specific situation. You can also request a free quotation and consultation through the Quote page.',
+        question: 'What if I have a question not covered in these FAQs?',
+        answer: 'Send us an email at support@gritsync.com or call +1 (509) 270-3437. Our team is happy to answer any question about your specific situation. You can also request a free consultation through the Quote page.',
       },
       {
         question: 'Do you offer a free consultation before I commit to the service?',
-        answer: 'Yes! You can request a free, no-obligation quotation through our Quote page. Our team will review your situation and provide a personalized cost and timeline estimate. There is no commitment required to receive a quotation.',
+        answer: 'Yes. Request a free, no-obligation quotation through our Quote page. Our team will review your situation and provide a personalized cost and timeline estimate. There is no commitment required.',
       },
     ],
   },
@@ -352,23 +403,23 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'What is the GritSync NCLEX Sponsorship program?',
-        answer: 'The GritSync NCLEX Sponsorship program connects qualified Filipino nurses with financial sponsors who cover all or part of their NCLEX processing and application fees. In exchange, sponsored nurses commit to a work arrangement with the sponsoring employer in the US after obtaining their USRN license.',
+        answer: 'The GritSync NCLEX Sponsorship program connects qualified Filipino nurses with financial sponsors (typically US healthcare employers) who cover all or part of the NCLEX processing fees. In exchange, sponsored nurses commit to a work arrangement with the sponsoring employer in the US after obtaining their USRN license.',
       },
       {
         question: 'Who qualifies for the sponsorship program?',
-        answer: 'Eligibility criteria typically include: valid PRC RN license, at least 1–2 years of clinical nursing experience, willingness to work in the US under a sponsorship agreement, and meeting the basic English proficiency requirements of the target state. Visit the Sponsorship page for full eligibility details.',
+        answer: 'Eligibility criteria typically include: a valid PRC RN license, at least 1–2 years of clinical nursing experience, willingness to work in the US under a sponsorship agreement, and meeting basic eligibility requirements for the NCLEX application. Visit the Sponsorship page for full details.',
       },
       {
         question: 'What does the sponsorship cover?',
-        answer: 'Sponsorship packages vary, but may cover GritSync service fees, BON application fees, CGFNS fees, and NCLEX exam fees. The exact coverage depends on the sponsoring employer and the specific package. All terms are clearly stated in the sponsorship agreement.',
+        answer: 'Sponsorship may cover the full $775.99 package or specific components (e.g., BON fees, CGFNS fees, GritSync Service Fee). The exact coverage depends on the sponsoring employer. All terms are clearly disclosed before you sign any agreement.',
       },
       {
         question: 'How do I apply for the sponsorship program?',
-        answer: 'Visit the Sponsorship page on our website and click "Apply for Sponsorship." Fill in the application form with your nursing background and experience. Our team will review your application and contact you within 3–5 business days.',
+        answer: 'Visit the Sponsorship page on our website and click "Apply for Sponsorship." Fill in your nursing background and experience. Our team will review your application and contact you within a few business days.',
       },
       {
-        question: 'Is the sponsorship a loan I need to repay?',
-        answer: 'No — it is not a traditional loan. The sponsorship is tied to a work commitment with the employer sponsor. If you fulfill the employment terms, you are not required to repay the fees. Specific terms vary by sponsor and will be fully disclosed before you sign any agreement.',
+        question: 'Is the sponsorship a loan I have to repay?',
+        answer: 'No — it is not a traditional loan. The sponsorship is tied to a work commitment with the employer. If you fulfill the employment terms, you are not required to repay. All terms will be fully disclosed before you sign anything.',
       },
     ],
   },
@@ -441,7 +492,7 @@ export function FAQs() {
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <SEO
         title="Frequently Asked Questions | GritSync"
-        description="Everything you need to know about NCLEX application processing for Filipino nurses — documents, timelines, fees, the exam, and more."
+        description="Everything you need to know about NCLEX application processing for Filipino nurses — documents, timeline, fees, the exam, and more."
       />
       <Header />
 
