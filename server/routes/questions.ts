@@ -24,7 +24,7 @@ function isAdmin(req: AuthenticatedRequest): boolean {
   return req.user?.role === 'admin'
 }
 
-async function getUserPlanAndUsage(userId: number): Promise<{ plan: string; questionsToday: number; dailyLimit: number | null; canAnswer: boolean }> {
+async function getUserPlanAndUsage(userId: string): Promise<{ plan: string; questionsToday: number; dailyLimit: number | null; canAnswer: boolean }> {
   const today = new Date().toISOString().split('T')[0]
   const subResult = await query(
     `SELECT plan FROM nclex_subscriptions
