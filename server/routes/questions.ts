@@ -918,6 +918,108 @@ router.get('/subscription/me', authenticateToken, async (req: AuthenticatedReque
   }
 })
 
+// ─── Free Review Eligibility (Processing Clients) ─────────────────────────────
+router.get('/free-review-eligibility', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    // Check if user has any active NCLEX processing application
+    const appResult = await query(
+      `SELECT id, grit_app_id, service_type, status, created_at
+       FROM applications
+       WHERE user_id = $1 AND status NOT IN ('rejected', 'cancelled')
+       ORDER BY created_at ASC LIMIT 1`,
+      [userId]
+    )
+    const hasApplication = appResult.rows.length > 0
+    const application = appResult.rows[0] || null
+
+    // Check if user has already claimed the processing bonus
+    const claimedResult = await query(
+      `SELECT id FROM nclex_subscriptions
+       WHERE user_id = $1 AND notes = 'processing_bonus'`,
+      [userId]
+    )
+    const alreadyClaimed = claimedResult.rows.length > 0
+
+    // Check current subscription
+    const subResult = await query(
+      `SELECT plan FROM nclex_subscriptions
+       WHERE user_id = $1 AND status = 'active'
+         AND (expires_at IS NULL OR expires_at > NOW())
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    )
+    const currentPlan = subResult.rows[0]?.plan || 'free'
+
+    res.json({
+      eligible: hasApplication && !alreadyClaimed,
+      has_application: hasApplication,
+      already_claimed: alreadyClaimed,
+      current_plan: currentPlan,
+      application: application ? {
+        id: application.id,
+        grit_app_id: application.grit_app_id,
+        service_type: application.service_type,
+        status: application.status,
+      } : null,
+    })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ─── Activate Free Review (Processing Clients) ────────────────────────────────
+router.post('/free-review-activate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    // Verify eligibility
+    const appResult = await query(
+      `SELECT id, grit_app_id FROM applications
+       WHERE user_id = $1 AND status NOT IN ('rejected', 'cancelled')
+       LIMIT 1`,
+      [userId]
+    )
+    if (appResult.rows.length === 0) {
+      return res.status(403).json({ error: 'No active NCLEX processing application found.' })
+    }
+
+    const claimedResult = await query(
+      `SELECT id FROM nclex_subscriptions WHERE user_id = $1 AND notes = 'processing_bonus'`,
+      [userId]
+    )
+    if (claimedResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Free review has already been activated for your account.' })
+    }
+
+    // Expire any existing active subscription
+    await query(
+      `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW()
+       WHERE user_id = $1 AND status = 'active'`,
+      [userId]
+    )
+
+    // Grant 2 months free premium
+    const result = await query(
+      `INSERT INTO nclex_subscriptions
+         (user_id, plan, status, expires_at, payment_amount, activated_by, notes)
+       VALUES ($1, 'premium', 'active', NOW() + INTERVAL '2 months', 0, 'system', 'processing_bonus')
+       RETURNING *`,
+      [userId]
+    )
+
+    res.json({
+      message: 'Your 2 months FREE Premium NCLEX Review has been activated!',
+      subscription: result.rows[0],
+    })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 router.post('/subscription/track-usage', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id

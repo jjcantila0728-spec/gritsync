@@ -6,7 +6,7 @@ import {
   BarChart2, Plus, Filter, ChevronRight, Crown, Zap,
   BookOpen, CheckCircle, XCircle, Clock, RotateCcw,
   TrendingUp, AlertCircle, X, Brain, Target,
-  ChevronDown, ChevronUp, Lock,
+  ChevronDown, ChevronUp, Lock, Gift, Sparkles,
 } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
@@ -474,6 +474,155 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ── Free Activate Modal ───────────────────────────────────────────────────────
+function FreeActivateModal({ eligibility, onClose, onActivated }: {
+  eligibility: any
+  onClose: () => void
+  onActivated: () => void
+}) {
+  const [activating, setActivating] = useState(false)
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleActivate() {
+    setActivating(true)
+    setError(null)
+    try {
+      await apiFetch('/api/questions/free-review-activate', { method: 'POST' })
+      setDone(true)
+      setTimeout(() => {
+        onActivated()
+        onClose()
+      }, 2200)
+    } catch (err: any) {
+      setError(err.message || 'Activation failed')
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#0d2137] to-[#163352] px-6 pt-6 pb-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-[#17c3b2]/20 flex items-center justify-center">
+                <Gift className="h-4 w-4 text-[#17c3b2]" />
+              </div>
+              <span className="text-xs font-bold text-[#17c3b2] uppercase tracking-widest">Processing Client Benefit</span>
+            </div>
+            <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <h2 className="text-2xl font-black text-white leading-tight">
+            2 Months FREE<br />
+            <span className="text-[#17c3b2]">Premium NCLEX Review</span>
+          </h2>
+          <p className="text-white/70 text-sm mt-1.5">Complimentary access included with your NCLEX Processing subscription.</p>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Order Summary */}
+          <div className="rounded-xl border-2 border-[#17c3b2]/30 bg-[#17c3b2]/5 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-bold text-gray-900 dark:text-white">Order Summary</span>
+              <span className="text-xs font-bold text-[#17c3b2] bg-[#17c3b2]/10 px-2.5 py-1 rounded-full">FREE</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">NCLEX RN Q-Bank — Premium</span>
+                <span className="font-semibold text-gray-900 dark:text-white">2 Months</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">250 questions/day</span>
+                <span className="font-semibold text-[#17c3b2]">Included</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">All exam modes (Tutorial, CAT, Timed)</span>
+                <span className="font-semibold text-[#17c3b2]">Included</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">NGN case studies + detailed rationales</span>
+                <span className="font-semibold text-[#17c3b2]">Included</span>
+              </div>
+              <div className="border-t border-[#17c3b2]/20 pt-2 mt-2 flex justify-between text-sm font-bold">
+                <span className="text-gray-900 dark:text-white">Total Due Today</span>
+                <span className="text-[#17c3b2] text-lg">₱0.00</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Application Info */}
+          {eligibility?.application && (
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4 flex items-start gap-3">
+              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Verified NCLEX Processing Client</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Application {eligibility.application.grit_app_id || eligibility.application.id?.slice(0,8).toUpperCase()} · {eligibility.application.status}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* What you get */}
+          <div className="space-y-2">
+            {[
+              'Access to full Q-Bank (42+ questions, constantly growing)',
+              'NGN next-generation nursing case studies',
+              'Performance analytics & session history',
+              'Expires 2 months from activation — use it wisely!',
+            ].map(f => (
+              <div key={f} className="flex items-start gap-2.5">
+                <Sparkles className="h-3.5 w-3.5 text-[#17c3b2] flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">{f}</span>
+              </div>
+            ))}
+          </div>
+
+          {error && (
+            <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+
+          {done && (
+            <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+              <p className="text-sm font-semibold text-green-700 dark:text-green-300">Activated! Enjoy your 2 months of Premium access.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 pb-6 space-y-2">
+          {!done && (
+            <button
+              onClick={handleActivate}
+              disabled={activating}
+              className="w-full py-3 rounded-xl bg-[#17c3b2] text-white font-bold text-sm hover:bg-[#14a99a] transition-colors disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-[#17c3b2]/20"
+            >
+              {activating ? (
+                <><RotateCcw className="h-4 w-4 animate-spin" /> Activating...</>
+              ) : (
+                <><Gift className="h-4 w-4" /> Activate Free Subscription</>
+              )}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            {done ? 'Close' : 'Maybe Later'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function NCLEXReview() {
   const { user } = useAuth()
@@ -487,6 +636,8 @@ export function NCLEXReview() {
   const [loading, setLoading] = useState(true)
   const [showCreateTest, setShowCreateTest] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showFreeActivate, setShowFreeActivate] = useState(false)
+  const [eligibility, setEligibility] = useState<any>(null)
   const [showClassic, setShowClassic] = useState(true)
   const [seedingLoading, setSeedingLoading] = useState(false)
   const [filterPending, setFilterPending] = useState(false)
@@ -499,15 +650,17 @@ export function NCLEXReview() {
     if (!user) return
     setLoading(true)
     try {
-      const [subData, statsData, sessionsData] = await Promise.allSettled([
+      const [subData, statsData, sessionsData, eligData] = await Promise.allSettled([
         apiFetch('/api/questions/subscription/me'),
         apiFetch('/api/questions/user-stats'),
         apiFetch('/api/questions/my-sessions?limit=50'),
+        apiFetch('/api/questions/free-review-eligibility'),
       ])
 
       if (subData.status === 'fulfilled') setSubscription(subData.value)
       if (statsData.status === 'fulfilled') setStats(statsData.value)
       if (sessionsData.status === 'fulfilled') setSessions(Array.isArray(sessionsData.value) ? sessionsData.value : [])
+      if (eligData.status === 'fulfilled') setEligibility(eligData.value)
     } finally {
       setLoading(false)
     }
@@ -562,6 +715,13 @@ export function NCLEXReview() {
         />
       )}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+      {showFreeActivate && (
+        <FreeActivateModal
+          eligibility={eligibility}
+          onClose={() => setShowFreeActivate(false)}
+          onActivated={loadAll}
+        />
+      )}
 
       <div className="p-5 lg:p-7 max-w-6xl mx-auto">
         {/* Header */}
@@ -627,7 +787,29 @@ export function NCLEXReview() {
         {activeTab === 'statistics' && (
           <div className="space-y-6">
             {/* Promo banners */}
-            {plan === 'free' && (
+            {plan === 'free' && eligibility?.eligible && (
+              <div className="rounded-2xl bg-gradient-to-r from-[#0d2137] to-[#163352] text-white p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-2 border-[#17c3b2]/40 relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-[#17c3b2] text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">
+                  Processing Perk
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-[#17c3b2]/20 flex items-center justify-center flex-shrink-0">
+                    <Gift className="h-5 w-5 text-[#17c3b2]" />
+                  </div>
+                  <div>
+                    <p className="font-bold">You Have 2 Months FREE Premium!</p>
+                    <p className="text-sm text-white/70 mt-0.5">As a GritSync Processing client, enjoy complimentary Premium access — 250 questions/day, all modes included.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowFreeActivate(true)}
+                  className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#17c3b2] text-white text-sm font-bold hover:bg-[#14a99a] transition-colors shadow-lg shadow-[#17c3b2]/30 whitespace-nowrap"
+                >
+                  <Gift className="h-4 w-4" /> Activate Free Access
+                </button>
+              </div>
+            )}
+            {plan === 'free' && !eligibility?.eligible && (
               <div className="rounded-2xl bg-gradient-to-r from-[#0d2137] to-[#163352] text-white p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className="h-10 w-10 rounded-xl bg-[#17c3b2]/20 flex items-center justify-center flex-shrink-0">
