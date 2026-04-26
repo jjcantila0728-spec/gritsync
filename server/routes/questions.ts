@@ -391,25 +391,38 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
   try {
     const userId = req.user?.id
 
-    // Total questions in bank
+    // Total questions in bank — mutually exclusive partitions matching answered-query predicates:
+    //   classic:     is_ngn = false AND case_study_id IS NULL
+    //   ngn:         is_ngn = true  AND case_study_id IS NULL
+    //   case_studies: case_study_id IS NOT NULL (may be ngn or classic)
     const bankResult = await query(
       `SELECT
          COUNT(*) as total,
-         COUNT(*) FILTER (WHERE is_ngn = false) as total_classic,
-         COUNT(*) FILTER (WHERE is_ngn = true) as total_ngn,
+         COUNT(*) FILTER (WHERE is_ngn = false AND case_study_id IS NULL) as total_classic,
+         COUNT(*) FILTER (WHERE is_ngn = true  AND case_study_id IS NULL) as total_ngn,
          COUNT(*) FILTER (WHERE question_type = 'ngn_sata') as total_sata,
          COUNT(*) FILTER (WHERE case_study_id IS NOT NULL) as total_case_study_questions
        FROM question_bank WHERE is_active = true`
     )
 
-    // User's answered questions
+    // User's answered questions — overall and per type
     const answeredResult = await query(
       `SELECT
          COUNT(DISTINCT sr.question_id) as total_used,
          COUNT(DISTINCT sr.question_id) FILTER (WHERE sr.is_correct = true) as total_correct,
-         COUNT(DISTINCT sr.question_id) FILTER (WHERE sr.is_correct = false) as total_incorrect
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE sr.is_correct = false) as total_incorrect,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = false AND qb.case_study_id IS NULL) as classic_used,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = false AND qb.case_study_id IS NULL AND sr.is_correct = true) as classic_correct,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = false AND qb.case_study_id IS NULL AND sr.is_correct = false) as classic_incorrect,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = true AND qb.case_study_id IS NULL) as ngn_used,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = true AND qb.case_study_id IS NULL AND sr.is_correct = true) as ngn_correct,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.is_ngn = true AND qb.case_study_id IS NULL AND sr.is_correct = false) as ngn_incorrect,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.case_study_id IS NOT NULL) as cs_used,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.case_study_id IS NOT NULL AND sr.is_correct = true) as cs_correct,
+         COUNT(DISTINCT sr.question_id) FILTER (WHERE qb.case_study_id IS NOT NULL AND sr.is_correct = false) as cs_incorrect
        FROM session_responses sr
        JOIN test_sessions ts ON sr.session_id = ts.id
+       JOIN question_bank qb ON sr.question_id = qb.id
        WHERE ts.user_id = $1 AND sr.answered_at IS NOT NULL`,
       [userId]
     )
@@ -427,6 +440,16 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
     const incorrect = parseInt(answered.total_incorrect) || 0
     const unused = Math.max(0, totalBank - used)
 
+    const classicUsed = parseInt(answered.classic_used) || 0
+    const classicCorrect = parseInt(answered.classic_correct) || 0
+    const classicIncorrect = parseInt(answered.classic_incorrect) || 0
+    const ngnUsed = parseInt(answered.ngn_used) || 0
+    const ngnCorrect = parseInt(answered.ngn_correct) || 0
+    const ngnIncorrect = parseInt(answered.ngn_incorrect) || 0
+    const csUsed = parseInt(answered.cs_used) || 0
+    const csCorrect = parseInt(answered.cs_correct) || 0
+    const csIncorrect = parseInt(answered.cs_incorrect) || 0
+
     res.json({
       total_questions: totalBank,
       total_classic: totalClassic,
@@ -438,6 +461,18 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
       correct,
       incorrect,
       omitted: 0,
+      classic_used: classicUsed,
+      classic_unused: Math.max(0, totalClassic - classicUsed),
+      classic_correct: classicCorrect,
+      classic_incorrect: classicIncorrect,
+      ngn_used: ngnUsed,
+      ngn_unused: Math.max(0, totalNgn - ngnUsed),
+      ngn_correct: ngnCorrect,
+      ngn_incorrect: ngnIncorrect,
+      cs_used: csUsed,
+      cs_unused: Math.max(0, totalCaseStudies - csUsed),
+      cs_correct: csCorrect,
+      cs_incorrect: csIncorrect,
     })
   } catch (error: any) {
     console.error('User stats error:', error)

@@ -45,6 +45,18 @@ interface UserStats {
   correct: number
   incorrect: number
   omitted: number
+  classic_used: number
+  classic_unused: number
+  classic_correct: number
+  classic_incorrect: number
+  ngn_used: number
+  ngn_unused: number
+  ngn_correct: number
+  ngn_incorrect: number
+  cs_used: number
+  cs_unused: number
+  cs_correct: number
+  cs_incorrect: number
 }
 
 // ── Donut Chart ───────────────────────────────────────────────────────────────
@@ -738,13 +750,35 @@ export function NCLEXReview() {
   const pendingSessions = sessions.filter(s => s.status === 'in_progress')
 
   const totalBank = stats?.total_questions ?? 0
-  const usedQuestions = stats?.used ?? 0
-  const unusedQuestions = stats?.unused ?? 0
-  const correctQuestions = stats?.correct ?? 0
-  const incorrectQuestions = stats?.incorrect ?? 0
 
-  const usagePct = totalBank > 0 ? Math.round((usedQuestions / totalBank) * 100) : 0
-  const unusedPct = totalBank > 0 ? 100 - usagePct : 100
+  const filteredTotal = statsTab === 'classic'
+    ? (stats?.total_classic ?? 0)
+    : statsTab === 'ngn'
+      ? (stats?.total_ngn ?? 0)
+      : (stats?.total_case_studies ?? 0)
+  const usedQuestions = statsTab === 'classic'
+    ? (stats?.classic_used ?? 0)
+    : statsTab === 'ngn'
+      ? (stats?.ngn_used ?? 0)
+      : (stats?.cs_used ?? 0)
+  const unusedQuestions = statsTab === 'classic'
+    ? (stats?.classic_unused ?? 0)
+    : statsTab === 'ngn'
+      ? (stats?.ngn_unused ?? 0)
+      : (stats?.cs_unused ?? 0)
+  const correctQuestions = statsTab === 'classic'
+    ? (stats?.classic_correct ?? 0)
+    : statsTab === 'ngn'
+      ? (stats?.ngn_correct ?? 0)
+      : (stats?.cs_correct ?? 0)
+  const incorrectQuestions = statsTab === 'classic'
+    ? (stats?.classic_incorrect ?? 0)
+    : statsTab === 'ngn'
+      ? (stats?.ngn_incorrect ?? 0)
+      : (stats?.cs_incorrect ?? 0)
+
+  const usagePct = filteredTotal > 0 ? Math.round((usedQuestions / filteredTotal) * 100) : 0
+  const unusedPct = filteredTotal > 0 ? 100 - usagePct : 100
 
   const displayedSessions = filterPending ? pendingSessions : completedSessions
 
@@ -976,7 +1010,7 @@ export function NCLEXReview() {
                     <div className="space-y-2 flex-1 min-w-0">
                       <div className="flex items-center justify-between text-sm py-1 border-b border-gray-100 dark:border-gray-800">
                         <span className="text-gray-600 dark:text-gray-400">Total Questions</span>
-                        <span className="font-bold text-gray-900 dark:text-white">{totalBank}</span>
+                        <span className="font-bold text-gray-900 dark:text-white">{filteredTotal}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm py-1 border-b border-gray-100 dark:border-gray-800">
                         <span className="text-gray-600 dark:text-gray-400">Used Questions</span>
