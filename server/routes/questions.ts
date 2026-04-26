@@ -511,6 +511,12 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
     const csCorrect = parseInt(answered.cs_correct) || 0
     const csIncorrect = parseInt(answered.cs_incorrect) || 0
 
+    const bookmarkResult = await query(
+      `SELECT COUNT(*) as bookmark_count FROM user_question_bookmarks WHERE user_id = $1`,
+      [userId]
+    )
+    const bookmarkCount = parseInt(bookmarkResult.rows[0]?.bookmark_count) || 0
+
     res.json({
       total_questions: totalBank,
       total_classic: totalClassic,
@@ -535,9 +541,97 @@ router.get('/user-stats', authenticateToken, async (req: AuthenticatedRequest, r
       cs_correct: csCorrect,
       cs_incorrect: csIncorrect,
       content_area_breakdown: contentAreaBreakdown,
+      bookmark_count: bookmarkCount,
     })
   } catch (error: any) {
     console.error('User stats error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ─── Bookmarks ────────────────────────────────────────────────────────────────
+router.get('/bookmarks', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const result = await query(
+      `SELECT uqb.question_id, uqb.created_at as bookmarked_at,
+              qb.question_text, qb.question_type, qb.content_area, qb.subcategory,
+              qb.difficulty, qb.is_ngn, qb.tags,
+              qb.case_study_id, cs.title as case_study_title
+       FROM user_question_bookmarks uqb
+       JOIN question_bank qb ON uqb.question_id = qb.id
+       LEFT JOIN case_studies cs ON qb.case_study_id = cs.id
+       WHERE uqb.user_id = $1
+       ORDER BY uqb.created_at DESC`,
+      [userId]
+    )
+
+    res.json({ bookmarks: result.rows })
+  } catch (error: any) {
+    console.error('Get bookmarks error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/bookmarks/toggle', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { question_id } = req.body
+    const qid = parseInt(question_id)
+    if (!question_id || isNaN(qid) || qid <= 0) {
+      return res.status(400).json({ error: 'question_id must be a positive integer' })
+    }
+
+    const questionCheck = await query(`SELECT id FROM question_bank WHERE id = $1`, [qid])
+    if (questionCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Question not found' })
+    }
+
+    const existing = await query(
+      `SELECT id FROM user_question_bookmarks WHERE user_id = $1 AND question_id = $2`,
+      [userId, qid]
+    )
+
+    if (existing.rows.length > 0) {
+      await query(
+        `DELETE FROM user_question_bookmarks WHERE user_id = $1 AND question_id = $2`,
+        [userId, qid]
+      )
+      res.json({ bookmarked: false })
+    } else {
+      await query(
+        `INSERT INTO user_question_bookmarks (user_id, question_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, qid]
+      )
+      res.json({ bookmarked: true })
+    }
+  } catch (error: any) {
+    console.error('Toggle bookmark error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/bookmarks/:question_id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const qid = parseInt(req.params.question_id)
+    if (isNaN(qid) || qid <= 0) {
+      return res.status(400).json({ error: 'question_id must be a positive integer' })
+    }
+
+    await query(
+      `DELETE FROM user_question_bookmarks WHERE user_id = $1 AND question_id = $2`,
+      [userId, qid]
+    )
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('Delete bookmark error:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -627,6 +721,13 @@ router.post('/session/start', authenticateToken, async (req: AuthenticatedReques
           JOIN test_sessions ts ON sr.session_id = ts.id
           WHERE ts.user_id = $${paramIdx++} AND sr.answered_at IS NOT NULL AND sr.is_correct = false
           ORDER BY sr.question_id, sr.answered_at DESC
+        )
+      `)
+      params.push(userId)
+    } else if (pool === 'bookmarked') {
+      conditions.push(`
+        qb.id IN (
+          SELECT question_id FROM user_question_bookmarks WHERE user_id = $${paramIdx++}
         )
       `)
       params.push(userId)
@@ -752,13 +853,17 @@ router.get('/session/:id/questions', authenticateToken, async (req: Authenticate
               qb.correct_answer, qb.rationale, qb.tags,
               qb.case_study_id,
               cs.title AS case_study_title,
-              cs.scenario AS case_study_scenario
+              cs.scenario AS case_study_scenario,
+              EXISTS(
+                SELECT 1 FROM user_question_bookmarks uqb
+                WHERE uqb.user_id = $2 AND uqb.question_id = sr.question_id
+              ) as is_bookmarked
        FROM session_responses sr
        JOIN question_bank qb ON sr.question_id = qb.id
        LEFT JOIN case_studies cs ON qb.case_study_id = cs.id
        WHERE sr.session_id = $1
        ORDER BY sr.question_order`,
-      [sessionId]
+      [sessionId, userId]
     )
 
     const session = sessionResult.rows[0]

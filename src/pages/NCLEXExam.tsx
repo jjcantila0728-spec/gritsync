@@ -5,7 +5,7 @@ import { NCLEXExamLayout } from '@/layouts/NCLEXLayout'
 import {
   ChevronLeft, ChevronRight, Flag, AlignLeft, CheckCircle,
   XCircle, Lightbulb, AlertCircle, Clock, BarChart2,
-  Award, Star, RotateCcw, BookOpen, Target, Brain,
+  Award, Star, RotateCcw, BookOpen, Target, Brain, Bookmark,
 } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
@@ -535,6 +535,8 @@ export function NCLEXExam() {
   // UI state
   const [showScore, setShowScore] = useState(initialTab === 'score')
   const [markedQuestions, setMarkedQuestions] = useState<Set<number>>(new Set())
+  const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<number>>(new Set())
+  const [bookmarkLoading, setBookmarkLoading] = useState(false)
   const [scenarioExpanded, setScenarioExpanded] = useState(true)
   const [caseStudyFilter, setCaseStudyFilter] = useState<string | null>(searchParams.get('csFilter'))
 
@@ -600,12 +602,15 @@ export function NCLEXExam() {
       setSession(data.session)
       setQuestions(data.questions || [])
 
-      // Build pre-filled marks
+      // Build pre-filled marks and bookmarks
       const marks = new Set<number>()
+      const bookmarks = new Set<number>()
       for (const q of (data.questions || [])) {
         if (q.marked_for_review) marks.add(q.question_id)
+        if (q.is_bookmarked) bookmarks.add(q.question_id)
       }
       setMarkedQuestions(marks)
+      setBookmarkedQuestions(bookmarks)
 
       // In review mode, start at first question
       setQIndex(0)
@@ -705,6 +710,30 @@ export function NCLEXExam() {
         body: JSON.stringify({ question_id: qId, marked: newMarked.has(qId) }),
       })
     } catch {}
+  }
+
+  async function toggleBookmark() {
+    if (!currentQuestion || bookmarkLoading) return
+    const qId = currentQuestion.question_id
+    setBookmarkLoading(true)
+    const wasBookmarked = bookmarkedQuestions.has(qId)
+    const newBookmarked = new Set(bookmarkedQuestions)
+    if (wasBookmarked) newBookmarked.delete(qId)
+    else newBookmarked.add(qId)
+    setBookmarkedQuestions(newBookmarked)
+    try {
+      await apiFetch('/api/questions/bookmarks/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ question_id: qId }),
+      })
+    } catch {
+      // Revert on error
+      if (wasBookmarked) newBookmarked.add(qId)
+      else newBookmarked.delete(qId)
+      setBookmarkedQuestions(new Set(newBookmarked))
+    } finally {
+      setBookmarkLoading(false)
+    }
   }
 
   async function submitAnswer() {
@@ -826,6 +855,7 @@ export function NCLEXExam() {
   })()
 
   const isMarked = currentQuestion ? markedQuestions.has(currentQuestion.question_id) : false
+  const isBookmarked = currentQuestion ? bookmarkedQuestions.has(currentQuestion.question_id) : false
   const answeredCount = questions.filter(q => q.answered_at).length
 
   if (loading) {
@@ -912,6 +942,17 @@ export function NCLEXExam() {
             >
               <Flag className="h-3.5 w-3.5" />
               {isMarked ? 'Marked' : 'Mark for Later'}
+            </button>
+            <button
+              onClick={toggleBookmark}
+              disabled={bookmarkLoading}
+              title={isBookmarked ? 'Remove bookmark' : 'Bookmark this question'}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-60 ${
+                isBookmarked ? 'border-[#17c3b2] bg-[#17c3b2]/10 text-[#17c3b2]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-[#17c3b2]' : ''}`} />
+              {isBookmarked ? 'Bookmarked' : 'Bookmark'}
             </button>
             {caseStudyId && caseStudyTotal > 0 && (
               <span

@@ -127,6 +127,21 @@ async function runStartupMigrations() {
     console.warn('Startup migration warning (case_studies updated_at):', err)
   }
 
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_question_bookmarks (
+        id SERIAL PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        question_id INTEGER NOT NULL REFERENCES question_bank(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, question_id)
+      )
+    `)
+    await query(`CREATE INDEX IF NOT EXISTS idx_uqb_user_id ON user_question_bookmarks(user_id)`)
+  } catch (err) {
+    console.warn('Startup migration warning (user_question_bookmarks table):', err)
+  }
+
   await autoSeedIfEmpty()
 }
 

@@ -6,7 +6,7 @@ import {
   BarChart2, Plus, Filter, ChevronRight, Crown, Zap,
   BookOpen, CheckCircle, XCircle, Clock, RotateCcw,
   TrendingUp, AlertCircle, X, Brain, Target,
-  ChevronDown, ChevronUp, Lock, Gift, Sparkles,
+  ChevronDown, ChevronUp, Lock, Gift, Sparkles, Bookmark, Trash2,
 } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
@@ -66,6 +66,7 @@ interface UserStats {
   cs_correct: number
   cs_incorrect: number
   content_area_breakdown?: ContentAreaStat[]
+  bookmark_count?: number
 }
 
 // ── Donut Chart ───────────────────────────────────────────────────────────────
@@ -275,7 +276,7 @@ function ContentAreaBreakdown({ breakdown }: { breakdown: ContentAreaStat[] }) {
 // ── Create Test Modal ─────────────────────────────────────────────────────────
 type TestMode = 'tutorial' | 'timed' | 'cat' | 'readiness'
 type TestType = 'classic' | 'ngn' | 'mixed'
-type QuestionPool = 'unused' | 'incorrect' | 'marked' | 'all' | 'case_studies'
+type QuestionPool = 'unused' | 'incorrect' | 'marked' | 'all' | 'case_studies' | 'bookmarked'
 
 interface CreateTestConfig {
   mode: TestMode
@@ -285,15 +286,16 @@ interface CreateTestConfig {
   contentArea: string
 }
 
-function CreateTestModal({ onClose, onStart, stats }: {
+function CreateTestModal({ onClose, onStart, stats, initialPool }: {
   onClose: () => void
   onStart: (config: CreateTestConfig) => void
   stats: UserStats | null
+  initialPool?: QuestionPool
 }) {
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(initialPool ? 2 : 1)
   const [mode, setMode] = useState<TestMode>('tutorial')
   const [testType, setTestType] = useState<TestType>('mixed')
-  const [pool, setPool] = useState<QuestionPool>('all')
+  const [pool, setPool] = useState<QuestionPool>(initialPool || 'all')
   const [questionCount, setQuestionCount] = useState(25)
   const [contentArea, setContentArea] = useState('all')
   const [starting, setStarting] = useState(false)
@@ -465,6 +467,7 @@ function CreateTestModal({ onClose, onStart, stats }: {
                     {[
                       { value: 'unused', label: 'Unused', sub: `${stats?.unused ?? '—'} questions` },
                       { value: 'incorrect', label: 'Incorrect', sub: `${stats?.incorrect ?? '—'} questions` },
+                      { value: 'bookmarked', label: 'Bookmarked', sub: `${stats?.bookmark_count ?? '—'} questions` },
                       { value: 'all', label: 'All', sub: `${stats?.total_questions ?? '—'} questions` },
                       { value: 'case_studies', label: 'Case Studies', sub: 'NGN cluster sets' },
                     ].map(opt => (
@@ -509,6 +512,13 @@ function CreateTestModal({ onClose, onStart, stats }: {
                       className="w-32 px-3 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:border-[#17c3b2] outline-none"
                     />
                   </div>
+                </div>
+              )}
+
+              {pool === 'bookmarked' && (
+                <div className="bg-[#17c3b2]/10 border border-[#17c3b2]/30 rounded-xl p-4 text-sm text-[#17c3b2] space-y-1">
+                  <p className="font-semibold">Bookmarked Questions</p>
+                  <p className="text-gray-600 dark:text-gray-400">Practice only the questions you've bookmarked. You currently have <strong>{stats?.bookmark_count ?? 0}</strong> bookmarked question{(stats?.bookmark_count ?? 0) !== 1 ? 's' : ''}.</p>
                 </div>
               )}
 
@@ -821,10 +831,27 @@ export function NCLEXReview() {
   const [showReseedConfirm, setShowReseedConfirm] = useState(false)
   const [adminBankCount, setAdminBankCount] = useState<number | null>(null)
   const [filterPending, setFilterPending] = useState(false)
+  const [bookmarks, setBookmarks] = useState<any[]>([])
+  const [bookmarksLoading, setBookmarksLoading] = useState(false)
+  const [removingBookmark, setRemovingBookmark] = useState<number | null>(null)
+  const [createTestInitialPool, setCreateTestInitialPool] = useState<QuestionPool | undefined>(undefined)
 
   useEffect(() => {
     if (location.state?.openUpgrade) navigate('/nclex-review/checkout')
   }, [location.state])
+
+  const loadBookmarks = useCallback(async () => {
+    if (!user) return
+    setBookmarksLoading(true)
+    try {
+      const data = await apiFetch('/api/questions/bookmarks')
+      setBookmarks(data.bookmarks || [])
+    } catch {
+      setBookmarks([])
+    } finally {
+      setBookmarksLoading(false)
+    }
+  }, [user])
 
   const loadAll = useCallback(async () => {
     if (!user) return
@@ -855,6 +882,17 @@ export function NCLEXReview() {
   }, [user])
 
   useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadBookmarks() }, [loadBookmarks])
+
+  async function removeBookmark(questionId: number) {
+    setRemovingBookmark(questionId)
+    try {
+      await apiFetch(`/api/questions/bookmarks/${questionId}`, { method: 'DELETE' })
+      setBookmarks(prev => prev.filter(b => b.question_id !== questionId))
+      setStats(prev => prev ? { ...prev, bookmark_count: Math.max(0, (prev.bookmark_count ?? 0) - 1) } : prev)
+    } catch {}
+    setRemovingBookmark(null)
+  }
 
   async function seedQuestions(force = false) {
     setSeedingLoading(true)
@@ -938,9 +976,10 @@ export function NCLEXReview() {
     <NCLEXLayout subscription={subscription}>
       {showCreateTest && (
         <CreateTestModal
-          onClose={() => setShowCreateTest(false)}
-          onStart={() => setShowCreateTest(false)}
+          onClose={() => { setShowCreateTest(false); setCreateTestInitialPool(undefined) }}
+          onStart={() => { setShowCreateTest(false); setCreateTestInitialPool(undefined) }}
           stats={stats}
+          initialPool={createTestInitialPool}
         />
       )}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
@@ -1224,6 +1263,71 @@ export function NCLEXReview() {
             {stats?.content_area_breakdown && stats.content_area_breakdown.length > 0 && (
               <ContentAreaBreakdown breakdown={stats.content_area_breakdown} />
             )}
+
+            {/* Bookmarks Section */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-[#17c3b2]" /> Bookmarked Questions
+                  {bookmarks.length > 0 && (
+                    <span className="ml-1 text-xs font-bold bg-[#17c3b2] text-white px-2 py-0.5 rounded-full">{bookmarks.length}</span>
+                  )}
+                </h2>
+                {bookmarks.length > 0 && (
+                  <button
+                    onClick={() => { setCreateTestInitialPool('bookmarked'); setShowCreateTest(true) }}
+                    className="flex items-center gap-1.5 text-xs text-[#17c3b2] hover:underline font-medium"
+                  >
+                    Practice bookmarked →
+                  </button>
+                )}
+              </div>
+              {bookmarksLoading ? (
+                <div className="text-sm text-gray-400 text-center py-6">Loading bookmarks...</div>
+              ) : bookmarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400">
+                  <Bookmark className="h-8 w-8 opacity-30" />
+                  <p className="text-sm">No bookmarks yet.</p>
+                  <p className="text-xs text-gray-400">Click the Bookmark button on any question during a test to save it here.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {bookmarks.map(b => {
+                    const tagList: string[] = Array.isArray(b.tags) ? b.tags.filter(Boolean) : []
+                    return (
+                      <div key={b.question_id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                        <Bookmark className="h-4 w-4 text-[#17c3b2] fill-[#17c3b2] flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-800 dark:text-gray-200 font-medium line-clamp-2">{b.question_text}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-[10px] text-gray-400 font-mono">QID:{b.question_id}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                              b.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
+                              b.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>{b.difficulty}</span>
+                            <span className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded capitalize">
+                              {b.question_type === 'traditional_mcq' ? 'MCQ' : b.question_type === 'ngn_sata' ? 'SATA' : b.question_type === 'ngn_cloze' ? 'Cloze' : b.question_type === 'ngn_matrix' ? 'Matrix' : b.question_type}
+                            </span>
+                            {tagList.slice(0, 2).map(tag => (
+                              <span key={tag} className="text-[10px] bg-[#17c3b2]/10 text-[#17c3b2] px-1.5 py-0.5 rounded">{tag}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeBookmark(b.question_id)}
+                          disabled={removingBookmark === b.question_id}
+                          title="Remove bookmark"
+                          className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Recent sessions preview */}
             {completedSessions.length > 0 && (
