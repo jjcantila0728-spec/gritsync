@@ -14,8 +14,9 @@ import {
   Lock, Eye, EyeOff, Save, Shield, User, Mail, Calendar, 
   Key, LogOut, AlertTriangle, CheckCircle2, XCircle, 
   Info, Bell, Clock, QrCode, Copy, 
-  Check, X, Download
+  Check, X, Download, ArrowRight, FileText, Settings
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
 // Password strength checker
@@ -362,57 +363,92 @@ export function AccountSettings() {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-5xl mx-auto w-full">
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-              Account Settings
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Manage your account security, preferences, and personal information
-            </p>
+          <div className="mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
+                  Account Settings
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Manage your password, security, and notification preferences
+                </p>
+              </div>
+              <Link to="/my-details" className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors flex-shrink-0">
+                <FileText className="h-3.5 w-3.5" />
+                View My Details
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-6">
             {/* Profile Header */}
-            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
-              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                <div className={cn(
-                  "w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0",
-                  getAvatarColor(nameForAvatar),
-                  getAvatarColorDark(nameForAvatar),
-                  getAvatarTextColor(nameForAvatar),
-                  getAvatarTextColorDark(nameForAvatar)
-                )}>
-                  {getInitials(nameForAvatar)}
+            <Card className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden p-0">
+              {/* Gradient Banner */}
+              <div className="h-28 bg-gradient-to-br from-primary-700 via-primary-600 to-red-500 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-20"
+                  style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 0%, transparent 60%), radial-gradient(circle at 80% 20%, white 0%, transparent 50%)' }}
+                />
+                <div className="absolute top-3 right-4 flex items-center gap-1.5 text-white/80 text-xs font-medium">
+                  <Settings className="h-3.5 w-3.5" />
+                  Account Settings
                 </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                    {fullName}
-                  </h2>
-                  <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <p className="text-gray-600 dark:text-gray-400">
-                      {clientEmail || user?.email}
-                    </p>
+              </div>
+
+              {/* Content overlapping banner */}
+              <div className="px-6 pb-6">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
+                  {/* Avatar with ring */}
+                  <div className={cn(
+                    "w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold flex-shrink-0 shadow-xl ring-4 ring-white dark:ring-gray-800",
+                    getAvatarColor(nameForAvatar),
+                    getAvatarColorDark(nameForAvatar),
+                    getAvatarTextColor(nameForAvatar),
+                    getAvatarTextColorDark(nameForAvatar)
+                  )}>
+                    {getInitials(nameForAvatar)}
                   </div>
-                  <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
-                    {user?.role === 'admin' && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
-                        <Shield className="h-3 w-3" />
-                        Administrator
-                      </span>
-                    )}
-                    {user?.role === 'client' && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
-                        <User className="h-3 w-3" />
-                        Client
-                      </span>
-                    )}
-                    {user?.grit_id && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                        <Key className="h-3 w-3" />
-                        ID: {user.grit_id}
-                      </span>
-                    )}
+
+                  {/* Name & info */}
+                  <div className="flex-1 min-w-0 pb-1 text-center sm:text-left">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1 truncate">
+                      {fullName}
+                    </h2>
+                    <div className="flex items-center gap-1.5 justify-center sm:justify-start mb-2 text-sm text-gray-500 dark:text-gray-400">
+                      <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="truncate">{clientEmail || user?.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
+                      {user?.role === 'admin' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                          <Shield className="h-3 w-3" />
+                          Administrator
+                        </span>
+                      )}
+                      {user?.role === 'client' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                          <User className="h-3 w-3" />
+                          Client
+                        </span>
+                      )}
+                      {user?.grit_id && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                          <Key className="h-3 w-3" />
+                          {user.grit_id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick action */}
+                  <div className="flex-shrink-0 pb-1">
+                    <Link to="/my-details">
+                      <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-400 transition-colors">
+                        <FileText className="h-3.5 w-3.5" />
+                        Edit Profile Details
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </Link>
                   </div>
                 </div>
               </div>

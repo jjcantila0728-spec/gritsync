@@ -1150,7 +1150,7 @@ export function Dashboard() {
       label: 'Personal Details',
       done: profileComplete,
       link: '/my-details',
-      description: profileComplete ? 'Profile complete' : `${profileCompletion}% complete`,
+      description: profileComplete ? `${profileCompletion}% — Complete!` : `${profileCompletion}% complete`,
       progress: profileCompletion,
     },
     {
@@ -1300,55 +1300,71 @@ export function Dashboard() {
               </div>
 
               {/* Steps list */}
-              <div className="space-y-3">
-                {onboardingSteps.map((step) => (
-                  <div key={step.id} className={cn(
-                    "flex items-center gap-3 p-2.5 rounded-lg transition-colors",
-                    !step.done && step.link
-                      ? "hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
-                      : ""
-                  )}>
-                    <div className={cn(
-                      "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center",
-                      step.done
-                        ? "bg-green-100 dark:bg-green-900/30"
-                        : "bg-gray-100 dark:bg-gray-800"
-                    )}>
-                      {step.done
-                        ? <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        : <XCircle className="h-4 w-4 text-gray-400" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        "text-sm font-medium leading-tight",
+              <div className="space-y-1.5">
+                {onboardingSteps.map((step) => {
+                  const inner = (
+                    <>
+                      <div className={cn(
+                        "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center",
                         step.done
-                          ? "text-gray-700 dark:text-gray-300"
-                          : "text-gray-900 dark:text-gray-100"
+                          ? "bg-green-100 dark:bg-green-900/30"
+                          : "bg-gray-100 dark:bg-gray-800"
                       )}>
-                        {step.label}
-                      </p>
-                      {step.id === 'profile' && !step.done && (
-                        <div className="mt-1 flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary-500 rounded-full transition-all duration-500"
-                              style={{ width: `${profileCompletion}%` }}
-                            />
+                        {step.done
+                          ? <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          : <XCircle className="h-4 w-4 text-gray-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "text-sm font-medium leading-tight",
+                          step.done
+                            ? "text-gray-700 dark:text-gray-300"
+                            : "text-gray-900 dark:text-gray-100"
+                        )}>
+                          {step.label}
+                        </p>
+                        {step.id === 'profile' && (
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all duration-500",
+                                  profileCompletion === 100 ? "bg-green-500" : "bg-primary-500"
+                                )}
+                                style={{ width: `${profileCompletion}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{profileCompletion}%</span>
                           </div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{profileCompletion}%</span>
-                        </div>
+                        )}
+                        {step.id !== 'profile' && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{step.description}</p>
+                        )}
+                      </div>
+                      {step.link && (
+                        <ArrowRight className={cn(
+                          "h-4 w-4 flex-shrink-0 transition-colors",
+                          step.done
+                            ? "text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400"
+                            : "text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400"
+                        )} />
                       )}
-                      {!(step.id === 'profile' && !step.done) && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{step.description}</p>
-                      )}
+                    </>
+                  )
+                  return step.link ? (
+                    <Link
+                      key={step.id}
+                      to={step.link}
+                      className="flex items-center gap-3 p-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 group"
+                    >
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={step.id} className="flex items-center gap-3 p-2.5 rounded-lg">
+                      {inner}
                     </div>
-                    {!step.done && step.link && (
-                      <Link to={step.link} className="flex-shrink-0">
-                        <ArrowRight className="h-4 w-4 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors" />
-                      </Link>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Action buttons */}
