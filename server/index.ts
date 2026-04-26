@@ -15,15 +15,19 @@ import { getSeedQuestions } from './data/nclex-seed'
 
 async function runStartupMigrations() {
   try {
-    // Fix test_sessions.user_id type: migrate from INTEGER to UUID to match users.id.
-    // The column is dropped and re-added as UUID with a FK reference to users(id).
-    // This is safe because the table had 0 rows when this migration was first introduced.
+    // Fix test_sessions.user_id type: ensure it is UUID to match users.id.
+    // PostgreSQL cannot automatically cast integer→uuid using ALTER COLUMN SET DATA TYPE,
+    // so we use DROP COLUMN + ADD COLUMN. Any rows with non-uuid user_ids are cleared
+    // (sessions from before auth was UUID-based have no valid owner anyway).
     const colTypeResult = await query(
       `SELECT data_type FROM information_schema.columns
        WHERE table_name = 'test_sessions' AND column_name = 'user_id'`
     )
-    if (colTypeResult.rows[0]?.data_type === 'integer') {
-      console.log('Migrating test_sessions.user_id from INTEGER to UUID...')
+    const currentType = colTypeResult.rows[0]?.data_type
+    if (currentType && currentType !== 'uuid') {
+      console.log(`Migrating test_sessions.user_id from ${currentType.toUpperCase()} to UUID...`)
+      // Delete rows that cannot be migrated (integer ids have no uuid equivalent)
+      await query(`DELETE FROM test_sessions WHERE user_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`)
       await query(`ALTER TABLE test_sessions DROP COLUMN user_id`)
       await query(`ALTER TABLE test_sessions ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE`)
       console.log('test_sessions.user_id migrated to UUID successfully.')
