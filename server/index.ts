@@ -11,10 +11,65 @@ import questionRoutes from './routes/questions'
 import storageRoutes from './routes/storage'
 import contactRoutes from './routes/contact'
 import { query } from './db'
+import { getSeedQuestions } from './data/nclex-seed'
 
 async function runStartupMigrations() {
   try {
+    // Existing columns
     await query(`ALTER TABLE session_responses ADD COLUMN IF NOT EXISTS marked_for_review BOOLEAN DEFAULT false`)
+
+    // Case study support columns
+    await query(`ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS case_study_group VARCHAR(100)`)
+    await query(`ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS case_study_scenario TEXT`)
+
+    // Payment submissions table
+    await query(`
+      CREATE TABLE IF NOT EXISTS nclex_payment_submissions (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(100) NOT NULL,
+        plan VARCHAR(20) NOT NULL DEFAULT 'premium',
+        amount DECIMAL(10,2) NOT NULL,
+        payment_method VARCHAR(50) NOT NULL,
+        reference_number VARCHAR(200) NOT NULL,
+        notes TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMP,
+        reviewed_by VARCHAR(100),
+        admin_notes TEXT
+      )
+    `)
+
+    // Auto-seed question bank if fewer than 10 questions exist
+    const countResult = await query(`SELECT COUNT(*) FROM question_bank WHERE is_active = true`)
+    const count = parseInt(countResult.rows[0].count, 10)
+    if (count < 10) {
+      console.log(`Question bank has only ${count} questions — auto-seeding...`)
+      const questions = getSeedQuestions()
+      let inserted = 0
+      for (const q of questions) {
+        try {
+          await query(
+            `INSERT INTO question_bank
+               (question_text, question_type, content_area, subcategory, difficulty,
+                cognitive_level, is_ngn, options, correct_answer, rationale, tags,
+                case_study_group, case_study_scenario, is_active)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true)`,
+            [
+              q.question_text, q.question_type, q.content_area, q.subcategory || null,
+              q.difficulty, q.cognitive_level || 'Application', q.is_ngn,
+              JSON.stringify(q.options), JSON.stringify(q.correct_answer),
+              q.rationale, q.tags ? q.tags.split(',').map((t: string) => t.trim()) : null,
+              q.case_study_group || null, q.case_study_scenario || null,
+            ]
+          )
+          inserted++
+        } catch (seedErr: any) {
+          console.warn('Seed insert warning:', seedErr.message)
+        }
+      }
+      console.log(`Auto-seeded ${inserted} questions into the question bank.`)
+    }
   } catch (err) {
     console.warn('Startup migration warning:', err)
   }
@@ -49,16 +104,12 @@ app.use('/api/storage', storageRoutes)
 app.use('/api/contact', contactRoutes)
 
 if (isProd) {
-  // Serve built frontend static files
   const distPath = path.join(__dirname, '..', 'dist')
   app.use(express.static(distPath))
-
-  // SPA fallback — send index.html for all non-API routes (Express 5 syntax)
   app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'))
   })
 } else {
-  // Dev: 404 for unknown routes (Vite handles the frontend)
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' })
   })

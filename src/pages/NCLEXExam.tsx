@@ -40,6 +40,43 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${cfg.cls}`}>{cfg.label}</span>
 }
 
+// ── Case Study Scenario Banner ───────────────────────────────────────────────
+function CaseStudyScenario({ scenario, group, questions, currentIndex }: {
+  scenario: string
+  group: string
+  questions: any[]
+  currentIndex: number
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const groupQuestions = questions.filter(q => q.case_study_group === group)
+  const posInGroup = groupQuestions.findIndex(q => q.question_id === questions[currentIndex]?.question_id) + 1
+  const totalInGroup = groupQuestions.length
+
+  return (
+    <div className="mb-5 rounded-xl border-2 border-[#17c3b2]/40 bg-[#17c3b2]/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-[#17c3b2] flex-shrink-0" />
+          <span className="text-xs font-bold text-[#17c3b2] uppercase tracking-wide">
+            NGN Case Study — Question {posInGroup} of {totalInGroup}
+          </span>
+        </div>
+        <span className="text-[10px] text-[#17c3b2] font-semibold">
+          {expanded ? '▲ Hide Scenario' : '▼ Show Scenario'}
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-[#17c3b2]/20">
+          <p className="text-sm text-gray-800 leading-relaxed mt-3 whitespace-pre-line">{scenario}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Question Type Components ─────────────────────────────────────────────────
 
 function MCQQuestion({ options, selected, onSelect, disabled, feedback, correctAnswer }: {
@@ -712,13 +749,23 @@ export function NCLEXExam() {
               )}
             </div>
 
-            {/* Clinical scenario tabs (if applicable) */}
+            {/* Subcategory tab */}
             {currentQuestion.subcategory && (
               <div className="flex border-b border-gray-200 mb-4 text-xs gap-0">
                 <div className="px-4 py-2 border-b-2 border-gray-900 font-semibold text-gray-900">
                   {currentQuestion.subcategory}
                 </div>
               </div>
+            )}
+
+            {/* NGN Case Study Scenario Block */}
+            {currentQuestion.case_study_group && currentQuestion.case_study_scenario && (
+              <CaseStudyScenario
+                scenario={currentQuestion.case_study_scenario}
+                group={currentQuestion.case_study_group}
+                questions={questions}
+                currentIndex={qIndex}
+              />
             )}
 
             {/* Question text */}
