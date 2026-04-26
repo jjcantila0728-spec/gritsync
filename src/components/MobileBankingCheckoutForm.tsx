@@ -31,6 +31,7 @@ interface MobileBankingCheckoutFormProps {
   amount: number
   serviceFeeAmount?: number
   applicationType?: 'NCLEX'
+  phpAmount?: number
   onSuccess: (
     paymentIntentId: string,
     paymentMethod?: 'card' | 'mobile_banking',
@@ -45,6 +46,7 @@ export function MobileBankingCheckoutForm({
   amount,
   serviceFeeAmount,
   applicationType,
+  phpAmount,
   onSuccess,
   onError,
   processingPayment: externalProcessing = false,
@@ -225,7 +227,7 @@ export function MobileBankingCheckoutForm({
           <div className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
             <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Amount: {formatCurrency(amount)}
+              Amount: {phpAmount != null ? `₱${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(phpAmount)}` : formatCurrency(amount)}
             </p>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -417,7 +419,11 @@ export function MobileBankingCheckoutForm({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
                     <span className="text-xs sm:text-sm font-medium text-amber-900 dark:text-amber-100">Amount to Pay:</span>
                     <div className="text-left sm:text-right">
-                      {selectedConfig.name.toLowerCase() === 'zelle' ? (
+                      {phpAmount != null ? (
+                        <div className="text-base sm:text-lg font-bold text-amber-900 dark:text-amber-100">
+                          ₱{new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(phpAmount)}
+                        </div>
+                      ) : selectedConfig.name.toLowerCase() === 'zelle' ? (
                         <>
                           <div className="text-base sm:text-lg font-bold text-amber-900 dark:text-amber-100">{formatCurrency(finalAmount)}</div>
                           <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">Zelle payments are in USD</p>
