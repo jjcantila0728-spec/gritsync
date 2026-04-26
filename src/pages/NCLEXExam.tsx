@@ -500,7 +500,7 @@ function ScoreSheet({ session, questions, onClose, onReviewAll, mode }: {
 // ── Main Exam Component ───────────────────────────────────────────────────────
 export function NCLEXExam() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -536,7 +536,20 @@ export function NCLEXExam() {
   const [showScore, setShowScore] = useState(initialTab === 'score')
   const [markedQuestions, setMarkedQuestions] = useState<Set<number>>(new Set())
   const [scenarioExpanded, setScenarioExpanded] = useState(true)
-  const [caseStudyFilter, setCaseStudyFilter] = useState<string | null>(null)
+  const [caseStudyFilter, setCaseStudyFilter] = useState<string | null>(searchParams.get('csFilter'))
+
+  const updateCaseStudyFilter = (value: string | null) => {
+    setCaseStudyFilter(value)
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value === null) {
+        next.delete('csFilter')
+      } else {
+        next.set('csFilter', value)
+      }
+      return next
+    }, { replace: true })
+  }
 
   const currentQuestion = questions[qIndex] || null
   const sessionMode = session?.settings?.mode || 'tutorial'
@@ -617,6 +630,14 @@ export function NCLEXExam() {
       if (firstIdx >= 0) setQIndex(firstIdx)
     }
   }, [caseStudyFilter, questions])
+
+  // After questions load, validate the csFilter from the URL; clear it if it doesn't match any case study
+  useEffect(() => {
+    if (caseStudyFilter && caseStudiesInSession.length > 0) {
+      const valid = caseStudiesInSession.some(cs => cs.id === caseStudyFilter)
+      if (!valid) updateCaseStudyFilter(null)
+    }
+  }, [caseStudiesInSession])
 
   // Timer
   useEffect(() => {
@@ -1195,7 +1216,7 @@ export function NCLEXExam() {
         <div className="bg-[#0a1a2e] border-t border-white/10 px-4 py-2 flex items-center gap-2 flex-shrink-0 overflow-x-auto">
           <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wide flex-shrink-0">Filter:</span>
           <button
-            onClick={() => setCaseStudyFilter(null)}
+            onClick={() => updateCaseStudyFilter(null)}
             className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
               caseStudyFilter === null
                 ? 'bg-[#17c3b2] text-white'
@@ -1207,8 +1228,8 @@ export function NCLEXExam() {
           {caseStudiesInSession.map(cs => (
             <button
               key={cs.id}
-              onClick={() => setCaseStudyFilter(cs.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[180px] ${
+              onClick={() => updateCaseStudyFilter(cs.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors max-w-[160px] ${
                 caseStudyFilter === cs.id
                   ? 'bg-blue-500 text-white'
                   : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
