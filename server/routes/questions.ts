@@ -2014,10 +2014,19 @@ router.post('/subscription/admin/reject', authenticateToken, async (req: Authent
 router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
 
+  const force = req.query.force === 'true'
+
   try {
     const existing = await query(`SELECT COUNT(*) FROM question_bank WHERE is_active = true`)
-    if (parseInt(existing.rows[0].count) > 10) {
-      return res.json({ message: 'Question bank already has questions', count: parseInt(existing.rows[0].count) })
+    const existingCount = parseInt(existing.rows[0].count)
+
+    if (existingCount > 10 && !force) {
+      return res.json({ message: 'Question bank already has questions', count: existingCount })
+    }
+
+    if (force && existingCount > 0) {
+      await query(`DELETE FROM question_bank`)
+      console.log(`[seed] Cleared ${existingCount} existing questions for re-seed.`)
     }
 
     const questions = getSeedQuestions()
@@ -2042,7 +2051,8 @@ router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) =
       inserted++
     }
 
-    res.json({ message: 'Seeded successfully', inserted })
+    const action = force && existingCount > 0 ? 'Reset and re-seeded' : 'Seeded'
+    res.json({ message: `${action} successfully`, inserted, replaced: force ? existingCount : 0 })
   } catch (error: any) {
     res.status(500).json({ error: error.message })
   }

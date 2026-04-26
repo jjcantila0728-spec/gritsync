@@ -653,6 +653,8 @@ export function NCLEXReview() {
   const [showClassic, setShowClassic] = useState(true)
   const [seedingLoading, setSeedingLoading] = useState(false)
   const [seedingCaseStudiesLoading, setSeedingCaseStudiesLoading] = useState(false)
+  const [showReseedConfirm, setShowReseedConfirm] = useState(false)
+  const [adminBankCount, setAdminBankCount] = useState<number | null>(null)
   const [filterPending, setFilterPending] = useState(false)
 
   useEffect(() => {
@@ -663,17 +665,25 @@ export function NCLEXReview() {
     if (!user) return
     setLoading(true)
     try {
-      const [subData, statsData, sessionsData, eligData] = await Promise.allSettled([
+      const requests: Promise<any>[] = [
         apiFetch('/api/questions/subscription/me'),
         apiFetch('/api/questions/user-stats'),
         apiFetch('/api/questions/my-sessions?limit=50'),
         apiFetch('/api/questions/free-review-eligibility'),
-      ])
+      ]
+      if (user.role === 'admin') {
+        requests.push(apiFetch('/api/questions/stats'))
+      }
+
+      const [subData, statsData, sessionsData, eligData, bankStatsData] = await Promise.allSettled(requests)
 
       if (subData.status === 'fulfilled') setSubscription(subData.value)
       if (statsData.status === 'fulfilled') setStats(statsData.value)
       if (sessionsData.status === 'fulfilled') setSessions(Array.isArray(sessionsData.value) ? sessionsData.value : [])
       if (eligData.status === 'fulfilled') setEligibility(eligData.value)
+      if (bankStatsData && bankStatsData.status === 'fulfilled') {
+        setAdminBankCount(bankStatsData.value?.total ?? 0)
+      }
     } finally {
       setLoading(false)
     }
@@ -681,10 +691,12 @@ export function NCLEXReview() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  async function seedQuestions() {
+  async function seedQuestions(force = false) {
     setSeedingLoading(true)
+    setShowReseedConfirm(false)
     try {
-      await apiFetch('/api/questions/seed', { method: 'POST' })
+      const url = force ? '/api/questions/seed?force=true' : '/api/questions/seed'
+      await apiFetch(url, { method: 'POST' })
       await loadAll()
     } catch (err: any) {
       alert(err.message)
@@ -753,6 +765,32 @@ export function NCLEXReview() {
         />
       )}
 
+      {showReseedConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 max-w-md w-full">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Reset & Re-seed Question Bank?</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
+              This will permanently delete all <strong>{adminBankCount ?? 0}</strong> existing questions and replace them with the default seed questions. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowReseedConfirm(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => seedQuestions(true)}
+                disabled={seedingLoading}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors"
+              >
+                {seedingLoading ? 'Resetting...' : 'Reset & Re-seed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-5 lg:p-7 max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -769,13 +807,13 @@ export function NCLEXReview() {
             )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {user?.role === 'admin' && totalBank < 10 && (
+            {user?.role === 'admin' && (
               <button
-                onClick={seedQuestions}
+                onClick={() => (adminBankCount ?? 0) >= 10 ? setShowReseedConfirm(true) : seedQuestions()}
                 disabled={seedingLoading}
                 className="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                {seedingLoading ? 'Seeding...' : 'Seed Questions'}
+                {seedingLoading ? 'Seeding...' : (adminBankCount ?? 0) >= 10 ? 'Reset & Re-seed' : 'Seed Questions'}
               </button>
             )}
             {user?.role === 'admin' && (
