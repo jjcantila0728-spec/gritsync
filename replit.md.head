@@ -1,0 +1,71 @@
+# GritSync - NCLEX Processing Agency
+
+### Overview
+GritSync is a comprehensive SaaS application designed to streamline the NCLEX application process for Filipino nurses aspiring to work in the US. It aims to be the leading platform for NCLEX processing, offering features such as quotation generation, real-time application tracking, secure payment processing, and an integrated NCLEX review platform. The project aims to provide an end-to-end solution for nurses, from initial application to NCLEX preparation, enhancing efficiency and user experience.
+
+### User Preferences
+*   I prefer detailed explanations.
+*   I want iterative development.
+*   Ask before making major changes.
+*   Do not make changes to folder `node_modules`.
+*   Do not make changes to file `package-lock.json`.
+
+### System Architecture
+
+#### Technical Stack
+The application is built with a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy.
+*   **Frontend**: React 18, TypeScript, Vite
+*   **Backend**: Express.js
+*   **Database**: Replit PostgreSQL (accessed via `DATABASE_URL`)
+*   **Authentication**: Custom JWT (`bcryptjs`, `jsonwebtoken`)
+*   **Payments**: Stripe (Client SDK)
+*   **File Storage**: PostgreSQL `file_storage` table
+*   **Email Service**: Resend API (`RESEND_API_KEY`)
+*   **UI Framework**: Tailwind CSS
+*   **Icons**: Lucide Icons
+
+#### Core Architecture
+The system is divided into a React-based frontend and an Express.js backend. A key architectural decision is the frontend's Supabase compatibility layer (`src/lib/supabase.ts`), which translates Supabase SDK calls into direct API requests to the Express backend, allowing the frontend to leverage existing Supabase-oriented code and knowledge while using a custom backend.
+
+#### Backend Structure
+*   `server/index.ts`: Entry point for the Express application.
+*   `server/db.ts`: Handles PostgreSQL database connections.
+*   `server/middleware/auth.ts`: JWT authentication middleware.
+*   `server/routes/auth.ts`: Manages user authentication (login, registration, password reset).
+*   `server/routes/query.ts`: Provides generic CRUD operations for database tables.
+
+#### NCLEX Review Platform
+The NCLEX review platform features distinct layouts for general review and exam modes (using `src/layouts/NCLEXLayout.tsx` for a consistent dark navy sidebar UI), offering various test modes (Tutorial, Timed, CAT, Readiness) and question types (traditional MCQ, NGN SATA, NGN Cloze, NGN Matrix).
+*   **Subscription Tiers**: Free (limited questions), Premium (unlimited questions, video library, cheat sheets), VIP (all premium features plus live lectures).
+*   **Exam Modes**: Tutorial (instant explanations), Timed (explanation after completion), CAT (adaptive difficulty), Readiness (full simulation).
+*   **Question Types**: Traditional MCQ, NGN SATA, NGN Cloze, NGN Matrix.
+*   **Admin Features**: Allows administrators to manage user subscriptions, assign plans, and view analytics.
+*   **Payment Submission Flow**: Users can submit GCash/Maya payment proof (reference number, notes) from the Order History page. Submissions appear in the admin "Pending Approvals" tab with approve/reject actions. Approving instantly activates the user's subscription plan.
+
+#### Email System
+Transactional emails are sent via the Resend API. The system handles various email types including verification, welcome, and password reset emails. An `email_logs` table tracks system-generated emails.
+
+#### Database Schema Notes
+*   `applications` table: Requires `applicant_name`, `email`, `service_type` on insert.
+*   `application_payments` table: Lacks `user_id` (requires JOIN with `applications`) and `service_fee_amount`.
+*   `user_details` table: Excludes `first_name`, `last_name`, `email` (these are in the `users` table).
+*   `users` table: Contains `first_name`, `last_name`, `middle_name`, `mobile` (unique), `grit_id`, `gritsync_email`, `personal_email`.
+
+#### UI/UX Decisions
+Public-facing pages like Home, About Us, Career Listing, Sponsorship Landing, Donate, Tracking, and Quote have been redesigned with cinematic hero sections using AI-generated images for an enhanced user experience. The NCLEX review platform has a distinct dark navy and teal color scheme for a focused study environment. All EAD (Employment Authorization Document) functionalities have been removed to focus solely on NCLEX processing.
+
+### External Dependencies
+*   **PostgreSQL**: Primary database for all application data, including file storage.
+*   **Stripe**: Used for processing payments.
+*   **Resend API**: Employed for sending transactional emails.
+*   **Vite**: Frontend build tool.
+*   **Express.js**: Backend web framework.
+*   **React**: Frontend library.
+*   **TypeScript**: Programming language for both frontend and backend.
+*   **Tailwind CSS**: Utility-first CSS framework for styling.
+*   **Lucide Icons**: Icon library.
+*   **bcryptjs**: For password hashing.
+*   **jsonwebtoken**: For JWT authentication.
+*   **pg**: PostgreSQL client for Node.js.
+*   **tsx**: For running TypeScript files directly.
+*   **concurrently**: For running multiple npm scripts concurrently.

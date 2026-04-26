@@ -26,17 +26,18 @@ async function runStartupMigrations() {
     await query(`
       CREATE TABLE IF NOT EXISTS nclex_payment_submissions (
         id SERIAL PRIMARY KEY,
-        user_id VARCHAR(100) NOT NULL,
-        plan VARCHAR(20) NOT NULL DEFAULT 'premium',
-        amount DECIMAL(10,2) NOT NULL,
-        payment_method VARCHAR(50) NOT NULL,
-        reference_number VARCHAR(200) NOT NULL,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        plan VARCHAR(20) NOT NULL,
+        payment_method VARCHAR(50),
+        payment_reference VARCHAR(200),
+        payment_amount NUMERIC(10,2),
         notes TEXT,
         status VARCHAR(20) NOT NULL DEFAULT 'pending',
-        submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        reviewed_by UUID REFERENCES users(id),
         reviewed_at TIMESTAMP,
-        reviewed_by VARCHAR(100),
-        admin_notes TEXT
+        review_notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
 

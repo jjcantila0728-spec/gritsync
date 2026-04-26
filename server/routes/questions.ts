@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { query } from '../db'
+import { query, withTransaction } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { getSeedQuestions } from '../data/nclex-seed'
 
@@ -1304,6 +1304,58 @@ router.post('/seed-case-studies', authenticateToken, async (req: AuthenticatedRe
   }
 })
 
+// ─── Payment Submission Routes ────────────────────────────────────────────────
+
+router.post('/subscription/submit-payment', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id
+    const { plan, payment_method, payment_reference, payment_amount, notes } = req.body
+
+    if (!plan || !['premium', 'vip'].includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan. Must be premium or vip.' })
+    }
+
+    const existing = await query(
+      `SELECT id FROM nclex_payment_submissions WHERE user_id = $1 AND status = 'pending'`,
+      [userId]
+    )
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'You already have a pending payment submission. Please wait for admin review.' })
+    }
+
+    const result = await query(
+      `INSERT INTO nclex_payment_submissions
+         (user_id, plan, payment_method, payment_reference, payment_amount, notes, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+       RETURNING *`,
+      [userId, plan, payment_method || null, payment_reference || null,
+       payment_amount || null, notes || null]
+    )
+
+    const submission = result.rows[0]
+
+    const userName = [req.user?.first_name, req.user?.last_name].filter(Boolean).join(' ') || req.user?.email || 'A user'
+    const planLabel = plan === 'vip' ? 'VIP' : 'Premium'
+    const notifMessage = `${userName} submitted ${planLabel} plan payment proof${payment_method ? ` via ${payment_method}` : ''}${payment_reference ? ` (ref: ${payment_reference})` : ''}. Review in NCLEX Subscriptions → Pending Approvals.`
+
+    const adminUsers = await query(`SELECT id FROM users WHERE role = 'admin'`)
+    for (const admin of adminUsers.rows) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message, read)
+         VALUES ($1, 'payment_pending', 'New Payment Submission', $2, false)`,
+        [admin.id, notifMessage]
+      ).catch((err) => {
+        console.warn('Admin notification insert failed (non-fatal):', err?.message || err)
+      })
+    }
+
+    res.status(201).json(submission)
+  } catch (error: any) {
+    console.error('Submit payment error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 function getCaseStudySeedData() {
   return [
     // ─────────────────────────────────────────────────────────────────────────
@@ -1827,6 +1879,137 @@ Medications given in triage (prior to ABG):
   ]
 }
 
+router.get('/subscription/my-submissions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id
+    const result = await query(
+      `SELECT * FROM nclex_payment_submissions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
+      [userId]
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/subscription/admin/pending-approvals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const result = await query(
+      `SELECT ps.*,
+              u.email as user_email,
+              u.first_name,
+              u.last_name,
+              u.grit_id
+       FROM nclex_payment_submissions ps
+       JOIN users u ON ps.user_id = u.id
+       WHERE ps.status = 'pending'
+       ORDER BY ps.created_at ASC`
+    )
+    res.json(result.rows)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/subscription/admin/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const { submission_id, review_notes } = req.body
+    if (!submission_id) return res.status(400).json({ error: 'submission_id is required' })
+
+    const subResult = await query(
+      `SELECT * FROM nclex_payment_submissions WHERE id = $1`,
+      [submission_id]
+    )
+    if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' })
+
+    const submission = subResult.rows[0]
+    if (submission.status !== 'pending') {
+      return res.status(409).json({ error: `Submission is already ${submission.status}. Only pending submissions can be approved.` })
+    }
+
+    const adminId = req.user?.id
+
+    let expiresAt: string | null = null
+    if (submission.plan === 'premium') {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 2)
+      expiresAt = d.toISOString()
+    } else if (submission.plan === 'vip') {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 6)
+      expiresAt = d.toISOString()
+    }
+
+    await withTransaction(async (q) => {
+      await q(
+        `UPDATE nclex_payment_submissions
+         SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_notes = $2, updated_at = NOW()
+         WHERE id = $3 AND status = 'pending'`,
+        [adminId, review_notes || null, submission_id]
+      )
+
+      await q(
+        `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW()
+         WHERE user_id = $1::text AND status = 'active'`,
+        [submission.user_id]
+      )
+
+      await q(
+        `INSERT INTO nclex_subscriptions
+           (user_id, plan, status, expires_at, payment_amount, payment_currency,
+            payment_reference, payment_method, notes, activated_by)
+         VALUES ($1::text, $2, 'active', $3, $4, 'PHP', $5, $6, $7, $8::text)`,
+        [
+          submission.user_id, submission.plan, expiresAt,
+          submission.payment_amount || null,
+          submission.payment_reference || null,
+          submission.payment_method || null,
+          submission.notes || null,
+          adminId,
+        ]
+      )
+    })
+
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('Approve submission error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/subscription/admin/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const { submission_id, review_notes } = req.body
+    if (!submission_id) return res.status(400).json({ error: 'submission_id is required' })
+
+    const subResult = await query(
+      `SELECT status FROM nclex_payment_submissions WHERE id = $1`,
+      [submission_id]
+    )
+    if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' })
+    if (subResult.rows[0].status !== 'pending') {
+      return res.status(409).json({ error: `Submission is already ${subResult.rows[0].status}. Only pending submissions can be rejected.` })
+    }
+
+    await query(
+      `UPDATE nclex_payment_submissions
+       SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_notes = $2, updated_at = NOW()
+       WHERE id = $3 AND status = 'pending'`,
+      [req.user?.id, review_notes || null, submission_id]
+    )
+
+    res.json({ success: true })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // ─── Seed Questions (Admin only) ──────────────────────────────────────────────
 router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
@@ -1860,128 +2043,6 @@ router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) =
     }
 
     res.json({ message: 'Seeded successfully', inserted })
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// ─── Payment Submission (User) ────────────────────────────────────────────────
-router.post('/payment/submit', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-  const { plan, amount, payment_method, reference_number, notes } = req.body
-  if (!plan || !amount || !payment_method || !reference_number) {
-    return res.status(400).json({ error: 'plan, amount, payment_method, and reference_number are required' })
-  }
-  if (!['premium', 'vip'].includes(plan)) {
-    return res.status(400).json({ error: 'Plan must be premium or vip' })
-  }
-
-  try {
-    const existing = await query(
-      `SELECT id FROM nclex_payment_submissions WHERE user_id = $1 AND status = 'pending'`,
-      [userId]
-    )
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'You already have a pending payment submission. Please wait for admin review.' })
-    }
-
-    const result = await query(
-      `INSERT INTO nclex_payment_submissions
-         (user_id, plan, amount, payment_method, reference_number, notes, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-       RETURNING *`,
-      [userId, plan, parseFloat(amount), payment_method, reference_number.trim(), notes || null]
-    )
-    res.json({ message: 'Payment submitted successfully. Admin will review within 24 hours.', submission: result.rows[0] })
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// ─── Get User's Own Payment Submissions ──────────────────────────────────────
-router.get('/payment/my-submissions', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-  try {
-    const result = await query(
-      `SELECT id, plan, amount, payment_method, reference_number, notes, status, submitted_at, reviewed_at, admin_notes
-       FROM nclex_payment_submissions
-       WHERE user_id = $1
-       ORDER BY submitted_at DESC`,
-      [userId]
-    )
-    res.json(result.rows)
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// ─── Admin: List All Payment Submissions ─────────────────────────────────────
-router.get('/payment/submissions', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
-
-  const { status } = req.query
-  try {
-    const result = await query(
-      `SELECT ps.*, u.email, u.first_name, u.last_name, u.grit_id
-       FROM nclex_payment_submissions ps
-       JOIN users u ON ps.user_id = u.id::text
-       ${status && status !== 'all' ? `WHERE ps.status = $1` : ''}
-       ORDER BY ps.submitted_at DESC`,
-      status && status !== 'all' ? [status] : []
-    )
-    res.json(result.rows)
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// ─── Admin: Approve or Reject a Payment Submission ───────────────────────────
-router.patch('/payment/submissions/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
-
-  const { id } = req.params
-  const { action, admin_notes } = req.body
-  const adminId = req.user?.id
-
-  if (!['approve', 'reject'].includes(action)) {
-    return res.status(400).json({ error: 'action must be approve or reject' })
-  }
-
-  try {
-    const subResult = await query(
-      `SELECT * FROM nclex_payment_submissions WHERE id = $1`,
-      [id]
-    )
-    if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' })
-
-    const sub = subResult.rows[0]
-    if (sub.status !== 'pending') {
-      return res.status(400).json({ error: 'Submission has already been reviewed' })
-    }
-
-    const newStatus = action === 'approve' ? 'approved' : 'rejected'
-    await query(
-      `UPDATE nclex_payment_submissions
-       SET status = $1, reviewed_at = NOW(), reviewed_by = $2, admin_notes = $3
-       WHERE id = $4`,
-      [newStatus, adminId, admin_notes || null, id]
-    )
-
-    if (action === 'approve') {
-      const durationMonths = sub.plan === 'vip' ? 6 : 2
-      await query(
-        `INSERT INTO nclex_subscriptions
-           (user_id, plan, status, expires_at, payment_amount, payment_method, payment_reference, activated_by, notes)
-         VALUES ($1, $2, 'active', NOW() + INTERVAL '${durationMonths} months', $3, $4, $5, $6, $7)`,
-        [sub.user_id, sub.plan, sub.amount, sub.payment_method, sub.reference_number, adminId, `Auto-approved from submission #${id}`]
-      )
-    }
-
-    res.json({ message: `Submission ${newStatus} successfully` })
   } catch (error: any) {
     res.status(500).json({ error: error.message })
   }
