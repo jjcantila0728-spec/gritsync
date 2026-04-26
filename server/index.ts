@@ -7,7 +7,7 @@ import authRoutes from './routes/auth'
 import queryRoutes from './routes/query'
 import paymentRoutes from './routes/payments'
 import emailRoutes from './routes/emails'
-import questionRoutes from './routes/questions'
+import questionRoutes, { autoSeedIfEmpty } from './routes/questions'
 import storageRoutes from './routes/storage'
 import contactRoutes from './routes/contact'
 import { query } from './db'
@@ -73,6 +73,7 @@ async function runStartupMigrations() {
   } catch (err) {
     console.warn('Startup migration warning:', err)
   }
+  await autoSeedIfEmpty()
 }
 
 const __filename = fileURLToPath(import.meta.url)

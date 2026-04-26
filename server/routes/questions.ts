@@ -1084,6 +1084,42 @@ router.get('/subscription/admin/analytics', authenticateToken, async (req: Authe
   }
 })
 
+// ─── Seed Questions (shared logic) ────────────────────────────────────────────
+function parseTags(tags: string | string[] | null | undefined): string[] | null {
+  if (!tags) return null
+  if (Array.isArray(tags)) return tags
+  return tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+}
+
+export async function autoSeedIfEmpty(): Promise<void> {
+  try {
+    const existing = await query(`SELECT COUNT(*) FROM question_bank WHERE is_active = true`)
+    if (parseInt(existing.rows[0].count) > 10) return
+
+    const questions = getSeedQuestions()
+    for (const q of questions) {
+      await query(
+        `INSERT INTO question_bank
+           (question_text, question_type, content_area, subcategory, difficulty,
+            cognitive_level, is_ngn, options, correct_answer, rationale, tags,
+            case_study_group, case_study_scenario, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true)
+         ON CONFLICT DO NOTHING`,
+        [
+          q.question_text, q.question_type, q.content_area, q.subcategory || null,
+          q.difficulty, q.cognitive_level || 'Application', q.is_ngn,
+          JSON.stringify(q.options), JSON.stringify(q.correct_answer),
+          q.rationale, parseTags(q.tags),
+          (q as any).case_study_group || null, (q as any).case_study_scenario || null,
+        ]
+      )
+    }
+    console.log(`[seed] Question bank seeded with ${questions.length} sample questions.`)
+  } catch (err) {
+    console.warn('[seed] Auto-seed failed (non-fatal):', err)
+  }
+}
+
 // ─── Seed Questions (Admin only) ──────────────────────────────────────────────
 router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
@@ -1109,7 +1145,7 @@ router.post('/seed', authenticateToken, async (req: AuthenticatedRequest, res) =
           q.question_text, q.question_type, q.content_area, q.subcategory || null,
           q.difficulty, q.cognitive_level || 'Application', q.is_ngn,
           JSON.stringify(q.options), JSON.stringify(q.correct_answer),
-          q.rationale, q.tags ? q.tags.split(',').map((t: string) => t.trim()) : null,
+          q.rationale, parseTags(q.tags),
           (q as any).case_study_group || null, (q as any).case_study_scenario || null,
         ]
       )
