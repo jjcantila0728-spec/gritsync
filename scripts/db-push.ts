@@ -119,6 +119,26 @@ async function push() {
     console.warn('  ⚠️  nclex_payment_submissions warning:', err.message)
   }
 
+  // ── one-time: ensure jjcantila0728@gmail.com is admin + verified in all envs ─
+  try {
+    const fix = await query(
+      `UPDATE users SET role = 'admin', email_verified = true, updated_at = NOW()
+       WHERE grit_id = 'GRIT437617'
+          OR email = 'jjcantila0728@gmail.com'
+          OR personal_email = 'jjcantila0728@gmail.com'
+       RETURNING id, grit_id, email, role, email_verified`
+    )
+    if (fix.rowCount && fix.rowCount > 0) {
+      fix.rows.forEach((r: any) =>
+        console.log(`  ✅  ${r.grit_id || r.id} → role=${r.role}, email_verified=${r.email_verified}`)
+      )
+    } else {
+      console.log('  ℹ️  jjcantila0728 — no matching accounts found (safe to ignore)')
+    }
+  } catch (err: any) {
+    console.warn('  ⚠️  jjcantila0728 admin fix warning:', err.message)
+  }
+
   console.log('\n✅ db-push complete.')
   await pool.end()
 }
