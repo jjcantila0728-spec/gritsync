@@ -4245,70 +4245,24 @@ export const applicationPaymentsAPI = {
           filePath
         })
 
-        // Convert File to Blob with explicit type
+        // Convert File to Blob with explicit content type for reliable upload
         const arrayBuffer = await proofOfPaymentFile.arrayBuffer()
         const blob = new Blob([arrayBuffer], { type: contentType })
-        
-        console.log('Created Blob (Supabase will auto-detect from Blob.type):', {
-          blobSize: blob.size,
-          blobType: blob.type,
-          originalFileSize: proofOfPaymentFile.size,
-          note: 'NOT setting contentType explicitly - letting Blob.type be used'
-        })
 
-        // Try REST API upload as workaround for SDK contentType issue
-        try {
-          const { data: { session } } = await db.auth.getSession()
-          const token = session?.access_token
-          
-          if (!token) {
-            throw new Error('No authentication token available')
-          }
-
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-          const uploadUrl = `${supabaseUrl}/storage/v1/object/documents/${filePath}`
-          
-          console.log('Uploading via REST API:', {
-            url: uploadUrl,
-            blobType: blob.type,
-            blobSize: blob.size
+        const { error: uploadError } = await db.storage
+          .from('documents')
+          .upload(filePath, blob, {
+            contentType,
+            cacheControl: '3600',
+            upsert: false,
           })
 
-          const response = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': blob.type,  // Set as request header
-              'x-upsert': 'false',
-            },
-            body: blob
-          })
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error('REST API upload error:', response.status, errorText)
-            throw new Error(`Upload failed: ${response.status} ${errorText}`)
-          }
-
-          console.log('REST API upload successful!', await response.json())
-        } catch (restError: any) {
-          console.error('REST API upload failed, falling back to SDK:', restError)
-          
-          // Fallback to SDK method
-          const { error: uploadError } = await db.storage
-            .from('documents')
-            .upload(filePath, blob, {
-              cacheControl: '3600',
-              upsert: false,
-            })
-
-          if (uploadError) {
-            console.error('SDK upload error:', uploadError)
-            throw new Error(`Failed to upload proof of payment: ${uploadError.message}`)
-          }
+        if (uploadError) {
+          console.error('Proof of payment upload error:', uploadError)
+          throw new Error(`Failed to upload proof of payment: ${uploadError.message}`)
         }
-        
-        console.log('Proof of payment uploaded successfully:', filePath, '| Blob.type was:', blob.type, '| Should auto-detect in Supabase')
+
+        console.log('Proof of payment uploaded successfully:', filePath)
         proofOfPaymentFilePath = filePath
       } catch (uploadErr: any) {
         console.error('Proof of payment upload failed:', uploadErr)
@@ -4338,12 +4292,11 @@ export const applicationPaymentsAPI = {
     }
     
     if (proofOfPaymentFilePath) {
-      updatePayload.proof_of_payment_file_path = proofOfPaymentFilePath
+      updatePayload.proof_url = proofOfPaymentFilePath
     }
     
     // Add GCash details ONLY if payment method is explicitly 'gcash'
-    // Note: These columns need to exist in the database (run migration: add-gcash-columns-to-payments.sql)
-    // For mobile_banking, we don't use GCash fields - only proof_of_payment_file_path
+    // For mobile_banking, we don't use GCash fields - only proof_url
     if (paymentMethod === 'gcash' && gcashDetails && gcashDetails.number && gcashDetails.reference) {
       updatePayload.gcash_number = gcashDetails.number
       updatePayload.gcash_reference = gcashDetails.reference
@@ -4356,7 +4309,7 @@ export const applicationPaymentsAPI = {
       payment_method: updatePayload.payment_method,
       hasTransactionId: !!updatePayload.transaction_id,
       hasStripeIntentId: !!updatePayload.stripe_payment_intent_id,
-      hasProofOfPayment: !!updatePayload.proof_of_payment_file_path,
+      hasProofOfPayment: !!updatePayload.proof_url,
       hasGcashDetails: !!updatePayload.gcash_number,
     })
     
