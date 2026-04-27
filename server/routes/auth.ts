@@ -301,6 +301,17 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       [user.id]
     )
 
+    // Cascade verification to any other account sharing the same email/personal_email
+    // (handles duplicate accounts where one is the personal email and the other is the gritsync email)
+    const sharedEmail = user.personal_email || user.email
+    if (sharedEmail) {
+      await query(
+        `UPDATE users SET email_verified = true, updated_at = NOW()
+         WHERE id != $1 AND (email = $2 OR personal_email = $2) AND email_verified = false`,
+        [user.id, sharedEmail]
+      ).catch(() => {}) // non-fatal
+    }
+
     // Send welcome email if not already sent (fire-and-forget)
     if (!user.welcome_email_sent_at && user.personal_email) {
       query(
@@ -377,9 +388,15 @@ router.post('/login', async (req: Request, res: Response) => {
 
     let result
     if (isEmail) {
-      // Check both gritsync email (email col) and personal email
+      // Check both gritsync email (email col) and personal email.
+      // Prefer exact email match first (so admin accounts take priority over client accounts
+      // that share the same personal email), then fall back by creation date.
       result = await query(
-        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE email = $1 OR personal_email = $1',
+        `SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at
+         FROM users
+         WHERE email = $1 OR personal_email = $1
+         ORDER BY (email = $1) DESC, created_at ASC
+         LIMIT 1`,
         [identifier.toLowerCase()]
       )
     } else if (isGritId) {
@@ -895,13 +912,20 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 router.post('/resend-verification', async (req: Request, res: Response) => {
   try {
     const { personal_email } = req.body
-    if (!personal_email) {
+    const emailInput = personal_email?.trim().toLowerCase()
+    if (!emailInput) {
       return res.status(400).json({ error: 'Email is required' })
     }
 
+    // Match by personal_email OR email column; prefer unverified accounts so we
+    // can actually send them a new link (already-verified accounts are skipped below)
     const result = await query(
-      'SELECT id, first_name, personal_email, email_verified FROM users WHERE personal_email = $1',
-      [personal_email.trim().toLowerCase()]
+      `SELECT id, first_name, personal_email, email, email_verified
+       FROM users
+       WHERE personal_email = $1 OR email = $1
+       ORDER BY email_verified ASC, created_at ASC
+       LIMIT 1`,
+      [emailInput]
     )
 
     if (result.rows.length === 0) {
@@ -923,7 +947,9 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
       [verification_token, verification_expires, otp, otp_expires, user.id]
     )
 
-    sendVerificationEmail(user.personal_email, user.first_name, verification_token, otp)
+    // Send to the email the user provided (handles accounts where personal_email is null)
+    const sendTo = user.personal_email || emailInput
+    sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
 
     res.json({ message: 'Verification email resent. Please check your inbox.' })
   } catch (err: any) {
