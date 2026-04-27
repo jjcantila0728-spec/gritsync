@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, RefreshCw } from 'lucide-react'
 
 
 export function Login() {
@@ -21,6 +21,8 @@ export function Login() {
   const [accountLocked, setAccountLocked] = useState(false)
   const [_lockedUntil, setLockedUntil] = useState<string | null>(null)
   const [minutesRemaining, setMinutesRemaining] = useState<number | null>(null)
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
   const { signIn, isAdmin, user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -53,6 +55,7 @@ export function Login() {
     setAccountLocked(false)
     setLockedUntil(null)
     setMinutesRemaining(null)
+    setShowResendVerification(false)
 
     try {
       await signIn(email, password)
@@ -90,10 +93,39 @@ export function Login() {
         }
       } else {
         setError(errorMessage)
+        // Show resend option when the error is about unverified email
+        if (errorMessage.toLowerCase().includes('verify your email') || errorMessage.toLowerCase().includes('verification link')) {
+          setShowResendVerification(true)
+        }
         showToast(errorMessage, 'error')
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    const emailToResend = email.trim()
+    if (!emailToResend) {
+      showToast('Please enter your email address first.', 'error')
+      return
+    }
+    setResendLoading(true)
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personal_email: emailToResend }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to resend')
+      showToast(data.message || 'Verification email sent! Please check your inbox.', 'success')
+      setShowResendVerification(false)
+      setError('')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to resend verification email.', 'error')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -173,6 +205,22 @@ export function Login() {
                     <p className="text-xs text-red-500 dark:text-red-400">
                       Account will be locked after the next failed attempt.
                     </p>
+                  )}
+                  {showResendVerification && (
+                    <div className="pt-1 border-t border-red-200 dark:border-red-700">
+                      <p className="text-xs text-red-500 dark:text-red-400 mb-2">
+                        Didn't receive the email or the link expired?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleResendVerification}
+                        disabled={resendLoading}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 underline-offset-2 hover:underline transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${resendLoading ? 'animate-spin' : ''}`} />
+                        {resendLoading ? 'Sending...' : 'Resend verification email'}
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
