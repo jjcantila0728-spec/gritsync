@@ -1,0 +1,66 @@
+Service Worker registered: https://app.gritsync.com/
+sw.js:93 [Service Worker] Serving from cache: https://app.gritsync.com/gritsync_logo.png
+dashboard:1 Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.
+sw.js:93 [Service Worker] Serving from cache: https://app.gritsync.com/gritsync_logo.png
+AdminEmails-ZOjKtZQq.js:46 Admin Inbox - API Result: {object: 'list', has_more: true, data: Array(50)}
+AdminEmails-ZOjKtZQq.js:46 Admin Inbox - Emails data: (50) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+AdminEmails-ZOjKtZQq.js:46 Admin Inbox - Number of emails: 50
+AdminEmails-ZOjKtZQq.js:46 Admin Inbox - Email TO addresses: (5) [{…}, {…}, {…}, {…}, {…}]
+index-hJHzHk_D.js:68  GET https://app.gritsync.com/api/db/email_subscribers?select=*&order=created_at.desc 403 (Forbidden)
+(anonymous) @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:2
+N @ index-hJHzHk_D.js:2
+_execute @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:2
+N @ index-hJHzHk_D.js:2
+then @ index-hJHzHk_D.js:68Understand this error
+index-hJHzHk_D.js:68  GET https://app.gritsync.com/api/db/subscriber_stats?select=* 403 (Forbidden)
+(anonymous) @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:2
+N @ index-hJHzHk_D.js:2
+_execute @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:68
+(anonymous) @ index-hJHzHk_D.js:2
+N @ index-hJHzHk_D.js:2
+then @ index-hJHzHk_D.js:68Understand this error
+installHook.js:1 Error loading subscribers: Error: Table not allowed
+    at Object.<anonymous> (subscribers-api-CtwvOsBm.js:1:1226)
+    at Generator.next (<anonymous>)
+    at o (subscribers-api-CtwvOsBm.js:1:483)
+overrideMethod @ installHook.js:1
+(anonymous) @ AdminEmails-ZOjKtZQq.js:43
+C @ AdminEmails-ZOjKtZQq.js:2
+Promise.then
+k @ AdminEmails-ZOjKtZQq.js:2
+(anonymous) @ AdminEmails-ZOjKtZQq.js:2
+x @ AdminEmails-ZOjKtZQq.js:2
+u @ AdminEmails-ZOjKtZQq.js:43
+(anonymous) @ AdminEmails-ZOjKtZQq.js:43
+ko @ index-hJHzHk_D.js:41
+zn @ index-hJHzHk_D.js:41
+im @ index-hJHzHk_D.js:41
+qt @ index-hJHzHk_D.js:41
+Eu @ index-hJHzHk_D.js:41
+Bt @ index-hJHzHk_D.js:39
+(anonymous) @ index-hJHzHk_D.js:41Understand this error
+installHook.js:1 Error loading stats: Error: Table not allowed
+    at Object.<anonymous> (subscribers-api-CtwvOsBm.js:3:756)
+    at Generator.next (<anonymous>)
+    at o (subscribers-api-CtwvOsBm.js:1:483)
+overrideMethod @ installHook.js:1
+(anonymous) @ AdminEmails-ZOjKtZQq.js:43
+C @ AdminEmails-ZOjKtZQq.js:2
+Promise.then
+k @ AdminEmails-ZOjKtZQq.js:2
+(anonymous) @ AdminEmails-ZOjKtZQq.js:2
+x @ AdminEmails-ZOjKtZQq.js:2
+M @ AdminEmails-ZOjKtZQq.js:43
+(anonymous) @ AdminEmails-ZOjKtZQq.js:43
+ko @ index-hJHzHk_D.js:41
+zn @ index-hJHzHk_D.js:41
+im @ index-hJHzHk_D.js:41
+qt @ index-hJHzHk_D.js:41
+Eu @ index-hJHzHk_D.js:41
+Bt @ index-hJHzHk_D.js:39
+(anonymous) @ index-hJHzHk_D.js:41Understand this error
