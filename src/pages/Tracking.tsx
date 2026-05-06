@@ -42,6 +42,7 @@ interface Application {
   picture_path?: string | null
   service_type?: string
   service_state?: string
+  user_id?: string
 }
 
 type SortField = 'name' | 'date' | 'status'
@@ -1431,8 +1432,8 @@ export function Tracking() {
                         </div>
                       )}
                       
-                      {/* Delete Button - Top Left (visible to admins on all applications) */}
-                      {isAdminView && (
+                      {/* Delete Button - Top Left (visible to admins on all applications, and to clients on their own applications) */}
+                      {(isAdminView || (!isAdmin() && app.user_id === user?.id)) && (
                         <div 
                           className="absolute top-2 left-2 z-40"
                           onClick={(e) => e.stopPropagation()}
