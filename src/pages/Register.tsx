@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { appUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
@@ -199,7 +200,7 @@ export function Register() {
       setOtpSuccess('Email verified! Redirecting to your dashboard...')
       showToast('Account verified successfully!', 'success')
       setTimeout(() => {
-        window.location.href = '/dashboard'
+        window.location.href = appUrl('/dashboard')
       }, 1200)
     } catch {
       setOtpError('Something went wrong. Please try again.')

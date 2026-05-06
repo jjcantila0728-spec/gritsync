@@ -10,6 +10,7 @@ import { SessionTimeout } from './components/SessionTimeout'
 import { ScrollToTop } from './components/ScrollToTop'
 import { PWAInstallPrompt } from './components/PWAInstallPrompt'
 import { PWAUpdateNotification } from './components/PWAUpdateNotification'
+import { getSubdomainContext, getBasename } from './lib/routing'
 
 // Lazy load pages for better performance and code splitting
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })))
@@ -90,6 +91,10 @@ function PageLoader() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Route guards
+// ---------------------------------------------------------------------------
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
@@ -105,7 +110,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  // Ensure children is not a plain object (which React can't render)
   if (children && typeof children === 'object' && !React.isValidElement(children) && !Array.isArray(children)) {
     console.error('ProtectedRoute: Invalid children prop - received plain object', children)
     return null
@@ -125,7 +129,6 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // If user is logged in, redirect to dashboard
   if (user) {
     return <Navigate to={isAdmin() ? '/admin/dashboard' : '/dashboard'} replace />
   }
@@ -148,7 +151,6 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/dashboard" replace />
   }
 
-  // Ensure children is not a plain object (which React can't render)
   if (children && typeof children === 'object' && !React.isValidElement(children) && !Array.isArray(children)) {
     console.error('AdminRoute: Invalid children prop - received plain object', children)
     return null
@@ -177,6 +179,49 @@ function AdminRedirect({ to }: { to: string }) {
   return <Navigate to={redirectPath} replace />
 }
 
+// ---------------------------------------------------------------------------
+// Landing routes (gritsync.com / no prefix in dev: /)
+// ---------------------------------------------------------------------------
+
+function LandingRoutes() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/faqs" element={<FAQs />} />
+        <Route path="/quote" element={<Quote />} />
+        <Route path="/quote/:id" element={<Quote />} />
+        <Route path="/quotations" element={<Quote />} />
+        <Route path="/quotations/:id" element={<Quote />} />
+        <Route path="/tracking" element={<Tracking />} />
+        <Route path="/tracking/:id" element={<Tracking />} />
+        <Route path="/applications" element={<Tracking />} />
+        <Route path="/sponsorship" element={<SponsorshipLanding />} />
+        <Route path="/sponsorship/apply" element={<NCLEXSponsorship />} />
+        <Route path="/career" element={<CareerListing />} />
+        <Route path="/career/apply" element={<Career />} />
+        <Route path="/donate" element={<Donate />} />
+        <Route path="/donate/checkout" element={<DonateCheckout />} />
+        <Route path="/donate/success" element={<DonateSuccess />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/preferences/:token" element={<EmailPreferences />} />
+        <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
+        <Route path="/sign" element={<SignaturePage />} />
+        <Route path="/test-api" element={<TestApi />} />
+        <Route path="/test-upload" element={<TestProofOfPaymentUpload />} />
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// App (portal) routes (app.gritsync.com / /app prefix in dev)
+// ---------------------------------------------------------------------------
+
 function AppRoutes() {
   const { isAdmin } = useAuth()
   const [isMaintenance, setIsMaintenance] = useState(false)
@@ -203,7 +248,6 @@ function AppRoutes() {
     return <PageLoader />
   }
 
-  // Show maintenance mode to non-admins only
   if (isMaintenance && !isAdmin()) {
     return <MaintenanceMode />
   }
@@ -211,532 +255,135 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route 
-          path="/" 
-          element={
-            <PublicRoute>
-              <Home />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/login" 
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/register" 
-          element={
-            <PublicRoute>
-              <Register />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/forgot-password" 
-          element={
-            <PublicRoute>
-              <ForgotPassword />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/reset-password" 
-          element={
-            <PublicRoute>
-              <ResetPassword />
-            </PublicRoute>
-          } 
-        />
+        {/* Auth pages */}
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/terms" element={<TermsOfService />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
-        <Route path="/about-us" element={<AboutUs />} />
-        <Route path="/faqs" element={<FAQs />} />
-        <Route path="/nclex-review" element={<NCLEXReview />} />
-        <Route path="/nclex-review/exam/:id" element={<NCLEXExam />} />
-        <Route path="/nclex-review/video-library" element={<NCLEXVideoLibrary />} />
-        <Route path="/nclex-review/cheat-sheets" element={<NCLEXCheatSheets />} />
-        <Route path="/nclex-review/live-lectures" element={<NCLEXLiveLectures />} />
-        <Route path="/nclex-review/order-history" element={<NCLEXOrderHistory />} />
-        <Route path="/nclex-review/checkout" element={<NCLEXCheckout />} />
-        <Route path="/donate" element={<Donate />} />
-        <Route path="/donate/checkout" element={<DonateCheckout />} />
-        <Route path="/donate/success" element={<DonateSuccess />} />
-        <Route path="/career/apply" element={<Career />} />
-        <Route path="/career" element={<CareerListing />} />
-        <Route path="/test-api" element={<TestApi />} />
-        <Route path="/test-upload" element={<TestProofOfPaymentUpload />} />
-        <Route path="/sign" element={<SignaturePage />} />
-      
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new"
-        element={
-          <ProtectedRoute>
-            <NCLEXApplication />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/application/new/nclex"
-        element={
-          <ProtectedRoute>
-            <NCLEXApplication />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/sponsorship/apply"
-        element={<NCLEXSponsorship />}
-      />
-      <Route
-        path="/sponsorship"
-        element={<SponsorshipLanding />}
-      />
-      <Route
-        path="/tracking"
-        element={<Tracking />}
-      />
-      <Route
-        path="/tracking/:id"
-        element={<Tracking />}
-      />
-      <Route
-        path="/applications"
-        element={<Tracking />}
-      />
-      <Route
-        path="/applications/:id"
-        element={<Navigate to="timeline" replace />}
-      />
-      <Route
-        path="/applications/:id/payments"
-        element={
-          <ProtectedRoute>
-            <ApplicationPayments />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/checkout"
-        element={<ApplicationCheckout />}
-      />
-      <Route
-        path="/applications/:id/details/:subTab"
-        element={
-          <ProtectedRoute>
-            <ApplicationDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/details"
-        element={
-          <ProtectedRoute>
-            <Navigate to="personal" replace />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:id/:tab"
-        element={
-          <ProtectedRoute>
-            <ApplicationDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/applications/:applicationId/payment"
-        element={
-          <ProtectedRoute>
-            <ApplicationPayment />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quote"
-        element={<Quote />}
-      />
-      <Route
-        path="/quote/:id"
-        element={<Quote />}
-      />
-      <Route
-        path="/quotations"
-        element={<Quote />}
-      />
-      <Route
-        path="/quotations/:id"
-        element={<Quote />}
-      />
-      <Route
-        path="/quotations/new"
-        element={
-          <ProtectedRoute>
-            <NewQuotation />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quotations/:id/pay"
-        element={
-          <ProtectedRoute>
-            <Payment />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-details"
-        element={
-          <ProtectedRoute>
-            <MyDetails />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/account-settings"
-        element={
-          <ProtectedRoute>
-            <AccountSettings />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/documents/:serviceType?"
-        element={
-          <ProtectedRoute>
-            <Documents />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <ProtectedRoute>
-            <Notifications />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/dashboard"
-        element={
-          <AdminRoute>
-            <Dashboard />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications"
-        element={
-          <AdminRoute>
-            <Tracking />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id"
-        element={<AdminRedirect to="timeline" />}
-      />
-      <Route
-        path="/admin/applications/:id/payments"
-        element={
-          <AdminRoute>
-            <AdminApplicationPayments />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id/details/:subTab"
-        element={
-          <AdminRoute>
-            <ApplicationDetail />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/applications/:id/details"
-        element={<AdminRedirect to="personal" />}
-      />
-      <Route
-        path="/admin/applications/:id/:tab"
-        element={
-          <AdminRoute>
-            <ApplicationDetail />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/clients"
-        element={
-          <AdminRoute>
-            <AdminClients />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/quotations"
-        element={
-          <AdminRoute>
-            <AdminQuoteManagement />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/settings"
-        element={
-          <AdminRoute>
-            <AdminSettings />
-          </AdminRoute>
-        }
-      >
-        <Route index element={<GeneralSettings />} />
-        <Route path="general" element={<GeneralSettings />} />
-        <Route path="notifications" element={<NotificationSettings />} />
-        <Route path="security" element={<SecuritySettings />} />
-        <Route path="payment" element={<PaymentSettings />} />
-        <Route path="promo-codes" element={<PromoCodeSettings />} />
-        <Route path="currency" element={<CurrencySettings />} />
-        <Route path="monitoring" element={<MonitoringDashboard />} />
-        <Route path="system" element={<SystemSettings />} />
-        <Route path="services" element={<ServiceSettings />} />
-      </Route>
-      <Route
-        path="/admin/notifications"
-        element={
-          <AdminRoute>
-            <NotificationManagement />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/sponsorships"
-        element={
-          <AdminRoute>
-            <AdminSponsorships />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/donations"
-        element={
-          <AdminRoute>
-            <AdminDonations />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/careers"
-        element={
-          <AdminRoute>
-            <AdminCareers />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/partner-agencies"
-        element={
-          <AdminRoute>
-            <AdminPartnerAgencies />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/question-bank"
-        element={
-          <AdminRoute>
-            <AdminQuestionBank />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/nclex-subscriptions"
-        element={
-          <AdminRoute>
-            <AdminNCLEXSubscriptions />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/inbox"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/sent"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/scheduled"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/ab-testing"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/analytics"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/campaigns"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/subscribers"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/templates"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/email-addresses"
-        element={
-          <AdminRoute>
-            <AdminEmailAddresses />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/email-templates"
-        element={
-          <AdminRoute>
-            <AdminEmailTemplates />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/signatures"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/email-setup"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/email-setup/admin"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/emails/email-setup/client"
-        element={
-          <AdminRoute>
-            <AdminEmails />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/analytics"
-        element={
-          <AdminRoute>
-            <AdminAnalytics />
-          </AdminRoute>
-        }
-      />
-      
-      {/* Client Email Routes */}
-      <Route
-        path="/client/emails"
-        element={
-          <ProtectedRoute>
-            <ClientEmails />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/emails/inbox"
-        element={
-          <ProtectedRoute>
-            <ClientEmails />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/emails/sent"
-        element={
-          <ProtectedRoute>
-            <ClientEmails />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/emails/templates"
-        element={
-          <ProtectedRoute>
-            <ClientEmails />
-          </ProtectedRoute>
-        }
-      />
+
+        {/* Client protected routes */}
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/application/new" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
+        <Route path="/application/new/nclex" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
+        <Route path="/applications/:id" element={<Navigate to="timeline" replace />} />
+        <Route path="/applications/:id/payments" element={<ProtectedRoute><ApplicationPayments /></ProtectedRoute>} />
+        <Route path="/applications/:id/checkout" element={<ApplicationCheckout />} />
+        <Route path="/applications/:id/details/:subTab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
+        <Route path="/applications/:id/details" element={<ProtectedRoute><Navigate to="personal" replace /></ProtectedRoute>} />
+        <Route path="/applications/:id/:tab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
+        <Route path="/applications/:applicationId/payment" element={<ProtectedRoute><ApplicationPayment /></ProtectedRoute>} />
+        <Route path="/quotations/new" element={<ProtectedRoute><NewQuotation /></ProtectedRoute>} />
+        <Route path="/quotations/:id/pay" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+        <Route path="/my-details" element={<ProtectedRoute><MyDetails /></ProtectedRoute>} />
+        <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+        <Route path="/documents/:serviceType?" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+
+        {/* Client email routes */}
+        <Route path="/client/emails" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/client/emails/inbox" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/client/emails/sent" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/client/emails/templates" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+
+        {/* Admin routes */}
+        <Route path="/admin/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/admin/applications" element={<AdminRoute><Tracking /></AdminRoute>} />
+        <Route path="/admin/applications/:id" element={<AdminRedirect to="timeline" />} />
+        <Route path="/admin/applications/:id/payments" element={<AdminRoute><AdminApplicationPayments /></AdminRoute>} />
+        <Route path="/admin/applications/:id/details/:subTab" element={<AdminRoute><ApplicationDetail /></AdminRoute>} />
+        <Route path="/admin/applications/:id/details" element={<AdminRedirect to="personal" />} />
+        <Route path="/admin/applications/:id/:tab" element={<AdminRoute><ApplicationDetail /></AdminRoute>} />
+        <Route path="/admin/clients" element={<AdminRoute><AdminClients /></AdminRoute>} />
+        <Route path="/admin/quotations" element={<AdminRoute><AdminQuoteManagement /></AdminRoute>} />
+        <Route
+          path="/admin/settings"
+          element={<AdminRoute><AdminSettings /></AdminRoute>}
+        >
+          <Route index element={<GeneralSettings />} />
+          <Route path="general" element={<GeneralSettings />} />
+          <Route path="notifications" element={<NotificationSettings />} />
+          <Route path="security" element={<SecuritySettings />} />
+          <Route path="payment" element={<PaymentSettings />} />
+          <Route path="promo-codes" element={<PromoCodeSettings />} />
+          <Route path="currency" element={<CurrencySettings />} />
+          <Route path="monitoring" element={<MonitoringDashboard />} />
+          <Route path="system" element={<SystemSettings />} />
+          <Route path="services" element={<ServiceSettings />} />
+        </Route>
+        <Route path="/admin/notifications" element={<AdminRoute><NotificationManagement /></AdminRoute>} />
+        <Route path="/admin/sponsorships" element={<AdminRoute><AdminSponsorships /></AdminRoute>} />
+        <Route path="/admin/donations" element={<AdminRoute><AdminDonations /></AdminRoute>} />
+        <Route path="/admin/careers" element={<AdminRoute><AdminCareers /></AdminRoute>} />
+        <Route path="/admin/partner-agencies" element={<AdminRoute><AdminPartnerAgencies /></AdminRoute>} />
+        <Route path="/admin/question-bank" element={<AdminRoute><AdminQuestionBank /></AdminRoute>} />
+        <Route path="/admin/nclex-subscriptions" element={<AdminRoute><AdminNCLEXSubscriptions /></AdminRoute>} />
+        <Route path="/admin/emails" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/inbox" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/sent" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/scheduled" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/ab-testing" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/analytics" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/campaigns" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/subscribers" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/templates" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/email-addresses" element={<AdminRoute><AdminEmailAddresses /></AdminRoute>} />
+        <Route path="/admin/email-templates" element={<AdminRoute><AdminEmailTemplates /></AdminRoute>} />
+        <Route path="/admin/emails/signatures" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/email-setup" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/email-setup/admin" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/emails/email-setup/client" element={<AdminRoute><AdminEmails /></AdminRoute>} />
+        <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+
+        {/* Root redirect: send to login if not authed, dashboard if authed */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Suspense>
   )
 }
 
+// ---------------------------------------------------------------------------
+// Review routes (review.gritsync.com / /review prefix in dev)
+// ---------------------------------------------------------------------------
+
+function ReviewRoutes() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/" element={<NCLEXReview />} />
+        <Route path="/exam/:id" element={<NCLEXExam />} />
+        <Route path="/video-library" element={<NCLEXVideoLibrary />} />
+        <Route path="/cheat-sheets" element={<NCLEXCheatSheets />} />
+        <Route path="/live-lectures" element={<NCLEXLiveLectures />} />
+        <Route path="/order-history" element={<NCLEXOrderHistory />} />
+        <Route path="/checkout" element={<NCLEXCheckout />} />
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Root router — picks the right route tree based on subdomain context
+// ---------------------------------------------------------------------------
+
+function RootRoutes() {
+  const context = getSubdomainContext()
+
+  if (context === 'app') return <AppRoutes />
+  if (context === 'review') return <ReviewRoutes />
+  return <LandingRoutes />
+}
+
 function App() {
+  const basename = getBasename()
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
@@ -744,13 +391,14 @@ function App() {
           <SessionTimeout>
             <ToastProvider>
               <BrowserRouter
+                basename={basename}
                 future={{
                   v7_startTransition: true,
                   v7_relativeSplatPath: true,
                 }}
               >
                 <ScrollToTop />
-                <AppRoutes />
+                <RootRoutes />
                 <PWAInstallPrompt />
                 <PWAUpdateNotification />
               </BrowserRouter>
@@ -763,4 +411,3 @@ function App() {
 }
 
 export default App
-

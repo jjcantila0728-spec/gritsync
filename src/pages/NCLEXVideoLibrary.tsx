@@ -101,7 +101,7 @@ export function NCLEXVideoLibrary() {
               </div>
             </div>
             <button
-              onClick={() => navigate('/nclex-review', { state: { openUpgrade: true } })}
+              onClick={() => navigate('/', { state: { openUpgrade: true } })}
               className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-[#17c3b2] text-white text-sm font-bold hover:bg-[#14a99a] transition-colors">
               Upgrade Now
             </button>

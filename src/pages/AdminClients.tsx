@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { appUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -712,7 +713,7 @@ export function AdminClients() {
                                         localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
                                         localStorage.setItem('gritsync_user', JSON.stringify(data.user))
                                         showToast(`Logged in as ${data.user?.first_name || 'user'}`, 'success')
-                                        window.location.href = '/dashboard'
+                                        window.location.href = appUrl('/dashboard')
                                       } catch (error: any) {
                                         showToast(error.message || 'Failed to login as user', 'error')
                                       }

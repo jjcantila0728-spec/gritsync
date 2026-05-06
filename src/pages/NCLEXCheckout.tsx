@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { appUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -202,7 +203,7 @@ export function NCLEXCheckout() {
           body: JSON.stringify({ paymentIntentId, plan: selectedPlan }),
         })
         showToast('Payment completed successfully!', 'success')
-        navigate('/nclex-review')
+        navigate('/')
       } else {
         let screenshotUrl: string | null = null
         if (proofFile) screenshotUrl = await uploadFile(proofFile)
@@ -219,7 +220,7 @@ export function NCLEXCheckout() {
           }),
         })
         showToast('Mobile banking payment submitted! Your proof of payment has been uploaded. An admin will review and approve your payment.', 'success')
-        navigate('/nclex-review')
+        navigate('/')
       }
     } catch (error: any) {
       showToast(error.message || 'Failed to complete payment. Please try again.', 'error')
@@ -253,7 +254,7 @@ export function NCLEXCheckout() {
           <Card>
             <div className="text-center py-8">
               <p className="text-gray-600 dark:text-gray-400">Please sign in to continue.</p>
-              <Button onClick={() => navigate('/login')} className="mt-4">
+              <Button onClick={() => { window.location.href = appUrl('/login') }} className="mt-4">
                 Sign In
               </Button>
             </div>
@@ -275,7 +276,7 @@ export function NCLEXCheckout() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/nclex-review')}
+              onClick={() => navigate('/')}
               className="flex items-center gap-2 mb-4"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -386,7 +387,7 @@ export function NCLEXCheckout() {
                   {/* Pay Later */}
                   <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                     <Button
-                      onClick={() => navigate('/nclex-review')}
+                      onClick={() => navigate('/')}
                       disabled={processingPayment}
                       className="w-full flex items-center gap-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700 text-white border-gray-900 dark:border-gray-800"
                     >
@@ -423,7 +424,7 @@ export function NCLEXCheckout() {
                           plan={selectedPlan}
                           onSuccess={() => {
                             showToast('Payment completed successfully!', 'success')
-                            navigate('/nclex-review')
+                            navigate('/')
                           }}
                           onError={handlePaymentError}
                           processingPayment={processingPayment}

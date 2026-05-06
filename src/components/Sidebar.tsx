@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
+import { reviewUrl } from '@/lib/routing'
 import {
   LayoutDashboard,
   DollarSign,
@@ -33,7 +34,6 @@ const clientNavItems: NavItem[] = [
   { label: 'Applications', path: '/applications', icon: ClipboardList },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
   { label: 'Emails', path: '/client/emails', icon: Mail },
-  { label: 'NCLEX Review', path: '/nclex-review', icon: BookOpen },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -397,6 +397,16 @@ export function Sidebar() {
             </Link>
           )
         })}
+        {/* NCLEX Review — cross-subdomain link */}
+        {!isAdmin() && (
+          <a
+            href={reviewUrl('/')}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <BookOpen className="h-5 w-5 flex-shrink-0" />
+            <span className="flex-1 min-w-0">NCLEX Review</span>
+          </a>
+        )}
       </nav>
     </aside>
   )
@@ -754,6 +764,18 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             </Link>
           )
         })}
+        {/* NCLEX Review — cross-subdomain link */}
+        {!isAdmin() && (
+          <a
+            href={reviewUrl('/')}
+            onClick={onNavigate}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            style={{ visibility: 'visible', display: 'flex' }}
+          >
+            <BookOpen className="h-5 w-5 flex-shrink-0" />
+            <span className="flex-1 min-w-0 block">NCLEX Review</span>
+          </a>
+        )}
       </nav>
     </aside>
   )

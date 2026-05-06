@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { appUrl } from '@/lib/routing'
 import { Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Heart, ArrowRight } from 'lucide-react'
 import { Button } from './ui/Button'
 import { useToast } from './ui/Toast'
@@ -195,10 +196,10 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/register" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={appUrl('/register')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Create Account</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
             </ul>
           </div>

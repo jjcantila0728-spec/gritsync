@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { appUrl } from '@/lib/routing'
 import { NCLEXLayout } from '@/layouts/NCLEXLayout'
 import {
   BarChart2, Plus, Filter, ChevronRight, Crown, Zap,
@@ -325,7 +326,7 @@ function CreateTestModal({ onClose, onStart, stats, initialPool }: {
         }),
       })
       onStart({ mode, testType, pool, questionCount, contentArea })
-      window.location.replace(`/nclex-review/exam/${data.session_id}`)
+      window.location.replace(`/exam/${data.session_id}`)
     } catch (err: any) {
       setError(err.message || 'Failed to create test')
       setStarting(false)
@@ -839,7 +840,7 @@ export function NCLEXReview() {
   const [createTestInitialPool, setCreateTestInitialPool] = useState<QuestionPool | undefined>(undefined)
 
   useEffect(() => {
-    if (location.state?.openUpgrade) navigate('/nclex-review/checkout')
+    if (location.state?.openUpgrade) navigate('/checkout')
   }, [location.state])
 
   const loadBookmarks = useCallback(async () => {
@@ -1038,7 +1039,7 @@ export function NCLEXReview() {
               <p className="text-sm text-gray-500 mt-0.5">
                 Expires in {Math.max(0, Math.ceil((new Date(subscription.expires_at).getTime() - Date.now()) / 86400000))} days
                 &nbsp;·&nbsp;
-                <button onClick={() => navigate('/nclex-review/checkout')} className="text-[#17c3b2] hover:underline font-medium">
+                <button onClick={() => navigate('/checkout')} className="text-[#17c3b2] hover:underline font-medium">
                   Extend
                 </button>
               </p>
@@ -1066,7 +1067,7 @@ export function NCLEXReview() {
             <button
               onClick={() => {
                 if (plan === 'free' && !subscription?.can_answer) {
-                  navigate('/nclex-review/checkout')
+                  navigate('/checkout')
                   return
                 }
                 setShowCreateTest(true)
@@ -1136,7 +1137,7 @@ export function NCLEXReview() {
                   </div>
                 </div>
                 <button
-                  onClick={() => navigate('/nclex-review/checkout')}
+                  onClick={() => navigate('/checkout')}
                   className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#17c3b2] text-white text-sm font-bold hover:bg-[#14a99a] transition-colors"
                 >
                   <Crown className="h-4 w-4" /> Upgrade Plan
@@ -1404,7 +1405,7 @@ export function NCLEXReview() {
                           {new Date(s.time_started).toLocaleDateString()} · {s.session_type} · {settings.mode || 'tutorial'}
                         </span>
                         <button
-                          onClick={() => navigate(`/nclex-review/exam/${s.id}?review=true`)}
+                          onClick={() => navigate(`/exam/${s.id}?review=true`)}
                           className="text-xs text-[#17c3b2] hover:underline font-medium flex-shrink-0"
                         >
                           Review
@@ -1515,7 +1516,7 @@ export function NCLEXReview() {
                             <div className="flex items-center justify-center gap-3">
                               {s.status === 'in_progress' ? (
                                 <button
-                                  onClick={() => navigate(`/nclex-review/exam/${s.id}`)}
+                                  onClick={() => navigate(`/exam/${s.id}`)}
                                   className="flex flex-col items-center gap-0.5 text-[#17c3b2] hover:text-[#14a99a] transition-colors"
                                 >
                                   <Play className="h-5 w-5" />
@@ -1524,14 +1525,14 @@ export function NCLEXReview() {
                               ) : (
                                 <>
                                   <button
-                                    onClick={() => navigate(`/nclex-review/exam/${s.id}?review=true`)}
+                                    onClick={() => navigate(`/exam/${s.id}?review=true`)}
                                     className="flex flex-col items-center gap-0.5 text-[#17c3b2] hover:text-[#14a99a] transition-colors"
                                   >
                                     <BarChart2 className="h-5 w-5" />
                                     <span className="text-[10px] font-semibold">Score/Stats</span>
                                   </button>
                                   <button
-                                    onClick={() => navigate(`/nclex-review/exam/${s.id}?review=true&tab=explanations`)}
+                                    onClick={() => navigate(`/exam/${s.id}?review=true&tab=explanations`)}
                                     className="flex flex-col items-center gap-0.5 text-[#17c3b2] hover:text-[#14a99a] transition-colors"
                                   >
                                     <BookOpen className="h-5 w-5" />

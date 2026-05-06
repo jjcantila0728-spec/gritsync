@@ -838,7 +838,7 @@ export function NCLEXExam() {
         <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500 p-6">
           <AlertCircle className="h-10 w-10 text-red-400" />
           <p className="text-sm text-center">{error}</p>
-          <button onClick={() => navigate('/nclex-review')} className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold">
+          <button onClick={() => navigate('/')} className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold">
             Back to Q-Bank
           </button>
         </div>
@@ -851,12 +851,12 @@ export function NCLEXExam() {
       <NCLEXExamLayout
         sessionId={sessionId}
         mode={sessionMode}
-        onClose={() => navigate('/nclex-review')}
+        onClose={() => navigate('/')}
       >
         <ScoreSheet
           session={session}
           questions={questions}
-          onClose={() => navigate('/nclex-review')}
+          onClose={() => navigate('/')}
           onReviewAll={() => { setShowScore(false); setQIndex(0) }}
           mode={sessionMode}
         />
@@ -866,7 +866,7 @@ export function NCLEXExam() {
 
   if (!currentQuestion) {
     return (
-      <NCLEXExamLayout onClose={() => navigate('/nclex-review')}>
+      <NCLEXExamLayout onClose={() => navigate('/')}>
         <div className="flex items-center justify-center h-full text-gray-500">No questions found.</div>
       </NCLEXExamLayout>
     )
@@ -1018,7 +1018,7 @@ export function NCLEXExam() {
       isBookmarked={isBookmarked}
       onToggleMark={toggleMark}
       onToggleBookmark={toggleBookmark}
-      onClose={() => navigate('/nclex-review')}
+      onClose={() => navigate('/')}
     >
       {/* ── Mobile Panel Tabs (only on small screens) ── */}
       <div className="flex border-b border-gray-200 bg-white sm:hidden flex-shrink-0">
@@ -1163,7 +1163,7 @@ export function NCLEXExam() {
       {/* ── Bottom Navigation Bar ── */}
       <div className="bg-[#0d2137] text-white h-12 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 flex-shrink-0">
         <button
-          onClick={() => navigate('/nclex-review')}
+          onClick={() => navigate('/')}
           className="flex items-center gap-1 text-xs font-semibold text-white/70 hover:text-white transition-colors px-2 sm:px-3 py-1.5 rounded-lg hover:bg-white/10 flex-shrink-0"
         >
           ✕ <span className="hidden sm:inline">Close</span>

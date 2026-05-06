@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { appUrl } from '@/lib/routing'
 import {
   BookOpen, Video, FileText, Radio, ShoppingBag,
   ChevronLeft, Crown, Zap, Menu, X, Home,
@@ -18,11 +19,11 @@ interface NCLEXLayoutProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Q-Bank', icon: BookOpen, path: '/nclex-review' },
-  { label: 'Video Library', icon: Video, path: '/nclex-review/video-library' },
-  { label: 'Cheat Sheets', icon: FileText, path: '/nclex-review/cheat-sheets' },
-  { label: 'Live Lectures', icon: Radio, path: '/nclex-review/live-lectures' },
-  { label: 'Order History', icon: ShoppingBag, path: '/nclex-review/order-history' },
+  { label: 'Q-Bank', icon: BookOpen, path: '/' },
+  { label: 'Video Library', icon: Video, path: '/video-library' },
+  { label: 'Cheat Sheets', icon: FileText, path: '/cheat-sheets' },
+  { label: 'Live Lectures', icon: Radio, path: '/live-lectures' },
+  { label: 'Order History', icon: ShoppingBag, path: '/order-history' },
 ]
 
 function PlanBadge({ plan }: { plan: string }) {
@@ -99,7 +100,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
           <div className="mt-3 flex items-center gap-2">
             <PlanBadge plan={plan} />
             {plan === 'free' && (
-              <button onClick={() => navigate('/nclex-review/checkout')} className="text-[10px] text-[#17c3b2] hover:underline font-medium">
+              <button onClick={() => navigate('/checkout')} className="text-[10px] text-[#17c3b2] hover:underline font-medium">
                 Upgrade →
               </button>
             )}
@@ -109,7 +110,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <div className="space-y-0.5">
             {NAV_ITEMS.map(({ label, icon: Icon, path }) => {
-              const isActive = path === '/nclex-review' ? currentPath === '/nclex-review' : currentPath.startsWith(path)
+              const isActive = path === '/' ? currentPath === '/' : currentPath.startsWith(path)
               return (
                 <button
                   key={path}
@@ -127,13 +128,13 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
         </nav>
 
         <div className="px-3 pb-5 border-t border-white/10 pt-4">
-          <button
-            onClick={() => navigate('/dashboard')}
+          <a
+            href={appUrl('/dashboard')}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/50 hover:text-white hover:bg-white/10 transition-colors"
           >
             <Home className="h-4 w-4" />
             Back to GritSync
-          </button>
+          </a>
         </div>
       </aside>
 
@@ -145,7 +146,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
           <div className="flex items-center gap-2 text-sm flex-1 min-w-0">
             <span
               className="font-semibold text-gray-900 dark:text-white cursor-pointer hover:text-[#17c3b2] transition-colors truncate"
-              onClick={() => navigate('/nclex-review')}
+              onClick={() => navigate('/')}
             >
               NCLEX RN – Q-Bank
             </span>
@@ -153,7 +154,7 @@ export function NCLEXLayout({ children, subscription }: NCLEXLayoutProps) {
           <div className="flex items-center gap-3 flex-shrink-0">
             {plan === 'free' && (
               <button
-                onClick={() => navigate('/nclex-review/checkout')}
+                onClick={() => navigate('/checkout')}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#17c3b2] text-white text-xs font-semibold hover:bg-[#14a99a] transition-colors"
               >
                 <Crown className="h-3 w-3" /> Upgrade

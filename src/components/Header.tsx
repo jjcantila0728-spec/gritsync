@@ -2,6 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
+import { appUrl, reviewUrl, landingUrl, getSubdomainContext } from '@/lib/routing'
 import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { NotificationDropdown } from './NotificationDropdown'
@@ -660,8 +661,13 @@ export function Header() {
   const handleSignOut = async () => {
     try {
       await signOut()
-      navigate('/login')
       setUserMenuOpen(false)
+      const ctx = getSubdomainContext()
+      if (ctx === 'app' || ctx === 'review') {
+        window.location.href = appUrl('/login')
+      } else {
+        navigate('/login')
+      }
     } catch (error) {
       console.error('Error signing out:', error)
     }
@@ -691,7 +697,7 @@ export function Header() {
       localStorage.setItem('gritsync_refresh_token', backup.refresh_token || '')
       localStorage.setItem('gritsync_user', JSON.stringify(backup.user))
       localStorage.removeItem('admin_session_backup')
-      window.location.href = '/admin/clients'
+      window.location.href = appUrl('/admin/clients')
     } catch (error) {
       console.error('Error restoring admin session:', error)
     }
@@ -833,9 +839,15 @@ export function Header() {
                 )}
               </button>
             )}
-            <Link to={user ? (isAdmin() ? '/admin/dashboard' : '/dashboard') : '/'} className="flex items-center">
-              <Logo />
-            </Link>
+            {user ? (
+              <Link to={isAdmin() ? '/admin/dashboard' : '/dashboard'} className="flex items-center">
+                <Logo />
+              </Link>
+            ) : (
+              <a href={landingUrl('/')} className="flex items-center">
+                <Logo />
+              </a>
+            )}
           </div>
 
           {/* Center - Navigation Links (Desktop, non-authenticated) */}
@@ -1084,17 +1096,17 @@ export function Header() {
               </>
             ) : (
               <>
-                {/* Auth Buttons */}
-                <Link to="/login">
+                {/* Auth Buttons — cross-subdomain when on landing */}
+                <a href={appUrl('/login')}>
                   <Button variant="ghost" size="sm" className="hidden sm:flex">
                     Login
                   </Button>
-                </Link>
-                <Link to="/register">
+                </a>
+                <a href={appUrl('/register')}>
                   <Button size="sm" className="hidden sm:flex">
                     Sign Up
                   </Button>
-                </Link>
+                </a>
 
                 {/* Mobile Menu Button */}
                 <button
@@ -1159,20 +1171,20 @@ export function Header() {
                 ))}
               </div>
               <div className="pt-4 border-t border-gray-200 dark:border-gray-800 mt-4 space-y-2">
-                <Link
-                  to="/login"
+                <a
+                  href={appUrl('/login')}
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full text-center px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
                   Login
-                </Link>
-                <Link
-                  to="/register"
+                </a>
+                <a
+                  href={appUrl('/register')}
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full text-center px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
                 >
                   Sign Up
-                </Link>
+                </a>
               </div>
             </nav>
           </div>
