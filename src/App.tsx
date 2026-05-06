@@ -81,6 +81,8 @@ const NCLEXCheatSheets = lazy(() => import('./pages/NCLEXCheatSheets').then(m =>
 const NCLEXLiveLectures = lazy(() => import('./pages/NCLEXLiveLectures').then(m => ({ default: m.NCLEXLiveLectures })))
 const NCLEXOrderHistory = lazy(() => import('./pages/NCLEXOrderHistory').then(m => ({ default: m.NCLEXOrderHistory })))
 const NCLEXCheckout = lazy(() => import('./pages/NCLEXCheckout').then(m => ({ default: m.NCLEXCheckout })))
+const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })))
+const AdminMessages = lazy(() => import('./pages/AdminMessages').then(m => ({ default: m.AdminMessages })))
 
 // Loading fallback component
 function PageLoader() {
@@ -307,6 +309,9 @@ function AppRoutes() {
         <Route path="/documents/:serviceType?" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
 
+        {/* Client messages route */}
+        <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+
         {/* Client email routes */}
         <Route path="/client/emails" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
         <Route path="/client/emails/inbox" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
@@ -361,6 +366,9 @@ function AppRoutes() {
         <Route path="/admin/emails/email-setup/admin" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/emails/email-setup/client" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+
+        {/* Admin messages route */}
+        <Route path="/admin/messages" element={<AdminRoute><AdminMessages /></AdminRoute>} />
 
         {/* Root redirect: send to login if not authed, dashboard if authed */}
         <Route path="/" element={<Navigate to="/login" replace />} />

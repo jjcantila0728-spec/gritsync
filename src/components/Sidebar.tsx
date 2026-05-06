@@ -19,6 +19,7 @@ import {
   FileText,
   BookOpen,
   Crown,
+  MessageSquare,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -34,6 +35,7 @@ const clientNavItems: NavItem[] = [
   { label: 'Applications', path: '/applications', icon: ClipboardList },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
   { label: 'Emails', path: '/client/emails', icon: Mail },
+  { label: 'Messages', path: '/messages', icon: MessageSquare },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -42,6 +44,7 @@ const adminNavItems: NavItem[] = [
   { label: 'Clients', path: '/admin/clients', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
   { label: 'Emails', path: '/admin/emails', icon: Mail },
+  { label: 'Messages', path: '/admin/messages', icon: MessageSquare },
   { label: 'Question Bank', path: '/admin/question-bank', icon: BookOpen },
   { label: 'NCLEX Subscriptions', path: '/admin/nclex-subscriptions', icon: Crown },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
@@ -57,6 +60,7 @@ export function Sidebar() {
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {
@@ -336,6 +340,54 @@ export function Sidebar() {
     }
   }, [user])
 
+  // Load unread messages count from API (poll every 30s) and localStorage cache
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getCachedCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadMessagesCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch { /* ignore */ }
+      return 0
+    }
+
+    const fetchCount = async () => {
+      try {
+        const token = localStorage.getItem('gritsync_token')
+        if (!token) return
+        const res = await fetch('/api/messages/unread-count', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        const count = data.count || 0
+        setUnreadMessagesCount(count)
+        localStorage.setItem(`unreadMessagesCount_${user.id}`, JSON.stringify({ count, timestamp: Date.now() }))
+      } catch { /* ignore */ }
+    }
+
+    setUnreadMessagesCount(getCachedCount())
+    fetchCount()
+
+    const interval = setInterval(fetchCount, 30000)
+
+    const handleUpdate = () => setUnreadMessagesCount(getCachedCount())
+    window.addEventListener('messagesUpdated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('messagesUpdated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="hidden md:block w-64 min-h-screen border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
       <nav className="space-y-2">
@@ -356,6 +408,9 @@ export function Sidebar() {
           
           // Show counter for Emails link (both admin and client)
           const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
+
+          // Show counter for Messages link (both admin and client)
+          const showMessagesCounter = (item.path === '/admin/messages' || item.path === '/messages') && unreadMessagesCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
@@ -386,6 +441,11 @@ export function Sidebar() {
               {showEmailsCounter && (
                 <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
+                </span>
+              )}
+              {showMessagesCounter && (
+                <span className="flex-shrink-0 bg-green-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                 </span>
               )}
               {showDocumentsStop && (
@@ -422,6 +482,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {
@@ -701,6 +762,54 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
     }
   }, [user])
 
+  // Load unread messages count from API (poll every 30s) and localStorage cache
+  useEffect(() => {
+    if (!user?.id) return
+
+    const getCachedCount = (): number => {
+      try {
+        const cached = localStorage.getItem(`unreadMessagesCount_${user.id}`)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed.timestamp && Date.now() - parsed.timestamp < 60 * 1000) {
+            return parsed.count || 0
+          }
+        }
+      } catch { /* ignore */ }
+      return 0
+    }
+
+    const fetchCount = async () => {
+      try {
+        const token = localStorage.getItem('gritsync_token')
+        if (!token) return
+        const res = await fetch('/api/messages/unread-count', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        const count = data.count || 0
+        setUnreadMessagesCount(count)
+        localStorage.setItem(`unreadMessagesCount_${user.id}`, JSON.stringify({ count, timestamp: Date.now() }))
+      } catch { /* ignore */ }
+    }
+
+    setUnreadMessagesCount(getCachedCount())
+    fetchCount()
+
+    const interval = setInterval(fetchCount, 30000)
+
+    const handleUpdate = () => setUnreadMessagesCount(getCachedCount())
+    window.addEventListener('messagesUpdated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('messagesUpdated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [user])
+
   return (
     <aside className="w-full h-full bg-white dark:bg-gray-900 p-4 overflow-visible">
       <nav className="space-y-2">
@@ -721,6 +830,9 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           
           // Show counter for Emails link (both admin and client)
           const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
+
+          // Show counter for Messages link (both admin and client)
+          const showMessagesCounter = (item.path === '/admin/messages' || item.path === '/messages') && unreadMessagesCount > 0
           
           // Show stop indicator for Documents link if required documents are incomplete
           const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
@@ -753,6 +865,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
               {showEmailsCounter && (
                 <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
+                </span>
+              )}
+              {showMessagesCounter && (
+                <span className="flex-shrink-0 bg-green-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                  {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                 </span>
               )}
               {showDocumentsStop && (

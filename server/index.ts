@@ -10,6 +10,7 @@ import emailRoutes from './routes/emails'
 import questionRoutes, { autoSeedIfEmpty } from './routes/questions'
 import storageRoutes from './routes/storage'
 import contactRoutes from './routes/contact'
+import messageRoutes from './routes/messages'
 import { query } from './db'
 import { getSeedQuestions } from './data/nclex-seed'
 
@@ -143,6 +144,31 @@ async function runStartupMigrations() {
   }
 
   await autoSeedIfEmpty()
+
+  // Messages table migration — fully idempotent, never drops data
+  try {
+    // 1. Ensure the table exists with the minimal required shape
+    await query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        recipient_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        subject TEXT,
+        body TEXT NOT NULL,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    // 2. Additive column additions for existing tables
+    await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS subject TEXT`)
+    // 3. Indexes
+    await query(`CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient_id)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)`)
+    console.log('Messages table ready.')
+  } catch (err) {
+    console.warn('Startup migration warning (messages table):', err)
+  }
 }
 
 const __filename = fileURLToPath(import.meta.url)
@@ -172,6 +198,7 @@ app.use('/api/emails', emailRoutes)
 app.use('/api/questions', questionRoutes)
 app.use('/api/storage', storageRoutes)
 app.use('/api/contact', contactRoutes)
+app.use('/api/messages', messageRoutes)
 
 if (isProd) {
   const distPath = path.join(__dirname, '..', 'dist')
