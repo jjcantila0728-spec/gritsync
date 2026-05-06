@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { Eye, EyeOff, Mail, Lock, RefreshCw } from 'lucide-react'
+import { appUrl, getSubdomainContext } from '@/lib/routing'
 
 
 export function Login() {
@@ -30,7 +31,13 @@ export function Login() {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      navigate(isAdmin() ? '/admin/dashboard' : '/dashboard', { replace: true })
+      const dest = isAdmin() ? '/admin/dashboard' : '/dashboard'
+      const ctx = getSubdomainContext()
+      if (ctx === 'landing' || ctx === 'review') {
+        window.location.href = appUrl(dest)
+      } else {
+        navigate(dest, { replace: true })
+      }
     }
   }, [user, authLoading, isAdmin, navigate])
 

@@ -10,7 +10,7 @@ import { SessionTimeout } from './components/SessionTimeout'
 import { ScrollToTop } from './components/ScrollToTop'
 import { PWAInstallPrompt } from './components/PWAInstallPrompt'
 import { PWAUpdateNotification } from './components/PWAUpdateNotification'
-import { getSubdomainContext, getBasename } from './lib/routing'
+import { getSubdomainContext, getBasename, appUrl } from './lib/routing'
 
 // Lazy load pages for better performance and code splitting
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })))
@@ -159,6 +159,24 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * Used on landing & review contexts: if already logged in, send to app subdomain dashboard.
+ * If not logged in, render the auth page normally.
+ */
+function LandingPublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, isAdmin } = useAuth()
+
+  if (loading) return <PageLoader />
+
+  if (user) {
+    // Cross-subdomain redirect — can't use navigate() here
+    window.location.href = appUrl(isAdmin() ? '/admin/dashboard' : '/dashboard')
+    return <PageLoader />
+  }
+
+  return <>{children}</>
+}
+
 function AdminRedirect({ to }: { to: string }) {
   const { user, isAdmin, loading } = useAuth()
   const { id } = useParams<{ id: string }>()
@@ -188,6 +206,12 @@ function LandingRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<Home />} />
+        {/* Auth routes — available on all domains */}
+        <Route path="/login" element={<LandingPublicRoute><Login /></LandingPublicRoute>} />
+        <Route path="/register" element={<LandingPublicRoute><Register /></LandingPublicRoute>} />
+        <Route path="/forgot-password" element={<LandingPublicRoute><ForgotPassword /></LandingPublicRoute>} />
+        <Route path="/reset-password" element={<LandingPublicRoute><ResetPassword /></LandingPublicRoute>} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/faqs" element={<FAQs />} />
         <Route path="/quote" element={<Quote />} />
@@ -362,6 +386,12 @@ function ReviewRoutes() {
         <Route path="/live-lectures" element={<NCLEXLiveLectures />} />
         <Route path="/order-history" element={<NCLEXOrderHistory />} />
         <Route path="/checkout" element={<NCLEXCheckout />} />
+        {/* Auth routes — available on all domains */}
+        <Route path="/login" element={<LandingPublicRoute><Login /></LandingPublicRoute>} />
+        <Route path="/register" element={<LandingPublicRoute><Register /></LandingPublicRoute>} />
+        <Route path="/forgot-password" element={<LandingPublicRoute><ForgotPassword /></LandingPublicRoute>} />
+        <Route path="/reset-password" element={<LandingPublicRoute><ResetPassword /></LandingPublicRoute>} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
