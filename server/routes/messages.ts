@@ -111,6 +111,33 @@ router.get('/unread-count', authenticateToken, async (req: AuthenticatedRequest,
   }
 })
 
+// GET /api/messages/clients — admin only; search client users by name or email
+router.get('/clients', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const q = ((req.query.q as string) || '').trim()
+    if (!q) return res.json({ data: [] })
+
+    const result = await query(`
+      SELECT id, first_name, last_name, email
+      FROM users
+      WHERE role = 'client'
+        AND (
+          first_name ILIKE $1
+          OR last_name ILIKE $1
+          OR email ILIKE $1
+          OR (first_name || ' ' || last_name) ILIKE $1
+        )
+      ORDER BY first_name, last_name
+      LIMIT 20
+    `, [`%${q}%`])
+
+    res.json({ data: result.rows })
+  } catch (err: any) {
+    console.error('GET /api/messages/clients error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/messages/:clientId — admin only; returns full thread for a specific client
 router.get('/:clientId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
