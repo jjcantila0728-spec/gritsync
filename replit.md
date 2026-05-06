@@ -9,10 +9,10 @@ GritSync is a comprehensive SaaS application designed to streamline the NCLEX ap
 *   Do not make changes to file `package-lock.json`.
 
 ### System Architecture
-The application features a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy. The core architectural decision involves a Supabase compatibility layer (`src/lib/supabase.ts`) on the frontend, which translates Supabase SDK calls into direct API requests to the custom Express backend. Data persistence is handled by a PostgreSQL database.
+The application features a React 18 frontend (TypeScript, Vite) and an Express.js backend, communicating via a `/api` proxy. Data persistence is handled by Replit's PostgreSQL database. **Supabase has been fully removed** — the frontend uses a custom chainable query builder (`src/lib/api-client.ts`) that talks directly to the Express backend.
 
 #### Core Architecture
-The system is divided into a React-based frontend and an Express.js backend. A key architectural decision is the frontend's Supabase compatibility layer (`src/lib/supabase.ts`), which translates Supabase SDK calls into direct API requests to the Express backend, allowing the frontend to leverage existing Supabase-oriented code and knowledge while using a custom backend. The system is entirely focused on NCLEX processing, with all EAD (Employment Authorization Document) functionalities removed.
+The system is divided into a React-based frontend and an Express.js backend. The frontend DB client (`src/lib/api-client.ts`) exports a `db` object with a Supabase-style chainable API (`db.from(table).select().eq()...`) that makes direct HTTP calls to the Express generic CRUD route (`/api/db/:table`). No third-party Supabase SDK is used anywhere. The system is entirely focused on NCLEX processing, with all EAD (Employment Authorization Document) functionalities removed.
 
 #### Backend Structure
 *   `server/index.ts`: Entry point for the Express application.
@@ -60,7 +60,7 @@ Transactional emails (verification, welcome, password reset) are sent via the Re
 Key tables include `applications`, `application_payments`, `user_details`, and `users`. Specific constraints and relationships are enforced, such as `applicant_name`, `email`, `service_type` being `NOT NULL` in the `applications` table. The `users` table holds primary user information, while `user_details` stores supplementary data. The `nclex_subscriptions` table manages user subscription plans and statuses.
 
 ### External Dependencies
-*   **PostgreSQL**: Primary database (Replit PostgreSQL).
+*   **PostgreSQL**: Primary database (Replit PostgreSQL) — accessed via `pg` directly on the backend.
 *   **Stripe**: Payment processing (Client SDK).
 *   **Resend API**: Transactional email service.
 *   **Vite**: Frontend build tool.
@@ -74,3 +74,7 @@ Key tables include `applications`, `application_payments`, `user_details`, and `
 *   **pg**: PostgreSQL client for Node.js.
 *   **tsx**: For running TypeScript files directly.
 *   **concurrently**: For running multiple npm scripts concurrently.
+
+### Gotchas
+- The custom `db` client in `src/lib/api-client.ts` does NOT support Supabase-style join syntax like `select('*, partner_agencies(*)')` — always use `select('*')` and merge related data in the frontend using already-fetched arrays.
+- Error objects from the server are `{ message: string }` — always extract `.message` before passing to `new Error()` to avoid "[object Object]" toasts.

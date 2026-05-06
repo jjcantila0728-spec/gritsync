@@ -4951,13 +4951,12 @@ export const trackingAPI = {
 
 // Careers API
 export const careersAPI = {
-  getAll: async () => {
-    const { data, error } = await db
-      .from('careers')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-    
+  getAll: async (includeInactive = false) => {
+    const { data, error } = await (
+      includeInactive
+        ? db.from('careers').select('*').order('created_at', { ascending: false })
+        : db.from('careers').select('*').eq('is_active', true).order('created_at', { ascending: false })
+    )
     if (error) throw new Error(error.message)
     return data || []
   },
@@ -5271,7 +5270,7 @@ export const careerApplicationsAPI = {
 
     const { data, error } = await db
       .from('career_applications')
-      .select('*, careers(*)')
+      .select('*')
       .order('created_at', { ascending: false })
     
     if (error) throw new Error(error.message)
@@ -5285,7 +5284,7 @@ export const careerApplicationsAPI = {
 
     const { data, error } = await db
       .from('career_applications')
-      .select('*, careers(*)')
+      .select('*')
       .eq('id', id)
       .single()
     
@@ -5356,6 +5355,51 @@ export const careerApplicationsAPI = {
       .select('*')
       .single()
     
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  updateStatus: async (
+    id: string,
+    status: 'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected',
+    adminNotes?: string,
+    agencyId?: string
+  ) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const updates: Record<string, any> = { status }
+    if (adminNotes !== undefined) updates.admin_notes = adminNotes
+    if (agencyId) updates.partner_agency_id = agencyId
+
+    const { data, error } = await db
+      .from('career_applications')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  forwardToAgency: async (applicationId: string, agencyId: string) => {
+    if (!(await isAdmin())) {
+      throw new Error('Unauthorized - Admin only')
+    }
+
+    const { data, error } = await db
+      .from('career_applications')
+      .update({
+        partner_agency_id: agencyId,
+        status: 'forwarded',
+        forwarded_to_agency_at: new Date().toISOString(),
+      })
+      .eq('id', applicationId)
+      .select('*')
+      .single()
+
     if (error) throw new Error(error.message)
     return data
   },

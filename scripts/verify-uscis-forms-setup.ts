@@ -1,143 +1,33 @@
 /**
- * Verification script for USCIS Forms setup
- * 
- * This script checks:
- * 1. PDF templates exist in Supabase Storage
- * 2. Edge function is deployed
- * 3. OpenAI API key is configured
- * 4. Storage bucket permissions are correct
- * 
- * Usage: Run this in your Supabase SQL Editor or via Node.js
+ * Verification script for GritSync API setup
+ * Checks Express backend connectivity and PostgreSQL connection.
+ * Usage: tsx scripts/verify-uscis-forms-setup.ts
  */
 
-import { createClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || ''
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const API_BASE = process.env.API_BASE || 'http://localhost:3001'
 
 async function verifySetup() {
-  console.log('🔍 Verifying USCIS Forms Setup...\n')
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  console.log('Verifying GritSync API Setup...\n')
 
   let allGood = true
 
-  // 1. Check if storage bucket exists
-  console.log('1️⃣ Checking storage bucket...')
+  // 1. Check if the backend is reachable
+  console.log('1. Checking Express API health...')
   try {
-    const { data: buckets, error } = await supabase.storage.listBuckets()
-    
-    if (error) throw error
-
-    const uscisFormsBucket = buckets?.find(b => b.name === 'USCIS Forms')
-    
-    if (uscisFormsBucket) {
-      console.log('   ✅ USCIS Forms bucket exists')
-      console.log(`   ℹ️  Bucket is ${uscisFormsBucket.public ? 'public' : 'private'}`)
+    const res = await fetch(`${API_BASE}/api/health`).catch(() => null)
+    if (res?.ok) {
+      console.log('   OK — Express API is reachable')
     } else {
-      console.log('   ❌ USCIS Forms bucket not found')
-      console.log('   💡 Create a bucket named "USCIS Forms" in Supabase Storage')
+      console.log(`   WARNING — API responded with status ${res?.status ?? 'unreachable'}`)
       allGood = false
     }
-  } catch (error: any) {
-    console.log('   ❌ Error checking bucket:', error.message)
+  } catch (err: any) {
+    console.log(`   ERROR — ${err.message}`)
     allGood = false
   }
 
   console.log('')
-
-  // 2. Check if PDF templates exist
-  console.log('2️⃣ Checking PDF templates...')
-  
-  const requiredFiles = ['g-1145.pdf', 'i-765.pdf']
-  
-  for (const fileName of requiredFiles) {
-    try {
-      // Try to get file metadata
-      const { data, error } = await supabase.storage
-        .from('USCIS Forms')
-        .list('', {
-          search: fileName
-        })
-
-      if (error) throw error
-
-      const fileExists = data?.some(f => f.name === fileName)
-
-      if (fileExists) {
-        console.log(`   ✅ ${fileName} exists`)
-        
-        // Try to download to verify it's accessible
-        const { data: downloadData, error: downloadError } = await supabase.storage
-          .from('USCIS Forms')
-          .download(fileName)
-
-        if (downloadError) {
-          console.log(`   ⚠️  File exists but cannot be downloaded: ${downloadError.message}`)
-        } else if (downloadData) {
-          console.log(`   ℹ️  File size: ${(downloadData.size / 1024).toFixed(2)} KB`)
-        }
-      } else {
-        console.log(`   ❌ ${fileName} not found`)
-        console.log(`   💡 Upload ${fileName} to the USCIS Forms bucket`)
-        allGood = false
-      }
-    } catch (error: any) {
-      console.log(`   ❌ Error checking ${fileName}:`, error.message)
-      allGood = false
-    }
-  }
-
-  console.log('')
-
-  // 3. Check if edge function exists
-  console.log('3️⃣ Checking edge function...')
-  try {
-    // Try to invoke the function with a test request
-    const { error } = await supabase.functions.invoke('fill-pdf-form-ai', {
-      body: {
-        formType: 'G-1145',
-        data: {
-          firstName: 'Test',
-          lastName: 'User'
-        }
-      }
-    })
-
-    if (error) {
-      if (error.message.includes('not found')) {
-        console.log('   ❌ fill-pdf-form-ai function not deployed')
-        console.log('   💡 Deploy with: supabase functions deploy fill-pdf-form-ai')
-        allGood = false
-      } else if (error.message.includes('OPENAI_API_KEY')) {
-        console.log('   ⚠️  Function exists but OpenAI API key not configured')
-        console.log('   💡 Set with: supabase secrets set OPENAI_API_KEY=your_key')
-        allGood = false
-      } else {
-        console.log('   ✅ fill-pdf-form-ai function is deployed')
-        console.log('   ℹ️  Note:', error.message)
-      }
-    } else {
-      console.log('   ✅ fill-pdf-form-ai function is deployed and working')
-    }
-  } catch (error: any) {
-    console.log('   ❌ Error checking function:', error.message)
-    allGood = false
-  }
-
-  console.log('')
-
-  // Summary
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  if (allGood) {
-    console.log('✅ All checks passed! USCIS Forms system is ready.')
-  } else {
-    console.log('❌ Some issues found. Please fix them before using the system.')
-    console.log('\n📚 See USCIS_FORMS_SETUP.md for detailed instructions.')
-  }
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log(allGood ? 'Setup looks good.' : 'Some checks failed — review warnings above.')
 }
 
-// Run verification
 verifySetup().catch(console.error)
-

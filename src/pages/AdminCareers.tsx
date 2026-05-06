@@ -59,15 +59,6 @@ interface CareerApplication {
   reviewed_at: string | null
   created_at: string
   updated_at: string
-  partner_agencies?: {
-    id: string
-    name: string
-    email: string
-    contact_person_name: string | null
-    contact_person_email: string | null
-    phone: string | null
-    website: string | null
-  } | null
 }
 
 const statusColors: Record<string, string> = {
@@ -643,6 +634,9 @@ export function AdminCareers() {
               <div className="space-y-4 mb-6">
                 {paginatedApplications.map((application) => {
                   const StatusIcon = statusIcons[application.status]
+                  const agency = application.partner_agency_id
+                    ? partnerAgencies.find(a => a.id === application.partner_agency_id) || null
+                    : null
                   return (
                     <Card key={application.id} className="p-4">
                       <div className="flex items-center justify-between">
@@ -657,10 +651,10 @@ export function AdminCareers() {
                               <StatusIcon className="h-3 w-3" />
                               {application.status.replace('_', ' ')}
                             </span>
-                            {application.partner_agencies && (
+                            {agency && (
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex items-center gap-1">
                                 <Building2 className="h-3 w-3" />
-                                {application.partner_agencies.name}
+                                {agency.name}
                               </span>
                             )}
                           </div>
@@ -793,24 +787,27 @@ export function AdminCareers() {
                   )}
                 </div>
 
-                {selectedApplication.partner_agencies && (
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                      Forwarded to Partner Agency
-                    </label>
-                    <p className="text-gray-900 dark:text-gray-100 font-semibold">
-                      {selectedApplication.partner_agencies.name}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {selectedApplication.partner_agencies.contact_person_email || selectedApplication.partner_agencies.email}
-                    </p>
-                    {selectedApplication.forwarded_to_agency_at && (
-                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                        Forwarded: {formatDate(selectedApplication.forwarded_to_agency_at)}
+                {selectedApplication.partner_agency_id && (() => {
+                  const agency = partnerAgencies.find(a => a.id === selectedApplication.partner_agency_id)
+                  return agency ? (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        Forwarded to Partner Agency
+                      </label>
+                      <p className="text-gray-900 dark:text-gray-100 font-semibold">
+                        {agency.name}
                       </p>
-                    )}
-                  </div>
-                )}
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {agency.contact_person_email || agency.email}
+                      </p>
+                      {selectedApplication.forwarded_to_agency_at && (
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                          Forwarded: {formatDate(selectedApplication.forwarded_to_agency_at)}
+                        </p>
+                      )}
+                    </div>
+                  ) : null
+                })()}
 
                 {selectedApplication.admin_notes && (
                   <div>

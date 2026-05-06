@@ -148,7 +148,7 @@ class QueryBuilder {
     const body = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      return { data: null, error: { message: body.error || `HTTP ${res.status}` } }
+      return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
     }
 
     const rows = body.data || []
