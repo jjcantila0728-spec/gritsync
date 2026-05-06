@@ -290,6 +290,7 @@ function AppRoutes() {
 
         {/* Client protected routes */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/applications" element={<ProtectedRoute><Tracking /></ProtectedRoute>} />
         <Route path="/application/new" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
         <Route path="/application/new/nclex" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
         <Route path="/applications/:id" element={<Navigate to="timeline" replace />} />

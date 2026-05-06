@@ -1431,8 +1431,8 @@ export function Tracking() {
                         </div>
                       )}
                       
-                      {/* Delete Button - Top Left (only for applications needing payment) */}
-                      {needsPayment && (
+                      {/* Delete Button - Top Left (visible to admins on all applications) */}
+                      {isAdminView && (
                         <div 
                           className="absolute top-2 left-2 z-40"
                           onClick={(e) => e.stopPropagation()}
