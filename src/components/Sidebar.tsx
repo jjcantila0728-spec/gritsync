@@ -389,8 +389,8 @@ export function Sidebar() {
   }, [user])
 
   return (
-    <aside className="hidden md:block w-64 min-h-screen border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
-      <nav className="space-y-2">
+    <aside className="hidden md:flex md:flex-col w-64 h-screen sticky top-0 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
+      <nav className="space-y-2 overflow-y-auto flex-1">
         {navItems.map((item) => {
           const Icon = item.icon
           let isActive = location.pathname === item.path || 
