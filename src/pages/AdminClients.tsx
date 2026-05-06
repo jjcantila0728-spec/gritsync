@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { appUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
@@ -15,7 +16,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, AlertTriangle } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, AlertTriangle, MessageSquare } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
@@ -36,6 +37,7 @@ interface Client {
 export function AdminClients() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -805,6 +807,22 @@ export function AdminClients() {
           </div>
         ) : (
           <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!selectedClient) return
+                  handleCloseModal()
+                  navigate('/admin/messages', { state: { clientId: selectedClient.id } })
+                }}
+                className="flex items-center gap-2"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Message Client
+              </Button>
+            </div>
+
             {/* Personal Information */}
             <Card>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">

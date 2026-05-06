@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -55,8 +56,12 @@ async function apiFetch(path: string, options: RequestInit = {}) {
 export function AdminMessages() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const location = useLocation()
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(
+    (location.state as { clientId?: string } | null)?.clientId ?? null
+  )
+  const [pendingClientInfo, setPendingClientInfo] = useState<{ first_name: string; last_name: string; email: string } | null>(null)
   const [thread, setThread] = useState<Message[]>([])
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [loadingThread, setLoadingThread] = useState(false)
@@ -77,6 +82,23 @@ export function AdminMessages() {
       if (!silent) showToast(err.message || 'Failed to load conversations', 'error')
     } finally {
       setLoadingConvs(false)
+    }
+  }
+
+  const loadClientInfo = async (clientId: string) => {
+    try {
+      const data = await apiFetch(`/api/db/users?id=${encodeURIComponent(clientId)}&select=first_name%2Clast_name%2Cemail&limit=1`)
+      const rows = Array.isArray(data) ? data : data.data
+      const u = rows?.[0]
+      if (u) {
+        setPendingClientInfo({
+          first_name: u.first_name || '',
+          last_name: u.last_name || '',
+          email: u.email || '',
+        })
+      }
+    } catch {
+      // Best-effort — silently ignore
     }
   }
 
@@ -129,9 +151,19 @@ export function AdminMessages() {
     if (selectedClientId) {
       setThread([])
       setNewSubject('')
+      setPendingClientInfo(null)
       loadThread(selectedClientId)
     }
   }, [selectedClientId])
+
+  // When conversations load, if the selected client isn't in the list, fetch their basic info
+  useEffect(() => {
+    if (!selectedClientId || loadingConvs) return
+    const inList = conversations.some((c) => c.client_id === selectedClientId)
+    if (!inList && !pendingClientInfo) {
+      loadClientInfo(selectedClientId)
+    }
+  }, [conversations, loadingConvs, selectedClientId, pendingClientInfo])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -171,6 +203,9 @@ export function AdminMessages() {
 
   const selectedConversation = conversations.find((c) => c.client_id === selectedClientId)
   const conversationSubject = thread.find((m) => m.subject)?.subject || selectedConversation?.last_subject
+  const displayClient = selectedConversation
+    ? { first_name: selectedConversation.first_name, last_name: selectedConversation.last_name, email: selectedConversation.email }
+    : pendingClientInfo
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
@@ -267,10 +302,10 @@ export function AdminMessages() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {selectedConversation?.first_name} {selectedConversation?.last_name}
+                        {displayClient ? `${displayClient.first_name} ${displayClient.last_name}`.trim() || 'Client' : 'Client'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {selectedConversation?.email}
+                        {displayClient?.email}
                         {conversationSubject && <span className="ml-2 italic">· {conversationSubject}</span>}
                       </p>
                     </div>
