@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { appUrl } from '@/lib/routing'
+import { appUrl, landingUrl } from '@/lib/routing'
 import { Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Heart, ArrowRight } from 'lucide-react'
 import { Button } from './ui/Button'
 import { useToast } from './ui/Toast'
@@ -129,40 +128,40 @@ export function Footer() {
             <h4 className="text-white font-semibold mb-4 text-lg">Quick Links</h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <Link to="/" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Home</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/about-us" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/about-us')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>About Us</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/quote" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/quote')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Get a Quote</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/tracking" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/tracking')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Track Application</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/sponsorship" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/sponsorship')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>NCLEX Sponsorship</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/career" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/career')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Career Opportunities</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
             </ul>
           </div>
@@ -172,28 +171,28 @@ export function Footer() {
             <h4 className="text-white font-semibold mb-4 text-lg">Services</h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <Link to="/application/new" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/application/new')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>NCLEX Application</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/quote" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/quote')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Quotation Generator</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/tracking" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/tracking')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Application Tracking</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/donate" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/donate')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Donate & Support</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
                 <a href={appUrl('/register')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
@@ -209,27 +208,20 @@ export function Footer() {
             <h4 className="text-white font-semibold mb-4 text-lg">Legal & Support</h4>
             <ul className="space-y-3 text-sm mb-6">
               <li>
-                <Link to="/terms" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/terms')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Terms of Service</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/privacy" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/privacy')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Privacy Policy</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
                 <a 
-                  href="#contact" 
-                  onClick={(e) => {
-                    e.preventDefault()
-                    const contactSection = document.getElementById('contact')
-                    if (contactSection) {
-                      contactSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }
-                  }}
+                  href={landingUrl('/#contact')}
                   className="hover:text-primary-400 transition-colors flex items-center gap-2 group"
                 >
                   <span>Contact Us</span>
@@ -237,16 +229,16 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link to="/faqs" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/faqs')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>FAQs</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/about-us" className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                <a href={landingUrl('/about-us')} className="hover:text-primary-400 transition-colors flex items-center gap-2 group">
                   <span>Help Center</span>
                   <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                </a>
               </li>
             </ul>
             

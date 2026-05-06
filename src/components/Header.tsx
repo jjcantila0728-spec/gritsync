@@ -742,7 +742,14 @@ export function Header() {
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string, hash: string) => {
     e.preventDefault()
-    
+
+    // When not on the landing site, cross-navigate to the correct domain
+    const ctx = getSubdomainContext()
+    if (ctx !== 'landing') {
+      window.location.href = landingUrl(hash ? `${path}#${hash}` : path)
+      return
+    }
+
     if (hash) {
       // If we're on the home page, just scroll
       if (location.pathname === '/') {
@@ -856,7 +863,7 @@ export function Header() {
               {navLinks.map((link) => (
                 <a
                   key={`${link.path}-${link.hash}`}
-                  href={link.hash ? `${link.path}#${link.hash}` : link.path}
+                  href={landingUrl(link.hash ? `${link.path}#${link.hash}` : link.path)}
                   onClick={(e) => handleNavClick(e, link.path, link.hash)}
                   className={cn(
                     'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
@@ -892,7 +899,7 @@ export function Header() {
                     {exploreMenuItems.map((item) => (
                       <a
                         key={`${item.path}-${item.hash}`}
-                        href={item.hash ? `${item.path}#${item.hash}` : item.path}
+                        href={landingUrl(item.hash ? `${item.path}#${item.hash}` : item.path)}
                         onClick={(e) => {
                           handleNavClick(e, item.path, item.hash)
                           setExploreMenuOpen(false)
@@ -1132,7 +1139,7 @@ export function Header() {
               {navLinks.map((link) => (
                 <a
                   key={`${link.path}-${link.hash}`}
-                  href={link.hash ? `${link.path}#${link.hash}` : link.path}
+                  href={landingUrl(link.hash ? `${link.path}#${link.hash}` : link.path)}
                   onClick={(e) => {
                     handleNavClick(e, link.path, link.hash)
                     setMobileMenuOpen(false)
@@ -1154,7 +1161,7 @@ export function Header() {
                 {exploreMenuItems.map((item) => (
                   <a
                     key={`${item.path}-${item.hash}`}
-                    href={item.hash ? `${item.path}#${item.hash}` : item.path}
+                    href={landingUrl(item.hash ? `${item.path}#${item.hash}` : item.path)}
                     onClick={(e) => {
                       handleNavClick(e, item.path, item.hash)
                       setMobileMenuOpen(false)
