@@ -380,11 +380,14 @@ export function Sidebar() {
           const onMessagesPage = window.location.pathname === messagesPath ||
             window.location.pathname.startsWith(messagesPath + '/')
           if (!onMessagesPage) {
+            const newCount = count - prev
+            const msg = newCount === 1 ? 'You have a new message' : `You have ${newCount} new messages`
             showToast(
-              'You have a new message',
+              msg,
               'info',
               8000,
-              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } }
+              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } },
+              'messages-notification'
             )
           }
         }
@@ -828,11 +831,14 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           const onMessagesPage = window.location.pathname === messagesPath ||
             window.location.pathname.startsWith(messagesPath + '/')
           if (!onMessagesPage) {
+            const newCount = count - prev
+            const msg = newCount === 1 ? 'You have a new message' : `You have ${newCount} new messages`
             showToast(
-              'You have a new message',
+              msg,
               'info',
               8000,
-              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } }
+              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } },
+              'messages-notification'
             )
           }
         }

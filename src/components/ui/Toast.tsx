@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react'
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,7 @@ interface ToastAction {
 
 interface Toast {
   id: string
+  key?: string
   message: string
   type: ToastType
   duration?: number
@@ -18,29 +19,58 @@ interface Toast {
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: ToastType, duration?: number, action?: ToastAction) => void
+  showToast: (message: string, type?: ToastType, duration?: number, action?: ToastAction, key?: string) => void
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const timerRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  const showToast = useCallback((message: string, type: ToastType = 'info', duration = 5000, action?: ToastAction) => {
+  const showToast = useCallback((message: string, type: ToastType = 'info', duration = 5000, action?: ToastAction, key?: string) => {
     const id = Math.random().toString(36).substring(7)
-    const newToast: Toast = { id, message, type, duration, action }
-    
-    setToasts((prev) => [...prev, newToast])
+    const newToast: Toast = { id, key, message, type, duration, action }
+
+    setToasts((prev) => {
+      if (key) {
+        const existing = prev.find((t) => t.key === key)
+        if (existing) {
+          const timer = timerRefs.current.get(existing.id)
+          if (timer !== undefined) {
+            clearTimeout(timer)
+            timerRefs.current.delete(existing.id)
+          }
+          return [...prev.filter((t) => t.key !== key), newToast]
+        }
+      }
+      return [...prev, newToast]
+    })
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((toast) => toast.id !== id))
+        timerRefs.current.delete(id)
       }, duration)
+      timerRefs.current.set(id, timer)
     }
   }, [])
 
   const removeToast = useCallback((id: string) => {
+    const timer = timerRefs.current.get(id)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timerRefs.current.delete(id)
+    }
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
+  }, [])
+
+  useEffect(() => {
+    const timers = timerRefs.current
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
+    }
   }, [])
 
   const getIcon = (type: ToastType) => {
