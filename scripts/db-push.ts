@@ -119,6 +119,14 @@ async function push() {
     console.warn('  ⚠️  nclex_payment_submissions warning:', err.message)
   }
 
+  // ── users.is_active column ────────────────────────────────────────────────────
+  try {
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`)
+    console.log('  ✅  users.is_active — ready')
+  } catch (err: any) {
+    console.warn('  ⚠️  users.is_active warning:', err.message)
+  }
+
   // ── one-time: ensure jjcantila0728@gmail.com is admin + verified in all envs ─
   try {
     const fix = await query(

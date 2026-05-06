@@ -7,7 +7,7 @@ import { NotificationBell } from './NotificationBell'
 import { NotificationDropdown } from './NotificationDropdown'
 import { NotificationModal } from './NotificationModal'
 import type { NotificationItem } from './NotificationModal'
-import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle } from 'lucide-react'
+import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle, ArrowLeft, AlertTriangle } from 'lucide-react'
 import { Button } from './ui/Button'
 import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
@@ -667,6 +667,36 @@ export function Header() {
     }
   }
 
+  // Admin impersonation: detect if admin is logged in as a user
+  const [adminBackup, setAdminBackup] = useState<{ user: { first_name?: string; last_name?: string } | null } | null>(null)
+  useEffect(() => {
+    const checkAdminBackup = () => {
+      try {
+        const raw = localStorage.getItem('admin_session_backup')
+        setAdminBackup(raw ? JSON.parse(raw) : null)
+      } catch {
+        setAdminBackup(null)
+      }
+    }
+    checkAdminBackup()
+    window.addEventListener('storage', checkAdminBackup)
+    return () => window.removeEventListener('storage', checkAdminBackup)
+  }, [])
+
+  const handleBackToAdmin = () => {
+    try {
+      const backup = JSON.parse(localStorage.getItem('admin_session_backup') || 'null')
+      if (!backup) return
+      localStorage.setItem('gritsync_token', backup.access_token)
+      localStorage.setItem('gritsync_refresh_token', backup.refresh_token || '')
+      localStorage.setItem('gritsync_user', JSON.stringify(backup.user))
+      localStorage.removeItem('admin_session_backup')
+      window.location.href = '/admin/clients'
+    } catch (error) {
+      console.error('Error restoring admin session:', error)
+    }
+  }
+
   // Close user menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -768,6 +798,24 @@ export function Header() {
 
   return (
     <>
+      {/* Back to Admin banner — shown when an admin is viewing as a client */}
+      {adminBackup && (
+        <div className="sticky top-0 z-[60] w-full bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-sm shadow">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span className="font-medium">
+              You are viewing as a client.
+            </span>
+          </div>
+          <button
+            onClick={handleBackToAdmin}
+            className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 transition-colors rounded-md px-3 py-1 font-semibold whitespace-nowrap"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Admin
+          </button>
+        </div>
+      )}
       <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-gray-200 dark:border-gray-800 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Left side - Logo and Mobile Menu */}

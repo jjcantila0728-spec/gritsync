@@ -148,6 +148,14 @@ export function ClientEmails() {
   const [selectedInboxIds, setSelectedInboxIds] = useState<Set<string>>(new Set())
   const [selectedSentIds, setSelectedSentIds] = useState<Set<string>>(new Set())
 
+  // Sync active tab when URL changes (e.g. navigating directly to /client/emails/sent)
+  useEffect(() => {
+    const newTab = getInitialTab()
+    if (newTab !== activeTab) {
+      setActiveTab(newTab)
+    }
+  }, [location.pathname])
+
   useEffect(() => {
     if (!user || !isClient()) {
       navigate('/dashboard')

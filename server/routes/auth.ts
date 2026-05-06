@@ -422,6 +422,11 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid login credentials' })
     }
 
+    // Block login if account is deactivated
+    if (user.is_active === false) {
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact support.' })
+    }
+
     // Block login if email not verified
     if (user.email_verified === false) {
       return res.status(403).json({
@@ -952,6 +957,53 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
     sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
 
     res.json({ message: 'Verification email resent. Please check your inbox.' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PATCH /api/auth/admin/users/:id/deactivate  (admin only)
+router.patch('/admin/users/:id/deactivate', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const { id } = req.params
+    const { is_active } = req.body
+    if (typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'is_active must be a boolean' })
+    }
+    const result = await query(
+      `UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, is_active`,
+      [is_active, id]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json({ success: true, user: result.rows[0] })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/auth/admin/users/:id  (admin only)
+router.delete('/admin/users/:id', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const { id } = req.params
+    // Prevent self-deletion
+    if (authReq.user?.id === id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' })
+    }
+    const result = await query(`DELETE FROM users WHERE id = $1 RETURNING id`, [id])
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

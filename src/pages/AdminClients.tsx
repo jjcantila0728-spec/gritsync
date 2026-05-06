@@ -14,7 +14,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, AlertTriangle } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
@@ -29,6 +29,7 @@ interface Client {
   created_at: string
   grit_id: string
   gmail_account?: string
+  is_active?: boolean
 }
 
 export function AdminClients() {
@@ -47,6 +48,7 @@ export function AdminClients() {
   const [clientDetails, setClientDetails] = useState<any>(null)
   const [clientDocuments, setClientDocuments] = useState<any[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
+  const [actioningClientId, setActioningClientId] = useState<string | null>(null)
 
   useEffect(() => {
     if (isAdmin()) {
@@ -392,6 +394,57 @@ export function AdminClients() {
     return paginate(filteredClients, currentPage, pageSize)
   }, [filteredClients, currentPage, pageSize])
 
+  const handleDeactivateClient = async (client: Client) => {
+    const isActive = client.is_active !== false
+    const action = isActive ? 'deactivate' : 'reactivate'
+    if (!confirm(`Are you sure you want to ${action} ${getFullName(client.first_name, client.last_name)}?`)) return
+
+    setActioningClientId(client.id)
+    try {
+      const adminToken = localStorage.getItem('gritsync_token')
+      const res = await fetch(`/api/auth/admin/users/${client.id}/deactivate`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ is_active: !isActive }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Failed to ${action} user`)
+
+      setClients(prev => prev.map(c => c.id === client.id ? { ...c, is_active: !isActive } : c))
+      showToast(`${getFullName(client.first_name, client.last_name)} ${action}d successfully`, 'success')
+    } catch (error: any) {
+      showToast(error.message || `Failed to ${action} client`, 'error')
+    } finally {
+      setActioningClientId(null)
+    }
+  }
+
+  const handleDeleteClient = async (client: Client) => {
+    const name = getFullName(client.first_name, client.last_name)
+    if (!confirm(`Permanently delete ${name}?\n\nThis will remove their account and all associated data. This action CANNOT be undone.`)) return
+
+    setActioningClientId(client.id)
+    try {
+      const adminToken = localStorage.getItem('gritsync_token')
+      const res = await fetch(`/api/auth/admin/users/${client.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${adminToken}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete user')
+
+      setClients(prev => prev.filter(c => c.id !== client.id))
+      showToast(`${name} deleted successfully`, 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete client', 'error')
+    } finally {
+      setActioningClientId(null)
+    }
+  }
+
   const handleExport = () => {
     if (filteredClients.length === 0) {
       showToast('No data to export', 'error')
@@ -579,7 +632,7 @@ export function AdminClients() {
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[180px]">Email</th>
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">Joined</th>
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">GRIT-ID</th>
-                          <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[120px]">Actions</th>
+                          <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[200px]">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -630,55 +683,66 @@ export function AdminClients() {
                                 )}
                               </td>
                               <td className="py-3 px-2 sm:px-4 text-right">
-                                <Button 
-                                  size="sm"
-                                  className="text-xs sm:text-sm whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0"
-                                  onClick={async () => {
-                                    try {
-                                      showToast('Logging in as user...', 'info')
-                                      
-                                      const adminToken = localStorage.getItem('gritsync_token')
-                                      if (!adminToken) {
-                                        throw new Error('No active session. Please log in again.')
+                                <div className="flex items-center justify-end gap-1">
+                                  {/* Login as user */}
+                                  <Button 
+                                    size="sm"
+                                    title="Login as this user"
+                                    className="text-xs whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0"
+                                    disabled={actioningClientId === client.id}
+                                    onClick={async () => {
+                                      try {
+                                        showToast('Logging in as user...', 'info')
+                                        const adminToken = localStorage.getItem('gritsync_token')
+                                        if (!adminToken) throw new Error('No active session. Please log in again.')
+                                        const res = await fetch('/api/auth/admin-login-as', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+                                          body: JSON.stringify({ userId: client.id }),
+                                        })
+                                        const data = await res.json()
+                                        if (!res.ok || !data.access_token) throw new Error(data.error || 'Failed to generate login token')
+                                        const adminUser = localStorage.getItem('gritsync_user')
+                                        localStorage.setItem('admin_session_backup', JSON.stringify({
+                                          access_token: adminToken,
+                                          refresh_token: localStorage.getItem('gritsync_refresh_token') || '',
+                                          user: adminUser ? JSON.parse(adminUser) : null,
+                                        }))
+                                        localStorage.setItem('gritsync_token', data.access_token)
+                                        localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
+                                        localStorage.setItem('gritsync_user', JSON.stringify(data.user))
+                                        showToast(`Logged in as ${data.user?.first_name || 'user'}`, 'success')
+                                        window.location.href = '/dashboard'
+                                      } catch (error: any) {
+                                        showToast(error.message || 'Failed to login as user', 'error')
                                       }
-
-                                      const res = await fetch('/api/auth/admin-login-as', {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          'Authorization': `Bearer ${adminToken}`,
-                                        },
-                                        body: JSON.stringify({ userId: client.id }),
-                                      })
-                                      const data = await res.json()
-
-                                      if (!res.ok || !data.access_token) {
-                                        throw new Error(data.error || 'Failed to generate login token')
-                                      }
-
-                                      // Back up current admin session
-                                      const adminUser = localStorage.getItem('gritsync_user')
-                                      localStorage.setItem('admin_session_backup', JSON.stringify({
-                                        access_token: adminToken,
-                                        refresh_token: localStorage.getItem('gritsync_refresh_token') || '',
-                                        user: adminUser ? JSON.parse(adminUser) : null,
-                                      }))
-
-                                      // Swap session to target user
-                                      localStorage.setItem('gritsync_token', data.access_token)
-                                      localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
-                                      localStorage.setItem('gritsync_user', JSON.stringify(data.user))
-
-                                      showToast(`Logged in as ${data.user?.first_name || 'user'}`, 'success')
-                                      window.location.href = '/dashboard'
-                                    } catch (error: any) {
-                                      console.error('Error logging in as user:', error)
-                                      showToast(error.message || 'Failed to login as user', 'error')
-                                    }
-                                  }}
-                                >
-                                  Login
-                                </Button>
+                                    }}
+                                  >
+                                    Login
+                                  </Button>
+                                  {/* Deactivate / Reactivate */}
+                                  <Button
+                                    size="sm"
+                                    title={client.is_active !== false ? 'Deactivate account' : 'Reactivate account'}
+                                    disabled={actioningClientId === client.id}
+                                    className={`text-xs whitespace-nowrap border-0 ${client.is_active !== false ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400' : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400'}`}
+                                    onClick={() => handleDeactivateClient(client)}
+                                  >
+                                    <UserX className="h-3.5 w-3.5 sm:mr-1" />
+                                    <span className="hidden sm:inline">{client.is_active !== false ? 'Deactivate' : 'Activate'}</span>
+                                  </Button>
+                                  {/* Delete */}
+                                  <Button
+                                    size="sm"
+                                    title="Delete account permanently"
+                                    disabled={actioningClientId === client.id}
+                                    className="text-xs whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 border-0"
+                                    onClick={() => handleDeleteClient(client)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
+                                    <span className="hidden sm:inline">Delete</span>
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           )
