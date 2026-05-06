@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
 import { reviewUrl } from '@/lib/routing'
+import { useToast } from '@/components/ui/Toast'
 import {
   LayoutDashboard,
   DollarSign,
@@ -57,10 +58,12 @@ const adminNavItems: NavItem[] = [
 export function Sidebar() {
   const { isAdmin, user } = useAuth()
   const location = useLocation()
+  const { showToast } = useToast()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
+  const prevUnreadMessagesRef = useRef<number | null>(null)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {
@@ -344,7 +347,7 @@ export function Sidebar() {
   useEffect(() => {
     if (!user?.id) return
 
-    const getCachedCount = (): number => {
+    const getValidCachedCount = (): number | null => {
       try {
         const cached = localStorage.getItem(`unreadMessagesCount_${user.id}`)
         if (cached) {
@@ -354,8 +357,10 @@ export function Sidebar() {
           }
         }
       } catch { /* ignore */ }
-      return 0
+      return null
     }
+
+    const messagesPath = isAdmin() ? '/admin/messages' : '/messages'
 
     const fetchCount = async () => {
       try {
@@ -369,15 +374,37 @@ export function Sidebar() {
         const count = data.count || 0
         setUnreadMessagesCount(count)
         localStorage.setItem(`unreadMessagesCount_${user.id}`, JSON.stringify({ count, timestamp: Date.now() }))
+
+        const prev = prevUnreadMessagesRef.current
+        if (prev !== null && count > prev) {
+          const onMessagesPage = window.location.pathname === messagesPath ||
+            window.location.pathname.startsWith(messagesPath + '/')
+          if (!onMessagesPage) {
+            showToast(
+              'You have a new message',
+              'info',
+              8000,
+              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } }
+            )
+          }
+        }
+        prevUnreadMessagesRef.current = count
       } catch { /* ignore */ }
     }
 
-    setUnreadMessagesCount(getCachedCount())
+    const validCached = getValidCachedCount()
+    if (validCached !== null) {
+      setUnreadMessagesCount(validCached)
+      prevUnreadMessagesRef.current = validCached
+    }
     fetchCount()
 
     const interval = setInterval(fetchCount, 30000)
 
-    const handleUpdate = () => setUnreadMessagesCount(getCachedCount())
+    const handleUpdate = () => {
+      const c = getValidCachedCount()
+      if (c !== null) setUnreadMessagesCount(c)
+    }
     window.addEventListener('messagesUpdated', handleUpdate)
     window.addEventListener('storage', handleUpdate)
 
@@ -386,7 +413,7 @@ export function Sidebar() {
       window.removeEventListener('messagesUpdated', handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
-  }, [user])
+  }, [user, isAdmin, showToast])
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 h-screen sticky top-0 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
@@ -479,10 +506,12 @@ interface MobileSidebarProps {
 export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const { isAdmin, user } = useAuth()
   const location = useLocation()
+  const { showToast } = useToast()
   const navItems = isAdmin() ? adminNavItems : clientNavItems
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
+  const prevUnreadMessagesRef = useRef<number | null>(null)
   
   // Load cached applications payment status from localStorage
   const getCachedApplicationsPaymentStatus = () => {
@@ -766,7 +795,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   useEffect(() => {
     if (!user?.id) return
 
-    const getCachedCount = (): number => {
+    const getValidCachedCount = (): number | null => {
       try {
         const cached = localStorage.getItem(`unreadMessagesCount_${user.id}`)
         if (cached) {
@@ -776,8 +805,10 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           }
         }
       } catch { /* ignore */ }
-      return 0
+      return null
     }
+
+    const messagesPath = isAdmin() ? '/admin/messages' : '/messages'
 
     const fetchCount = async () => {
       try {
@@ -791,15 +822,37 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
         const count = data.count || 0
         setUnreadMessagesCount(count)
         localStorage.setItem(`unreadMessagesCount_${user.id}`, JSON.stringify({ count, timestamp: Date.now() }))
+
+        const prev = prevUnreadMessagesRef.current
+        if (prev !== null && count > prev) {
+          const onMessagesPage = window.location.pathname === messagesPath ||
+            window.location.pathname.startsWith(messagesPath + '/')
+          if (!onMessagesPage) {
+            showToast(
+              'You have a new message',
+              'info',
+              8000,
+              { label: 'View', onClick: () => { window.history.pushState(null, '', messagesPath); window.dispatchEvent(new PopStateEvent('popstate')) } }
+            )
+          }
+        }
+        prevUnreadMessagesRef.current = count
       } catch { /* ignore */ }
     }
 
-    setUnreadMessagesCount(getCachedCount())
+    const validCached = getValidCachedCount()
+    if (validCached !== null) {
+      setUnreadMessagesCount(validCached)
+      prevUnreadMessagesRef.current = validCached
+    }
     fetchCount()
 
     const interval = setInterval(fetchCount, 30000)
 
-    const handleUpdate = () => setUnreadMessagesCount(getCachedCount())
+    const handleUpdate = () => {
+      const c = getValidCachedCount()
+      if (c !== null) setUnreadMessagesCount(c)
+    }
     window.addEventListener('messagesUpdated', handleUpdate)
     window.addEventListener('storage', handleUpdate)
 
@@ -808,7 +861,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       window.removeEventListener('messagesUpdated', handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
-  }, [user])
+  }, [user, isAdmin, showToast])
 
   return (
     <aside className="w-full h-full bg-white dark:bg-gray-900 p-4 overflow-visible">
