@@ -52,14 +52,40 @@ export function AdminClients() {
   const [clientDocuments, setClientDocuments] = useState<any[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [actioningClientId, setActioningClientId] = useState<string | null>(null)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
     if (isAdmin()) {
       fetchClients()
+      fetchUnreadCounts()
+      const pollInterval = setInterval(fetchUnreadCounts, 60_000)
+      return () => clearInterval(pollInterval)
     } else {
       setLoading(false)
     }
   }, [isAdmin])
+
+  async function fetchUnreadCounts() {
+    try {
+      const token = localStorage.getItem('gritsync_token')
+      if (!token) return
+      const res = await fetch('/api/messages', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const conversations: Array<{ client_id: string; unread_count: number }> = data.data || []
+      const counts: Record<string, number> = {}
+      for (const conv of conversations) {
+        if (conv.unread_count > 0) {
+          counts[conv.client_id] = conv.unread_count
+        }
+      }
+      setUnreadCounts(counts)
+    } catch {
+      // silently ignore — badge is non-critical
+    }
+  }
 
   // Set up real-time subscription for new client registrations
   useEffect(() => {
@@ -139,7 +165,7 @@ export function AdminClients() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await fetchClients()
+    await Promise.all([fetchClients(), fetchUnreadCounts()])
   }
 
   const handleViewClient = async (client: Client) => {
@@ -662,8 +688,18 @@ export function AdminClients() {
                                   onClick={() => handleViewClient(client)}
                                   className="flex items-center gap-3 w-full text-left hover:text-primary-600 dark:hover:text-primary-400 transition-all cursor-pointer group border border-transparent hover:border-primary-300 dark:hover:border-primary-700 rounded-lg px-2 py-1 -mx-2 -my-1"
                                 >
-                                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-semibold text-xs sm:text-sm flex-shrink-0 group-hover:bg-primary-200 dark:group-hover:bg-primary-900/50 transition-colors">
-                                    {initials}
+                                  <div className="relative flex-shrink-0">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-semibold text-xs sm:text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-900/50 transition-colors">
+                                      {initials}
+                                    </div>
+                                    {unreadCounts[client.id] > 0 && (
+                                      <span
+                                        title={`${unreadCounts[client.id]} unread message${unreadCounts[client.id] > 1 ? 's' : ''}`}
+                                        className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-900"
+                                      >
+                                        {unreadCounts[client.id] > 99 ? '99+' : unreadCounts[client.id]}
+                                      </span>
+                                    )}
                                   </div>
                                   <span className="truncate max-w-[120px] sm:max-w-none">
                                     {fullName}
