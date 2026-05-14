@@ -12,6 +12,7 @@ node_modules/
 
 # Misc
 .DS_Store
+scripts/push-schema-now.cjs
 .env
 .env.local
 .env.development.local
