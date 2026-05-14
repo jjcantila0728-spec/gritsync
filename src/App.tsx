@@ -1,7 +1,9 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
+import { homePathForRole, permissionForPath, rolePanelPrefix } from './lib/permissions'
 import { ToastProvider } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loading } from './components/ui/Loading'
@@ -11,6 +13,7 @@ import { ScrollToTop } from './components/ScrollToTop'
 import { PWAInstallPrompt } from './components/PWAInstallPrompt'
 import { PWAUpdateNotification } from './components/PWAUpdateNotification'
 import { getSubdomainContext, getBasename, appUrl } from './lib/routing'
+import { Toaster } from 'react-hot-toast'
 
 // Lazy load pages for better performance and code splitting
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })))
@@ -42,7 +45,13 @@ const SystemSettings = lazy(() => import('./pages/admin-settings/SystemSettings'
 const MonitoringDashboard = lazy(() => import('./pages/admin-settings/MonitoringDashboard').then(m => ({ default: m.MonitoringDashboard })))
 const PromoCodeSettings = lazy(() => import('./pages/admin-settings/PromoCodeSettings').then(m => ({ default: m.PromoCodeSettings })))
 const ServiceSettings = lazy(() => import('./pages/admin-settings/ServiceSettings').then(m => ({ default: m.ServiceSettings })))
+const ReferralSettings = lazy(() => import('./pages/admin-settings/ReferralSettings').then(m => ({ default: m.ReferralSettings })))
+const RolePermissions = lazy(() => import('./pages/admin-settings/RolePermissions').then(m => ({ default: m.RolePermissions })))
 const NotificationManagement = lazy(() => import('./pages/admin-settings/NotificationManagement').then(m => ({ default: m.NotificationManagement })))
+const AffiliatePanel = lazy(() => import('./pages/AffiliatePanel').then(m => ({ default: m.AffiliatePanel })))
+const AdvisorPanel = lazy(() => import('./pages/AdvisorPanel').then(m => ({ default: m.AdvisorPanel })))
+const AdvisorApplications = lazy(() => import('./pages/AdvisorApplications').then(m => ({ default: m.AdvisorApplications })))
+const AdvisorClientList = lazy(() => import('./pages/AdvisorClientList').then(m => ({ default: m.AdvisorClientList })))
 const AdminQuoteManagement = lazy(() => import('./pages/AdminQuoteManagement').then(m => ({ default: m.AdminQuoteManagement })))
 const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m.MyDetails })))
 const AccountSettings = lazy(() => import('./pages/AccountSettings').then(m => ({ default: m.AccountSettings })))
@@ -79,8 +88,13 @@ const NCLEXCheatSheets = lazy(() => import('./pages/NCLEXCheatSheets').then(m =>
 const NCLEXLiveLectures = lazy(() => import('./pages/NCLEXLiveLectures').then(m => ({ default: m.NCLEXLiveLectures })))
 const NCLEXOrderHistory = lazy(() => import('./pages/NCLEXOrderHistory').then(m => ({ default: m.NCLEXOrderHistory })))
 const NCLEXCheckout = lazy(() => import('./pages/NCLEXCheckout').then(m => ({ default: m.NCLEXCheckout })))
+const NclexHome = lazy(() => import('./pages/nclex/NclexHome').then(m => ({ default: m.NclexHome })))
+const NclexExam = lazy(() => import('./pages/nclex/NclexExam').then(m => ({ default: m.NclexExam })))
+const NclexResults = lazy(() => import('./pages/nclex/NclexResults').then(m => ({ default: m.NclexResults })))
+const NclexReviewPage = lazy(() => import('./pages/nclex/NclexReview').then(m => ({ default: m.NclexReview })))
 const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })))
-const AdminMessages = lazy(() => import('./pages/AdminMessages').then(m => ({ default: m.AdminMessages })))
+const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ default: m.AdminSocial })))
+const AdminAds = lazy(() => import('./pages/AdminAds').then(m => ({ default: m.AdminAds })))
 
 // Loading fallback component
 function PageLoader() {
@@ -97,6 +111,8 @@ function PageLoader() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  const { can, loading: permsLoading } = usePermissions()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -110,6 +126,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
+  // Panel-mismatch: a user who lands on another panel's URL (e.g. an affiliate
+  // hitting /client/dashboard) is sent back to their own panel's home.
+  const panelMatch = location.pathname.match(/^\/(client|affiliate|advisor|admin)(?=\/|$)/)
+  if (panelMatch && panelMatch[1] !== user.role) {
+    return <Navigate to={homePathForRole(user.role)} replace />
+  }
+
+  // Permission-gated routes: bounce a user who lacks access back to their own
+  // home. Admins always pass; the seeded defaults cover the first render before
+  // stored overrides arrive.
+  if (user.role !== 'admin') {
+    const required = permissionForPath(location.pathname)
+    if (required && !permsLoading && !can(required)) {
+      return <Navigate to={homePathForRole(user.role)} replace />
+    }
+  }
+
   if (children && typeof children === 'object' && !React.isValidElement(children) && !Array.isArray(children)) {
     console.error('ProtectedRoute: Invalid children prop - received plain object', children)
     return null
@@ -119,7 +152,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading } = useAuth()
 
   if (loading) {
     return (
@@ -130,7 +163,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    return <Navigate to={isAdmin() ? '/admin/dashboard' : '/dashboard'} replace />
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
 
   return <>{children}</>
@@ -148,7 +181,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user || !isAdmin()) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={homePathForRole(user?.role)} replace />
   }
 
   if (children && typeof children === 'object' && !React.isValidElement(children) && !Array.isArray(children)) {
@@ -164,17 +197,39 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
  * If not logged in, render the auth page normally.
  */
 function LandingPublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading } = useAuth()
 
   if (loading) return <PageLoader />
 
   if (user) {
     // Cross-subdomain redirect — can't use navigate() here
-    window.location.href = appUrl(isAdmin() ? '/admin/dashboard' : '/dashboard')
+    window.location.href = appUrl(homePathForRole(user.role))
     return <PageLoader />
   }
 
   return <>{children}</>
+}
+
+/**
+ * Backwards-compat redirect for legacy unprefixed paths. Sends the current user
+ * to the same path under their role's panel prefix (e.g. `/messages` becomes
+ * `/client/messages` for a client, `/admin/messages` for an admin). Preserves
+ * query string and hash. Falls through to /login if unauthenticated.
+ */
+function RoleRedirect() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+
+  if (loading) return <PageLoader />
+  if (!user) return <Navigate to="/login" replace />
+
+  const prefix = rolePanelPrefix(user.role)
+  // Already under the user's prefix? Just send them home — shouldn't normally happen.
+  if (location.pathname === prefix || location.pathname.startsWith(prefix + '/')) {
+    return <Navigate to={homePathForRole(user.role)} replace state={location.state} />
+  }
+  const target = `${prefix}${location.pathname}${location.search}${location.hash}`
+  return <Navigate to={target} replace state={location.state} />
 }
 
 function AdminRedirect({ to }: { to: string }) {
@@ -190,7 +245,7 @@ function AdminRedirect({ to }: { to: string }) {
   }
 
   if (!user || !isAdmin()) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={homePathForRole(user?.role)} replace />
   }
 
   const redirectPath = id ? `/admin/applications/${id}/${to}` : '/admin/applications'
@@ -286,33 +341,79 @@ function AppRoutes() {
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
 
-        {/* Client protected routes */}
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/applications" element={<ProtectedRoute><Tracking /></ProtectedRoute>} />
-        <Route path="/application/new" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
-        <Route path="/application/new/nclex" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
-        <Route path="/applications/:id" element={<Navigate to="timeline" replace />} />
-        <Route path="/applications/:id/payments" element={<ProtectedRoute><ApplicationPayments /></ProtectedRoute>} />
-        <Route path="/applications/:id/checkout" element={<ApplicationCheckout />} />
-        <Route path="/applications/:id/details/:subTab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
-        <Route path="/applications/:id/details" element={<ProtectedRoute><Navigate to="personal" replace /></ProtectedRoute>} />
-        <Route path="/applications/:id/:tab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
-        <Route path="/applications/:applicationId/payment" element={<ProtectedRoute><ApplicationPayment /></ProtectedRoute>} />
-        <Route path="/quotations/new" element={<ProtectedRoute><NewQuotation /></ProtectedRoute>} />
-        <Route path="/quotations/:id/pay" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
-        <Route path="/my-details" element={<ProtectedRoute><MyDetails /></ProtectedRoute>} />
-        <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-        <Route path="/documents/:serviceType?" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        {/* ────────────────────────────────────────────────────────────────
+           Panel routes — every authenticated page lives under its role's
+           prefix (/client/*, /affiliate/*, /advisor/*, /admin/*). Legacy
+           unprefixed paths fall through to <RoleRedirect /> below, which
+           sends users to the same path under their own panel.
+           ──────────────────────────────────────────────────────────────── */}
 
-        {/* Client messages route */}
-        <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
-
-        {/* Client email routes */}
+        {/* ───── CLIENT panel ───── */}
+        <Route path="/client/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/client/applications" element={<ProtectedRoute><Tracking /></ProtectedRoute>} />
+        <Route path="/client/application/new" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
+        <Route path="/client/application/new/nclex" element={<ProtectedRoute><NCLEXApplication /></ProtectedRoute>} />
+        <Route path="/client/applications/:id" element={<Navigate to="timeline" replace />} />
+        <Route path="/client/applications/:id/payments" element={<ProtectedRoute><ApplicationPayments /></ProtectedRoute>} />
+        <Route path="/client/applications/:id/checkout" element={<ApplicationCheckout />} />
+        <Route path="/client/applications/:id/details/:subTab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
+        <Route path="/client/applications/:id/details" element={<ProtectedRoute><Navigate to="personal" replace /></ProtectedRoute>} />
+        <Route path="/client/applications/:id/:tab" element={<ProtectedRoute><ApplicationDetail /></ProtectedRoute>} />
+        <Route path="/client/applications/:applicationId/payment" element={<ProtectedRoute><ApplicationPayment /></ProtectedRoute>} />
+        <Route path="/client/quotations/new" element={<ProtectedRoute><NewQuotation /></ProtectedRoute>} />
+        <Route path="/client/quotations/:id/pay" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+        <Route path="/client/my-details" element={<ProtectedRoute><MyDetails /></ProtectedRoute>} />
+        <Route path="/client/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+        <Route path="/client/documents/:serviceType?" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+        <Route path="/client/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/client/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
         <Route path="/client/emails" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
         <Route path="/client/emails/inbox" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
         <Route path="/client/emails/sent" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
         <Route path="/client/emails/templates" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+
+        {/* ───── AFFILIATE panel ───── */}
+        <Route path="/affiliate" element={<ProtectedRoute><AffiliatePanel /></ProtectedRoute>} />
+        <Route path="/affiliate/dashboard" element={<ProtectedRoute><AffiliatePanel /></ProtectedRoute>} />
+        <Route path="/affiliate/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+        <Route path="/affiliate/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/affiliate/my-details" element={<ProtectedRoute><MyDetails /></ProtectedRoute>} />
+        <Route path="/affiliate/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+
+        {/* ───── ADVISOR panel ───── */}
+        <Route path="/advisor" element={<ProtectedRoute><AdvisorPanel /></ProtectedRoute>} />
+        <Route path="/advisor/dashboard" element={<ProtectedRoute><AdvisorPanel /></ProtectedRoute>} />
+        <Route path="/advisor/applications" element={<ProtectedRoute><AdvisorApplications /></ProtectedRoute>} />
+        <Route path="/advisor/clients" element={<ProtectedRoute><AdvisorClientList /></ProtectedRoute>} />
+        <Route path="/advisor/clients/:clientId" element={<ProtectedRoute><AdvisorPanel /></ProtectedRoute>} />
+        <Route path="/advisor/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+        <Route path="/advisor/emails" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/advisor/emails/inbox" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/advisor/emails/sent" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        <Route path="/advisor/emails/templates" element={<ProtectedRoute><ClientEmails /></ProtectedRoute>} />
+        {/* Singular alias — forgiving for bookmarks / sidebars that still use /email */}
+        <Route path="/advisor/email" element={<Navigate to="/advisor/emails" replace />} />
+        <Route path="/advisor/email/:rest" element={<Navigate to="/advisor/emails" replace />} />
+        <Route path="/advisor/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/advisor/my-details" element={<ProtectedRoute><MyDetails /></ProtectedRoute>} />
+        <Route path="/advisor/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+
+        {/* ───── Legacy redirects ─────
+           Send anyone hitting an unprefixed path to the same path under their
+           own panel (e.g. /messages → /client/messages or /admin/messages). */}
+        <Route path="/dashboard" element={<RoleRedirect />} />
+        <Route path="/applications" element={<RoleRedirect />} />
+        <Route path="/applications/*" element={<RoleRedirect />} />
+        <Route path="/application" element={<RoleRedirect />} />
+        <Route path="/application/*" element={<RoleRedirect />} />
+        <Route path="/quotations/new" element={<RoleRedirect />} />
+        <Route path="/quotations/:id/pay" element={<RoleRedirect />} />
+        <Route path="/documents" element={<RoleRedirect />} />
+        <Route path="/documents/*" element={<RoleRedirect />} />
+        <Route path="/messages" element={<RoleRedirect />} />
+        <Route path="/notifications" element={<RoleRedirect />} />
+        <Route path="/my-details" element={<RoleRedirect />} />
+        <Route path="/account-settings" element={<RoleRedirect />} />
 
         {/* Admin routes */}
         <Route path="/admin/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
@@ -321,8 +422,11 @@ function AppRoutes() {
         <Route path="/admin/applications/:id/payments" element={<AdminRoute><AdminApplicationPayments /></AdminRoute>} />
         <Route path="/admin/applications/:id/details/:subTab" element={<AdminRoute><ApplicationDetail /></AdminRoute>} />
         <Route path="/admin/applications/:id/details" element={<AdminRedirect to="personal" />} />
+        <Route path="/admin/applications/:id/gs-method/:subTab" element={<AdminRoute><ApplicationDetail /></AdminRoute>} />
+        <Route path="/admin/applications/:id/gs-method" element={<AdminRedirect to="gs-method/mandatory-course" />} />
         <Route path="/admin/applications/:id/:tab" element={<AdminRoute><ApplicationDetail /></AdminRoute>} />
-        <Route path="/admin/clients" element={<AdminRoute><AdminClients /></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><AdminClients /></AdminRoute>} />
+        <Route path="/admin/clients" element={<Navigate to="/admin/users" replace />} />
         <Route path="/admin/quotations" element={<AdminRoute><AdminQuoteManagement /></AdminRoute>} />
         <Route
           path="/admin/settings"
@@ -332,7 +436,9 @@ function AppRoutes() {
           <Route path="general" element={<GeneralSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="security" element={<SecuritySettings />} />
+          <Route path="permissions" element={<RolePermissions />} />
           <Route path="payment" element={<PaymentSettings />} />
+          <Route path="referrals" element={<ReferralSettings />} />
           <Route path="promo-codes" element={<PromoCodeSettings />} />
           <Route path="currency" element={<CurrencySettings />} />
           <Route path="monitoring" element={<MonitoringDashboard />} />
@@ -362,9 +468,15 @@ function AppRoutes() {
         <Route path="/admin/emails/email-setup/admin" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/emails/email-setup/client" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+        <Route path="/admin/social" element={<AdminRoute><AdminSocial /></AdminRoute>} />
+        <Route path="/admin/ads" element={<AdminRoute><AdminAds /></AdminRoute>} />
 
-        {/* Admin messages route */}
-        <Route path="/admin/messages" element={<AdminRoute><AdminMessages /></AdminRoute>} />
+        {/* Admin messages route — same unified Messages experience as clients & partners */}
+        <Route path="/admin/messages" element={<AdminRoute><Messages /></AdminRoute>} />
+
+        {/* Admin profile pages — same components every panel uses */}
+        <Route path="/admin/my-details" element={<AdminRoute><MyDetails /></AdminRoute>} />
+        <Route path="/admin/account-settings" element={<AdminRoute><AccountSettings /></AdminRoute>} />
 
         {/* Root redirect: send to login if not authed, dashboard if authed */}
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -391,6 +503,14 @@ function ReviewRoutes() {
         <Route path="/live-lectures" element={<NCLEXLiveLectures />} />
         <Route path="/order-history" element={<NCLEXOrderHistory />} />
         <Route path="/checkout" element={<NCLEXCheckout />} />
+        {/* NCLEX Review (imported from grit) — qbanks dashboard, exam, results, review */}
+        <Route path="/nclex" element={<ProtectedRoute><Navigate to="/nclex/qbanks/statistics" replace /></ProtectedRoute>} />
+        <Route path="/nclex/qbanks" element={<ProtectedRoute><Navigate to="/nclex/qbanks/statistics" replace /></ProtectedRoute>} />
+        <Route path="/nclex/qbanks/:qbanksTab" element={<ProtectedRoute><NclexHome /></ProtectedRoute>} />
+        <Route path="/nclex/exam/:sessionId" element={<ProtectedRoute><NclexExam /></ProtectedRoute>} />
+        <Route path="/nclex/results/:sessionId" element={<ProtectedRoute><NclexResults /></ProtectedRoute>} />
+        <Route path="/nclex/review/:sessionId" element={<ProtectedRoute><NclexReviewPage /></ProtectedRoute>} />
+        <Route path="/nclex/:section" element={<ProtectedRoute><NclexHome /></ProtectedRoute>} />
         {/* Auth routes — available on all domains */}
         <Route path="/login" element={<LandingPublicRoute><Login /></LandingPublicRoute>} />
         <Route path="/register" element={<LandingPublicRoute><Register /></LandingPublicRoute>} />
@@ -423,22 +543,25 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <SessionTimeout>
-            <ToastProvider>
-              <BrowserRouter
-                basename={basename}
-                future={{
-                  v7_startTransition: true,
-                  v7_relativeSplatPath: true,
-                }}
-              >
-                <ScrollToTop />
-                <RootRoutes />
-                <PWAInstallPrompt />
-                <PWAUpdateNotification />
-              </BrowserRouter>
-            </ToastProvider>
-          </SessionTimeout>
+          <PermissionsProvider>
+            <SessionTimeout>
+              <ToastProvider>
+                <BrowserRouter
+                  basename={basename}
+                  future={{
+                    v7_startTransition: true,
+                    v7_relativeSplatPath: true,
+                  }}
+                >
+                  <ScrollToTop />
+                  <RootRoutes />
+                  <PWAInstallPrompt />
+                  <PWAUpdateNotification />
+                  <Toaster position="top-right" />
+                </BrowserRouter>
+              </ToastProvider>
+            </SessionTimeout>
+          </PermissionsProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

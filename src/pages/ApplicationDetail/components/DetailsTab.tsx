@@ -186,27 +186,18 @@ export function DetailsTab({
 
 
               {application.country_of_birth && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Country of Birth
-                  </label>
-                  <p className="text-gray-900 dark:text-gray-100">{application.country_of_birth}</p>
+                <div className="flex items-center gap-1.5 py-1">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Country:</span>
+                  <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.country_of_birth}</span>
+                  <button
+                    onClick={() => copyToClipboard(application.country_of_birth || '', 'Country of birth', showToast)}
+                    className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
+                    title="Copy Country of Birth"
+                  >
+                    <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                  </button>
                 </div>
               )}
-
-              {application.country_of_birth && (
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Country:</span>
-                      <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.country_of_birth}</span>
-                      <button
-                        onClick={() => copyToClipboard(application.country_of_birth || '', 'Country of birth', showToast)}
-                        className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
-                        title="Copy Country of Birth"
-                      >
-                        <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                      </button>
-                    </div>
-                  )}
                   {(application.place_of_birth || application.birth_place) && (
                     <div className="flex items-center gap-1.5 py-1">
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Place:</span>

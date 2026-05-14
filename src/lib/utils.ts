@@ -99,6 +99,38 @@ export async function validatePassword(password: string): Promise<{ valid: boole
   return { valid: true }
 }
 
+/**
+ * Generate a cryptographically-random temporary password that passes the
+ * standard "strong password" rules (mixed case, digit, symbol). Excludes
+ * visually-ambiguous characters (0/O, 1/l/I) for legibility.
+ */
+export function generatePassword(length: number = 14): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghijkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const symbols = '!@#$%^&*?'
+  const all = upper + lower + digits + symbols
+
+  const n = Math.max(10, Math.min(64, length | 0))
+  const random = (max: number): number => {
+    if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+      const arr = new Uint32Array(1)
+      window.crypto.getRandomValues(arr)
+      return arr[0] % max
+    }
+    return Math.floor(Math.random() * max)
+  }
+  const pick = (s: string) => s[random(s.length)]
+
+  const chars: string[] = [pick(upper), pick(lower), pick(digits), pick(symbols)]
+  while (chars.length < n) chars.push(pick(all))
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = random(i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
+
 // Legacy synchronous version for backward compatibility
 // This uses default values if settings can't be loaded
 export function validatePasswordSync(password: string): { valid: boolean; message?: string } {

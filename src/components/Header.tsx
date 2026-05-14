@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { appUrl, landingUrl, getSubdomainContext } from '@/lib/routing'
+import { homePathForRole, roleUrl } from '@/lib/permissions'
+import { peekStack as peekImpersonation, popToPreviousSession as popImpersonation } from '@/lib/impersonation'
 import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { NotificationDropdown } from './NotificationDropdown'
@@ -672,33 +674,25 @@ export function Header() {
     }
   }
 
-  // Admin impersonation: detect if admin is logged in as a user
-  const [adminBackup, setAdminBackup] = useState<{ user: { first_name?: string; last_name?: string } | null } | null>(null)
+  // Impersonation stack: an admin can sign in as an advisor who in turn signs
+  // in as a client. Each step pushes the current session onto the stack; this
+  // banner reads the top frame to know who we'll return to next.
+  const [adminBackup, setAdminBackup] = useState<{ user: { first_name?: string; last_name?: string; role?: string } | null } | null>(null)
   useEffect(() => {
-    const checkAdminBackup = () => {
-      try {
-        const raw = localStorage.getItem('admin_session_backup')
-        setAdminBackup(raw ? JSON.parse(raw) : null)
-      } catch {
-        setAdminBackup(null)
-      }
-    }
-    checkAdminBackup()
-    window.addEventListener('storage', checkAdminBackup)
-    return () => window.removeEventListener('storage', checkAdminBackup)
+    const refresh = () => setAdminBackup(peekImpersonation())
+    refresh()
+    window.addEventListener('storage', refresh)
+    return () => window.removeEventListener('storage', refresh)
   }, [])
 
   const handleBackToAdmin = () => {
     try {
-      const backup = JSON.parse(localStorage.getItem('admin_session_backup') || 'null')
-      if (!backup) return
-      localStorage.setItem('gritsync_token', backup.access_token)
-      localStorage.setItem('gritsync_refresh_token', backup.refresh_token || '')
-      localStorage.setItem('gritsync_user', JSON.stringify(backup.user))
-      localStorage.removeItem('admin_session_backup')
-      window.location.href = appUrl('/admin/clients')
+      const frame = popImpersonation()
+      if (!frame) return
+      // Return to that frame's home panel (admin dashboard, advisor panel, etc.).
+      window.location.href = appUrl(homePathForRole(frame.user?.role))
     } catch (error) {
-      console.error('Error restoring admin session:', error)
+      console.error('Error restoring impersonation session:', error)
     }
   }
 
@@ -808,27 +802,35 @@ export function Header() {
     return exploreMenuItems.some(item => isActive(item.path, item.hash))
   }
 
+  const viewingName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'another user'
+  const originalName = `${adminBackup?.user?.first_name || ''} ${adminBackup?.user?.last_name || ''}`.trim()
+    || (adminBackup?.user?.role === 'advisor' ? 'advisor' : adminBackup?.user?.role === 'admin' ? 'admin' : 'your account')
+
   return (
     <>
-      {/* Back to Admin banner — shown when an admin is viewing as a client */}
-      {adminBackup && (
-        <div className="sticky top-0 z-[60] w-full bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-sm shadow">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-            <span className="font-medium">
-              You are viewing as a client.
-            </span>
+      {/* Banner + header live in one sticky stack so the banner can never
+          overlap the navbar. The banner is a normal (non-sticky) block above
+          the header; the whole group sticks to top-0 together as the page
+          scrolls. */}
+      <div className="sticky top-0 z-50 w-full">
+        {adminBackup && (
+          <div className="w-full bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-sm shadow">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span className="font-medium truncate">
+                You are viewing as <span className="font-semibold">{viewingName}</span>.
+              </span>
+            </div>
+            <button
+              onClick={handleBackToAdmin}
+              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 transition-colors rounded-md px-3 py-1 font-semibold whitespace-nowrap"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to {originalName}
+            </button>
           </div>
-          <button
-            onClick={handleBackToAdmin}
-            className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 transition-colors rounded-md px-3 py-1 font-semibold whitespace-nowrap"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Admin
-          </button>
-        </div>
-      )}
-      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-gray-200 dark:border-gray-800 shadow-sm">
+        )}
+      <header className="w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-gray-200 dark:border-gray-800 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Left side - Logo and Mobile Menu */}
           <div className="flex items-center gap-4">
@@ -846,7 +848,7 @@ export function Header() {
               </button>
             )}
             {user ? (
-              <Link to={isAdmin() ? '/admin/dashboard' : '/dashboard'} className="flex items-center">
+              <Link to={homePathForRole(user.role)} className="flex items-center">
                 <Logo />
               </Link>
             ) : (
@@ -1070,7 +1072,7 @@ export function Header() {
                       
                       <div className="py-1">
                         <Link
-                          to="/my-details"
+                          to={roleUrl(user.role, 'my-details')}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                         >
@@ -1078,7 +1080,7 @@ export function Header() {
                           My Details
                         </Link>
                         <Link
-                          to="/account-settings"
+                          to={roleUrl(user.role, 'account-settings')}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                         >
@@ -1196,6 +1198,7 @@ export function Header() {
           </div>
         )}
       </header>
+      </div>
 
       {/* Mobile Sidebar (Authenticated) */}
       {user && mobileMenuOpen && (

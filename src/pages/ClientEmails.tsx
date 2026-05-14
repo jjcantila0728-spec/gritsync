@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { roleUrl } from '@/lib/permissions'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { useToast } from '@/components/ui/Toast'
@@ -50,10 +51,13 @@ interface EnrichedReceivedEmail extends ReceivedEmail {
 }
 
 export function ClientEmails() {
-  const { user, isClient } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { showToast } = useToast()
+  // Tab links stay under the current user's panel prefix so an advisor on
+  // /advisor/emails clicking "Inbox" lands on /advisor/emails/inbox, not /client/*.
+  const emailsBase = roleUrl(user?.role, 'emails')
   
   const getInitialTab = (): Tab => {
     const pathParts = location.pathname.split('/')
@@ -141,6 +145,10 @@ export function ClientEmails() {
   const [selectedInboxIds, setSelectedInboxIds] = useState<Set<string>>(new Set())
   const [selectedSentIds, setSelectedSentIds] = useState<Set<string>>(new Set())
 
+  // Pagination (20 per page, client-side)
+  const [inboxPage, setInboxPage] = useState(1)
+  const [sentPage, setSentPage] = useState(1)
+
   // Sync active tab when URL changes (e.g. navigating directly to /client/emails/sent)
   useEffect(() => {
     const newTab = getInitialTab()
@@ -150,8 +158,14 @@ export function ClientEmails() {
   }, [location.pathname])
 
   useEffect(() => {
-    if (!user || !isClient()) {
-      navigate('/dashboard')
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    // Admins have their own dedicated mailbox at /admin/emails — keep the
+    // personal mailbox for non-admin roles (client, affiliate, advisor).
+    if (user.role === 'admin') {
+      navigate('/admin/emails')
       return
     }
 
@@ -162,8 +176,8 @@ export function ClientEmails() {
   }, [user])
 
   useEffect(() => {
-    if (!user || !isClient()) return
-    
+    if (!user || user.role === 'admin') return
+
     // Wait for clientEmailAddress to be loaded before loading emails
     if (!clientEmailAddress) {
       console.log('Client Emails: Waiting for clientEmailAddress to load...')
@@ -285,13 +299,14 @@ export function ClientEmails() {
 
     try {
       setLoading(true)
-      
+      setSentPage(1)
+
       const response = await emailLogsAPI.getAll({
         fromEmailAddressId: clientEmailAddress.id,
         search: searchQuery || undefined,
         status: statusFilter || undefined,
         page: 1,
-        limit: 50,
+        limit: 100,
       })
       
       if (!response || !Array.isArray(response.data)) {
@@ -327,16 +342,17 @@ export function ClientEmails() {
 
     try {
       setLoading(true)
-      
+      setInboxPage(1)
+
       if (!clientEmailAddress.email_address || !clientEmailAddress.email_address.includes('@')) {
         throw new Error(`Invalid client email address: ${clientEmailAddress.email_address}`)
       }
-      
+
       console.log('Client Inbox - Fetching emails for:', clientEmailAddress.email_address)
-      
+
       // Fetch ALL emails first (no filter) to see what's available
       const allEmailsResponse = await resendInboxAPI.list({
-        limit: 50,
+        limit: 100,
       })
       
       console.log('Client Inbox - All emails from Resend:', allEmailsResponse?.data?.length || 0)
@@ -678,7 +694,7 @@ export function ClientEmails() {
       
       // Auto-open sent items
       setActiveTab('sent')
-      navigate('/client/emails/sent')
+      navigate(`${emailsBase}/sent`)
       setTimeout(() => loadSentEmails(), 500)
     } catch (error: any) {
       console.error('Error sending email:', error)
@@ -935,7 +951,7 @@ export function ClientEmails() {
     // Only admins should have this ability
   }
 
-  if (!user || !isClient()) {
+  if (!user || user.role === 'admin') {
     return <Loading text="Loading..." />
   }
 
@@ -976,7 +992,7 @@ export function ClientEmails() {
                 <button
                   onClick={() => {
                     setActiveTab('inbox')
-                    navigate('/client/emails/inbox')
+                    navigate(`${emailsBase}/inbox`)
                   }}
                   className={cn(
                     'px-4 py-2 font-medium transition-colors border-b-2',
@@ -996,7 +1012,7 @@ export function ClientEmails() {
                 <button
                   onClick={() => {
                     setActiveTab('sent')
-                    navigate('/client/emails/sent')
+                    navigate(`${emailsBase}/sent`)
                   }}
                   className={cn(
                     'px-4 py-2 font-medium transition-colors border-b-2',
@@ -1042,6 +1058,7 @@ export function ClientEmails() {
                   </button>
                 </div>
               ) : (
+                <>
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
                   {/* Table Header */}
                   <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
@@ -1062,13 +1079,13 @@ export function ClientEmails() {
 
                   {/* Email Rows */}
                   <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {receivedEmails.map((email) => (
+                    {receivedEmails.slice((inboxPage - 1) * 20, inboxPage * 20).map((email) => (
                       <div
                         key={email.id}
                         className={cn(
                           'group relative flex flex-col sm:flex-row sm:items-center px-2 py-2 hover:shadow-sm transition-all cursor-pointer border-l-4 hover:border-l-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                          email.isRead 
-                            ? 'border-transparent' 
+                          email.isRead
+                            ? 'border-transparent'
                             : 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/10'
                         )}
                         onClick={(e) => {
@@ -1209,6 +1226,52 @@ export function ClientEmails() {
                     ))}
                   </div>
                 </div>
+                {receivedEmails.length > 20 && (() => {
+                  const totalInboxPages = Math.ceil(receivedEmails.length / 20)
+                  return (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Showing {(inboxPage - 1) * 20 + 1} to {Math.min(inboxPage * 20, receivedEmails.length)} of {receivedEmails.length} emails
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setInboxPage(Math.max(1, inboxPage - 1))}
+                          disabled={inboxPage === 1}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalInboxPages) }, (_, i) => {
+                            const page = i + 1
+                            return (
+                              <button
+                                key={page}
+                                onClick={() => setInboxPage(page)}
+                                className={cn(
+                                  'px-3 py-1.5 text-sm border rounded-lg',
+                                  inboxPage === page
+                                    ? 'bg-primary-600 text-white border-primary-600'
+                                    : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                )}
+                              >
+                                {page}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button
+                          onClick={() => setInboxPage(Math.min(totalInboxPages, inboxPage + 1))}
+                          disabled={inboxPage === totalInboxPages}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+                </>
               )
             ) : (
               /* SENT TABLE */
@@ -1218,6 +1281,7 @@ export function ClientEmails() {
                   <p className="text-gray-600 dark:text-gray-400">No sent emails</p>
                 </div>
               ) : (
+                <>
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
                   {/* Table Header */}
                   <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
@@ -1238,7 +1302,7 @@ export function ClientEmails() {
 
                   {/* Email Rows */}
                   <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {emailLogs.map((log) => (
+                    {emailLogs.slice((sentPage - 1) * 20, sentPage * 20).map((log) => (
                       <div
                         key={log.id}
                         className="group relative flex flex-col sm:flex-row sm:items-center px-2 py-2 hover:shadow-sm transition-all cursor-pointer border-l-4 border-transparent hover:border-l-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/50"
@@ -1369,6 +1433,52 @@ export function ClientEmails() {
                     ))}
                   </div>
                 </div>
+                {emailLogs.length > 20 && (() => {
+                  const totalSentPages = Math.ceil(emailLogs.length / 20)
+                  return (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Showing {(sentPage - 1) * 20 + 1} to {Math.min(sentPage * 20, emailLogs.length)} of {emailLogs.length} emails
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setSentPage(Math.max(1, sentPage - 1))}
+                          disabled={sentPage === 1}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalSentPages) }, (_, i) => {
+                            const page = i + 1
+                            return (
+                              <button
+                                key={page}
+                                onClick={() => setSentPage(page)}
+                                className={cn(
+                                  'px-3 py-1.5 text-sm border rounded-lg',
+                                  sentPage === page
+                                    ? 'bg-primary-600 text-white border-primary-600'
+                                    : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                )}
+                              >
+                                {page}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button
+                          onClick={() => setSentPage(Math.min(totalSentPages, sentPage + 1))}
+                          disabled={sentPage === totalSentPages}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+                </>
               )
             )}
           </div>

@@ -164,14 +164,23 @@ class QueryBuilder {
     if (this._limit !== null) params.set('limit', String(this._limit))
     if (this._offset !== null) params.set('offset', String(this._offset))
 
+    let hasUndefinedFilter = false
     for (const [key, val] of Object.entries(this._filters)) {
-      if (val === null) {
+      if (val === undefined) {
+        hasUndefinedFilter = true
+        break
+      } else if (val === null) {
         params.set(key, 'null')
       } else if (typeof val === 'object' && val._op) {
         params.set(key, JSON.stringify(val))
       } else {
         params.set(key, String(val))
       }
+    }
+    if (hasUndefinedFilter) {
+      if (this._single) return { data: null, count, error: { message: 'No rows found', code: 'PGRST116' } }
+      if (this._maybeSingle) return { data: null, count, error: null }
+      return { data: [], count, error: null }
     }
 
     const res = await fetch(`${API_BASE}/db/${this.table}?${params}`, { headers })
@@ -230,6 +239,13 @@ class MutationBuilder {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    }
+
+    if (this.operation === 'update' || this.operation === 'delete') {
+      const undefinedCol = Object.entries(this._filters).find(([, v]) => v === undefined)?.[0]
+      if (undefinedCol) {
+        return { data: null, error: { message: `Refusing to ${this.operation} "${this.table}": filter "${undefinedCol}" is undefined (would affect all rows).` } }
+      }
     }
 
     if (this.operation === 'insert' || this.operation === 'upsert') {

@@ -1,4 +1,11 @@
-import { Pool } from 'pg'
+import { Pool, types } from 'pg'
+
+// Return DATE columns (OID 1082) as the raw 'YYYY-MM-DD' string instead of a JS
+// Date. The default parser produces a Date at midnight local time, which then
+// serializes to an ISO timestamp like '2026-05-01T07:00:00.000Z' over JSON and
+// shifts by the server's timezone offset — flipping the day for users in
+// different TZs. Keeping DATE as a string sidesteps the whole conversion.
+types.setTypeParser(1082, (v: string) => v)
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

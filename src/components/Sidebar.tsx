@@ -1,6 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermissions } from '@/contexts/PermissionsContext'
+import { roleUrl, type AppRole, type RolePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
 import { reviewUrl } from '@/lib/routing'
@@ -20,6 +22,10 @@ import {
   BookOpen,
   Crown,
   MessageSquare,
+  Link2,
+  ArrowUpRight,
+  Share2,
+  Megaphone,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -27,24 +33,21 @@ interface NavItem {
   label: string
   path: string
   icon: React.ComponentType<{ className?: string }>
-  adminOnly?: boolean
+  /** Permission id the (non-admin) role must hold for this item to appear. */
+  permission?: string
+  /** Restrict the item to specific non-admin roles. */
+  roles?: AppRole[]
 }
-
-const clientNavItems: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Applications', path: '/applications', icon: ClipboardList },
-  { label: 'Documents', path: '/documents', icon: FolderOpen },
-  { label: 'Emails', path: '/client/emails', icon: Mail },
-  { label: 'Messages', path: '/messages', icon: MessageSquare },
-]
 
 const adminNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
   { label: 'All Applications', path: '/admin/applications', icon: ClipboardList },
-  { label: 'Clients', path: '/admin/clients', icon: Users },
+  { label: 'Users', path: '/admin/users', icon: Users },
   { label: 'Quotations', path: '/admin/quotations', icon: DollarSign },
   { label: 'Emails', path: '/admin/emails', icon: Mail },
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare },
+  { label: 'Social', path: '/admin/social', icon: Share2 },
+  { label: 'AI Ads', path: '/admin/ads', icon: Megaphone },
   { label: 'Question Bank', path: '/admin/question-bank', icon: BookOpen },
   { label: 'NCLEX Subscriptions', path: '/admin/nclex-subscriptions', icon: Crown },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
@@ -54,11 +57,48 @@ const adminNavItems: NavItem[] = [
   { label: 'Settings', path: '/admin/settings', icon: Settings },
 ]
 
+// Non-admin nav is built per-role so every link lives under the user's panel
+// prefix (e.g. /client/messages, /affiliate/messages). The shared utility
+// items (Applications / Documents / Emails / Messages) only show up when the
+// role's permission matrix grants the underlying capability.
+function buildNavItems(role: string | undefined, matrix: RolePermissions): NavItem[] {
+  if (role === 'admin') return adminNavItems
+  const r = (role || 'client') as AppRole
+
+  const items: NavItem[] = []
+  if (r === 'client') {
+    items.push({ label: 'Dashboard', path: roleUrl(r, 'dashboard'), icon: LayoutDashboard })
+  } else if (r === 'affiliate') {
+    items.push({ label: 'Affiliate Panel', path: roleUrl(r, 'dashboard'), icon: Link2, permission: 'referrals.view_own' })
+  } else if (r === 'advisor') {
+    items.push({ label: 'Dashboard', path: roleUrl(r, 'dashboard'), icon: LayoutDashboard, permission: 'referrals.view_own' })
+  }
+  // Advisor-only client management list.
+  if (r === 'advisor') {
+    items.push({ label: 'Clients', path: roleUrl(r, 'clients'), icon: Users, permission: 'users.view' })
+  }
+  items.push(
+    { label: 'Applications', path: roleUrl(r, 'applications'), icon: ClipboardList, permission: 'applications.view' },
+  )
+  // Advisors don't need a personal Documents tab — they work on their assigned
+  // clients' documents inside the Advisor Panel, not their own.
+  if (r !== 'advisor') {
+    items.push({ label: 'Documents', path: roleUrl(r, 'documents'), icon: FolderOpen, permission: 'documents.view' })
+  }
+  items.push(
+    { label: 'Emails', path: roleUrl(r, 'emails'), icon: Mail, permission: 'emails.view' },
+    { label: 'Messages', path: roleUrl(r, 'messages'), icon: MessageSquare, permission: 'messages.view' },
+  )
+
+  return items.filter((it) => !it.permission || !!matrix[r]?.[it.permission])
+}
+
 export function Sidebar() {
   const { isAdmin, user } = useAuth()
+  const { matrix: permissionMatrix } = usePermissions()
   const location = useLocation()
   const { showToast } = useToast()
-  const navItems = isAdmin() ? adminNavItems : clientNavItems
+  const navItems = useMemo(() => buildNavItems(user?.role, permissionMatrix), [user?.role, permissionMatrix])
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
@@ -359,12 +399,14 @@ export function Sidebar() {
       return null
     }
 
-    const messagesPath = isAdmin() ? '/admin/messages' : '/messages'
+    const messagesPath = roleUrl(user?.role, 'messages')
 
     const fetchCount = async () => {
       try {
         const token = localStorage.getItem('gritsync_token')
         if (!token) return
+        // Presence heartbeat — keeps the user's "online" status fresh app-wide
+        fetch('/api/messages/heartbeat', { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
         const res = await fetch('/api/messages/unread-count', {
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -418,7 +460,12 @@ export function Sidebar() {
   }, [user, isAdmin, showToast])
 
   return (
-    <aside className="hidden md:flex md:flex-col w-64 h-screen sticky top-0 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
+    <>
+      {/* Placeholder reserves the flex column so the fixed sidebar below
+          doesn't overlap the main content. Hidden on mobile (MobileSidebar
+          handles small screens). */}
+      <div className="hidden md:block w-64 flex-shrink-0" aria-hidden />
+    <aside className="hidden md:flex md:flex-col w-64 h-[calc(100vh-4rem)] fixed top-16 left-0 z-30 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
       <nav className="space-y-2 overflow-y-auto flex-1">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -426,27 +473,29 @@ export function Sidebar() {
             location.pathname.startsWith(item.path + '/')
           
           // Special handling for "My Applications" to also match /application/new
-          if (item.path === '/applications') {
-            isActive = isActive || 
-              location.pathname === '/application/new' ||
-              location.pathname.startsWith('/application/')
+          // under the user's panel (e.g. /client/application/new).
+          if (item.path === roleUrl(user?.role, 'applications')) {
+            const applicationBase = roleUrl(user?.role, 'application')
+            isActive = isActive ||
+              location.pathname === applicationBase + '/new' ||
+              location.pathname.startsWith(applicationBase + '/')
           }
 
           // Show counter for Quotations link (admin only)
           const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
           
-          // Show counter for Emails link (both admin and client)
-          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
+          // Show counter for Emails link (every panel that surfaces /emails)
+          const showEmailsCounter = item.path.endsWith('/emails') && unreadEmailsCount > 0
 
-          // Show counter for Messages link (both admin and client)
-          const showMessagesCounter = (item.path === '/admin/messages' || item.path === '/messages') && unreadMessagesCount > 0
-          
+          // Show counter for Messages link (every panel that surfaces /messages)
+          const showMessagesCounter = item.path.endsWith('/messages') && unreadMessagesCount > 0
+
           // Show stop indicator for Documents link if required documents are incomplete
-          const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
+          const showDocumentsStop = item.path === roleUrl(user?.role, 'documents') && !isAdmin() &&
             (!documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport)
-          
+
           // Show stop indicator for Applications link if there are applications needing payment
-          const showApplicationsStop = (item.path === '/applications' || item.path === '/admin/applications') && 
+          const showApplicationsStop = item.path.endsWith('/applications') &&
             hasApplicationsNeedingPayment
           
           return (
@@ -486,18 +535,22 @@ export function Sidebar() {
             </Link>
           )
         })}
-        {/* NCLEX Review — cross-subdomain link */}
+        {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
         {!isAdmin() && (
           <a
             href={reviewUrl('/')}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />
             <span className="flex-1 min-w-0">NCLEX Review</span>
+            <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
           </a>
         )}
       </nav>
     </aside>
+    </>
   )
 }
 
@@ -507,9 +560,10 @@ interface MobileSidebarProps {
 
 export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
   const { isAdmin, user } = useAuth()
+  const { matrix: permissionMatrix } = usePermissions()
   const location = useLocation()
   const { showToast } = useToast()
-  const navItems = isAdmin() ? adminNavItems : clientNavItems
+  const navItems = useMemo(() => buildNavItems(user?.role, permissionMatrix), [user?.role, permissionMatrix])
   const [unopenedQuotesCount, setUnopenedQuotesCount] = useState(0)
   const [unreadEmailsCount, setUnreadEmailsCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
@@ -810,12 +864,14 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       return null
     }
 
-    const messagesPath = isAdmin() ? '/admin/messages' : '/messages'
+    const messagesPath = roleUrl(user?.role, 'messages')
 
     const fetchCount = async () => {
       try {
         const token = localStorage.getItem('gritsync_token')
         if (!token) return
+        // Presence heartbeat — keeps the user's "online" status fresh app-wide
+        fetch('/api/messages/heartbeat', { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
         const res = await fetch('/api/messages/unread-count', {
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -877,27 +933,29 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             location.pathname.startsWith(item.path + '/')
           
           // Special handling for "My Applications" to also match /application/new
-          if (item.path === '/applications') {
-            isActive = isActive || 
-              location.pathname === '/application/new' ||
-              location.pathname.startsWith('/application/')
+          // under the user's panel (e.g. /client/application/new).
+          if (item.path === roleUrl(user?.role, 'applications')) {
+            const applicationBase = roleUrl(user?.role, 'application')
+            isActive = isActive ||
+              location.pathname === applicationBase + '/new' ||
+              location.pathname.startsWith(applicationBase + '/')
           }
 
           // Show counter for Quotations link (admin only)
           const showQuotesCounter = item.path === '/admin/quotations' && unopenedQuotesCount > 0
           
-          // Show counter for Emails link (both admin and client)
-          const showEmailsCounter = (item.path === '/admin/emails' || item.path === '/client/emails') && unreadEmailsCount > 0
+          // Show counter for Emails link (every panel that surfaces /emails)
+          const showEmailsCounter = item.path.endsWith('/emails') && unreadEmailsCount > 0
 
-          // Show counter for Messages link (both admin and client)
-          const showMessagesCounter = (item.path === '/admin/messages' || item.path === '/messages') && unreadMessagesCount > 0
-          
+          // Show counter for Messages link (every panel that surfaces /messages)
+          const showMessagesCounter = item.path.endsWith('/messages') && unreadMessagesCount > 0
+
           // Show stop indicator for Documents link if required documents are incomplete
-          const showDocumentsStop = item.path === '/documents' && !isAdmin() && 
+          const showDocumentsStop = item.path === roleUrl(user?.role, 'documents') && !isAdmin() &&
             (!documentsStatus.picture || !documentsStatus.diploma || !documentsStatus.passport)
-          
+
           // Show stop indicator for Applications link if there are applications needing payment
-          const showApplicationsStop = (item.path === '/applications' || item.path === '/admin/applications') && 
+          const showApplicationsStop = item.path.endsWith('/applications') &&
             hasApplicationsNeedingPayment
           
           return (
@@ -939,16 +997,19 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             </Link>
           )
         })}
-        {/* NCLEX Review — cross-subdomain link */}
+        {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
         {!isAdmin() && (
           <a
             href={reviewUrl('/')}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={onNavigate}
             className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             style={{ visibility: 'visible', display: 'flex' }}
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />
             <span className="flex-1 min-w-0 block">NCLEX Review</span>
+            <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
           </a>
         )}
       </nav>

@@ -51,10 +51,14 @@ export async function sendPaymentReceiptEmail(
 ): Promise<boolean> {
   const { subject, html } = await EmailTemplates.createPaymentReceiptEmail(data)
 
+  // Payment receipts are business transactions — business mailbox is fine.
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'transactional',
+    emailCategory: 'payment_receipt',
+    recipientName: data.userName,
   })
 }
 
@@ -75,10 +79,16 @@ export async function sendTimelineUpdateEmail(
 ): Promise<boolean> {
   const { subject, html } = await EmailTemplates.createTimelineUpdateEmail(data)
 
+  // Timeline updates during processing ARE business transactions — they
+  // belong in the user's business mailbox if they have one.
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'transactional',
+    emailCategory: 'application_status_change',
+    applicationId: data.applicationId,
+    recipientName: data.userName,
   })
 }
 
@@ -100,7 +110,11 @@ export async function sendMissingDocumentEmail(
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'reminder',
+    emailCategory: 'missing_document',
+    applicationId: data.applicationId,
+    recipientName: data.userName,
   })
 }
 
@@ -121,7 +135,10 @@ export async function sendMissingDetailsEmail(
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'reminder',
+    emailCategory: 'missing_details',
+    recipientName: data.userName,
   })
 }
 
@@ -143,7 +160,11 @@ export async function sendSchoolLetterEmail(
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'transactional',
+    emailCategory: 'school_letter',
+    applicationId: data.applicationId,
+    recipientName: data.userName,
   })
 }
 
@@ -165,7 +186,11 @@ export async function sendFullInstructionsEmail(
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'transactional',
+    emailCategory: 'full_instructions',
+    applicationId: data.applicationId,
+    recipientName: data.userName,
   })
 }
 
@@ -185,7 +210,10 @@ export async function sendWelcomeEmail(
   return await sendEmail({
     to: email,
     subject,
-    html
+    html,
+    emailType: 'notification',
+    emailCategory: 'welcome',
+    recipientName: data.userName,
   })
 }
 

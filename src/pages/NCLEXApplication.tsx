@@ -100,8 +100,6 @@ export function NCLEXApplication() {
   const [nursingSchoolYearsAttended, setNursingSchoolYearsAttended] = useState('')
   const [nursingSchoolStartDate, setNursingSchoolStartDate] = useState('')
   const [nursingSchoolEndDate, setNursingSchoolEndDate] = useState('')
-  const [nursingSchoolMajor, setNursingSchoolMajor] = useState('')
-  const [nursingSchoolDiplomaDate, setNursingSchoolDiplomaDate] = useState('')
 
   // Documents
   const [picture, setPicture] = useState<File | null>(null)
@@ -305,14 +303,6 @@ export function NCLEXApplication() {
           delete errors.nursingSchoolEndDate
         }
         break
-      case 'nursingSchoolDiplomaDate':
-        if (nursingSchoolDiplomaDate) {
-          errors.nursingSchoolDiplomaDate = validateDate(nursingSchoolDiplomaDate, 'Diploma Date')
-          if (!errors.nursingSchoolDiplomaDate) delete errors.nursingSchoolDiplomaDate
-        } else {
-          delete errors.nursingSchoolDiplomaDate
-        }
-        break
     }
 
     setValidationErrors(errors)
@@ -333,64 +323,30 @@ export function NCLEXApplication() {
   // Fetch GritSync email whenever component mounts or user changes
   useEffect(() => {
     const fetchGritSyncEmail = async () => {
-      if (user?.id) {
-        console.log('🔍 Fetching GritSync email for user ID:', user.id)
-        console.log('🔍 User auth email:', user.email)
-        
-        try {
-          // Try fetching from email_addresses table first
-          const { data: emailData, error: emailError } = await db
-            .from('email_addresses')
-            .select('email_address, address_type, is_primary, is_active')
-            .eq('user_id', user.id)
-            .eq('address_type', 'client')
-            .eq('is_primary', true)
-            .single()
-          
-          console.log('📊 Query result:', { data: emailData, error: emailError })
-          
-          if (emailError) {
-            console.error('❌ Error fetching GritSync email in useEffect:', emailError)
-            console.error('❌ Error details:', JSON.stringify(emailError, null, 2))
-            
-            // Try using active_email_addresses view instead
-            console.log('🔄 Trying active_email_addresses view...')
-            const { data: viewData, error: viewError } = await db
-              .from('active_email_addresses')
-              .select('email_address')
-              .eq('user_id', user.id)
-              .eq('address_type', 'client')
-              .single()
-            
-            console.log('📊 View result:', { data: viewData, error: viewError })
-            
-            if (viewData?.email_address) {
-              console.log('✅ GritSync email found in VIEW:', viewData.email_address)
-              setEmail(viewData.email_address)
-              return
-            }
-            
-            // Try without .single() to see all results
-            const { data: allEmails, error: allError } = await db
-              .from('email_addresses')
-              .select('*')
-              .eq('user_id', user.id)
-            
-            console.log('📊 All emails for user:', allEmails)
-            console.log('📊 All emails error:', allError)
-          }
-          
-          if (emailData?.email_address) {
-            console.log('✅ GritSync email found in useEffect:', emailData.email_address)
-            setEmail(emailData.email_address)
-          } else {
-            console.log('⚠️ No GritSync email found, using auth email:', user.email)
-            setEmail(user.email || '')
-          }
-        } catch (error) {
-          console.error('❌ Exception in useEffect fetching GritSync email:', error)
-          setEmail(user.email || '')
+      if (!user?.id) return
+      try {
+        const { data: emailData } = await db
+          .from('email_addresses')
+          .select('email_address')
+          .eq('user_id', user.id)
+          .eq('address_type', 'client')
+          .eq('is_primary', true)
+          .maybeSingle()
+        if (emailData?.email_address) {
+          setEmail(emailData.email_address)
+          return
         }
+        // Fall back to the active_email_addresses view (covers older rows
+        // that don't have is_primary set yet).
+        const { data: viewData } = await db
+          .from('active_email_addresses')
+          .select('email_address')
+          .eq('user_id', user.id)
+          .eq('address_type', 'client')
+          .maybeSingle()
+        setEmail(viewData?.email_address || user.email || '')
+      } catch {
+        setEmail(user.email || '')
       }
     }
 
@@ -560,34 +516,24 @@ export function NCLEXApplication() {
         nursing_school_years_attended?: string | number
         nursing_school_start_date?: string
         nursing_school_end_date?: string
-        nursing_school_major?: string
-        nursing_school_diploma_date?: string
       } | null
       
-      // Fetch GritSync email from email_addresses table
+      // Fetch GritSync email from email_addresses table — silent on miss,
+      // caller already falls back to the user's auth email below.
       if (user?.id) {
         try {
-          const { data: emailData, error: emailError } = await db
+          const { data: emailData } = await db
             .from('email_addresses')
             .select('email_address')
             .eq('user_id', user.id)
             .eq('address_type', 'client')
             .eq('is_primary', true)
-            .single()
-          
-          if (emailError) {
-            console.error('❌ Error fetching GritSync email:', emailError)
-          }
-          
+            .maybeSingle()
           if (emailData?.email_address) {
             gritsyncEmail = emailData.email_address
-            console.log('✅ GritSync email found:', gritsyncEmail)
-          } else {
-            console.log('⚠️ No GritSync email found in database')
           }
-        } catch (error) {
-          // Fallback to user email if GritSync email not found
-          console.error('❌ Exception fetching GritSync email:', error)
+        } catch {
+          // Silently fall back; caller defaults to user's auth email.
         }
       }
       
@@ -633,8 +579,6 @@ export function NCLEXApplication() {
         setNursingSchoolYearsAttended(typedDetails.nursing_school_years_attended != null ? String(typedDetails.nursing_school_years_attended) : '')
         setNursingSchoolStartDate(convertToMMYYYY(typedDetails.nursing_school_start_date))
         setNursingSchoolEndDate(convertToMMYYYY(typedDetails.nursing_school_end_date))
-        setNursingSchoolMajor(typedDetails.nursing_school_major || '')
-        setNursingSchoolDiplomaDate(convertToMMYYYY(typedDetails.nursing_school_diploma_date))
         setAutoFilled(true)
       } else {
         // No saved details yet — still populate name/email from user context
@@ -892,7 +836,97 @@ export function NCLEXApplication() {
         return
       }
 
-      // Create application data object (not FormData)
+      // -----------------------------------------------------------------
+      // 1. SAVE PROFILE FIELDS TO `user_details` (single source of truth).
+      //    This keeps /app/application/new and /app/my-details 100% in
+      //    sync — both forms now write to the same row. The admin View
+      //    Profile modal reads from this same row.
+      //
+      //    `user_details` stores DATE columns, so the MM/YYYY education
+      //    dates and the MM/YYYY diploma date are converted here the
+      //    same way MyDetails does.
+      // -----------------------------------------------------------------
+      const safeOrNull = (v: string | undefined | null): string | null => {
+        if (!v) return null
+        const t = String(v).trim()
+        return t === '' ? null : t
+      }
+      const profileData = {
+        // Names mirrored here for legacy reads; the canonical store for
+        // first/middle/last is the `users` table (updated below).
+        first_name: safeOrNull(firstName),
+        middle_name: safeOrNull(middleName),
+        last_name: safeOrNull(lastName),
+        email: safeOrNull(email),
+        mobile_number: safeOrNull(mobileNumber),
+        gender: safeOrNull(gender),
+        marital_status: safeOrNull(maritalStatus),
+        single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '')
+          ? safeOrNull(singleFullName)
+          : null,
+        date_of_birth: dbDate || null,
+        birth_place: safeOrNull(birthPlace),
+        country_of_birth: safeOrNull(country),
+        house_number: safeOrNull(houseNumber),
+        street_name: safeOrNull(streetName),
+        city: safeOrNull(city),
+        province: safeOrNull(province),
+        country: safeOrNull(country),
+        zipcode: safeOrNull(zipcode),
+        elementary_school: safeOrNull(elementarySchool),
+        elementary_city: safeOrNull(elementaryCity),
+        elementary_province: safeOrNull(elementaryProvince),
+        elementary_country: safeOrNull(elementaryCountry),
+        elementary_years_attended: safeOrNull(elementaryYearsAttended),
+        elementary_start_date: convertMMYYYYToDatabase(elementaryStartDate) || null,
+        elementary_end_date: convertMMYYYYToDatabase(elementaryEndDate) || null,
+        high_school: safeOrNull(highSchool),
+        high_school_city: safeOrNull(highSchoolCity),
+        high_school_province: safeOrNull(highSchoolProvince),
+        high_school_country: safeOrNull(highSchoolCountry),
+        high_school_years_attended: safeOrNull(highSchoolYearsAttended),
+        high_school_start_date: convertMMYYYYToDatabase(highSchoolStartDate) || null,
+        high_school_end_date: convertMMYYYYToDatabase(highSchoolEndDate) || null,
+        nursing_school: safeOrNull(nursingSchool),
+        nursing_school_city: safeOrNull(nursingSchoolCity),
+        nursing_school_province: safeOrNull(nursingSchoolProvince),
+        nursing_school_country: safeOrNull(nursingSchoolCountry),
+        nursing_school_years_attended: safeOrNull(nursingSchoolYearsAttended),
+        nursing_school_start_date: convertMMYYYYToDatabase(nursingSchoolStartDate) || null,
+        nursing_school_end_date: convertMMYYYYToDatabase(nursingSchoolEndDate) || null,
+        signature: safeOrNull(signature),
+      }
+
+      try {
+        await userDetailsAPI.save(profileData)
+      } catch (profileErr: any) {
+        // Don't block submission on profile-save failure — the application
+        // table still gets the snapshot below — but log so we can debug drift.
+        console.error('Failed to sync profile to user_details:', profileErr?.message || profileErr)
+      }
+
+      // Keep the canonical name on the `users` table in sync too.
+      if (user?.id && firstName && lastName) {
+        try {
+          await db
+            .from('users')
+            .update({
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              middle_name: middleName ? middleName.trim() : null,
+            })
+            .eq('id', user.id)
+        } catch (nameErr: any) {
+          console.error('Failed to sync names to users table:', nameErr?.message || nameErr)
+        }
+      }
+
+      // -----------------------------------------------------------------
+      // 2. CREATE THE APPLICATION ROW. We still send the same payload so
+      //    historical/audit columns on `applications` remain populated,
+      //    but going forward the read path (My Details, admin modal)
+      //    prefers `user_details`.
+      // -----------------------------------------------------------------
       const applicationData = {
         first_name: firstName,
         middle_name: middleName || null,
@@ -932,10 +966,6 @@ export function NCLEXApplication() {
         nursing_school_years_attended: nursingSchoolYearsAttended,
         nursing_school_start_date: nursingSchoolStartDate,
         nursing_school_end_date: nursingSchoolEndDate,
-        nursing_school_major: nursingSchoolMajor || null,
-        nursing_school_diploma_date: nursingSchoolDiplomaDate
-          ? (convertMMYYYYToDatabase(nursingSchoolDiplomaDate) + '-01') || null
-          : null,
         signature: signature || null,
         payment_type: paymentType || null,
         picture_path: picturePath,
@@ -1056,12 +1086,16 @@ export function NCLEXApplication() {
         }
       }
 
-      // Prepare new data with current form values (only user_details columns)
+      // Prepare new data with current form values (only user_details columns).
+      // first_name/last_name live on the users table (saved above via /api/auth/update);
+      // middle_name exists in BOTH tables — we save the canonical copy here so it
+      // survives the user_details-first read path on subsequent loads.
       const newData: any = {
+        middle_name: safeTrim(middleName),
         mobile_number: safeTrim(mobileNumber),
         gender: gender || null,
         marital_status: maritalStatus || null,
-        single_full_name: maritalStatus === 'single' ? safeTrim(singleFullName) : null,
+        single_full_name: (gender === 'female' && maritalStatus !== 'single' && maritalStatus !== '') ? safeTrim(singleFullName) : null,
         date_of_birth: convertToDatabaseFormat(dateOfBirth) || null,
         birth_place: safeTrim(birthPlace),
         house_number: safeTrim(houseNumber),
@@ -1091,10 +1125,6 @@ export function NCLEXApplication() {
         nursing_school_years_attended: safeTrim(nursingSchoolYearsAttended),
         nursing_school_start_date: convertMMYYYYToDatabase(nursingSchoolStartDate) || null,
         nursing_school_end_date: convertMMYYYYToDatabase(nursingSchoolEndDate) || null,
-        nursing_school_major: safeTrim(nursingSchoolMajor),
-        nursing_school_diploma_date: nursingSchoolDiplomaDate
-          ? (convertMMYYYYToDatabase(nursingSchoolDiplomaDate) + '-01') || null
-          : null,
       }
       
       // Merge with existing details - preserve existing values when new value is null/empty
@@ -1888,39 +1918,6 @@ export function NCLEXApplication() {
                     )}
                   />
                 </div>
-                <div>
-                  <Input
-                    label="Major / Concentration"
-                    value={nursingSchoolMajor}
-                    onChange={(e) => setNursingSchoolMajor(e.target.value)}
-                    placeholder="BS in Nursing"
-                    className={cn(
-                      nursingSchoolMajor && 'border-green-500 focus:ring-green-500'
-                    )}
-                  />
-                </div>
-                <div>
-                  <Input
-                    label="Date of Diploma Awarded (MM/YYYY)"
-                    type="text"
-                    value={nursingSchoolDiplomaDate}
-                    onChange={(e) => {
-                      const formatted = formatMMYYYY(e.target.value)
-                      setNursingSchoolDiplomaDate(formatted)
-                      if (touchedFields.nursingSchoolDiplomaDate) {
-                        handleFieldBlur('nursingSchoolDiplomaDate')
-                      }
-                    }}
-                    onBlur={() => handleFieldBlur('nursingSchoolDiplomaDate')}
-                    placeholder="MM/YYYY"
-                    maxLength={7}
-                    error={touchedFields.nursingSchoolDiplomaDate ? validationErrors.nursingSchoolDiplomaDate : undefined}
-                    className={cn(
-                      getFieldStatus('nursingSchoolDiplomaDate', nursingSchoolDiplomaDate) === 'success' && 'border-green-500 focus:ring-green-500',
-                      getFieldStatus('nursingSchoolDiplomaDate', nursingSchoolDiplomaDate) === 'error' && 'border-red-500 focus:ring-red-500'
-                    )}
-                  />
-                </div>
               </div>
             </Card>
             )}
@@ -2273,8 +2270,6 @@ export function NCLEXApplication() {
                       <div><span className="font-medium">Years Attended:</span> {nursingSchoolYearsAttended || 'N/A'}</div>
                       <div><span className="font-medium">Start Date:</span> {nursingSchoolStartDate || 'N/A'}</div>
                       <div><span className="font-medium">End Date:</span> {nursingSchoolEndDate || 'N/A'}</div>
-                      <div><span className="font-medium">Major / Concentration:</span> {nursingSchoolMajor || 'N/A'}</div>
-                      <div><span className="font-medium">Diploma Date:</span> {nursingSchoolDiplomaDate || 'N/A'}</div>
                     </div>
                   </div>
 

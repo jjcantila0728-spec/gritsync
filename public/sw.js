@@ -9,9 +9,11 @@ self.addEventListener('install', () => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    self.registration.unregister().then(() => {
-      return self.clients.claim()
-    })
-  )
+  event.waitUntil((async () => {
+    // Claim open clients FIRST — once unregister() runs, this worker is no
+    // longer the active worker and claim() throws InvalidStateError.
+    try { await self.clients.claim() } catch {}
+    // Then remove ourselves so future page loads run without a service worker.
+    await self.registration.unregister()
+  })())
 })

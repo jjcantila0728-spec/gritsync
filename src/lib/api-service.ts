@@ -103,6 +103,432 @@ function resolveServiceState(app: { service_state?: string; application_type?: s
   return 'New York'
 }
 
+// Compute progress fields (current_progress / next_step / progress_percentage /
+// completed_steps / total_steps) for one application based on its timeline
+// steps and payments. Extracted so the tracking lookup can show the same
+// progress the dashboard does.
+async function enhanceApplicationWithTimeline(app: any, allSteps: any[], payments: any[]): Promise<any> {
+try {
+  // Define step order and names (based on timeline structure)
+  const stepOrder = [
+    { key: 'app_submission', name: 'Application Submission' },
+    { key: 'credentialing', name: 'Credentialing' },
+    { key: 'bon_application', name: 'BON Application' },
+    { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
+    { key: 'pearson_vue', name: 'Pearson VUE Application' },
+    { key: 'att', name: 'ATT' },
+    { key: 'nclex_exam', name: 'NCLEX Exam' }
+  ]
+  
+  // Define next step instructions
+  const nextStepInstructions: { [key: string]: string } = {
+    'credentialing': 'Generate your letter for school',
+    'bon_application': 'Complete mandatory courses and submit Form 1',
+    'nclex_eligibility': 'Wait for NCLEX eligibility approval',
+    'pearson_vue': 'Create Pearson VUE account and request ATT',
+    'att': 'Wait for ATT to be received',
+    'nclex_exam': 'Schedule and take your NCLEX exam'
+  }
+  
+  // Create a map of step statuses
+  const stepStatusMap: { [key: string]: any } = {}
+  allSteps.forEach((step: any) => {
+    stepStatusMap[step.step_key] = step
+  })
+  
+  // Helper function to check if a step is actually completed based on sub-steps
+  const isStepCompleted = (stepKey: string): boolean => {
+    const stepData = stepStatusMap[stepKey]
+    
+    // Check sub-steps first (regardless of parent step status)
+    switch (stepKey) {
+      case 'app_submission': {
+        const appCreated = stepStatusMap['app_created']
+        const docsSubmitted = stepStatusMap['documents_submitted']
+        const appPaid = stepStatusMap['app_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step1'))
+        const allSubStepsDone = (appCreated && appCreated.status === 'completed') &&
+                               (docsSubmitted && docsSubmitted.status === 'completed') &&
+                               (appPaid && (appPaid.status === 'completed' || (typeof appPaid === 'object' && appPaid.status === 'paid')))
+        // Return true if all sub-steps are done OR if parent is explicitly marked completed
+        return allSubStepsDone || (stepData && stepData.status === 'completed')
+      }
+      case 'credentialing': {
+        const letterGenerated = stepStatusMap['letter_generated']
+        const letterSubmitted = stepStatusMap['letter_submitted']
+        const officialDocs = stepStatusMap['official_docs_submitted']
+        const allSubStepsDone = (letterGenerated && letterGenerated.status === 'completed') &&
+                               (letterSubmitted && letterSubmitted.status === 'completed') &&
+                               (officialDocs && officialDocs.status === 'completed')
+        return allSubStepsDone || (stepData && stepData.status === 'completed')
+      }
+      case 'bon_application': {
+        const mandatoryCourses = stepStatusMap['mandatory_courses']
+        const form1Submitted = stepStatusMap['form1_submitted']
+        const appStep2Paid = stepStatusMap['app_step2_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
+        const allSubStepsDone = (mandatoryCourses && mandatoryCourses.status === 'completed') &&
+                               (form1Submitted && form1Submitted.status === 'completed') &&
+                               (appStep2Paid && (appStep2Paid.status === 'completed' || (typeof appStep2Paid === 'object' && appStep2Paid.status === 'paid')))
+        return allSubStepsDone || (stepData && stepData.status === 'completed')
+      }
+      case 'nclex_eligibility': {
+        const eligibilityApproved = stepStatusMap['nclex_eligibility_approved']
+        const subStepDone = (eligibilityApproved && eligibilityApproved.status === 'completed')
+        return subStepDone || (stepData && stepData.status === 'completed')
+      }
+      case 'pearson_vue': {
+        const accountCreated = stepStatusMap['pearson_account_created']
+        const attRequested = stepStatusMap['att_requested']
+        const allSubStepsDone = (accountCreated && accountCreated.status === 'completed') &&
+                               (attRequested && attRequested.status === 'completed')
+        return allSubStepsDone || (stepData && stepData.status === 'completed')
+      }
+      case 'att': {
+        const attReceived = stepStatusMap['att_received']
+        if (!attReceived || !attReceived.data) {
+          return (stepData && stepData.status === 'completed')
+        }
+        const data = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
+        const hasCodeAndExpiry = !!(data.code || data.att_code) && !!(data.expiry_date || data.att_expiry_date)
+        return hasCodeAndExpiry || (stepData && stepData.status === 'completed')
+      }
+      case 'nclex_exam': {
+        const examBooked = stepStatusMap['exam_date_booked']
+        if (!examBooked || !examBooked.data) {
+          return (stepData && stepData.status === 'completed')
+        }
+        const data = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
+        const hasAllDetails = !!(data.date || examBooked.date) && !!(data.exam_time || data.time) && !!(data.exam_location || data.location)
+        return hasAllDetails || (stepData && stepData.status === 'completed')
+      }
+      case 'quick_results': {
+        const quickResultsData = stepStatusMap['quick_results']
+        if (!quickResultsData || !quickResultsData.data) {
+          return (stepData && stepData.status === 'completed')
+        }
+        const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
+        const hasResult = !!(data.result)
+        return hasResult || (stepData && stepData.status === 'completed')
+      }
+      default:
+        return stepData && stepData.status === 'completed'
+    }
+  }
+  
+  // Find the current progress (last completed step in order)
+  let currentProgress: string | null = null
+  let currentProgressStep: { key: string; name: string } | null = null
+  
+  // Find the last completed step in step order (using new completion logic)
+  // Start from the end and work backwards to find the most recent completed step
+  for (let i = stepOrder.length - 1; i >= 0; i--) {
+    const step = stepOrder[i]
+    if (isStepCompleted(step.key)) {
+      currentProgress = step.name
+      currentProgressStep = step
+      break
+    }
+  }
+  
+  // If no step is completed yet but application exists, default to Application Submission
+  if (!currentProgress && app.created_at) {
+    currentProgress = 'Application Submission'
+    currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
+  }
+  
+  // Find the next step (first pending step after the last completed step)
+  let nextStep: string | null = null
+  let nextStepInstruction: string | null = null
+  
+  // Find the index of current progress in stepOrder
+  let currentProgressIndex = -1
+  if (currentProgressStep) {
+    for (let i = 0; i < stepOrder.length; i++) {
+      if (stepOrder[i].key === currentProgressStep.key) {
+        currentProgressIndex = i
+        break
+      }
+    }
+  }
+  
+  // Next step is the first pending step after current progress
+  if (currentProgressIndex >= 0 && currentProgressIndex < stepOrder.length - 1) {
+    // Look for the next step that is pending or not yet started
+    for (let i = currentProgressIndex + 1; i < stepOrder.length; i++) {
+      const nextStepInfo = stepOrder[i]
+      const nextStepData = stepStatusMap[nextStepInfo.key]
+      
+      // If step doesn't exist or is not completed (using new completion logic), this is the next step
+      if (!nextStepData || !isStepCompleted(nextStepInfo.key)) {
+        nextStep = nextStepInfo.name
+        nextStepInstruction = nextStepInstructions[nextStepInfo.key] || null
+        break
+      }
+    }
+  } else if (currentProgressIndex === -1) {
+    // No progress yet, next step is the first step
+    if (stepOrder.length > 0) {
+      const firstStep = stepOrder[0]
+      if (!isStepCompleted(firstStep.key)) {
+        nextStep = firstStep.name
+        nextStepInstruction = nextStepInstructions[firstStep.key] || null
+      }
+    }
+  }
+  
+  // Check if timeline is completed (all steps in stepOrder are done)
+  const isTimelineCompleted = stepOrder.every(step => isStepCompleted(step.key))
+  
+  // Build current progress message
+  let currentProgressMessage = currentProgress || 'Not started'
+  let nextStepMessage: string | null = null
+  
+  // Check for exam result if timeline is completed or at last step
+  const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results') as any
+  const hasExamResult = quickResultsStep && 'data' in quickResultsStep && quickResultsStep.data
+  
+  if (hasExamResult) {
+    const resultData = typeof quickResultsStep.data === 'string' ? JSON.parse(quickResultsStep.data) : quickResultsStep.data
+    if (resultData.result) {
+      if (resultData.result === 'pass' || resultData.result === 'Passed') {
+        currentProgressMessage = 'Congratulations!, You Passed the NCLEX-RN Exam!'
+        nextStepMessage = 'Wait for 1-2 weeks for your license to reflect in "Nursys"'
+      } else if (resultData.result === 'failed' || resultData.result === 'Failed') {
+        currentProgressMessage = 'You have failed the exam, Don\'t worry, you can take it again anytime.'
+        nextStepMessage = 'Retake again!'
+      } else {
+        const resultText = resultData.result
+        currentProgressMessage = `Exam Result: ${resultText}`
+      }
+    }
+  } else if (isTimelineCompleted || app.status === 'completed') {
+    // Timeline completed but no exam result yet
+    // Keep current progress as is, but don't show next step
+    nextStepMessage = null
+  } else {
+    // Build next step message for non-completed applications
+    if (nextStep) {
+      nextStepMessage = nextStep
+      if (nextStepInstruction) {
+        nextStepMessage += `, ${nextStepInstruction}`
+      }
+    }
+  }
+  
+  // Calculate progress percentage based on main steps and sub-steps
+  const allStepsWithSubSteps = [
+    {
+      mainKey: 'app_submission',
+      mainName: 'Application Submission',
+      subSteps: [
+        { key: 'app_created', checkFn: () => !!app.created_at },
+        { key: 'documents_submitted', checkFn: () => {
+          return !!(app.picture_path && app.diploma_path && app.passport_path)
+        }},
+        { key: 'app_paid', checkFn: () => {
+          return payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step1')
+        }}
+      ]
+    },
+    {
+      mainKey: 'credentialing',
+      mainName: 'Credentialing',
+      subSteps: [
+        { key: 'letter_generated', checkFn: () => {
+          const step = stepStatusMap['letter_generated']
+          return step && step.status === 'completed'
+        }},
+        { key: 'letter_submitted', checkFn: () => {
+          const step = stepStatusMap['letter_submitted']
+          return step && step.status === 'completed'
+        }},
+        { key: 'official_docs_submitted', checkFn: () => {
+          const step = stepStatusMap['official_docs_submitted']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'bon_application',
+      mainName: 'BON Application',
+      subSteps: [
+        { key: 'mandatory_courses', checkFn: () => {
+          const step = stepStatusMap['mandatory_courses']
+          return step && step.status === 'completed'
+        }},
+        { key: 'form1_submitted', checkFn: () => {
+          const step = stepStatusMap['form1_submitted']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'nclex_eligibility',
+      mainName: 'NCLEX Eligibility',
+      subSteps: [
+        { key: 'nclex_eligibility_approved', checkFn: () => {
+          const step = stepStatusMap['nclex_eligibility_approved']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'pearson_vue',
+      mainName: 'Pearson VUE Application',
+      subSteps: [
+        { key: 'pearson_account_created', checkFn: () => {
+          const step = stepStatusMap['pearson_account_created']
+          return step && step.status === 'completed'
+        }},
+        { key: 'att_requested', checkFn: () => {
+          const step = stepStatusMap['att_requested']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'att',
+      mainName: 'ATT',
+      subSteps: [
+        { key: 'att_received', checkFn: () => {
+          const step = stepStatusMap['att_received']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'nclex_exam',
+      mainName: 'NCLEX Exam',
+      subSteps: [
+        { key: 'exam_date_booked', checkFn: () => {
+          const step = stepStatusMap['exam_date_booked']
+          return step && step.status === 'completed'
+        }}
+      ]
+    },
+    {
+      mainKey: 'quick_results',
+      mainName: 'Quick Results',
+      subSteps: []
+    }
+  ]
+  
+  // Count completed items (main steps + sub-steps)
+  let totalItems = 0
+  let completedItems = 0
+  
+  for (const mainStep of allStepsWithSubSteps) {
+    // Check main step
+    totalItems++
+    if (isStepCompleted(mainStep.mainKey)) {
+      completedItems++
+    }
+    
+    // Check sub-steps
+    for (const subStep of mainStep.subSteps) {
+      totalItems++
+      if (subStep.checkFn()) {
+        completedItems++
+      }
+    }
+  }
+  
+  // Calculate progress percentage based on main steps and sub-steps
+  let progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
+  
+  // Override to 100% if timeline is completed (all main steps in stepOrder are done)
+  // This ensures that when all required steps are completed, progress shows 100%
+  // even if quick_results step is not yet completed
+  if (isTimelineCompleted) {
+    progressPercentage = 100
+  } else if (app.status === 'completed') {
+    // If status is completed, also set to 100%
+    progressPercentage = 100
+  } else if (hasExamResult) {
+    // If there's an exam result, timeline is effectively complete
+    progressPercentage = 100
+  }
+  
+  // Ensure progress doesn't exceed 100%
+  progressPercentage = Math.min(100, Math.max(0, progressPercentage))
+  
+  // Get GritSync account email from processing accounts
+  let displayEmail = app.email
+  try {
+    const { data: gritsyncAccounts, error: gritsyncError } = await db
+      .from('processing_accounts')
+      .select('email')
+      .eq('application_id', app.id)
+      .eq('account_type', 'gritsync')
+      .limit(1)
+    
+    if (!gritsyncError && gritsyncAccounts && gritsyncAccounts.length > 0) {
+      const gritsyncAccount = gritsyncAccounts[0] as { email?: string } | null
+      if (gritsyncAccount?.email) {
+        displayEmail = gritsyncAccount.email
+      }
+    } else {
+      // If no GritSync account exists, use application email
+      displayEmail = app.email || ''
+    }
+  } catch (error) {
+    // If error, fall back to application email
+    displayEmail = app.email || ''
+  }
+  
+  const serviceType = resolveServiceType(app)
+  const serviceState = resolveServiceState(app)
+  return {
+    ...app,
+    email: displayEmail, // Use generated Gmail instead of user email
+    current_progress: currentProgressMessage,
+    next_step: nextStepMessage,
+    progress_percentage: progressPercentage,
+    completed_steps: completedItems,
+    total_steps: totalItems,
+    service_type: serviceType,
+    service_state: serviceState,
+  }
+} catch (error) {
+  // Try to get or generate Gmail email even in error case
+  let displayEmail = app.email
+  try {
+    const { data: gmailAccounts } = await db
+      .from('processing_accounts')
+      .select('email')
+      .eq('application_id', app.id)
+      .eq('account_type', 'gritsync')
+      .limit(1)
+    
+    if (gmailAccounts && gmailAccounts.length > 0) {
+      const gmailAccount = gmailAccounts[0] as { email?: string } | null
+      if (gmailAccount?.email) {
+        displayEmail = gmailAccount.email
+      }
+    } else {
+      // If no GritSync account exists, use application email
+      displayEmail = app.email || ''
+    }
+  } catch (emailError) {
+    // If error, fall back to application email
+    displayEmail = app.email || ''
+  }
+  
+  const serviceType = resolveServiceType(app)
+  const serviceState = resolveServiceState(app)
+  return {
+    ...app,
+    email: displayEmail,
+    current_progress: 'Not started',
+    next_step: null,
+    progress_percentage: 0,
+    completed_steps: 0,
+    total_steps: 0,
+    service_type: serviceType,
+    service_state: serviceState,
+  }
+}
+}
+
 // Applications API
 export const applicationsAPI = {
   getAll: async () => {
@@ -173,430 +599,9 @@ export const applicationsAPI = {
 
     // Enhance each application with timeline-based current_progress and next_step
     const applicationsWithTimeline = await Promise.all(
-      applications.map(async (app: any) => {
-        try {
-          const allSteps = stepsByApp.get(app.id) || []
-          const payments = paymentsByApp.get(app.id) || []
-          
-          // Define step order and names (based on timeline structure)
-          const stepOrder = [
-            { key: 'app_submission', name: 'Application Submission' },
-            { key: 'credentialing', name: 'Credentialing' },
-            { key: 'bon_application', name: 'BON Application' },
-            { key: 'nclex_eligibility', name: 'NCLEX Eligibility' },
-            { key: 'pearson_vue', name: 'Pearson VUE Application' },
-            { key: 'att', name: 'ATT' },
-            { key: 'nclex_exam', name: 'NCLEX Exam' }
-          ]
-          
-          // Define next step instructions
-          const nextStepInstructions: { [key: string]: string } = {
-            'credentialing': 'Generate your letter for school',
-            'bon_application': 'Complete mandatory courses and submit Form 1',
-            'nclex_eligibility': 'Wait for NCLEX eligibility approval',
-            'pearson_vue': 'Create Pearson VUE account and request ATT',
-            'att': 'Wait for ATT to be received',
-            'nclex_exam': 'Schedule and take your NCLEX exam'
-          }
-          
-          // Create a map of step statuses
-          const stepStatusMap: { [key: string]: any } = {}
-          allSteps.forEach((step: any) => {
-            stepStatusMap[step.step_key] = step
-          })
-          
-          // Helper function to check if a step is actually completed based on sub-steps
-          const isStepCompleted = (stepKey: string): boolean => {
-            const stepData = stepStatusMap[stepKey]
-            
-            // Check sub-steps first (regardless of parent step status)
-            switch (stepKey) {
-              case 'app_submission': {
-                const appCreated = stepStatusMap['app_created']
-                const docsSubmitted = stepStatusMap['documents_submitted']
-                const appPaid = stepStatusMap['app_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step1'))
-                const allSubStepsDone = (appCreated && appCreated.status === 'completed') &&
-                                       (docsSubmitted && docsSubmitted.status === 'completed') &&
-                                       (appPaid && (appPaid.status === 'completed' || (typeof appPaid === 'object' && appPaid.status === 'paid')))
-                // Return true if all sub-steps are done OR if parent is explicitly marked completed
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
-              }
-              case 'credentialing': {
-                const letterGenerated = stepStatusMap['letter_generated']
-                const letterSubmitted = stepStatusMap['letter_submitted']
-                const officialDocs = stepStatusMap['official_docs_submitted']
-                const allSubStepsDone = (letterGenerated && letterGenerated.status === 'completed') &&
-                                       (letterSubmitted && letterSubmitted.status === 'completed') &&
-                                       (officialDocs && officialDocs.status === 'completed')
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
-              }
-              case 'bon_application': {
-                const mandatoryCourses = stepStatusMap['mandatory_courses']
-                const form1Submitted = stepStatusMap['form1_submitted']
-                const appStep2Paid = stepStatusMap['app_step2_paid'] || (payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step2'))
-                const allSubStepsDone = (mandatoryCourses && mandatoryCourses.status === 'completed') &&
-                                       (form1Submitted && form1Submitted.status === 'completed') &&
-                                       (appStep2Paid && (appStep2Paid.status === 'completed' || (typeof appStep2Paid === 'object' && appStep2Paid.status === 'paid')))
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
-              }
-              case 'nclex_eligibility': {
-                const eligibilityApproved = stepStatusMap['nclex_eligibility_approved']
-                const subStepDone = (eligibilityApproved && eligibilityApproved.status === 'completed')
-                return subStepDone || (stepData && stepData.status === 'completed')
-              }
-              case 'pearson_vue': {
-                const accountCreated = stepStatusMap['pearson_account_created']
-                const attRequested = stepStatusMap['att_requested']
-                const allSubStepsDone = (accountCreated && accountCreated.status === 'completed') &&
-                                       (attRequested && attRequested.status === 'completed')
-                return allSubStepsDone || (stepData && stepData.status === 'completed')
-              }
-              case 'att': {
-                const attReceived = stepStatusMap['att_received']
-                if (!attReceived || !attReceived.data) {
-                  return (stepData && stepData.status === 'completed')
-                }
-                const data = typeof attReceived.data === 'string' ? JSON.parse(attReceived.data) : attReceived.data
-                const hasCodeAndExpiry = !!(data.code || data.att_code) && !!(data.expiry_date || data.att_expiry_date)
-                return hasCodeAndExpiry || (stepData && stepData.status === 'completed')
-              }
-              case 'nclex_exam': {
-                const examBooked = stepStatusMap['exam_date_booked']
-                if (!examBooked || !examBooked.data) {
-                  return (stepData && stepData.status === 'completed')
-                }
-                const data = typeof examBooked.data === 'string' ? JSON.parse(examBooked.data) : examBooked.data
-                const hasAllDetails = !!(data.date || examBooked.date) && !!(data.exam_time || data.time) && !!(data.exam_location || data.location)
-                return hasAllDetails || (stepData && stepData.status === 'completed')
-              }
-              case 'quick_results': {
-                const quickResultsData = stepStatusMap['quick_results']
-                if (!quickResultsData || !quickResultsData.data) {
-                  return (stepData && stepData.status === 'completed')
-                }
-                const data = typeof quickResultsData.data === 'string' ? JSON.parse(quickResultsData.data) : quickResultsData.data
-                const hasResult = !!(data.result)
-                return hasResult || (stepData && stepData.status === 'completed')
-              }
-              default:
-                return stepData && stepData.status === 'completed'
-            }
-          }
-          
-          // Find the current progress (last completed step in order)
-          let currentProgress: string | null = null
-          let currentProgressStep: { key: string; name: string } | null = null
-          
-          // Find the last completed step in step order (using new completion logic)
-          // Start from the end and work backwards to find the most recent completed step
-          for (let i = stepOrder.length - 1; i >= 0; i--) {
-            const step = stepOrder[i]
-            if (isStepCompleted(step.key)) {
-              currentProgress = step.name
-              currentProgressStep = step
-              break
-            }
-          }
-          
-          // If no step is completed yet but application exists, default to Application Submission
-          if (!currentProgress && app.created_at) {
-            currentProgress = 'Application Submission'
-            currentProgressStep = { key: 'app_submission', name: 'Application Submission' }
-          }
-          
-          // Find the next step (first pending step after the last completed step)
-          let nextStep: string | null = null
-          let nextStepInstruction: string | null = null
-          
-          // Find the index of current progress in stepOrder
-          let currentProgressIndex = -1
-          if (currentProgressStep) {
-            for (let i = 0; i < stepOrder.length; i++) {
-              if (stepOrder[i].key === currentProgressStep.key) {
-                currentProgressIndex = i
-                break
-              }
-            }
-          }
-          
-          // Next step is the first pending step after current progress
-          if (currentProgressIndex >= 0 && currentProgressIndex < stepOrder.length - 1) {
-            // Look for the next step that is pending or not yet started
-            for (let i = currentProgressIndex + 1; i < stepOrder.length; i++) {
-              const nextStepInfo = stepOrder[i]
-              const nextStepData = stepStatusMap[nextStepInfo.key]
-              
-              // If step doesn't exist or is not completed (using new completion logic), this is the next step
-              if (!nextStepData || !isStepCompleted(nextStepInfo.key)) {
-                nextStep = nextStepInfo.name
-                nextStepInstruction = nextStepInstructions[nextStepInfo.key] || null
-                break
-              }
-            }
-          } else if (currentProgressIndex === -1) {
-            // No progress yet, next step is the first step
-            if (stepOrder.length > 0) {
-              const firstStep = stepOrder[0]
-              if (!isStepCompleted(firstStep.key)) {
-                nextStep = firstStep.name
-                nextStepInstruction = nextStepInstructions[firstStep.key] || null
-              }
-            }
-          }
-          
-          // Check if timeline is completed (all steps in stepOrder are done)
-          const isTimelineCompleted = stepOrder.every(step => isStepCompleted(step.key))
-          
-          // Build current progress message
-          let currentProgressMessage = currentProgress || 'Not started'
-          let nextStepMessage: string | null = null
-          
-          // Check for exam result if timeline is completed or at last step
-          const quickResultsStep = allSteps.find((step: any) => step.step_key === 'quick_results') as any
-          const hasExamResult = quickResultsStep && 'data' in quickResultsStep && quickResultsStep.data
-          
-          if (hasExamResult) {
-            const resultData = typeof quickResultsStep.data === 'string' ? JSON.parse(quickResultsStep.data) : quickResultsStep.data
-            if (resultData.result) {
-              if (resultData.result === 'pass' || resultData.result === 'Passed') {
-                currentProgressMessage = 'Congratulations!, You Passed the NCLEX-RN Exam!'
-                nextStepMessage = 'Wait for 1-2 weeks for your license to reflect in "Nursys"'
-              } else if (resultData.result === 'failed' || resultData.result === 'Failed') {
-                currentProgressMessage = 'You have failed the exam, Don\'t worry, you can take it again anytime.'
-                nextStepMessage = 'Retake again!'
-              } else {
-                const resultText = resultData.result
-                currentProgressMessage = `Exam Result: ${resultText}`
-              }
-            }
-          } else if (isTimelineCompleted || app.status === 'completed') {
-            // Timeline completed but no exam result yet
-            // Keep current progress as is, but don't show next step
-            nextStepMessage = null
-          } else {
-            // Build next step message for non-completed applications
-            if (nextStep) {
-              nextStepMessage = nextStep
-              if (nextStepInstruction) {
-                nextStepMessage += `, ${nextStepInstruction}`
-              }
-            }
-          }
-          
-          // Calculate progress percentage based on main steps and sub-steps
-          const allStepsWithSubSteps = [
-            {
-              mainKey: 'app_submission',
-              mainName: 'Application Submission',
-              subSteps: [
-                { key: 'app_created', checkFn: () => !!app.created_at },
-                { key: 'documents_submitted', checkFn: () => {
-                  return !!(app.picture_path && app.diploma_path && app.passport_path)
-                }},
-                { key: 'app_paid', checkFn: () => {
-                  return payments && payments.some((p: any) => p.status === 'paid' && p.payment_type === 'step1')
-                }}
-              ]
-            },
-            {
-              mainKey: 'credentialing',
-              mainName: 'Credentialing',
-              subSteps: [
-                { key: 'letter_generated', checkFn: () => {
-                  const step = stepStatusMap['letter_generated']
-                  return step && step.status === 'completed'
-                }},
-                { key: 'letter_submitted', checkFn: () => {
-                  const step = stepStatusMap['letter_submitted']
-                  return step && step.status === 'completed'
-                }},
-                { key: 'official_docs_submitted', checkFn: () => {
-                  const step = stepStatusMap['official_docs_submitted']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'bon_application',
-              mainName: 'BON Application',
-              subSteps: [
-                { key: 'mandatory_courses', checkFn: () => {
-                  const step = stepStatusMap['mandatory_courses']
-                  return step && step.status === 'completed'
-                }},
-                { key: 'form1_submitted', checkFn: () => {
-                  const step = stepStatusMap['form1_submitted']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'nclex_eligibility',
-              mainName: 'NCLEX Eligibility',
-              subSteps: [
-                { key: 'nclex_eligibility_approved', checkFn: () => {
-                  const step = stepStatusMap['nclex_eligibility_approved']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'pearson_vue',
-              mainName: 'Pearson VUE Application',
-              subSteps: [
-                { key: 'pearson_account_created', checkFn: () => {
-                  const step = stepStatusMap['pearson_account_created']
-                  return step && step.status === 'completed'
-                }},
-                { key: 'att_requested', checkFn: () => {
-                  const step = stepStatusMap['att_requested']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'att',
-              mainName: 'ATT',
-              subSteps: [
-                { key: 'att_received', checkFn: () => {
-                  const step = stepStatusMap['att_received']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'nclex_exam',
-              mainName: 'NCLEX Exam',
-              subSteps: [
-                { key: 'exam_date_booked', checkFn: () => {
-                  const step = stepStatusMap['exam_date_booked']
-                  return step && step.status === 'completed'
-                }}
-              ]
-            },
-            {
-              mainKey: 'quick_results',
-              mainName: 'Quick Results',
-              subSteps: []
-            }
-          ]
-          
-          // Count completed items (main steps + sub-steps)
-          let totalItems = 0
-          let completedItems = 0
-          
-          for (const mainStep of allStepsWithSubSteps) {
-            // Check main step
-            totalItems++
-            if (isStepCompleted(mainStep.mainKey)) {
-              completedItems++
-            }
-            
-            // Check sub-steps
-            for (const subStep of mainStep.subSteps) {
-              totalItems++
-              if (subStep.checkFn()) {
-                completedItems++
-              }
-            }
-          }
-          
-          // Calculate progress percentage based on main steps and sub-steps
-          let progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-          
-          // Override to 100% if timeline is completed (all main steps in stepOrder are done)
-          // This ensures that when all required steps are completed, progress shows 100%
-          // even if quick_results step is not yet completed
-          if (isTimelineCompleted) {
-            progressPercentage = 100
-          } else if (app.status === 'completed') {
-            // If status is completed, also set to 100%
-            progressPercentage = 100
-          } else if (hasExamResult) {
-            // If there's an exam result, timeline is effectively complete
-            progressPercentage = 100
-          }
-          
-          // Ensure progress doesn't exceed 100%
-          progressPercentage = Math.min(100, Math.max(0, progressPercentage))
-          
-          // Get GritSync account email from processing accounts
-          let displayEmail = app.email
-          try {
-            const { data: gritsyncAccounts, error: gritsyncError } = await db
-              .from('processing_accounts')
-              .select('email')
-              .eq('application_id', app.id)
-              .eq('account_type', 'gritsync')
-              .limit(1)
-            
-            if (!gritsyncError && gritsyncAccounts && gritsyncAccounts.length > 0) {
-              const gritsyncAccount = gritsyncAccounts[0] as { email?: string } | null
-              if (gritsyncAccount?.email) {
-                displayEmail = gritsyncAccount.email
-              }
-            } else {
-              // If no GritSync account exists, use application email
-              displayEmail = app.email || ''
-            }
-          } catch (error) {
-            // If error, fall back to application email
-            displayEmail = app.email || ''
-          }
-          
-          const serviceType = resolveServiceType(app)
-          const serviceState = resolveServiceState(app)
-          return {
-            ...app,
-            email: displayEmail, // Use generated Gmail instead of user email
-            current_progress: currentProgressMessage,
-            next_step: nextStepMessage,
-            progress_percentage: progressPercentage,
-            completed_steps: completedItems,
-            total_steps: totalItems,
-            service_type: serviceType,
-            service_state: serviceState,
-          }
-        } catch (error) {
-          // Try to get or generate Gmail email even in error case
-          let displayEmail = app.email
-          try {
-            const { data: gmailAccounts } = await db
-              .from('processing_accounts')
-              .select('email')
-              .eq('application_id', app.id)
-              .eq('account_type', 'gritsync')
-              .limit(1)
-            
-            if (gmailAccounts && gmailAccounts.length > 0) {
-              const gmailAccount = gmailAccounts[0] as { email?: string } | null
-              if (gmailAccount?.email) {
-                displayEmail = gmailAccount.email
-              }
-            } else {
-              // If no GritSync account exists, use application email
-              displayEmail = app.email || ''
-            }
-          } catch (emailError) {
-            // If error, fall back to application email
-            displayEmail = app.email || ''
-          }
-          
-          const serviceType = resolveServiceType(app)
-          const serviceState = resolveServiceState(app)
-          return {
-            ...app,
-            email: displayEmail,
-            current_progress: 'Not started',
-            next_step: null,
-            progress_percentage: 0,
-            completed_steps: 0,
-            total_steps: 0,
-            service_type: serviceType,
-            service_state: serviceState,
-          }
-        }
-      })
+      applications.map((app: any) =>
+        enhanceApplicationWithTimeline(app, stepsByApp.get(app.id) || [], paymentsByApp.get(app.id) || [])
+      )
     )
     
     return applicationsWithTimeline
@@ -1439,24 +1444,32 @@ export const servicesAPI = {
     total_full: number
     total_step1?: number
     total_step2?: number
+    tax_amount?: number
+    tax_step1?: number
+    tax_step2?: number
   }) => {
+    const fields = {
+      service_name: serviceData.service_name,
+      state: serviceData.state,
+      payment_type: serviceData.payment_type,
+      line_items: serviceData.line_items as any,
+      total_full: serviceData.total_full,
+      total_step1: serviceData.total_step1 ?? null,
+      total_step2: serviceData.total_step2 ?? null,
+      tax_amount: serviceData.tax_amount ?? null,
+      tax_step1: serviceData.tax_step1 ?? null,
+      tax_step2: serviceData.tax_step2 ?? null,
+    }
+
     if (serviceData.id) {
       // Update existing
       const { data, error } = await db
         .from('services')
-        .update({
-          service_name: serviceData.service_name,
-          state: serviceData.state,
-          payment_type: serviceData.payment_type,
-          line_items: serviceData.line_items as any,
-          total_full: serviceData.total_full,
-          total_step1: serviceData.total_step1,
-          total_step2: serviceData.total_step2,
-        })
+        .update(fields)
         .eq('id', serviceData.id)
         .select()
         .single()
-      
+
       if (error) throw new Error(error.message)
       return data
     } else {
@@ -1464,19 +1477,10 @@ export const servicesAPI = {
       const id = `svc_${Date.now()}`
       const { data, error } = await db
         .from('services')
-        .insert({
-          id,
-          service_name: serviceData.service_name,
-          state: serviceData.state,
-          payment_type: serviceData.payment_type,
-          line_items: serviceData.line_items as any,
-          total_full: serviceData.total_full,
-          total_step1: serviceData.total_step1,
-          total_step2: serviceData.total_step2,
-        })
+        .insert({ id, ...fields })
         .select()
         .single()
-      
+
       if (error) throw new Error(error.message)
       return data
     }
@@ -1506,12 +1510,12 @@ export const servicesAPI = {
 
 export const serviceRequiredDocumentsAPI = {
   getAll: async () => {
+    // The custom query builder only honours one .order(); sort by the most
+    // meaningful field server-side and let consumers refine in-memory.
     const { data, error } = await db
       .from('service_required_documents')
       .select('*')
-      .order('service_type', { ascending: true })
       .order('sort_order', { ascending: true })
-      .order('document_name', { ascending: true })
 
     if (error) throw new Error(error.message)
     return data || []
@@ -1521,9 +1525,7 @@ export const serviceRequiredDocumentsAPI = {
     const query = db
       .from('service_required_documents')
       .select('*')
-      .order('service_type', { ascending: true })
       .order('sort_order', { ascending: true })
-      .order('document_name', { ascending: true })
 
     if (serviceTypes && serviceTypes.length > 0) {
       query.in('service_type', serviceTypes)
@@ -2387,16 +2389,132 @@ async function uploadFile(userId: string, file: File, type: string): Promise<str
   const fileNamePrefix = type
   const fileName = `${fileNamePrefix}.${fileExt}`
   const filePath = `${userId}/${fileName}`
-  
+
   const { error } = await db.storage
     .from('documents')
     .upload(filePath, file, {
       cacheControl: '3600',
       upsert: true, // Allow overwriting existing files for smooth replacement
     })
-  
+
   if (error) throw new Error(error.message)
   return filePath
+}
+
+// Generate receipt + invoice PDFs for a successful payment, persist them on
+// the payment row (`receipt_file_path` / `invoice_file_path`), and email both
+// PDFs to the client's personal email. Best-effort — any failure is logged and
+// swallowed so a successful payment is never rolled back on a PDF hiccup.
+async function generateAndStorePaymentProofs(args: {
+  paymentId: string
+  receipt: { id: string; receipt_number: string; amount: number; payment_type: string; items: Array<{ name: string; amount: number; taxable?: boolean }>; created_at: string; application_id?: string; user_id?: string }
+  payment: any
+  application: any
+  user: any
+  receiptItems: Array<{ name: string; amount: number }>
+}): Promise<void> {
+  const { paymentId, receipt, payment, application, user, receiptItems } = args
+  const ownerId = receipt.user_id || user?.id || payment?.user_id
+  if (!ownerId) {
+    console.warn('generateAndStorePaymentProofs: missing user_id, skipping PDF storage')
+    return
+  }
+
+  const userName =
+    (user?.first_name && user?.last_name)
+      ? `${user.first_name} ${user.last_name}`
+      : application?.first_name && application?.last_name
+        ? `${application.first_name} ${application.last_name}`
+        : user?.email || 'Valued Customer'
+
+  // Prefer the user's personal email; only fall back to the gritsync_email or
+  // applicant-form email if no personal email is on file.
+  const personalEmail =
+    user?.personal_email || application?.personal_email || user?.email || application?.email
+
+  const { generateReceiptPDF, generateInvoicePDF } = await import('./pdf-generator')
+
+  // ── Receipt PDF
+  const receiptBytes = await generateReceiptPDF({
+    receipt_number: receipt.receipt_number,
+    amount: receipt.amount,
+    payment_type: receipt.payment_type,
+    items: receiptItems,
+    created_at: receipt.created_at,
+    application_id: receipt.application_id,
+    user_name: userName,
+    user_email: personalEmail,
+  })
+  const receiptBlob = new Blob([receiptBytes as BlobPart], { type: 'application/pdf' })
+  const receiptFile = new File([receiptBlob], `receipt-${receipt.receipt_number}.pdf`, { type: 'application/pdf' })
+
+  // ── Invoice PDF — derives subtotal/tax/total from the same line items.
+  const TAX_RATE = 0.12
+  const invoiceItems = receiptItems.map((it) => ({ ...it, taxable: false }))
+  const subtotal = invoiceItems.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
+  const tax = invoiceItems.reduce((sum, it: any) => sum + (it.taxable ? (Number(it.amount) || 0) * TAX_RATE : 0), 0)
+  const total = Math.abs(subtotal + tax - (Number(receipt.amount) || 0)) < 0.01
+    ? subtotal + tax
+    : (Number(receipt.amount) || subtotal + tax)
+  const invoiceBytes = await generateInvoicePDF({
+    invoice_number: `INV-${receipt.receipt_number.replace(/^RCP-/, '')}`,
+    amount: total,
+    payment_type: receipt.payment_type,
+    items: invoiceItems,
+    subtotal,
+    tax,
+    total,
+    created_at: receipt.created_at,
+    application_id: receipt.application_id,
+    user_name: userName,
+    user_email: personalEmail,
+    billing_address: application
+      ? {
+          name: userName,
+          email: personalEmail,
+          city: application.city,
+          state: application.province,
+          zip: application.zipcode,
+          country: application.country,
+        }
+      : undefined,
+  })
+  const invoiceBlob = new Blob([invoiceBytes as BlobPart], { type: 'application/pdf' })
+  const invoiceFile = new File([invoiceBlob], `invoice-${receipt.receipt_number}.pdf`, { type: 'application/pdf' })
+
+  // ── Upload both PDFs and record their storage paths on the payment row.
+  try {
+    const [receiptPath, invoicePath] = await Promise.all([
+      uploadFile(ownerId, receiptFile, `payment_${paymentId}_receipt`),
+      uploadFile(ownerId, invoiceFile, `payment_${paymentId}_invoice`),
+    ])
+    await db
+      .from('application_payments')
+      .update({
+        receipt_file_path: receiptPath,
+        invoice_file_path: invoicePath,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', paymentId)
+  } catch (uploadErr) {
+    console.error('Failed to store receipt/invoice PDFs:', uploadErr)
+  }
+
+  // ── Email both PDFs to the client's personal email (fire-and-forget).
+  if (personalEmail) {
+    try {
+      const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
+      sendPaymentReceiptEmailWithAttachments({
+        receipt: receipt as any,
+        payment: payment as any,
+        application: application,
+        user: { ...(user || {}), email: personalEmail },
+        attachments: [receiptFile, invoiceFile],
+      } as any).catch((err: any) => console.error('Error sending receipt email:', err))
+    } catch (emailErr) {
+      console.error('Error preparing receipt email:', emailErr)
+    }
+  }
 }
 
 // Get file URL (for Supabase Storage)
@@ -2876,6 +2994,7 @@ export const timelineStepsAPI = {
       'app_step2_paid': 'Application Step 2 payment paid',
       'credentialing': 'Credentialing',
       'letter_generated': 'Generated letter for school',
+      'form_2f_downloaded': 'Downloaded Form 2F',
       'letter_submitted': 'Letter for school submitted',
       'official_docs_submitted': 'Official Documents Sent by School to NY BON',
       'bon_application': 'BON (Board of Nursing) Application',
@@ -2975,8 +3094,68 @@ export const timelineStepsAPI = {
       })
       .select()
       .single()
-    
+
     if (error) throw new Error(error.message)
+
+    // AUTO-TRIGGER: when "Form 1 Application form submitted" is marked
+    // completed on a staggered-payment application, create the step 2 payment
+    // record so the client sees it on the payments page. Idempotent — does
+    // nothing if a step2 row already exists. applications.payment_type stores
+    // 'full' for full-pay applicants and 'step1' (the staggered first chunk)
+    // for staggered applicants; any non-'full' value is treated as staggered.
+    if (stepKey === 'form1_submitted' && status === 'completed') {
+      try {
+        const { data: appRow } = await db
+          .from('applications')
+          .select('id, payment_type, state, province')
+          .eq('id', applicationId)
+          .single()
+        const app = appRow as any
+        const isStaggered = !!(app?.payment_type) && app.payment_type !== 'full'
+        if (isStaggered) {
+          const { data: existing } = await db
+            .from('application_payments')
+            .select('id')
+            .eq('application_id', applicationId)
+            .eq('payment_type', 'step2')
+            .limit(1)
+          const alreadyExists = Array.isArray(existing) && existing.length > 0
+          if (!alreadyExists) {
+            // Resolve the step 2 amount from the staggered service config.
+            let step2Amount = 0
+            try {
+              const stateForService = (app?.state as string) || (app?.province as string) || 'New York'
+              const service = await servicesAPI.getByServiceStateAndPaymentType(
+                'NCLEX Processing',
+                stateForService,
+                'staggered'
+              )
+              step2Amount = (service as any)?.total_step2 || 0
+            } catch {
+              // No service config — fall through with 0; admin can edit later.
+            }
+            await db
+              .from('application_payments')
+              .insert({
+                application_id: applicationId,
+                payment_type: 'step2',
+                amount: step2Amount,
+                service_fee_amount: calculateServiceFee('step2'),
+                status: 'pending',
+              })
+            // Refresh any cached views of this application's payments.
+            try {
+              const { invalidateApplicationCache } = await import('./query-cache')
+              invalidateApplicationCache(applicationId)
+            } catch { /* cache module optional */ }
+          }
+        }
+      } catch (autoErr) {
+        // Auto-trigger is best-effort — never fail the timeline update on it.
+        console.warn('Auto-create step2 payment failed:', autoErr)
+      }
+    }
+
     return updatedStep
   },
 
@@ -3046,162 +3225,103 @@ function generateSecurityAnswers(
 
 // Processing Accounts API
 export const processingAccountsAPI = {
-  getByApplication: async (applicationId: string) => {
-    const userId = await getCurrentUserId()
-    const admin = await isAdmin()
-    
-    // Try to find by grit_app_id first (if it looks like AP + 12 alphanumeric)
-    // Otherwise, fall back to UUID id
-    const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
-    
-    let query = db
-      .from('applications')
-      .select('id, user_id, first_name, middle_name, last_name, elementary_school, gender, marital_status')
-    
-    if (isGritAppId) {
-      query = query.eq('grit_app_id', applicationId.toUpperCase())
-    } else {
-      query = query.eq('id', applicationId)
-    }
-    
-    const { data: application, error: appError } = await query.single()
-    
-    if (appError) {
-      throw new Error(appError.message)
-    }
-    if (!application) {
-      throw new Error('Application not found')
-    }
-    
-    // Type assertion for application
-    if (!application || 'error' in application) {
-      throw new Error('Application not found')
-    }
-    const typedApplication = application as Tables<'applications'>
-    
-    // Use the actual UUID id for subsequent queries (not the GRIT APP ID)
-    const actualApplicationId = typedApplication.id
-    
-    // Check if user owns the application or is admin
-    if (!admin && typedApplication.user_id !== userId) {
-      throw new Error('Unauthorized')
-    }
-    
-    // Get existing accounts (use actual UUID id)
-    const { data: accounts, error } = await db
-      .from('processing_accounts')
-      .select('*')
-      .eq('application_id', actualApplicationId)
-      .order('created_at', { ascending: false })
-    
-    if (error) {
-      throw new Error(error.message)
-    }
-    const existingAccounts = accounts || []
-    
-    // Check if GritSync and Pearson Vue accounts exist
-    const typedAccounts = existingAccounts as Array<{ account_type?: string; email?: string }>
-    const existingGritsync = typedAccounts.find(acc => acc.account_type === 'gritsync')
-    const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
-
-    // Get user's grit_id (for the password) and gritsync_email (for the Pearson account login)
-    const { data: user } = await db
-      .from('users')
-      .select('grit_id, gritsync_email')
-      .eq('id', typedApplication.user_id)
-      .single()
-
-    // Generate password: "@GRiT" + numeric part of grit_id
-    // Example: GRIT414821 -> @GRiT414821
-    let password = ''
-    const userData = user as { grit_id?: string; gritsync_email?: string } | null
-    if (userData?.grit_id) {
-      const gritId = userData.grit_id
-      // Extract numeric part (everything after "GRIT")
-      const numericPart = gritId.replace(/^GRIT/i, '')
-      password = `@GRiT${numericPart}`
-    }
-    // The Pearson Vue account uses the same login as the GritSync account.
-    // GritSync accounts are created server-side, so fall back through the
-    // sources we have available.
-    const gritsyncEmail = existingGritsync?.email || userData?.gritsync_email || typedApplication.email || ''
-    const { first_name: firstName, last_name: lastName } = typedApplication
-
-    // Create Pearson Vue account if it doesn't exist (same email and password as GritSync)
-    if (!existingPearson) {
-      try {
-        if (password && gritsyncEmail && firstName && lastName) {
-          // Generate security question answers
-          const securityAnswers = generateSecurityAnswers(
-            typedApplication.elementary_school || null,
-            typedApplication.gender || null,
-            typedApplication.middle_name || null,
-            typedApplication.marital_status || null
-          )
-
-          const { error: pearsonError } = await db
-            .from('processing_accounts')
-            .insert({
-              application_id: actualApplicationId,
-              account_type: 'pearson_vue',
-              email: gritsyncEmail,
-              password: password,
-              security_question_1: securityAnswers.question1,
-              security_question_2: securityAnswers.question2,
-              security_question_3: securityAnswers.question3,
-              status: 'inactive', // Inactive by default, must be activated by admin
-              created_by: typedApplication.user_id,
-            })
-            .select()
-            .single()
-          
-          // Silently handle duplicate errors (account already exists)
-          if (pearsonError && pearsonError.code !== '23505' && !pearsonError.message?.includes('duplicate') && !pearsonError.message?.includes('unique')) {
-            // Only log non-duplicate errors
-          }
-        }
-      } catch (error: any) {
-        // Silently handle duplicate errors
-        if (error?.code !== '23505' && !error?.message?.includes('duplicate') && !error?.message?.includes('unique')) {
-          // Only log non-duplicate errors
-        }
-      }
-    }
-    
-    // Re-fetch accounts from database to ensure we have the latest data and avoid duplicates
-    const { data: allAccounts, error: refetchError } = await db
-      .from('processing_accounts')
-      .select('*')
-      .eq('application_id', actualApplicationId)
-      .order('created_at', { ascending: false })
-    
-    if (!refetchError) {
-      // Use the re-fetched accounts
-      existingAccounts.length = 0
-      existingAccounts.push(...(allAccounts || []))
-    }
-    
-    // Deduplicate accounts by id (in case of any duplicates)
-    const validAccounts = existingAccounts.filter((acc: any) => acc && !('error' in acc) && 'id' in acc)
-    const typedExistingAccounts = validAccounts as unknown as Array<{ id: string }>
-    const uniqueAccounts = Array.from(
-      new Map(typedExistingAccounts.map(acc => [acc.id, acc])).values()
-    )
-    
-    // Sort accounts: GritSync and Pearson Vue first, then custom accounts
-    const typedUniqueAccounts = uniqueAccounts as Array<{ account_type?: string; created_at?: string }>
-    typedUniqueAccounts.sort((a, b) => {
-      const order: { [key: string]: number } = { 'gritsync': 1, 'pearson_vue': 2, 'custom': 3 }
-      const aOrder = order[a.account_type || ''] || 99
-      const bOrder = order[b.account_type || ''] || 99
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder
-      }
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  // Activate a system-managed inactive account. Admin-only; the server enforces
+  // that the application has at least one approved payment.
+  activate: async (id: string) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts/${id}/activate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     })
-    
-    return uniqueAccounts
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data
   },
+
+  // Deactivate a system-managed account. Admin-only.
+  deactivate: async (id: string) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts/${id}/deactivate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data
+  },
+
+  // Create a non-system account (custom / gmail). Admin-only on the server.
+  createCustom: async (payload: {
+    application_id: string
+    account_type: string
+    name?: string
+    link?: string
+    email: string
+    password: string
+    security_question_1?: string
+    security_question_2?: string
+    security_question_3?: string
+    status?: 'active' | 'inactive'
+  }) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data
+  },
+
+  // Update editable fields on any processing account. Admin-only on the server.
+  patch: async (id: string, updates: Record<string, any>) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(updates),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data
+  },
+
+  remove: async (id: string) => {
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts/${id}`, {
+      method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data
+  },
+
+  getByApplication: async (applicationId: string) => {
+    // Auto-provisioning of system-managed accounts (Pearson Vue, Mandatory Courses)
+    // happens server-side. Route handles both UUID and GRIT APP ID inputs.
+    const token = localStorage.getItem('gritsync_token')
+    const res = await fetch(`/api/processing-accounts/by-application/${encodeURIComponent(applicationId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.data as any[]
+  },
+
 
   create: async (applicationId: string, accountData: {
     account_type: 'gritsync' | 'pearson_vue' | 'custom'
@@ -3234,7 +3354,7 @@ export const processingAccountsAPI = {
   },
 
   update: async (id: string, updates: Partial<{
-    account_type: 'gmail' | 'gritsync' | 'pearson_vue' | 'custom'
+    account_type: 'gmail' | 'gritsync' | 'pearson_vue' | 'mandatory_courses' | 'custom'
     name: string
     link: string
     email: string
@@ -3246,20 +3366,23 @@ export const processingAccountsAPI = {
   }>) => {
     const admin = await isAdmin()
     const userId = await getCurrentUserId()
-    
+
     // First, get the account to check its type
     const { data: account, error: fetchError } = await db
       .from('processing_accounts')
       .select('account_type, application_id, created_by')
       .eq('id', id)
       .single()
-    
+
     if (fetchError) throw new Error(fetchError.message)
     if (!account) throw new Error('Account not found')
-    
-    // Check if this is a Gmail or Pearson Vue account
+
+    // Check if this is a managed system account (auto-provisioned, admin-controlled)
     const accountData = account as { account_type?: string; application_id?: string }
-    const isSystemAccount = accountData.account_type === 'gritsync' || accountData.account_type === 'pearson_vue'
+    const isSystemAccount =
+      accountData.account_type === 'gritsync' ||
+      accountData.account_type === 'pearson_vue' ||
+      accountData.account_type === 'mandatory_courses'
     const isGritsyncAccount = accountData.account_type === 'gritsync'
     
     // For Gmail accounts:
@@ -3295,8 +3418,8 @@ export const processingAccountsAPI = {
             throw new Error(`Unauthorized - Clients can only update status and password for Gmail accounts. Cannot update: ${disallowedFields.join(', ')}`)
           }
         } else {
-          // Pearson Vue accounts - only admins can update
-          throw new Error('Unauthorized - Only admins can update Pearson Vue accounts')
+          // Pearson Vue / Mandatory Courses accounts - only admins can update
+          throw new Error('Unauthorized - Only admins can update this account')
         }
       }
     } else {
@@ -3376,6 +3499,19 @@ export const clientsAPI = {
     }))
   },
 
+  // Get all users (every role) with their GritSync Gmail accounts — admin user management
+  getAllUsersWithGmailAccounts: async () => {
+    const { data, error } = await db
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message || 'Failed to fetch users')
+    return (data || []).map((u: any) => ({
+      ...u,
+      gmail_account: u.gritsync_email || u.email,
+    }))
+  },
+
   // Admin impersonation - login as user
   loginAsUser: async (userId: string) => {
     // This will be handled by a server endpoint that uses Supabase Admin API
@@ -3429,8 +3565,15 @@ export const dashboardAPI = {
     // Use Supabase RPC for aggregated stats when available; fallback to legacy queries
     if (admin) {
       const { data: rpcData, error: rpcError } = await db.rpc('get_dashboard_stats', { is_admin: true })
-      if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-        return mapStats(rpcData[0])
+      // The Express RPC endpoint wraps its result as `{ data: <array>, error: null }`,
+      // so the actual stats array may live one level deeper.
+      const rpcRows = Array.isArray(rpcData)
+        ? rpcData
+        : Array.isArray((rpcData as any)?.data)
+          ? (rpcData as any).data
+          : null
+      if (!rpcError && rpcRows && rpcRows.length > 0) {
+        return mapStats(rpcRows[0])
       }
       // RPC unavailable in this environment — silently fall through to direct queries
 
@@ -3539,10 +3682,16 @@ export const dashboardAPI = {
         }
       }
       
-      // Calculate revenue from payments
+      // Calculate revenue from payments. NUMERIC columns come back as strings
+      // from the pg driver, so coerce each row to a number — otherwise the +
+      // operator concatenates ("5.00"+"3.00" = "05.003.00") and the downstream
+      // formatter renders "$NaN".
       let revenue = 0
       if (payments.data) {
-        revenue = payments.data.reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0)
+        revenue = payments.data.reduce((sum: number, payment: any) => {
+          const n = Number(payment?.amount)
+          return sum + (Number.isFinite(n) ? n : 0)
+        }, 0)
       }
       
       const totalCompleted = completedCount
@@ -3564,8 +3713,13 @@ export const dashboardAPI = {
       }
     } else {
       const { data: rpcData, error: rpcError } = await db.rpc('get_dashboard_stats', { is_admin: false })
-      if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-        return mapStats(rpcData[0])
+      const rpcRows = Array.isArray(rpcData)
+        ? rpcData
+        : Array.isArray((rpcData as any)?.data)
+          ? (rpcData as any).data
+          : null
+      if (!rpcError && rpcRows && rpcRows.length > 0) {
+        return mapStats(rpcRows[0])
       }
       // RPC unavailable in this environment — silently fall through to direct queries
 
@@ -4176,16 +4330,21 @@ export const applicationPaymentsAPI = {
     }
     
     if (proofOfPaymentFilePath) {
+      // Canonical column name used by all read paths (Admin / Client payments
+      // pages, Dashboard). The upload step had been writing to `proof_url`,
+      // which left the file invisible everywhere else — keep both fields in
+      // sync for any legacy rows.
+      updatePayload.proof_of_payment_file_path = proofOfPaymentFilePath
       updatePayload.proof_url = proofOfPaymentFilePath
     }
-    
+
     // Add GCash details ONLY if payment method is explicitly 'gcash'
-    // For mobile_banking, we don't use GCash fields - only proof_url
+    // For mobile_banking, we don't use GCash fields - only the proof file.
     if (paymentMethod === 'gcash' && gcashDetails && gcashDetails.number && gcashDetails.reference) {
       updatePayload.gcash_number = gcashDetails.number
       updatePayload.gcash_reference = gcashDetails.reference
     }
-    
+
     // Log the update payload for debugging (without sensitive data)
     console.log('Updating payment with payload:', {
       paymentId,
@@ -4193,7 +4352,7 @@ export const applicationPaymentsAPI = {
       payment_method: updatePayload.payment_method,
       hasTransactionId: !!updatePayload.transaction_id,
       hasStripeIntentId: !!updatePayload.stripe_payment_intent_id,
-      hasProofOfPayment: !!updatePayload.proof_url,
+      hasProofOfPayment: !!updatePayload.proof_of_payment_file_path,
       hasGcashDetails: !!updatePayload.gcash_number,
     })
     
@@ -4336,52 +4495,61 @@ export const applicationPaymentsAPI = {
           })
           .select('*')
           .single()
-        
+
         if (receiptError) {
           console.error('Failed to create receipt:', receiptError)
           // Don't throw error, payment is still complete
         } else if (receipt) {
-          // Send email with PDF attachments asynchronously (don't wait for it)
+          // Fetch application and user data once — needed for both the
+          // PDF/email step and the on-record proof-of-payment upload.
+          let applicationData: any = null
+          let userData: any = null
+
           try {
-            // Fetch application and user data for email
-            let applicationData: any = null
-            let userData: any = null
-            
             if (typedPayment.application_id) {
-              const { data: appData } = await db
+              const { data: appRow } = await db
                 .from('applications')
-                .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                .select('id, user_id')
                 .eq('id', typedPayment.application_id)
                 .single()
-              applicationData = appData
+              const appUserId = (appRow as { user_id?: string } | null)?.user_id
+              if (appUserId) {
+                const { data: details } = await db
+                  .from('user_details')
+                  .select('first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                  .eq('user_id', appUserId)
+                  .maybeSingle()
+                applicationData = details ? { id: typedPayment.application_id, ...details } : { id: typedPayment.application_id }
+              }
             }
-            
             if (receiptUserId) {
               const { data: uData } = await db
                 .from('users')
-                .select('id, email, full_name, first_name, last_name')
+                .select('id, email, personal_email, first_name, last_name')
                 .eq('id', receiptUserId)
                 .single()
               userData = uData
             }
-            
-            // Send email with attachments (fire and forget)
-            const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
-            sendPaymentReceiptEmailWithAttachments({
+          } catch (lookupErr) {
+            console.warn('Receipt lookup error:', lookupErr)
+          }
+
+          // Generate the receipt + invoice PDFs, store the receipt as the
+          // payment's Proof of Payment, and email both PDFs to the client.
+          try {
+            await generateAndStorePaymentProofs({
+              paymentId,
               receipt: receipt as any,
               payment: paymentData as any,
               application: applicationData,
               user: userData,
-            }).catch((emailError) => {
-              console.error('Error sending payment receipt email:', emailError)
-              // Don't throw - email failure shouldn't fail payment
+              receiptItems,
             })
-          } catch (emailErr) {
-            console.error('Error preparing payment receipt email:', emailErr)
-            // Don't throw - email failure shouldn't fail payment
+          } catch (pdfErr) {
+            console.error('Receipt PDF/upload failed (non-fatal):', pdfErr)
           }
         }
-        
+
         return { payment: paymentData, receipt }
       } catch (receiptErr) {
         console.error('Receipt generation error:', receiptErr)
@@ -4602,49 +4770,53 @@ export const applicationPaymentsAPI = {
             })
             .select('*')
             .single()
-          
+
           if (receiptError) {
             console.error('Failed to create receipt:', receiptError)
             // Don't throw error, payment is still approved
           } else if (receipt) {
-            // Send email with PDF attachments asynchronously (don't wait for it)
+            // Look up applicant + user data once, then hand both PDFs over to
+            // the shared helper which uploads them and emails them.
             try {
-              // Fetch application and user data for email
               let applicationData: any = null
               let userData: any = null
-              
+
               if (typedPayment.application_id) {
-                const { data: appData } = await db
+                const { data: appRow } = await db
                   .from('applications')
-                  .select('id, first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                  .select('id, user_id')
                   .eq('id', typedPayment.application_id)
                   .single()
-                applicationData = appData
+                const appUserId = (appRow as { user_id?: string } | null)?.user_id
+                if (appUserId) {
+                  const { data: details } = await db
+                    .from('user_details')
+                    .select('first_name, last_name, email, mobile_number, province, city, country, zipcode')
+                    .eq('user_id', appUserId)
+                    .maybeSingle()
+                  applicationData = details ? { id: typedPayment.application_id, ...details } : { id: typedPayment.application_id }
+                }
               }
-              
+
               if (typedPayment.user_id) {
                 const { data: uData } = await db
                   .from('users')
-                  .select('id, email, full_name, first_name, last_name')
+                  .select('id, email, personal_email, first_name, last_name')
                   .eq('id', typedPayment.user_id)
                   .single()
                 userData = uData
               }
-              
-              // Send email with attachments (fire and forget)
-              const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
-              sendPaymentReceiptEmailWithAttachments({
+
+              await generateAndStorePaymentProofs({
+                paymentId: typedPayment.id!,
                 receipt: receipt as any,
                 payment: updatedPayment as any,
                 application: applicationData,
                 user: userData,
-              }).catch((emailError) => {
-                console.error('Error sending payment receipt email:', emailError)
-                // Don't throw - email failure shouldn't fail payment approval
+                receiptItems,
               })
-            } catch (emailErr) {
-              console.error('Error preparing payment receipt email:', emailErr)
-              // Don't throw - email failure shouldn't fail payment approval
+            } catch (pdfErr) {
+              console.error('Receipt PDF/upload failed (non-fatal):', pdfErr)
             }
           }
         } catch (receiptErr) {
@@ -4663,7 +4835,29 @@ export const applicationPaymentsAPI = {
     } catch {
       // Cache module might not be available, continue anyway
     }
-    
+
+    // Trigger admin/advisor follow-up tasks (Mandatory Courses + NYSED Form 1)
+    // when this approval was for step1 or a full payment. Fire-and-forget — the
+    // payment is already approved; failure to enqueue tasks shouldn't roll that back.
+    try {
+      const typedPayment = updatedPayment as { id?: string; payment_type?: string }
+      if (
+        typedPayment?.id &&
+        (typedPayment.payment_type === 'step1' || typedPayment.payment_type === 'full')
+      ) {
+        const token = localStorage.getItem('gritsync_token')
+        fetch(`/api/payments/${typedPayment.id}/trigger-followup-tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }).catch((err) => console.warn('Follow-up task trigger failed:', err))
+      }
+    } catch {
+      // Triggering follow-up tasks is best-effort.
+    }
+
     return updatedPayment
   },
 
@@ -4827,9 +5021,38 @@ export const trackingAPI = {
       .select('*')
       .eq('grit_app_id', gritAppId.toUpperCase())
       .single()
-    
+
     if (error) throw new Error(error.message)
-    return data
+    const app = data as any
+    if (!app) return data
+
+    // Pictures uploaded through the standalone /documents flow (vs. the
+    // NCLEX application form) land in user_documents, not applications. Fall
+    // back so the tracking page can render the user's photo either way.
+    if (!app.picture_path && app.user_id) {
+      try {
+        const { data: docs } = await db
+          .from('user_documents')
+          .select('file_path, document_type')
+          .eq('user_id', app.user_id)
+          .eq('document_type', 'picture')
+          .limit(1)
+        const path = Array.isArray(docs) && docs[0] ? (docs[0] as any).file_path : null
+        if (path) app.picture_path = path
+      } catch {
+        // Non-fatal — the page still renders without a photo.
+      }
+    }
+
+    // Load the same timeline + payments the dashboard uses and run the shared
+    // enhancer so current_progress / next_step / progress_percentage show up
+    // in the tracking result section.
+    const [{ data: timelineSteps }, { data: payments }] = await Promise.all([
+      db.from('application_timeline_steps').select('*').eq('application_id', app.id).order('created_at', { ascending: true }),
+      db.from('application_payments').select('*').eq('application_id', app.id),
+    ])
+
+    return enhanceApplicationWithTimeline(app, (timelineSteps as any[]) || [], (payments as any[]) || [])
   },
 }
 

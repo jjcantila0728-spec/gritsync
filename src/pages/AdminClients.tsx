@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { appUrl } from '@/lib/routing'
+import { pushCurrentSession } from '@/lib/impersonation'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -10,17 +11,18 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { clientsAPI } from '@/lib/api'
-import { formatDate, getFullName, exportToCSV, paginate } from '@/lib/utils'
+import { formatDate, getFullName, exportToCSV, paginate, cn, generatePassword } from '@/lib/utils'
 import { db } from '@/lib/api-client'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, EyeOff, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare, Briefcase, Shield, Link2, UserPlus, X, RefreshCcw } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
 import { userDetailsAPI, userDocumentsAPI, getSignedFileUrl } from '@/lib/api'
+import { CredentialsModal, type CreatedAccountCredentials } from '@/components/CredentialsModal'
 
 interface Client {
   id: string
@@ -32,6 +34,92 @@ interface Client {
   grit_id: string
   gmail_account?: string
   is_active?: boolean
+  referral_code?: string | null
+  referred_by?: string | null
+  advisor_id?: string | null
+}
+
+type RoleTab = 'client' | 'affiliate' | 'advisor' | 'admin'
+
+const ROLE_TABS: { id: RoleTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'client', label: 'Clients', icon: Users },
+  { id: 'affiliate', label: 'Affiliates', icon: Link2 },
+  { id: 'advisor', label: 'Advisors', icon: Briefcase },
+  { id: 'admin', label: 'Admins', icon: Shield },
+]
+
+const ROLE_SINGULAR: Record<RoleTab, string> = {
+  client: 'Client',
+  affiliate: 'Affiliate',
+  advisor: 'Advisor',
+  admin: 'Admin',
+}
+
+const ROLE_BADGE_STYLES: Record<string, string> = {
+  client: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  affiliate: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  advisor: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
+  admin: 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-300',
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const label = role.charAt(0).toUpperCase() + role.slice(1)
+  return (
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize', ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.client)}>
+      {label}
+    </span>
+  )
+}
+
+// Profile section card used inside the admin View Profile modal.
+// `accent` is a tailwind gradient class fragment (e.g. "from-sky-500 to-blue-600")
+// that colors the icon chip — gives each section a distinct visual feel
+// without recoloring the entire card.
+interface ProfileSectionProps {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  accent: string
+  summary?: string
+  fields: { label: string; value?: string | null; capitalize?: boolean }[]
+}
+
+function ProfileSection({ icon: Icon, title, accent, summary, fields }: ProfileSectionProps) {
+  const filledCount = fields.filter(f => f.value && String(f.value).trim() !== '' && String(f.value) !== 'N/A').length
+  return (
+    <div className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div className={cn('h-9 w-9 rounded-lg bg-gradient-to-br flex items-center justify-center shadow-sm', accent)}>
+          <Icon className="h-4 w-4 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+          {summary && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{summary}</p>
+          )}
+        </div>
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 flex-shrink-0">
+          {filledCount}/{fields.length}
+        </span>
+      </div>
+      <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+        {fields.map(({ label, value, capitalize }) => {
+          const v = value && String(value).trim() !== '' ? String(value) : null
+          return (
+            <div key={label} className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</div>
+              <div className={cn(
+                'mt-0.5 text-sm break-words',
+                v ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600 italic',
+                capitalize && v && 'capitalize',
+              )}>
+                {v || 'Not provided'}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function AdminClients() {
@@ -53,6 +141,19 @@ export function AdminClients() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [actioningClientId, setActioningClientId] = useState<string | null>(null)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  const [activeTab, setActiveTab] = useState<RoleTab>('client')
+  const emptyCreateForm = { role: 'client' as RoleTab, first_name: '', last_name: '', middle_name: '', personal_email: '', mobile: '', password: '' }
+  const [createForm, setCreateForm] = useState(emptyCreateForm)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [showCreatePassword, setShowCreatePassword] = useState(false)
+  const [createdCredentials, setCreatedCredentials] = useState<CreatedAccountCredentials | null>(null)
+
+  const openCreateModal = (role: RoleTab) => {
+    setCreateForm({ ...emptyCreateForm, role, password: generatePassword(14) })
+    setShowCreatePassword(true)
+    setShowCreateModal(true)
+  }
 
   useEffect(() => {
     if (isAdmin()) {
@@ -112,10 +213,10 @@ export function AdminClients() {
       const newRecord = payload.new
       const oldRecord = payload.old
 
-      if (eventType === 'INSERT' && newRecord && newRecord.role === 'client') {
-        // New client registered - add to list
-        setClients((prev) => [newRecord, ...prev])
-        showToast('New client registered', 'info')
+      if (eventType === 'INSERT' && newRecord && ['client', 'affiliate', 'advisor', 'admin'].includes(newRecord.role)) {
+        // New user registered - add to list
+        setClients((prev) => prev.some((c) => c.id === newRecord.id) ? prev : [newRecord, ...prev])
+        if (newRecord.role === 'client') showToast('New client registered', 'info')
       } else if (eventType === 'UPDATE' && newRecord) {
         // Client updated - update in place
         setClients((prev) => {
@@ -141,15 +242,15 @@ export function AdminClients() {
   async function fetchClients() {
     try {
       setLoading(true)
-      // Use optimized batch method to avoid N+1 queries
-      const clientsWithGmail = await clientsAPI.getAllWithGmailAccounts()
-      
-      setClients(clientsWithGmail as Client[])
+      // Fetch every user (all roles) so the role tabs can be populated
+      const usersWithGmail = await clientsAPI.getAllUsersWithGmailAccounts()
+
+      setClients(usersWithGmail as Client[])
       setCurrentPage(1)
     } catch (error: any) {
-      console.error('Error fetching clients:', error)
-      showToast(error?.message || 'Failed to load clients', 'error')
-      // Fallback to basic getAll if optimized method fails
+      console.error('Error fetching users:', error)
+      showToast(error?.message || 'Failed to load users', 'error')
+      // Fallback to basic getAll if the batch method fails
       try {
         const data = await clientsAPI.getAll()
         const clientsData = (data as unknown as Client[]) || []
@@ -160,6 +261,30 @@ export function AdminClients() {
     } finally {
       setLoading(false)
       setRefreshing(false)
+    }
+  }
+
+  async function handleChangeRole(client: Client, newRole: RoleTab) {
+    if (client.role === newRole) return
+    if (!confirm(`Change ${getFullName(client.first_name, client.last_name)}'s role from "${client.role}" to "${newRole}"?`)) return
+    setActioningClientId(client.id)
+    try {
+      const token = localStorage.getItem('gritsync_token')
+      const res = await fetch(`/api/auth/admin/users/${client.id}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ role: newRole }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to change role')
+      const referral_code = data.user?.referral_code ?? client.referral_code ?? null
+      setClients(prev => prev.map(c => c.id === client.id ? { ...c, role: newRole, referral_code } : c))
+      showToast(`${getFullName(client.first_name, client.last_name)} is now ${/^[aeiou]/i.test(newRole) ? 'an' : 'a'} ${newRole}`, 'success')
+      setActiveTab(newRole)
+    } catch (error: any) {
+      showToast(error.message || 'Failed to change role', 'error')
+    } finally {
+      setActioningClientId(null)
     }
   }
 
@@ -397,27 +522,48 @@ export function AdminClients() {
     }
   }
 
+  const roleCounts = useMemo(() => {
+    const counts: Record<RoleTab, number> = { client: 0, affiliate: 0, advisor: 0, admin: 0 }
+    for (const c of clients) {
+      const r = (c.role as RoleTab)
+      if (r in counts) counts[r]++
+      else counts.client++ // unknown roles bucket under clients
+    }
+    return counts
+  }, [clients])
+
+  const tabClients = useMemo(
+    () => clients.filter((c) => (c.role === activeTab) || (activeTab === 'client' && !ROLE_TABS.some(t => t.id === c.role))),
+    [clients, activeTab]
+  )
+
   const filteredClients = useMemo(() => {
-    if (!debouncedSearchQuery.trim()) return clients
+    if (!debouncedSearchQuery.trim()) return tabClients
 
     const query = debouncedSearchQuery.toLowerCase()
-    return clients.filter((client) => {
+    return tabClients.filter((client) => {
       const fullName = getFullName(client.first_name, client.last_name).toLowerCase()
       return (
         fullName.includes(query) ||
         client.email.toLowerCase().includes(query) ||
         client.id.toLowerCase().includes(query) ||
-        (client.grit_id && client.grit_id.toLowerCase().includes(query))
+        (client.grit_id && client.grit_id.toLowerCase().includes(query)) ||
+        (client.referral_code && client.referral_code.toLowerCase().includes(query))
       )
     })
-  }, [clients, debouncedSearchQuery])
+  }, [tabClients, debouncedSearchQuery])
 
   const stats = useMemo(() => {
     return {
       total: clients.length,
+      tabTotal: tabClients.length,
       filtered: filteredClients.length,
     }
-  }, [clients.length, filteredClients.length])
+  }, [clients.length, tabClients.length, filteredClients.length])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeTab, debouncedSearchQuery])
 
   const paginatedClients = useMemo(() => {
     return paginate(filteredClients, currentPage, pageSize)
@@ -502,6 +648,62 @@ export function AdminClients() {
     }
   }
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const form = createForm
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.personal_email.trim() || !form.mobile.trim() || !form.password) {
+      showToast('First name, last name, email, mobile and password are required', 'error')
+      return
+    }
+    if (form.password.length < 8) {
+      showToast('Password must be at least 8 characters', 'error')
+      return
+    }
+    setCreatingUser(true)
+    try {
+      const token = localStorage.getItem('gritsync_token')
+      const res = await fetch('/api/auth/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          role: form.role,
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
+          middle_name: form.middle_name.trim() || undefined,
+          personal_email: form.personal_email.trim(),
+          mobile: form.mobile.trim(),
+          password: form.password,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create user')
+      const created = data.user as Client & { gritsync_email?: string | null; personal_email?: string; middle_name?: string | null }
+      setClients(prev => prev.some(c => c.id === created.id) ? prev : [created, ...prev])
+      setShowCreateModal(false)
+      // Surface the brand-new credentials so the admin can copy & deliver them.
+      setCreatedCredentials({
+        id: created.id,
+        first_name: created.first_name,
+        last_name: created.last_name,
+        middle_name: created.middle_name ?? null,
+        personal_email: created.personal_email || form.personal_email.trim(),
+        gritsync_email: created.gritsync_email ?? null,
+        grit_id: created.grit_id || null,
+        mobile: form.mobile.trim(),
+        password: form.password,
+        role_label: form.role,
+      })
+      setCreateForm(emptyCreateForm)
+      setActiveTab(form.role)
+      setSearchQuery('')
+      showToast(`${getFullName(created.first_name, created.last_name)} created as ${form.role}`, 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to create user', 'error')
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -550,17 +752,24 @@ export function AdminClients() {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-4 md:p-8">
-          <div className="mb-8">
+          <div className="mb-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
               <div>
                 <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                  Clients
+                  Users
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Manage and view all registered clients
+                  Manage clients, affiliates, advisors and admins
                 </p>
               </div>
               <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => openCreateModal(activeTab)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  New {ROLE_SINGULAR[activeTab]}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -582,55 +791,90 @@ export function AdminClients() {
               </div>
             </div>
 
+            {/* Role tabs */}
+            <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
+              <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="User roles">
+                {ROLE_TABS.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => { setActiveTab(tab.id); setSearchQuery('') }}
+                      className={cn(
+                        'group inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
+                        isActive
+                          ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                      )}
+                      aria-current={isActive ? 'page' : undefined}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      {tab.label}
+                      <span className={cn(
+                        'ml-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
+                        isActive ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      )}>
+                        {roleCounts[tab.id]}
+                      </span>
+                    </button>
+                  )
+                })}
+              </nav>
+            </div>
+
             {/* Stats Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Clients</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-primary-100 dark:bg-primary-900/30">
-                    <Users className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Showing</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.filtered}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                </div>
-              </Card>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {ROLE_TABS.map((tab) => {
+                const Icon = tab.icon
+                return (
+                  <Card key={tab.id} className={cn('p-4 cursor-pointer transition-colors', activeTab === tab.id && 'ring-2 ring-primary-500')} onClick={() => { setActiveTab(tab.id); setSearchQuery('') }}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">{tab.label}</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{roleCounts[tab.id]}</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800">
+                        <Icon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
             </div>
 
             {/* Search */}
-            <Card className="mb-6">
+            <Card>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder="Search by name, email, or ID..."
+                  placeholder={`Search ${activeTab === 'admin' ? 'admins' : activeTab + 's'} by name, email, ID${activeTab !== 'client' && activeTab !== 'admin' ? ' or referral code' : ''}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Showing {stats.filtered} of {stats.tabTotal} {activeTab === 'admin' ? 'admins' : activeTab + 's'} · {stats.total} users total
+              </p>
             </Card>
           </div>
 
-          {clients.length === 0 ? (
+          {tabClients.length === 0 ? (
             <Card>
               <div className="text-center py-12">
                 <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 mb-2">No clients found</p>
-                <p className="text-sm text-gray-500 dark:text-gray-500">
-                  Clients will appear here once they register
+                <p className="text-gray-600 dark:text-gray-400 mb-2">No {activeTab === 'admin' ? 'admins' : activeTab + 's'} yet</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
+                  {activeTab === 'client'
+                    ? 'Clients will appear here once they register'
+                    : `Promote a client to ${activeTab} from the Clients tab, or create one directly`}
                 </p>
+                <Button size="sm" onClick={() => openCreateModal(activeTab)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  New {ROLE_SINGULAR[activeTab]}
+                </Button>
               </div>
             </Card>
           ) : filteredClients.length === 0 ? (
@@ -638,7 +882,7 @@ export function AdminClients() {
               <div className="text-center py-12">
                 <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 dark:text-gray-400 mb-2">
-                  No clients match your search
+                  No {activeTab === 'admin' ? 'admins' : activeTab + 's'} match your search
                 </p>
                 <Button
                   variant="outline"
@@ -661,6 +905,7 @@ export function AdminClients() {
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[180px]">Email</th>
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">Joined</th>
                           <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">GRIT-ID</th>
+                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[170px]">Role</th>
                           <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[200px]">Actions</th>
                         </tr>
                       </thead>
@@ -721,6 +966,30 @@ export function AdminClients() {
                                   <span className="text-gray-400 dark:text-gray-500">-</span>
                                 )}
                               </td>
+                              <td className="py-3 px-2 sm:px-4 text-sm">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <RoleBadge role={client.role} />
+                                  </div>
+                                  {(client.role === 'affiliate' || client.role === 'advisor') && (
+                                    <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400" title="Referral code">
+                                      {client.referral_code || 'no code'}
+                                    </span>
+                                  )}
+                                  <select
+                                    value={client.role}
+                                    disabled={actioningClientId === client.id}
+                                    onChange={(e) => handleChangeRole(client, e.target.value as RoleTab)}
+                                    className="mt-0.5 text-[11px] rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    title="Change role"
+                                  >
+                                    <option value="client">Client</option>
+                                    <option value="affiliate">Affiliate</option>
+                                    <option value="advisor">Advisor</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                </div>
+                              </td>
                               <td className="py-3 px-2 sm:px-4 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   {/* Login as user */}
@@ -741,12 +1010,7 @@ export function AdminClients() {
                                         })
                                         const data = await res.json()
                                         if (!res.ok || !data.access_token) throw new Error(data.error || 'Failed to generate login token')
-                                        const adminUser = localStorage.getItem('gritsync_user')
-                                        localStorage.setItem('admin_session_backup', JSON.stringify({
-                                          access_token: adminToken,
-                                          refresh_token: localStorage.getItem('gritsync_refresh_token') || '',
-                                          user: adminUser ? JSON.parse(adminUser) : null,
-                                        }))
+                                        pushCurrentSession()
                                         localStorage.setItem('gritsync_token', data.access_token)
                                         localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
                                         localStorage.setItem('gritsync_user', JSON.stringify(data.user))
@@ -830,293 +1094,357 @@ export function AdminClients() {
         </main>
       </div>
 
-      {/* Client Details Modal */}
+      {/* Create user modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => { if (!creatingUser) setShowCreateModal(false) }}
+        title={`Create ${ROLE_SINGULAR[createForm.role]}`}
+        size="md"
+      >
+        <form className="space-y-4" onSubmit={handleCreateUser}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+            <select
+              value={createForm.role}
+              onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as RoleTab }))}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="client">Client</option>
+              <option value="affiliate">Affiliate</option>
+              <option value="advisor">Advisor</option>
+              <option value="admin">Admin</option>
+            </select>
+            {(createForm.role === 'affiliate' || createForm.role === 'advisor') && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">A referral code is generated automatically once the account is created.</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="First Name" value={createForm.first_name} onChange={(e) => setCreateForm((f) => ({ ...f, first_name: e.target.value }))} placeholder="Juan" />
+            <Input label="Last Name" value={createForm.last_name} onChange={(e) => setCreateForm((f) => ({ ...f, last_name: e.target.value }))} placeholder="Dela Cruz" />
+          </div>
+          <Input label="Middle Name (optional)" value={createForm.middle_name} onChange={(e) => setCreateForm((f) => ({ ...f, middle_name: e.target.value }))} />
+          <Input label="Personal Email" type="email" value={createForm.personal_email} onChange={(e) => setCreateForm((f) => ({ ...f, personal_email: e.target.value }))} placeholder="name@example.com" />
+          <Input label="Mobile Number" value={createForm.mobile} onChange={(e) => setCreateForm((f) => ({ ...f, mobile: e.target.value }))} placeholder="+63..." />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Temporary Password</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showCreatePassword ? 'text' : 'password'}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="At least 8 characters"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button type="button" onClick={() => setShowCreatePassword((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title={showCreatePassword ? 'Hide' : 'Show'}>
+                  {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setCreateForm((f) => ({ ...f, password: generatePassword(14) }))} title="Generate a strong password">
+                <RefreshCcw className="h-4 w-4 mr-2" /> Generate
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              A strong 14-character password is pre-filled. You'll be able to copy & share it after the account is created — it's only shown once.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateModal(false)} disabled={creatingUser}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={creatingUser}>
+              <UserPlus className={`h-4 w-4 mr-2 ${creatingUser ? 'animate-pulse' : ''}`} />
+              {creatingUser ? 'Creating…' : `Create ${ROLE_SINGULAR[createForm.role]}`}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Client Details Modal — single source of truth is `user_details`.
+          /app/my-details and /app/application/new both upsert to that
+          table, so what shows here is what the user sees in their own
+          profile (and vice versa). */}
       <Modal
         isOpen={!!selectedClient}
         onClose={handleCloseModal}
-        title={selectedClient ? getFullName(selectedClient.first_name, selectedClient.last_name) : ''}
+        title=""
         size="xl"
       >
-        {loadingDetails ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-          </div>
-        ) : (
-          <div className="space-y-6 max-h-[80vh] overflow-y-auto">
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (!selectedClient) return
-                  handleCloseModal()
-                  navigate('/admin/messages', { state: { clientId: selectedClient.id } })
-                }}
-                className="flex items-center gap-2"
-              >
-                <MessageSquare className="h-4 w-4" />
-                Message Client
-              </Button>
-            </div>
+        {(() => {
+          const c = selectedClient
+          // Prefer the canonical name from `users`; fall back to user_details.
+          const fullName = c
+            ? getFullName(c.first_name || clientDetails?.first_name, c.last_name || clientDetails?.last_name)
+            : ''
+          const initials = fullName
+            ? fullName.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+            : '?'
+          const memberSince = c ? formatDate(c.created_at) : ''
+          const emailDisplay = clientDetails?.email || c?.email || 'No email'
+          const mobileDisplay = clientDetails?.mobile_number || 'No mobile'
+          const fmtAddress = [
+            clientDetails?.house_number,
+            clientDetails?.street_name,
+            clientDetails?.city,
+            clientDetails?.province,
+            clientDetails?.country,
+            clientDetails?.zipcode,
+          ].filter(Boolean).join(', ')
 
-            {/* Personal Information */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Personal Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">First Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.first_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Middle Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.middle_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.last_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Gender</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.gender || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Marital Status</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.marital_status || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Single Full Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.single_full_name || clientDetails?.single_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Date of Birth</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.date_of_birth) || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Birth Place</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.birth_place || clientDetails?.place_of_birth || 'N/A'}</p>
-                </div>
+          if (loadingDetails) {
+            return (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-600 border-t-transparent" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading profile…</p>
               </div>
-            </Card>
+            )
+          }
 
-            {/* Contact Information */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <Mail className="h-5 w-5" />
-                Contact Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.email || selectedClient?.email || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Mobile Number</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.mobile_number || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Address */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Address
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">House Number & Street Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.house_number || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Barangay</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.street_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">City / Municipality Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.city || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Province</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.province || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Country</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.country || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Zipcode</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.zipcode || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Education - Elementary School */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <School className="h-5 w-5" />
-                Elementary School
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">School Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.elementary_school || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">City</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.elementary_city || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Province</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.elementary_province || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Country</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.elementary_country || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Years Attended</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.elementary_years_attended || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Start Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.elementary_start_date, true) || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">End Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.elementary_end_date, true) || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Education - High School */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <School className="h-5 w-5" />
-                High School
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">School Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.high_school || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">City</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.high_school_city || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Province</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.high_school_province || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Country</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.high_school_country || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Years Attended</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.high_school_years_attended || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Start Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.high_school_start_date, true) || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">End Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.high_school_end_date, true) || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Education - Nursing School */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <Award className="h-5 w-5" />
-                Nursing School
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">School Name</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">City</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school_city || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Province</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school_province || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Country</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school_country || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Years Attended</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school_years_attended || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Start Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.nursing_school_start_date, true) || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">End Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.nursing_school_end_date, true) || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Major/Field of Study</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{clientDetails?.nursing_school_major || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Diploma Date</label>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDisplayDate(clientDetails?.nursing_school_diploma_date) || 'N/A'}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Documents */}
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Documents
-              </h3>
-              {clientDocuments.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No documents uploaded</p>
-              ) : (
-                <div className="space-y-2">
-                  {clientDocuments.map((doc: any) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {getDocumentDisplayName(doc.document_type)}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {doc.file_name} • {formatDate(doc.uploaded_at)}
-                          </p>
+          return (
+            <div className="-m-3 sm:-m-4 md:-m-6 max-h-[85vh] overflow-y-auto">
+              {/* ───────── Hero header ───────── */}
+              <div className="relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary-600 via-primary-700 to-violet-700 dark:from-primary-700 dark:via-primary-800 dark:to-violet-900" />
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{ backgroundImage: 'radial-gradient(circle at 20% 0%, white 0%, transparent 35%), radial-gradient(circle at 80% 100%, white 0%, transparent 35%)' }}
+                />
+                <div className="relative p-6 sm:p-8 text-white">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                    {/* Avatar */}
+                    <div className="flex-shrink-0">
+                      <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-white/15 backdrop-blur ring-2 ring-white/30 flex items-center justify-center text-2xl sm:text-3xl font-bold shadow-lg">
+                        {initials}
+                      </div>
+                    </div>
+                    {/* Identity */}
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl sm:text-3xl font-bold truncate">{fullName || 'Unnamed user'}</h2>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {c && (
+                          <span className="inline-flex items-center rounded-full bg-white/20 backdrop-blur px-2.5 py-0.5 text-[11px] font-semibold capitalize ring-1 ring-white/30">
+                            {c.role}
+                          </span>
+                        )}
+                        {c?.grit_id && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 backdrop-blur px-2.5 py-0.5 text-[11px] font-mono ring-1 ring-white/20">
+                            <Shield className="h-3 w-3" /> {c.grit_id}
+                          </span>
+                        )}
+                        {c && (c.role === 'affiliate' || c.role === 'advisor') && c.referral_code && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 backdrop-blur px-2.5 py-0.5 text-[11px] font-mono ring-1 ring-white/20">
+                            <Link2 className="h-3 w-3" /> {c.referral_code}
+                          </span>
+                        )}
+                        {c?.is_active === false && (
+                          <span className="inline-flex items-center rounded-full bg-red-500/30 px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-red-300/40">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-white/90">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Mail className="h-4 w-4 flex-shrink-0 text-white/70" />
+                          <span className="truncate">{emailDisplay}</span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <svg className="h-4 w-4 flex-shrink-0 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+                          </svg>
+                          <span className="truncate">{mobileDisplay}</span>
                         </div>
                       </div>
+                    </div>
+                    {/* Actions */}
+                    <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => handleViewDocument(doc.file_path, doc.file_name)}
+                        onClick={() => {
+                          if (!c) return
+                          handleCloseModal()
+                          navigate('/messages', { state: { userId: c.id } })
+                        }}
+                        className="bg-white text-primary-700 hover:bg-white/90 border-0 shadow-md flex items-center gap-2"
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
+                        <MessageSquare className="h-4 w-4" />
+                        Message
                       </Button>
+                      <button
+                        onClick={handleCloseModal}
+                        className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors sm:order-first"
+                        aria-label="Close"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Stat strip */}
+                  <div className="mt-6 grid grid-cols-3 gap-3">
+                    <div className="rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/20 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60 font-semibold">Member since</div>
+                      <div className="mt-0.5 text-sm font-semibold truncate">{memberSince}</div>
+                    </div>
+                    <div className="rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/20 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60 font-semibold">Documents</div>
+                      <div className="mt-0.5 text-sm font-semibold">{clientDocuments.length}</div>
+                    </div>
+                    <div className="rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/20 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-white/60 font-semibold">Status</div>
+                      <div className="mt-0.5 text-sm font-semibold">{c?.is_active === false ? 'Inactive' : 'Active'}</div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </Card>
-          </div>
-        )}
+              </div>
+
+              {/* ───────── Body ───────── */}
+              <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/40 space-y-4">
+                {/* Personal Information */}
+                <ProfileSection
+                  icon={User}
+                  title="Personal Information"
+                  accent="from-sky-500 to-blue-600"
+                  fields={[
+                    { label: 'First name', value: c?.first_name || clientDetails?.first_name },
+                    { label: 'Middle name', value: clientDetails?.middle_name },
+                    { label: 'Last name', value: c?.last_name || clientDetails?.last_name },
+                    { label: 'Gender', value: clientDetails?.gender, capitalize: true },
+                    { label: 'Marital status', value: clientDetails?.marital_status, capitalize: true },
+                    { label: 'Single full name', value: clientDetails?.single_full_name || clientDetails?.single_name },
+                    { label: 'Date of birth', value: formatDisplayDate(clientDetails?.date_of_birth) },
+                    { label: 'Birth place', value: clientDetails?.birth_place || clientDetails?.place_of_birth },
+                  ]}
+                />
+
+                {/* Address */}
+                <ProfileSection
+                  icon={MapPin}
+                  title="Address"
+                  accent="from-emerald-500 to-green-600"
+                  summary={fmtAddress || undefined}
+                  fields={[
+                    { label: 'House number', value: clientDetails?.house_number },
+                    { label: 'Barangay / Street', value: clientDetails?.street_name },
+                    { label: 'City / Municipality', value: clientDetails?.city },
+                    { label: 'Province', value: clientDetails?.province },
+                    { label: 'Country', value: clientDetails?.country },
+                    { label: 'Zipcode', value: clientDetails?.zipcode },
+                  ]}
+                />
+
+                {/* Elementary School */}
+                <ProfileSection
+                  icon={School}
+                  title="Elementary School"
+                  accent="from-amber-500 to-orange-600"
+                  summary={clientDetails?.elementary_school || undefined}
+                  fields={[
+                    { label: 'School name', value: clientDetails?.elementary_school },
+                    { label: 'City', value: clientDetails?.elementary_city },
+                    { label: 'Province', value: clientDetails?.elementary_province },
+                    { label: 'Country', value: clientDetails?.elementary_country },
+                    { label: 'Years attended', value: clientDetails?.elementary_years_attended },
+                    { label: 'Start date', value: formatDisplayDate(clientDetails?.elementary_start_date, true) },
+                    { label: 'End date', value: formatDisplayDate(clientDetails?.elementary_end_date, true) },
+                  ]}
+                />
+
+                {/* High School */}
+                <ProfileSection
+                  icon={School}
+                  title="High School"
+                  accent="from-rose-500 to-pink-600"
+                  summary={clientDetails?.high_school || undefined}
+                  fields={[
+                    { label: 'School name', value: clientDetails?.high_school },
+                    { label: 'City', value: clientDetails?.high_school_city },
+                    { label: 'Province', value: clientDetails?.high_school_province },
+                    { label: 'Country', value: clientDetails?.high_school_country },
+                    { label: 'Years attended', value: clientDetails?.high_school_years_attended },
+                    { label: 'Start date', value: formatDisplayDate(clientDetails?.high_school_start_date, true) },
+                    { label: 'End date', value: formatDisplayDate(clientDetails?.high_school_end_date, true) },
+                  ]}
+                />
+
+                {/* Nursing School */}
+                <ProfileSection
+                  icon={Award}
+                  title="Nursing School"
+                  accent="from-violet-500 to-purple-600"
+                  summary={clientDetails?.nursing_school || undefined}
+                  fields={[
+                    { label: 'School name', value: clientDetails?.nursing_school },
+                    { label: 'City', value: clientDetails?.nursing_school_city },
+                    { label: 'Province', value: clientDetails?.nursing_school_province },
+                    { label: 'Country', value: clientDetails?.nursing_school_country },
+                    { label: 'Years attended', value: clientDetails?.nursing_school_years_attended },
+                    { label: 'Start date', value: formatDisplayDate(clientDetails?.nursing_school_start_date, true) },
+                    { label: 'End date', value: formatDisplayDate(clientDetails?.nursing_school_end_date, true) },
+                    { label: 'Major / Field', value: clientDetails?.nursing_school_major },
+                    { label: 'Diploma date', value: formatDisplayDate(clientDetails?.nursing_school_diploma_date) },
+                  ]}
+                />
+
+                {/* Documents */}
+                <div className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm">
+                      <FileText className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Documents</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{clientDocuments.length} uploaded</p>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    {clientDocuments.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <div className="h-12 w-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
+                          <FileText className="h-6 w-6 text-gray-400" />
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No documents uploaded yet</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {clientDocuments.map((doc: any) => (
+                          <div
+                            key={doc.id}
+                            className="group flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/40 hover:bg-white dark:hover:bg-gray-800 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all"
+                          >
+                            <div className="h-10 w-10 rounded-lg bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center flex-shrink-0">
+                              <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {getDocumentDisplayName(doc.document_type)}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {formatDate(doc.uploaded_at)}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDocument(doc.file_path, doc.file_name)}
+                              className="opacity-70 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
+
+      {/* Credentials modal — shown after a successful create with the temp password */}
+      <CredentialsModal
+        credentials={createdCredentials}
+        onClose={() => setCreatedCredentials(null)}
+      />
     </div>
   )
 }

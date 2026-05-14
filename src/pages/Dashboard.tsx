@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { Button } from '@/components/ui/Button'
 import { SEO } from '@/components/SEO'
-import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User } from 'lucide-react'
+import { FileText, ClipboardList, DollarSign, CheckCircle, ArrowRight, TrendingUp, Clock, Activity, Users, AlertCircle, XCircle, Settings, BarChart3, Zap, FileCheck, User, CreditCard } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
 import { dashboardAPI, applicationsAPI, quotationsAPI, userDetailsAPI, userDocumentsAPI, applicationPaymentsAPI, timelineStepsAPI } from '@/lib/api'
@@ -63,6 +63,18 @@ export function Dashboard() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([])
   const [pendingPayments, setPendingPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [clientTodos, setClientTodos] = useState<Array<{
+    id: string
+    title: string
+    description: string
+    href: string
+    priority: 'urgent' | 'normal'
+    kind: 'payment' | 'timeline'
+  }>>([])
+  // Once a client has any in-progress NCLEX application, the onboarding
+  // checklist (email verified, profile %, document uploads) is no longer
+  // useful — the To-Do list takes over that card slot.
+  const [hasActiveApplication, setHasActiveApplication] = useState(false)
   // Load firstName from cache on mount
   const getCachedFirstName = (userId: string | undefined): string | null => {
     if (!userId) return null
@@ -133,8 +145,7 @@ export function Dashboard() {
     ]
     const nursingSchoolFields = [
       'nursingSchool', 'nursingSchoolCity', 'nursingSchoolProvince', 'nursingSchoolCountry',
-      'nursingSchoolYearsAttended', 'nursingSchoolStartDate', 'nursingSchoolEndDate',
-      'nursingSchoolMajor', 'nursingSchoolDiplomaDate'
+      'nursingSchoolYearsAttended', 'nursingSchoolStartDate', 'nursingSchoolEndDate'
     ]
     const allFields = [
       ...personalInfoFields,
@@ -207,8 +218,6 @@ export function Dashboard() {
             nursing_school_years_attended?: string
             nursing_school_start_date?: string
             nursing_school_end_date?: string
-            nursing_school_major?: string
-            nursing_school_diploma_date?: string
           } | null
           if (typedDetails?.first_name) {
             setFirstNameWithCache(typedDetails.first_name, user.id)
@@ -254,9 +263,7 @@ export function Dashboard() {
               nursingSchoolCountry: typedDetails.nursing_school_country,
               nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
               nursingSchoolStartDate: typedDetails.nursing_school_start_date,
-              nursingSchoolEndDate: typedDetails.nursing_school_end_date,
-              nursingSchoolMajor: typedDetails.nursing_school_major,
-              nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
+              nursingSchoolEndDate: typedDetails.nursing_school_end_date
             })
             setProfileCompletion(completion)
           }
@@ -586,6 +593,91 @@ export function Dashboard() {
         // Sort by date
         pending.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         setPendingItems(pending.slice(0, 10))
+      }
+
+      // Client todo-list: surface the next concrete actions for each
+      // in-progress NCLEX application — pending payments and incomplete
+      // client-driven timeline steps. Admins skip this; their pending list
+      // already covers admin actions.
+      if (!isAdmin() && Array.isArray(applications)) {
+        const activeApps = applications.filter(
+          (app: any) => app.application_type !== 'EAD' &&
+            app.status !== 'completed' && app.status !== 'rejected' && app.status !== 'cancelled'
+        )
+        setHasActiveApplication(activeApps.length > 0)
+        if (activeApps.length > 0) {
+          const todos: typeof clientTodos = []
+          // Fetch timeline + payments for each active application in parallel.
+          await Promise.all(activeApps.map(async (app: any) => {
+            const trackId = app.grit_app_id || app.id
+            const baseLink = `/applications/${trackId}/timeline`
+            const [steps, payments] = await Promise.all([
+              timelineStepsAPI.getByApplication(app.id).catch(() => []),
+              applicationPaymentsAPI.getByApplication(app.id).catch(() => []),
+            ])
+            const stepMap = new Map<string, any>(
+              (steps as any[]).map((s) => [s.step_key, s])
+            )
+            const isDone = (k: string) => stepMap.get(k)?.status === 'completed'
+
+            // Pending payments — show one entry per unpaid step.
+            for (const p of payments as any[]) {
+              if (p.status === 'pending') {
+                const label =
+                  p.payment_type === 'step1' ? 'Pay application — Step 1'
+                  : p.payment_type === 'step2' ? 'Pay application — Step 2'
+                  : 'Complete payment'
+                todos.push({
+                  id: `${app.id}:pay:${p.id}`,
+                  title: label,
+                  description: `Application ${trackId}${p.amount ? ` · $${Number(p.amount).toFixed(2)}` : ''}`,
+                  href: `/applications/${trackId}/payments`,
+                  priority: 'urgent',
+                  kind: 'payment',
+                })
+              } else if (p.status === 'pending_approval') {
+                todos.push({
+                  id: `${app.id}:pay:${p.id}:review`,
+                  title: 'Payment is under review',
+                  description: `Application ${trackId} — we'll notify you once it's verified.`,
+                  href: `/applications/${trackId}/payments`,
+                  priority: 'normal',
+                  kind: 'payment',
+                })
+              }
+            }
+
+            // Client-actionable timeline steps in canonical order. Everything
+            // else on the timeline (mandatory courses, Form 1, ATT, exam booking)
+            // is informational/admin-driven for the client and is NOT surfaced
+            // here. Order matches the timeline UI so the list reads top→bottom.
+            const TIMELINE_ACTIONS: Array<{ key: string; title: string; description: string }> = [
+              { key: 'letter_generated',        title: 'Generate letter for school',            description: 'Open the timeline and click "Generate Letter for school".' },
+              { key: 'form_2f_downloaded',      title: 'Download Form 2F',                       description: 'Pre-filled with your information — download from the timeline.' },
+              { key: 'letter_submitted',        title: 'Letter for school submitted',            description: 'Mark this step complete on the timeline and enter the date you submitted the letter.' },
+              { key: 'official_docs_submitted', title: 'Official Documents Sent by School to NY BON', description: 'Mark this step complete on the timeline and enter the date your school sent the documents.' },
+            ]
+            const remaining = TIMELINE_ACTIONS.filter((a) => !isDone(a.key))
+            for (const action of remaining) {
+              todos.push({
+                id: `${app.id}:step:${action.key}`,
+                title: action.title,
+                description: `Application ${trackId} — ${action.description}`,
+                href: baseLink,
+                priority: 'normal',
+                kind: 'timeline',
+              })
+            }
+          }))
+          // Urgent items first, then preserve order.
+          todos.sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'urgent' ? -1 : 1))
+          setClientTodos(todos)
+        } else {
+          setClientTodos([])
+        }
+      } else if (isAdmin()) {
+        // Admins never see the client onboarding/to-do hub.
+        setHasActiveApplication(false)
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -918,7 +1010,7 @@ export function Dashboard() {
                       </div>
                     </div>
                   </Link>
-                  <Link to="/admin/clients">
+                  <Link to="/admin/users">
                     <div className="group p-4 rounded-xl border-2 border-transparent bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md transition-all duration-200 cursor-pointer">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-purple-500/10 dark:bg-purple-400/20 group-hover:bg-purple-500/20 transition-colors">
@@ -1254,8 +1346,13 @@ export function Dashboard() {
           {/* Main grid: Onboarding Hub + Stats */}
           <div className="grid lg:grid-cols-3 gap-6 mb-8">
 
-            {/* Onboarding / Readiness Hub */}
+            {/* Onboarding / Readiness Hub
+                Once the client has an active application the onboarding
+                checklist is suppressed — the To-Do list (rendered further
+                below in this same Card) becomes the primary content. */}
             <Card className="lg:col-span-1 border-0 shadow-md">
+              {!hasActiveApplication && (
+              <>
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
                   <div className={cn(
@@ -1390,12 +1487,85 @@ export function Dashboard() {
               )}
               {onboardingDone && (
                 <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                  <Link to="/apply">
+                  <Link to="/application/new">
                     <Button size="sm" className="w-full text-xs font-semibold bg-green-600 hover:bg-green-700">
                       <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
                       Apply for NCLEX Processing
                     </Button>
                   </Link>
+                </div>
+              )}
+              </>
+              )}
+
+              {/* Todo List — when the client has an active application this
+                  becomes the primary content of the card (the onboarding
+                  checklist above is suppressed). Otherwise it's gated on
+                  onboardingDone, same as before. */}
+              {(hasActiveApplication || (onboardingDone && clientTodos.length > 0)) && (
+                <div className={cn(hasActiveApplication ? '' : 'mt-5 pt-4 border-t border-gray-100 dark:border-gray-700')}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={cn('rounded-lg', hasActiveApplication ? 'p-2 bg-primary-100 dark:bg-primary-900/30' : 'p-1.5 bg-primary-100 dark:bg-primary-900/30')}>
+                        <ClipboardList className={cn(hasActiveApplication ? 'h-5 w-5 text-primary-600 dark:text-primary-400' : 'h-3.5 w-3.5 text-primary-600 dark:text-primary-400')} />
+                      </div>
+                      <h3 className={cn('font-semibold text-gray-900 dark:text-gray-100', hasActiveApplication ? 'text-base' : 'text-sm')}>Your To-Do List</h3>
+                    </div>
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                      {clientTodos.length} {clientTodos.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+                  {hasActiveApplication && clientTodos.length === 0 && (
+                    <div className="p-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-900/10 text-center">
+                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 mx-auto mb-1.5" />
+                      <p className="text-xs font-semibold text-green-800 dark:text-green-300">All caught up!</p>
+                      <p className="text-[11px] text-green-700/80 dark:text-green-400/80 mt-0.5">
+                        Nothing's waiting on you right now. We'll let you know when the next step is ready.
+                      </p>
+                    </div>
+                  )}
+                  {clientTodos.length > 0 && (
+                  <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                    {clientTodos.map((t) => (
+                      <li key={t.id}>
+                        <Link
+                          to={t.href}
+                          className={cn(
+                            'flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors group',
+                            t.priority === 'urgent'
+                              ? 'border-red-200 dark:border-red-900/40 bg-red-50/60 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                          )}
+                        >
+                          <div className={cn(
+                            'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5',
+                            t.priority === 'urgent'
+                              ? 'bg-red-100 dark:bg-red-900/30'
+                              : 'bg-amber-100 dark:bg-amber-900/30'
+                          )}>
+                            {t.kind === 'payment' ? (
+                              <CreditCard className={cn('h-3 w-3', t.priority === 'urgent' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')} />
+                            ) : (
+                              <ClipboardList className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              'text-xs font-semibold leading-tight',
+                              t.priority === 'urgent' ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-gray-100'
+                            )}>
+                              {t.title}
+                            </p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                              {t.description}
+                            </p>
+                          </div>
+                          <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 mt-1" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  )}
                 </div>
               )}
             </Card>

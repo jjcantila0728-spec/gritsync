@@ -75,8 +75,7 @@ function calculateCompletion(details: any): number {
   // Nursing School fields
   const nursingSchoolFields = [
     'nursingSchool', 'nursingSchoolCity', 'nursingSchoolProvince', 'nursingSchoolCountry',
-    'nursingSchoolYearsAttended', 'nursingSchoolStartDate', 'nursingSchoolEndDate',
-    'nursingSchoolMajor', 'nursingSchoolDiplomaDate'
+    'nursingSchoolYearsAttended', 'nursingSchoolStartDate', 'nursingSchoolEndDate'
   ]
   
   const allFields = [
@@ -254,10 +253,6 @@ export function MyDetails() {
         const yearsError = validateYearsAttended(nursingSchoolYearsAttended)
         if (yearsError) errors.nursingSchoolYearsAttended = yearsError
       }
-      if (nursingSchoolDiplomaDate) {
-        const dateError = validateDate(nursingSchoolDiplomaDate, 'Diploma Date')
-        if (dateError) errors.nursingSchoolDiplomaDate = dateError
-      }
     }
 
     setValidationErrors(errors)
@@ -361,13 +356,6 @@ export function MyDetails() {
           delete errors.nursingSchoolEndDate
         }
         break
-      case 'nursingSchoolDiplomaDate':
-        if (nursingSchoolDiplomaDate) {
-          errors.nursingSchoolDiplomaDate = validateDate(nursingSchoolDiplomaDate, 'Diploma Date')
-        } else {
-          delete errors.nursingSchoolDiplomaDate
-        }
-        break
     }
 
     // Remove empty errors
@@ -390,6 +378,9 @@ export function MyDetails() {
 
   // Address
   const [email, setEmail] = useState('')
+  // Personal (reply-to / login) email — distinct from the auto-generated business
+  // address shown above. Stored on `users.personal_email`.
+  const [personalEmail, setPersonalEmail] = useState('')
   const [mobileNumber, setMobileNumber] = useState('')
   const [houseNumber, setHouseNumber] = useState('')
   const [streetName, setStreetName] = useState('')
@@ -424,8 +415,6 @@ export function MyDetails() {
   const [nursingSchoolYearsAttended, setNursingSchoolYearsAttended] = useState('')
   const [nursingSchoolStartDate, setNursingSchoolStartDate] = useState('')
   const [nursingSchoolEndDate, setNursingSchoolEndDate] = useState('')
-  const [nursingSchoolMajor, setNursingSchoolMajor] = useState('')
-  const [nursingSchoolDiplomaDate, setNursingSchoolDiplomaDate] = useState('')
 
   // Application Details
   const [signature, setSignature] = useState('')
@@ -486,8 +475,6 @@ export function MyDetails() {
         nursing_school_years_attended?: string
         nursing_school_start_date?: string
         nursing_school_end_date?: string
-        nursing_school_major?: string
-        nursing_school_diploma_date?: string
       } | null
       if (!typedDetails) return
       
@@ -525,9 +512,7 @@ export function MyDetails() {
         nursingSchoolCountry: typedDetails.nursing_school_country,
         nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
         nursingSchoolStartDate: typedDetails.nursing_school_start_date,
-        nursingSchoolEndDate: typedDetails.nursing_school_end_date,
-        nursingSchoolMajor: typedDetails.nursing_school_major,
-        nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
+        nursingSchoolEndDate: typedDetails.nursing_school_end_date
       })
       
       // Check if we should send a reminder (only if < 100% and haven't sent one recently)
@@ -588,21 +573,24 @@ export function MyDetails() {
 
   async function fetchDetails() {
     try {
-      // Fetch avatar and default design from users table (separate from 2x2 picture)
+      // Fetch avatar, default design, and personal_email from users table.
+      // personal_email is the reply-to/login email, distinct from the auto-
+      // generated business address (clientEmail/email_addresses table).
       try {
         const { data: userData } = await db
           .from('users')
-          .select('avatar_path, default_avatar_design')
+          .select('avatar_path, default_avatar_design, personal_email')
           .eq('id', user?.id || '')
           .single()
-        
-        const typedUserData = userData as { avatar_path?: string; default_avatar_design?: string | null } | null
+
+        const typedUserData = userData as { avatar_path?: string; default_avatar_design?: string | null; personal_email?: string | null } | null
         if (typedUserData?.avatar_path) {
           const url = await getSignedFileUrl(typedUserData.avatar_path, 3600, true) // silent=true for avatars
           setAvatarUrl(url)
         } else {
           setAvatarUrl(null)
         }
+        setPersonalEmail(typedUserData?.personal_email || '')
         
         // Set default avatar design and cache it
         const design = typedUserData?.default_avatar_design || 'default'
@@ -663,8 +651,6 @@ export function MyDetails() {
         nursing_school_years_attended?: string
         nursing_school_start_date?: string
         nursing_school_end_date?: string
-        nursing_school_major?: string
-        nursing_school_diploma_date?: string
         signature?: string
         payment_type?: string
       } | null
@@ -712,8 +698,6 @@ export function MyDetails() {
         setNursingSchoolYearsAttended(typedDetails.nursing_school_years_attended || '')
         setNursingSchoolStartDate(convertToMMYYYY(typedDetails.nursing_school_start_date))
         setNursingSchoolEndDate(convertToMMYYYY(typedDetails.nursing_school_end_date))
-        setNursingSchoolMajor(typedDetails.nursing_school_major || '')
-        setNursingSchoolDiplomaDate(convertFromDatabaseFormat(typedDetails.nursing_school_diploma_date))
         setSignature(typedDetails.signature || '')
         setPaymentType(typedDetails.payment_type || '')
         
@@ -752,9 +736,7 @@ export function MyDetails() {
           nursingSchoolCountry: typedDetails.nursing_school_country,
           nursingSchoolYearsAttended: typedDetails.nursing_school_years_attended,
           nursingSchoolStartDate: typedDetails.nursing_school_start_date,
-          nursingSchoolEndDate: typedDetails.nursing_school_end_date,
-          nursingSchoolMajor: typedDetails.nursing_school_major,
-          nursingSchoolDiplomaDate: typedDetails.nursing_school_diploma_date
+          nursingSchoolEndDate: typedDetails.nursing_school_end_date
         })
         setCompletionPercentage(completion)
       } else {
@@ -1022,8 +1004,6 @@ export function MyDetails() {
         nursing_school_years_attended: safeTrim(nursingSchoolYearsAttended),
         nursing_school_start_date: convertMMYYYYToDatabase(nursingSchoolStartDate) || null,
         nursing_school_end_date: convertMMYYYYToDatabase(nursingSchoolEndDate) || null,
-        nursing_school_major: safeTrim(nursingSchoolMajor),
-        nursing_school_diploma_date: convertToDatabaseFormat(nursingSchoolDiplomaDate) || null,
       }
       
       // Merge with existing details - preserve existing values when new value is null/empty
@@ -1060,13 +1040,15 @@ export function MyDetails() {
       // Auto-generate and save email address if names are provided
       if (firstName && lastName && user?.id) {
         try {
-          // Save first_name, last_name, middle_name to the users table (they don't belong in user_details)
+          // Save first_name, last_name, middle_name, and personal_email to
+          // the users table (they don't belong in user_details).
           await db
             .from('users')
             .update({
               first_name: firstName.trim(),
               last_name: lastName.trim(),
               middle_name: middleName ? middleName.trim() : null,
+              personal_email: personalEmail.trim() || null,
             })
             .eq('id', user.id)
           
@@ -1134,9 +1116,7 @@ export function MyDetails() {
         nursingSchoolCountry,
         nursingSchoolYearsAttended,
         nursingSchoolStartDate,
-        nursingSchoolEndDate,
-        nursingSchoolMajor,
-        nursingSchoolDiplomaDate
+        nursingSchoolEndDate
       })
       setCompletionPercentage(completion)
       
@@ -1448,11 +1428,23 @@ export function MyDetails() {
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 justify-center sm:justify-start mb-2">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <p className="text-gray-600 dark:text-gray-400">
-                      {clientEmail || user.email}
-                    </p>
+                  <div className="flex flex-col gap-1 mb-2">
+                    <div className="flex items-center gap-2 justify-center sm:justify-start">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <p className="text-gray-600 dark:text-gray-400">
+                        <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1.5">Business:</span>
+                        {clientEmail || user.email}
+                      </p>
+                    </div>
+                    {personalEmail && (
+                      <div className="flex items-center gap-2 justify-center sm:justify-start">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <p className="text-gray-600 dark:text-gray-400">
+                          <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1.5">Personal:</span>
+                          {personalEmail}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
                     {user.role === 'admin' && (
@@ -1584,13 +1576,23 @@ export function MyDetails() {
                     </div>
                     <div>
                       <Input
-                        label="Email Address"
+                        label="Business Email"
                         type="email"
                         value={clientEmail || email}
                         disabled
                         placeholder="Auto-generated from your name"
                         className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed opacity-75"
-                        hint="This email is auto-generated based on your first name, middle name, and last name"
+                        hint="Auto-generated from your first name, middle name, and last name."
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        label="Personal Email"
+                        type="email"
+                        value={personalEmail}
+                        onChange={(e) => setPersonalEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        hint="Your private reply-to / login email. We'll never auto-generate this for you."
                       />
                     </div>
                     <Select
@@ -2458,41 +2460,6 @@ export function MyDetails() {
                       />
                     </div>
                   </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Input
-                        label="Major/Field of Study"
-                        value={nursingSchoolMajor}
-                        onChange={(e) => setNursingSchoolMajor(e.target.value)}
-                        placeholder="BS in Nursing"
-                        className={cn(
-                          nursingSchoolMajor && 'border-green-500 focus:ring-green-500'
-                        )}
-                      />
-                    </div>
-                    <div>
-                      <Input
-                        label="Diploma Date (MM/DD/YYYY)"
-                        type="text"
-                        value={nursingSchoolDiplomaDate}
-                        onChange={(e) => {
-                          const formatted = formatMMDDYYYY(e.target.value)
-                          setNursingSchoolDiplomaDate(formatted)
-                          if (touchedFields.nursingSchoolDiplomaDate) {
-                            handleFieldBlur('nursingSchoolDiplomaDate')
-                          }
-                        }}
-                        onBlur={() => handleFieldBlur('nursingSchoolDiplomaDate')}
-                        placeholder="MM/DD/YYYY"
-                        maxLength={10}
-                        error={touchedFields.nursingSchoolDiplomaDate ? validationErrors.nursingSchoolDiplomaDate : undefined}
-                        className={cn(
-                          getFieldStatus('nursingSchoolDiplomaDate', nursingSchoolDiplomaDate) === 'success' && 'border-green-500 focus:ring-green-500',
-                          getFieldStatus('nursingSchoolDiplomaDate', nursingSchoolDiplomaDate) === 'error' && 'border-red-500 focus:ring-red-500'
-                        )}
-                      />
-                    </div>
-                  </div>
                 </div>
               ) : (
                 <div>
@@ -2568,25 +2535,6 @@ export function MyDetails() {
                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                           </div>
                           <p className="text-gray-900 dark:text-gray-100 font-medium">{formatMonthYear(nursingSchoolEndDate)}</p>
-                        </div>
-                      )}
-                      {nursingSchoolMajor && (
-                        <div className="group">
-                          <div className="flex items-center gap-2 mb-2">
-                            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Major/Field of Study</label>
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          </div>
-                          <p className="text-gray-900 dark:text-gray-100 font-medium">{nursingSchoolMajor}</p>
-                        </div>
-                      )}
-                      {nursingSchoolDiplomaDate && (
-                        <div className="group">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Diploma Date</label>
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          </div>
-                          <p className="text-gray-900 dark:text-gray-100 font-medium">{nursingSchoolDiplomaDate}</p>
                         </div>
                       )}
                     </div>

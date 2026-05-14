@@ -44,6 +44,8 @@ interface PaymentReceiptData {
     first_name?: string
     last_name?: string
   }
+  /** Optional pre-built attachments (receipt + invoice PDFs). */
+  attachments?: File[]
 }
 
 /**
@@ -70,7 +72,7 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
       // Fetch user from database
       const { data: userData, error: userError } = await db
         .from('users')
-        .select('email, full_name, first_name, last_name')
+        .select('email, first_name, last_name')
         .eq('id', data.receipt.user_id)
         .single()
       
@@ -228,7 +230,12 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
               </table>
             </div>
 
-            <p>Thank you for your payment! Please keep this email as a record of your payment. If you need an official receipt or invoice document, contact our support team.</p>
+            ${data.attachments && data.attachments.length > 0 ? `
+            <div class="attachments-note">
+              <strong>📎 Attached to this email:</strong> your official receipt and invoice (PDF). Please save them for your records.
+            </div>` : ''}
+
+            <p>Thank you for your payment! Please keep this email as a record of your payment.</p>
 
             <p>If you have any questions about your payment, please don't hesitate to contact our support team.</p>
           </div>
@@ -250,6 +257,7 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
       recipientName: userName,
       recipientUserId: data.user?.id || data.receipt.user_id,
       applicationId: data.application?.id || data.receipt.application_id,
+      attachments: data.attachments && data.attachments.length > 0 ? data.attachments : undefined,
       metadata: {
         receiptNumber: data.receipt.receipt_number,
         amount: data.receipt.amount,

@@ -7,6 +7,7 @@ import { db } from './api-client'
 import { generalSettings } from './settings'
 import * as EmailTemplates from './email-templates'
 import { getCurrentUserId } from './api-service'
+import { resolveDeliveryAddress } from './email-routing-policy'
 
 interface EmailAttachment {
   filename: string
@@ -259,6 +260,26 @@ export async function sendEmail(options: EmailOptions & {
       })
       return false
     }
+
+    // Routing policy: system notifications must never be delivered to a
+    // user's @gritsync.com business mailbox. That mailbox is reserved for
+    // actual business transactions during processing. See email-routing-policy.ts.
+    const decision = await resolveDeliveryAddress({
+      to: options.to,
+      emailType: options.emailType || null,
+      emailCategory: options.emailCategory || null,
+      recipientUserId: options.recipientUserId || null,
+    })
+    if (decision.rerouted || decision.to === null) {
+      console.log(
+        `[email-routing] ${decision.delivery} email "${options.emailCategory || options.emailType || 'untyped'}" originally to ${decision.originalTo} → ${decision.to || 'BLOCKED (in-app only)'}: ${decision.reason}`
+      )
+    }
+    if (decision.to === null) {
+      // In-app notification record (if any) is already there — nothing to send.
+      return true
+    }
+    options = { ...options, to: decision.to }
 
     const config = await getEmailConfig()
     

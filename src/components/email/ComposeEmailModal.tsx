@@ -101,6 +101,11 @@ export function ComposeEmailModal({
   // Stable ref for callbacks that change on every parent render — prevents infinite loops
   const onHtmlBodyChangeRef = useRef(onHtmlBodyChange)
   useEffect(() => { onHtmlBodyChangeRef.current = onHtmlBodyChange })
+  // `initialAttachments = []` default creates a new array on every parent
+  // render. Holding it via ref keeps the open/close effect below from
+  // re-firing on every render (which produced "Maximum update depth exceeded").
+  const initialAttachmentsRef = useRef(initialAttachments)
+  useEffect(() => { initialAttachmentsRef.current = initialAttachments })
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -155,16 +160,17 @@ export function ComposeEmailModal({
     }
   }, [isOpen, handleFileAdd])
 
-  // Clear attachments when modal closes, but preserve initial attachments on open
+  // Clear attachments when modal closes, but preserve initial attachments on
+  // open. Only react to `isOpen` transitions — initialAttachments is read off
+  // a ref to avoid the new-`[]`-every-render dependency loop.
   useEffect(() => {
     if (!isOpen) {
       setAttachments([])
       setShowPreview(false)
-    } else if (initialAttachments.length > 0) {
-      // Set initial attachments when modal opens
-      setAttachments(initialAttachments)
+    } else if (initialAttachmentsRef.current.length > 0) {
+      setAttachments(initialAttachmentsRef.current)
     }
-  }, [isOpen, initialAttachments])
+  }, [isOpen])
 
   // Update HTML preview when template variables change
   // NOTE: onHtmlBodyChange is accessed via ref to prevent infinite re-render loops

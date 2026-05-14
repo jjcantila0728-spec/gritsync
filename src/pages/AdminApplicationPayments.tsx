@@ -47,6 +47,8 @@ interface Payment {
   stripe_payment_intent_id?: string
   payment_method?: string
   proof_of_payment_file_path?: string
+  receipt_file_path?: string
+  invoice_file_path?: string
   usd_to_php_rate?: number
   admin_note?: string
   created_at: string
@@ -609,6 +611,37 @@ export function AdminApplicationPayments() {
     }
   }
 
+  async function handleDownloadFile(filePath: string, suggestedName?: string) {
+    try {
+      if (!filePath) {
+        showToast('File path is missing', 'error')
+        return
+      }
+      const url = await getSignedFileUrl(filePath, 600)
+      if (!url) {
+        showToast('Failed to generate download link', 'error')
+        return
+      }
+      const fileName = suggestedName || filePath.split('/').pop() || 'document.pdf'
+      // Force a download by fetching the URL and creating a blob anchor — this
+      // avoids storage backends that serve the file inline.
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    } catch (err: any) {
+      console.error('Download failed:', err)
+      showToast(err?.message || 'Failed to download file', 'error')
+    }
+  }
+
   async function handleViewProof(filePath: string) {
     try {
       if (!filePath) {
@@ -1094,7 +1127,7 @@ export function AdminApplicationPayments() {
 
               <Card className="p-3 sm:p-6">
                 <div className="overflow-x-auto -mx-3 sm:mx-0">
-                  <table className="w-full min-w-[800px]">
+                  <table className="w-full min-w-[1000px]">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
                         <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
@@ -1103,6 +1136,8 @@ export function AdminApplicationPayments() {
                         <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
                         <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Method</th>
                         <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Admin Note</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Receipt</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Invoice</th>
                         <th className="text-left py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Proof of Payment</th>
                       </tr>
                     </thead>
@@ -1156,7 +1191,42 @@ export function AdminApplicationPayments() {
                               )}
                             </td>
                             <td className="py-3 px-2 sm:px-4">
-                              {payment.proof_of_payment_file_path ? (
+                              {payment.receipt_file_path ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDownloadFile(payment.receipt_file_path!, `receipt-${payment.id.slice(0, 8)}.pdf`)}
+                                  className="text-xs flex items-center gap-1"
+                                  title="Download receipt PDF"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Receipt
+                                </Button>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500 italic text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-2 sm:px-4">
+                              {payment.invoice_file_path ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDownloadFile(payment.invoice_file_path!, `invoice-${payment.id.slice(0, 8)}.pdf`)}
+                                  className="text-xs flex items-center gap-1"
+                                  title="Download invoice PDF"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Invoice
+                                </Button>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500 italic text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-2 sm:px-4">
+                              {payment.payment_method === 'stripe' ? (
+                                // Stripe rows don't have a separate proof — the receipt PDF is the record of payment.
+                                <span className="text-gray-400 dark:text-gray-500 italic text-xs">N/A</span>
+                              ) : payment.proof_of_payment_file_path ? (
                                 <Button
                                   variant="ghost"
                                   size="sm"

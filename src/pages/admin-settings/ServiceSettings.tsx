@@ -114,9 +114,9 @@ export function ServiceSettings() {
       const typedServices = (data || []) as any[]
       const servicesWithTax = typedServices.map(calculateTaxForService)
       setServices(servicesWithTax)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching services:', error)
-      showToast('Failed to load services', 'error')
+      showToast(`Failed to load services: ${error?.message || 'unknown error'}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -125,14 +125,53 @@ export function ServiceSettings() {
   const handleServiceSave = async () => {
     if (!editingService) return
 
+    // Trim whitespace + basic validation so we don't push half-baked rows.
+    const trimmedName = (editingService.service_name || '').trim()
+    const trimmedState = (editingService.state || '').trim()
+    if (!trimmedName || !trimmedState) {
+      showToast('Service Name and State are required', 'error')
+      return
+    }
+    if (editingService.line_items.length === 0) {
+      showToast('Add at least one line item before saving', 'error')
+      return
+    }
+
     try {
-      await servicesAPI.createOrUpdate(editingService)
-      showToast('Service saved successfully', 'success')
+      // `createOrUpdate` decides INSERT vs UPDATE on whether id is truthy.
+      // For new services we strip the empty id so the API generates one.
+      const payload = editingService.id
+        ? { ...editingService, service_name: trimmedName, state: trimmedState }
+        : (() => {
+            const { id: _omit, ...rest } = editingService
+            return { ...rest, service_name: trimmedName, state: trimmedState }
+          })()
+      await servicesAPI.createOrUpdate(payload)
+      showToast(editingService.id ? 'Service updated successfully' : 'Service created successfully', 'success')
       setEditingService(null)
       fetchServices()
     } catch (error: any) {
       showToast(error.message || 'Failed to save service', 'error')
     }
+  }
+
+  // Build a fresh, blank service for the admin to fill in. We leave `id` empty
+  // — `servicesAPI.createOrUpdate` generates one on insert. Defaults match a
+  // typical NCLEX service so the form is workable from the first click.
+  const startNewService = () => {
+    setEditingService({
+      id: '',
+      service_name: '',
+      state: '',
+      payment_type: 'staggered',
+      line_items: [{ description: '', amount: 0, step: 1, taxable: false }],
+      total_full: 0,
+      total_step1: 0,
+      total_step2: 0,
+      tax_amount: 0,
+      tax_step1: 0,
+      tax_step2: 0,
+    })
   }
 
   const handleServiceDelete = async (id: string) => {
@@ -158,19 +197,27 @@ export function ServiceSettings() {
 
   return (
     <div className="p-3 sm:p-4 md:p-5">
-      <div className="mb-3 sm:mb-4">
-        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          Service Configuration
-        </h2>
-        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-          Manage service pricing and line items. Changes will automatically reflect in new quotes.
-        </p>
-        <div className="mt-2 p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-xs text-blue-800 dark:text-blue-200">
-            <strong>Staggered Payment:</strong> Step 1 items are paid immediately, Step 2 items are paid later. 
-            For full payment, both steps are paid upfront.
+      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="flex-1">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            Service Configuration
+          </h2>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+            Manage service pricing and line items. Changes will automatically reflect in new quotes.
           </p>
+          <div className="mt-2 p-2.5 sm:p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <p className="text-xs text-blue-800 dark:text-blue-200">
+              <strong>Staggered Payment:</strong> Step 1 items are paid immediately, Step 2 items are paid later.
+              For full payment, both steps are paid upfront.
+            </p>
+          </div>
         </div>
+        {!editingService && (
+          <Button onClick={startNewService} className="flex-shrink-0 self-start sm:self-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            New Service
+          </Button>
+        )}
       </div>
 
       {editingService ? (
@@ -188,6 +235,7 @@ export function ServiceSettings() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   No services configured. Add a service to get started.
                 </p>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 <Button
                   onClick={async () => {
                     try {
@@ -240,6 +288,11 @@ export function ServiceSettings() {
                   <Plus className="h-4 w-4 mr-2" />
                   Create Default NCLEX Services
                 </Button>
+                <Button variant="outline" onClick={startNewService}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Custom Service
+                </Button>
+                </div>
               </div>
             </Card>
           ) : (
@@ -1058,9 +1111,21 @@ function EditServiceForm({
     })
   }
 
+  const isNew = !service.id
+
   return (
     <Card className="p-3 sm:p-4 md:p-5">
       <div className="space-y-3">
+        <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3 -mt-1">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {isNew ? 'Create New Service' : 'Edit Service'}
+          </h3>
+          {isNew && (
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 rounded-full px-2 py-0.5">
+              Draft
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <Input
             label="Service Name"
@@ -1243,7 +1308,7 @@ function EditServiceForm({
           </Button>
           <Button onClick={onSave}>
             <Save className="h-4 w-4 mr-2" />
-            Save Service
+            {isNew ? 'Create Service' : 'Save Service'}
           </Button>
         </div>
       </div>

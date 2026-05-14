@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { useErrorHandler } from '@/lib/use-error-handler'
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
+import { Modal } from '@/components/ui/Modal'
 import { Link } from 'react-router-dom'
 import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI } from '@/lib/api'
 import { db } from '@/lib/api-client'
@@ -20,17 +21,18 @@ import { stripePromise } from '@/lib/stripe'
 import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { 
-  ArrowLeft, 
-  Clock, 
-  Copy, 
-  Check, 
-  Calendar, 
-  FileText, 
+  ArrowLeft,
+  Clock,
+  Copy,
+  Check,
+  Calendar,
+  FileText,
   GraduationCap,
   History,
   DollarSign,
   Info,
-  Lock
+  Lock,
+  Sparkles
 } from 'lucide-react'
 // Import extracted utilities and components
 import { TimelineStep } from './ApplicationDetail/components/TimelineStep'
@@ -38,6 +40,7 @@ import { DetailsTab } from './ApplicationDetail/components/DetailsTab'
 import { DocumentsTab } from './ApplicationDetail/components/DocumentsTab'
 import { ProcessingAccountsTab } from './ApplicationDetail/components/ProcessingAccountsTab'
 import { PaymentsTab } from './ApplicationDetail/components/PaymentsTab'
+import { GSMethodTab } from './ApplicationDetail/components/GSMethodTab'
 import { formatStatusDisplay, getStatusColor, getStatusIcon } from './ApplicationDetail/utils/statusHelpers'
 import { getSignedUrlFromPath } from './ApplicationDetail/utils/fileHelpers'
 import type { ApplicationData } from './ApplicationDetail/types'
@@ -46,8 +49,14 @@ import type { ApplicationData } from './ApplicationDetail/types'
 
 export function ApplicationDetail() {
   const { id, tab, subTab } = useParams<{ id: string; tab?: string; subTab?: string }>()
-  // If subTab exists, we're in the details tab
-  const activeTab = subTab ? 'details' : (tab || 'timeline')
+  const location = useLocation()
+  // Routes like /applications/:id/details/:subTab and /applications/:id/gs-method/:subTab
+  // bake the tab name as a literal path segment — useParams only exposes :id and
+  // :subTab, so derive the active tab from the URL directly.
+  const activeTab = (() => {
+    const m = location.pathname.match(/\/applications\/[^/]+\/([^/?#]+)/)
+    return m?.[1] || tab || 'timeline'
+  })()
   const navigate = useNavigate()
   const { user, isAdmin } = useAuth()
   const { showToast } = useToast()
@@ -91,7 +100,9 @@ export function ApplicationDetail() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [staggeredService, setStaggeredService] = useState<any>(null)
   const [loadingServices, setLoadingServices] = useState(true)
-  const [, setViewingFile] = useState<{ url: string, fileName: string, isImage: boolean } | null>(null)
+  // Viewer modal triggered by the Documents tab → Required Documents thumbnails.
+  // (`handleViewFile` below resolves the signed URL and sets this.)
+  const [viewingFile, setViewingFile] = useState<{ url: string, fileName: string, isImage: boolean } | null>(null)
   const [latestDocuments, setLatestDocuments] = useState<{
     picture?: { file_path: string; file_name: string }
     diploma?: { file_path: string; file_name: string }
@@ -2679,7 +2690,7 @@ export function ApplicationDetail() {
                     <div className="bg-white/80 dark:bg-gray-800/80 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Update Status</label>
                       <Select
-                        value={application.status || status}
+                        value={status || application.status || ''}
                         onChange={(e) => setStatus(e.target.value)}
                         className="text-sm mb-2"
                         options={[
@@ -2716,6 +2727,10 @@ export function ApplicationDetail() {
                     { id: 'documents', label: 'Documents', icon: FileText },
                     { id: 'processing-accounts', label: 'Processing Accounts', icon: Lock },
                   ]),
+                  // GS Method is admin-only and NCLEX-only (the courses are NY-specific)
+                  ...(isAdmin() && !isEADApplication ? [
+                    { id: 'gs-method', label: 'GS Method', icon: Sparkles },
+                  ] : []),
                   { id: 'payments', label: 'Payment History', icon: DollarSign },
                 ].map((tabItem) => {
                   const Icon = tabItem.icon
@@ -2726,6 +2741,8 @@ export function ApplicationDetail() {
                     tabPath = `${basePath}/${application?.grit_app_id || id}/payments`
                   } else if (tabItem.id === 'details') {
                     tabPath = `${basePath}/${application?.grit_app_id || id}/details/personal`
+                  } else if (tabItem.id === 'gs-method') {
+                    tabPath = `${basePath}/${application?.grit_app_id || id}/gs-method/mandatory-course`
                   } else {
                     tabPath = `${basePath}/${application?.grit_app_id || id}/${tabItem.id}`
                   }
@@ -3172,6 +3189,7 @@ export function ApplicationDetail() {
                           isCompleted={
                             getStepStatus('credentialing') === 'completed' ||
                             (getStepStatus('letter_generated') === 'completed' &&
+                             getStepStatus('form_2f_downloaded') === 'completed' &&
                              getStepStatus('letter_submitted') === 'completed' &&
                              getStepStatus('official_docs_submitted') === 'completed')
                           }
@@ -3188,10 +3206,11 @@ export function ApplicationDetail() {
                             // Check if all sub-steps are completed
                             setTimeout(async () => {
                               const letterGenerated = getStepStatus('letter_generated') === 'completed'
+                              const form2fDownloaded = getStepStatus('form_2f_downloaded') === 'completed'
                               const letterSubmitted = getStepStatus('letter_submitted') === 'completed'
                               const officialDocsSubmitted = getStepStatus('official_docs_submitted') === 'completed'
-                              
-                              if (letterGenerated && letterSubmitted && officialDocsSubmitted) {
+
+                              if (letterGenerated && form2fDownloaded && letterSubmitted && officialDocsSubmitted) {
                                 await updateTimelineStep('credentialing', 'completed', data)
                               } else {
                                 await updateTimelineStep('credentialing', 'pending', {})
@@ -3208,6 +3227,13 @@ export function ApplicationDetail() {
                               completed: getStepStatus('letter_generated') === 'completed',
                               date: getStepData('letter_generated')?.date,
                               data: getStepData('letter_generated')
+                            },
+                            {
+                              key: 'form_2f_downloaded',
+                              label: 'Downloaded Form 2F',
+                              completed: getStepStatus('form_2f_downloaded') === 'completed',
+                              date: getStepData('form_2f_downloaded')?.date,
+                              data: getStepData('form_2f_downloaded')
                             },
                             {
                               key: 'letter_submitted',
@@ -3261,6 +3287,7 @@ export function ApplicationDetail() {
                           }}
                           application={application}
                           payments={payments}
+                          navigate={navigate}
                           subSteps={[
                             {
                               key: 'mandatory_courses',
@@ -3284,6 +3311,7 @@ export function ApplicationDetail() {
                               data: (() => {
                                 const paidStep2 = payments.find(p => p.status === 'paid' && p.payment_type === 'step2')
                                 const paidFull = payments.find(p => p.status === 'paid' && p.payment_type === 'full')
+                                const pendingStep2 = payments.find(p => p.status === 'pending' && p.payment_type === 'step2')
                                 const timelineData = getStepData('app_step2_paid')
                                 const payment = paidStep2 || paidFull
                                 if (payment) {
@@ -3291,10 +3319,20 @@ export function ApplicationDetail() {
                                   const totalPaid = payments
                                     .filter(p => p.status === 'paid')
                                     .reduce((sum, p) => sum + (parseFloat(p.amount.toString()) || 0), 0)
-                                  return { 
+                                  return {
                                     amount: payment.amount,
                                     total_amount_paid: totalPaid,
                                     ...timelineData
+                                  }
+                                }
+                                // Step 2 has been triggered (auto-created on form1_submitted)
+                                // but the client hasn't paid yet — surface the pending amount so
+                                // the timeline can render a "Pay Now" CTA.
+                                if (pendingStep2) {
+                                  return {
+                                    ...timelineData,
+                                    step2_pending: true,
+                                    step2_pending_amount: pendingStep2.amount,
                                   }
                                 }
                                 return timelineData
@@ -3649,6 +3687,17 @@ export function ApplicationDetail() {
                   openAccountModal={openAccountModal}
                   handleDeleteAccount={handleDeleteAccount}
                   user={user}
+                  hasApprovedPayment={payments.some((p: any) => p && p.status === 'paid')}
+                  refreshAccounts={fetchProcessingAccounts}
+                />
+              )}
+
+              {activeTab === 'gs-method' && application && (
+                <GSMethodTab
+                  application={application}
+                  subTab={subTab || 'mandatory-course'}
+                  isAdmin={isAdmin()}
+                  showToast={showToast}
                 />
               )}
 
@@ -3685,6 +3734,45 @@ export function ApplicationDetail() {
           </div>
         </main>
       </div>
+
+      {/* Page-level file viewer — opened by the Documents tab's Required
+          Documents thumbnails via `handleViewFile`. Without this modal the
+          state was set but nothing rendered, which looked like "view modal
+          not working". */}
+      {viewingFile && (
+        <Modal
+          isOpen={!!viewingFile}
+          onClose={() => setViewingFile(null)}
+          title={viewingFile.fileName}
+          size="lg"
+        >
+          <div className="flex flex-col items-center">
+            {viewingFile.isImage ? (
+              <img
+                src={viewingFile.url}
+                alt={viewingFile.fileName}
+                className="max-w-full max-h-[70vh] object-contain rounded"
+              />
+            ) : (
+              <iframe
+                src={viewingFile.url}
+                title={viewingFile.fileName}
+                className="w-full h-[70vh] border-0 rounded"
+              />
+            )}
+            <div className="mt-3 flex justify-end gap-2 w-full">
+              <a
+                href={viewingFile.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Open in new tab
+              </a>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

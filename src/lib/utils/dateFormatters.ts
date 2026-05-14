@@ -65,23 +65,28 @@ export function convertToDatabaseFormat(mmddyyyy: string): string {
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
 }
 
-// Convert YYYY-MM to MM/YYYY
+// Convert a DB-shaped date to MM/YYYY for display. Accepts MM/YYYY (passthrough),
+// YYYY-MM, YYYY-MM-DD, and ISO timestamps like '2026-05-01T07:00:00.000Z' that
+// node-pg returns for DATE/TIMESTAMPTZ columns.
 export function convertToMMYYYY(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
   if (/^(0[1-9]|1[0-2])\/\d{4}$/.test(dateStr)) return dateStr
-  if (/^\d{4}-\d{2}$/.test(dateStr)) {
-    const [year, month] = dateStr.split('-')
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})(?:-\d{2})?(?:T.*)?$/)
+  if (isoMatch) {
+    const [, year, month] = isoMatch
     return `${month}/${year}`
   }
   return dateStr
 }
 
-// Convert MM/YYYY to YYYY-MM for database storage
+// Convert MM/YYYY to YYYY-MM-01 (first of the month) for a Postgres DATE column.
+// Postgres rejects 'YYYY-MM' with "invalid input syntax for type date" — the day
+// component is required. Returns '' for unparseable input.
 export function convertMMYYYYToDatabase(mmyyyy: string): string {
   if (!mmyyyy || !/^(0[1-9]|1[0-2])\/\d{4}$/.test(mmyyyy)) return ''
-  
+
   const [month, year] = mmyyyy.split('/')
-  return `${year}-${month.padStart(2, '0')}`
+  return `${year}-${month.padStart(2, '0')}-01`
 }
 
 // Helper function to validate MM/DD/YYYY format

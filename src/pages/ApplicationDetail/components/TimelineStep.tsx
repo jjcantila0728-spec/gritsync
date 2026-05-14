@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { CheckCircle, ChevronDown, ChevronRight, FileText, Download, Upload, Clock, Copy, Loader2, PenTool, Eye, Info } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronRight, FileText, Download, Upload, Clock, Copy, Loader2, PenTool, Eye, Info, DollarSign } from 'lucide-react'
 import { formatDate, formatCurrency, sanitizeHTML } from '@/lib/utils'
 import { userDocumentsAPI, getSignedFileUrl, processingAccountsAPI } from '@/lib/api'
 import { db } from '@/lib/api-client'
@@ -77,7 +77,52 @@ export function TimelineStep({
   const [signaturePreviewDataUrl, setSignaturePreviewDataUrl] = useState<string | null>(null)
   const [signaturePreviewTitle, setSignaturePreviewTitle] = useState<string>('')
   const [generatingForm2F, setGeneratingForm2F] = useState(false)
-  
+  const [mandatoryFilesComplete, setMandatoryFilesComplete] = useState<boolean>(false)
+
+  // Mandatory Courses Done can only be marked complete after BOTH course files
+  // (infection control + child abuse) have been uploaded. Recheck whenever the
+  // owning application changes.
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      if (!application?.user_id) {
+        setMandatoryFilesComplete(false)
+        return
+      }
+      try {
+        const docs = await userDocumentsAPI.getByUserId(application.user_id)
+        const types = new Set((docs || []).map((d: any) => d?.document_type))
+        if (!cancelled) {
+          setMandatoryFilesComplete(
+            types.has('mandatory_course_infection_control') &&
+              types.has('mandatory_course_child_abuse')
+          )
+        }
+      } catch {
+        if (!cancelled) setMandatoryFilesComplete(false)
+      }
+    }
+    check()
+    return () => {
+      cancelled = true
+    }
+  }, [application?.user_id, application?.id])
+
+  // Auto-complete "Mandatory Courses Done" the moment both files exist on the
+  // Documents tab — no manual click required. Idempotent: skip if the substep
+  // is already completed, or if it isn't part of this step's substeps.
+  useEffect(() => {
+    if (!mandatoryFilesComplete) return
+    if (!subSteps || !Array.isArray(subSteps)) return
+    const sub = subSteps.find((s) => s.key === 'mandatory_courses')
+    if (!sub || sub.completed) return
+    onUpdateSubStep?.('mandatory_courses', 'completed', {
+      date: new Date().toISOString(),
+      auto: true,
+      source: 'documents_tab',
+    })
+  }, [mandatoryFilesComplete, subSteps, onUpdateSubStep])
+
   // Initialize review state from sub-step data
   useEffect(() => {
     if (!subSteps || !Array.isArray(subSteps)) return
@@ -168,10 +213,10 @@ export function TimelineStep({
       const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
       const form = pdfDoc.getForm()
 
-      const safeSet = (fieldName: string, value: string) => {
+      const safeSet = (fieldName: string, value: string, transform: (v: string) => string = (v) => v.toUpperCase()) => {
         try {
           const field = form.getTextField(fieldName)
-          if (value) field.setText(value.toUpperCase())
+          if (value) field.setText(transform(value))
         } catch {
           // field not found or wrong type — skip silently
         }
@@ -201,18 +246,39 @@ export function TimelineStep({
         safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List1-3[0].BirthDate[0].Year[0]', String(dob.getFullYear()))
       }
 
-      // Section I — Address
-      const addressLine1 = application.house_number && application.street_name
-        ? `${application.house_number} ${application.street_name}`.trim()
-        : application.mailing_address || ''
+      // Section I — Mailing Address — check "Home" (OPTADD[0])
+      safeCheck('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].AddressType[0].OPTADD[0]')
+      // Line 1 = "House Number & Street Name" + Barangay (stored in street_name).
+      // Fall back to the unstructured mailing_address if neither is set.
+      const addressLine1 = [application.house_number, application.street_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || application.mailing_address || ''
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].Line1[0]', addressLine1)
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].City[0]', application.city || '')
-      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].State[0]', application.province || '')
-      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].CountryProvince[0]', application.country || '')
-      // ZIP: split "12345-6789" into ZIPCode1 + ZIPCode2
-      const zipParts = (application.zipcode || '').split('-')
-      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode1[0]', zipParts[0] || '')
-      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode2[0]', zipParts[1] || '')
+      // The form's "State" field is a 2-char US state code, which doesn't fit
+      // a PH province name. Put Province + Country together in CountryProvince
+      // (maxLen 21) and leave State blank for non-US applicants.
+      const provinceCountry = [application.province, application.country]
+        .filter(Boolean)
+        .join(', ')
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].CountryProvince[0]', provinceCountry)
+      // ZIP: ZIPCode1 has maxLen 5, ZIPCode2 has maxLen 4. Accept either a
+      // US-style "12345-6789" (already split on dash) or a single foreign
+      // ZIP that overflows the first box, in which case carry the extra
+      // digits into ZIPCode2 so longer codes still render.
+      const zipRaw = (application.zipcode || '').replace(/\s/g, '')
+      let zip1 = '', zip2 = ''
+      if (zipRaw.includes('-')) {
+        const parts = zipRaw.split('-')
+        zip1 = (parts[0] || '').slice(0, 5)
+        zip2 = (parts[1] || '').slice(0, 4)
+      } else {
+        zip1 = zipRaw.slice(0, 5)
+        zip2 = zipRaw.slice(5, 9)
+      }
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode1[0]', zip1)
+      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].Address[0].ZIPCode2[0]', zip2)
 
       // Section I — Phone
       const rawPhone = (application.mobile_number || '').replace(/\D/g, '')
@@ -220,8 +286,13 @@ export function TimelineStep({
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].Telephone[0].Phone1[0]', rawPhone.slice(3, 6))
       safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].Telephone[0].Phone2[0]', rawPhone.slice(6, 10))
 
-      // Section I — Email
-      safeSet('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].EmailAddress[0]', application.email || '')
+      // Section I — Email Address — check "Home" (OPTEMA[0]) and force lowercase
+      safeCheck('MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].EmailType[0].OPTEMA[0]')
+      safeSet(
+        'MHC2[0].Page1[0].SectionI[0].PersonalInformation[0].List4-6[0].PhoneEmail[0].EmailAddress[0]',
+        application.email || '',
+        (v) => v.toLowerCase()
+      )
 
       // Question 7 — Name on Diploma / DDC
       const diplomaName = application.single_full_name || application.single_name ||
@@ -256,11 +327,17 @@ export function TimelineStep({
 
   const handleSubStepToggle = async (subStepKey: string, currentStatus: boolean) => {
     if (onUpdateSubStep && application?.id) {
+      // Block marking "Mandatory Courses Done" until both course files exist.
+      // Un-checking (back to pending) is always allowed.
+      if (subStepKey === 'mandatory_courses' && !currentStatus && !mandatoryFilesComplete) {
+        showToast?.('Upload both Mandatory Courses files in the Documents tab before marking this step complete.', 'warning')
+        return
+      }
       const newStatus = currentStatus ? 'pending' : 'completed'
       // Set time to noon to avoid timezone issues
       const dateObj = new Date()
       dateObj.setHours(12, 0, 0, 0)
-      await onUpdateSubStep(subStepKey, newStatus, { 
+      await onUpdateSubStep(subStepKey, newStatus, {
         date: dateObj.toISOString()
       })
     }
@@ -441,6 +518,25 @@ export function TimelineStep({
                             >
                               <Copy className="h-3 w-3 text-gray-500 dark:text-gray-400" />
                             </button>
+                          </div>
+                        )}
+                        {/* Step 2 triggered (pending payment record exists) but not yet paid — show Pay Now */}
+                        {subStep.key === 'app_step2_paid' && !subStep.completed && subStep.data?.step2_pending && (
+                          <div className="mt-1.5 flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
+                            <DollarSign className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <div className="flex-1 min-w-0 text-xs font-medium text-amber-900 dark:text-amber-200">
+                              Payment ready
+                              {subStep.data.step2_pending_amount ? (
+                                <span className="ml-1 font-mono">· {formatCurrency(subStep.data.step2_pending_amount)}</span>
+                              ) : null}
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => navigate?.(`/applications/${application?.grit_app_id || application?.id}/payments`)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7 px-2.5"
+                            >
+                              Pay Now
+                            </Button>
                           </div>
                         )}
                         {(subStep.key === 'app_paid' || subStep.key === 'app_step2_paid') && subStep.data?.amount && (
@@ -2077,6 +2173,34 @@ export function TimelineStep({
                     Generate Letter for school
                   </Button>
                         )}
+                        {/* Download Form 2F for the form_2f_downloaded sub-step */}
+                        {subStep.key === 'form_2f_downloaded' && showGenerateLetter && (
+                          <Button
+                            onClick={async () => {
+                              await generateForm2F()
+                              if (onUpdateSubStep && application?.id) {
+                                try {
+                                  await onUpdateSubStep('form_2f_downloaded', 'completed', {
+                                    date: new Date().toISOString(),
+                                    downloaded_at: new Date().toISOString(),
+                                  })
+                                } catch (error) {
+                                  handleErrorSilently(error, { operation: 'updateTimelineStep', applicationId: application?.id })
+                                }
+                              }
+                            }}
+                            disabled={generatingForm2F}
+                            size="sm"
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white border-0"
+                          >
+                            {generatingForm2F ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4 mr-2" />
+                            )}
+                            {generatingForm2F ? 'GENERATING...' : 'Download Form 2F'}
+                          </Button>
+                        )}
                         {/* Date picker for app_created */}
                         {subStep.key === 'app_created' && isAdmin && (
                           <div className="flex flex-col gap-1">
@@ -2178,8 +2302,13 @@ export function TimelineStep({
                             <Input
                               type="date"
                               value={subStep.date ? subStep.date.split('T')[0] : ''}
+                              disabled={!mandatoryFilesComplete}
                               onChange={async (e) => {
                                 const dateValue = e.target.value
+                                if (!mandatoryFilesComplete) {
+                                  showToast?.('Upload both Mandatory Courses files in the Documents tab before marking this step complete.', 'warning')
+                                  return
+                                }
                                 if (dateValue && onUpdateSubStep && application?.id) {
                                   try {
                                     // Create date at noon local time to avoid timezone issues
@@ -2198,8 +2327,15 @@ export function TimelineStep({
                               }}
                               className="w-40 text-xs"
                               placeholder="Select date"
-                              title="Select date when mandatory courses were completed"
+                              title={mandatoryFilesComplete
+                                ? 'Select date when mandatory courses were completed'
+                                : 'Upload both Mandatory Courses files in the Documents tab first'}
                             />
+                            {!mandatoryFilesComplete && (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-400 max-w-[16rem]">
+                                Both Mandatory Courses files must be uploaded in the Documents tab before this step can be marked done.
+                              </p>
+                            )}
                           </div>
                         )}
                         {/* Form 1 Application Reference Number and Date */}
@@ -3831,25 +3967,6 @@ export function TimelineStep({
                     <li className="leading-relaxed">Don't forget to bring about 1,500php for school fees</li>
                     <li className="leading-relaxed">Reiterate to submit all documents via email based on what stated on the letter for school</li>
                   </ol>
-                </div>
-              )}
-
-              {/* Download Form 2F Button for Step 2 */}
-              {stepNumber === 2 && showGenerateLetter && (
-                <div className="mt-4 flex gap-2 flex-wrap">
-                  <Button
-                    onClick={generateForm2F}
-                    disabled={generatingForm2F}
-                    variant="outline"
-                    size="sm"
-                  >
-                    {generatingForm2F ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4 mr-2" />
-                    )}
-                    {generatingForm2F ? 'GENERATING...' : 'DOWNLOAD FORM 2F'}
-                  </Button>
                 </div>
               )}
 

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } from '../middleware/auth'
+import { ensureReferralCode } from './referrals'
 
 const router = Router()
 
@@ -266,6 +267,23 @@ router.post('/register', async (req: Request, res: Response) => {
     const role = isAdmin ? 'admin' : 'client'
     const emailVerified = isAdmin || SKIP_EMAIL_VERIFICATION
 
+    // Referral attribution: if the registrant came in via a partner's link,
+    // record who referred them. Advisors also become the new client's advisor.
+    let referredBy: string | null = null
+    let advisorId: string | null = null
+    const referralCodeRaw = (req.body.referralCode || req.body.ref || '').toString().trim().toUpperCase()
+    if (referralCodeRaw) {
+      const refRes = await query(
+        `SELECT id, role FROM users WHERE referral_code = $1 AND is_active = true AND role IN ('affiliate', 'advisor')`,
+        [referralCodeRaw]
+      )
+      const referrer = refRes.rows[0]
+      if (referrer) {
+        referredBy = referrer.id
+        if (referrer.role === 'advisor') advisorId = referrer.id
+      }
+    }
+
     // Generate email verification token (valid 24 hours) + OTP (valid 15 minutes)
     const verification_token = crypto.randomBytes(32).toString('hex')
     const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -273,10 +291,10 @@ router.post('/register', async (req: Request, res: Response) => {
     const otp_expires = new Date(Date.now() + 15 * 60 * 1000)
 
     const result = await query(
-      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at, email_otp, email_otp_expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at, email_otp, email_otp_expires_at, referred_by, advisor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, created_at`,
-      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, emailVerified, verification_token, verification_expires, otp, otp_expires]
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, emailVerified, verification_token, verification_expires, otp, otp_expires, referredBy, advisorId]
     )
 
     const user = result.rows[0]
@@ -687,32 +705,58 @@ router.put('/update', authenticateToken, async (req: AuthenticatedRequest, res: 
   }
 })
 
-// POST /api/auth/admin-login-as — generate a token for a user (admin only)
+// POST /api/auth/admin-login-as — generate a token for a user.
+// Admins may impersonate anyone; advisors may impersonate only their own
+// assigned clients (users where advisor_id = caller.id).
 router.post('/admin-login-as', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const admin = req.user
-    if (!admin || admin.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin only' })
+    const caller = req.user
+    if (!caller || (caller.role !== 'admin' && caller.role !== 'advisor')) {
+      return res.status(403).json({ error: 'You are not allowed to impersonate other users' })
     }
 
     const { userId } = req.body
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' })
     }
+    if (userId === caller.id) {
+      return res.status(400).json({ error: 'You cannot impersonate yourself' })
+    }
 
-    const result = await query('SELECT id, email, gritsync_email, role, first_name, last_name, grit_id, mobile FROM users WHERE id = $1', [userId])
+    const result = await query(
+      'SELECT id, email, gritsync_email, role, first_name, last_name, grit_id, mobile, advisor_id, is_active FROM users WHERE id = $1',
+      [userId]
+    )
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' })
     }
 
     const targetUser = result.rows[0]
+
+    if (caller.role === 'advisor') {
+      // Advisors can only impersonate active clients assigned to them.
+      if (targetUser.advisor_id !== caller.id) {
+        return res.status(403).json({ error: 'This client is not assigned to you' })
+      }
+      if (targetUser.role !== 'client') {
+        return res.status(403).json({ error: 'Advisors can only sign in as their assigned clients' })
+      }
+      if (targetUser.is_active === false) {
+        return res.status(400).json({ error: 'This client account is deactivated' })
+      }
+    }
+
     const token = signToken({ id: targetUser.id, email: targetUser.email, role: targetUser.role })
     const refreshToken = signRefreshToken({ id: targetUser.id, email: targetUser.email })
+
+    // Don't leak internal columns the frontend doesn't need.
+    const { advisor_id: _drop1, is_active: _drop2, ...safeUser } = targetUser
+    void _drop1; void _drop2
 
     res.json({
       access_token: token,
       refresh_token: refreshToken,
-      user: targetUser,
+      user: safeUser,
     })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
@@ -1038,6 +1082,162 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
   }
 })
 
+// POST /api/auth/admin/users  (admin only) — create a new user with a given role
+router.post('/admin/users', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const { password, first_name, last_name, middle_name, mobile, personal_email } = req.body
+    const role = (req.body.role || 'client').toString().trim().toLowerCase()
+    const allowedRoles = ['client', 'affiliate', 'advisor', 'admin']
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be one of: ' + allowedRoles.join(', ') })
+    }
+    if (!password || !first_name || !last_name || !mobile) {
+      return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' })
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' })
+    }
+    if (!personal_email) {
+      return res.status(400).json({ error: 'Personal email address is required' })
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(personal_email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid personal email address' })
+    }
+    if (personal_email.trim().toLowerCase().endsWith('@gritsync.com')) {
+      return res.status(400).json({ error: 'Use a personal email address (e.g. Gmail, Yahoo), not a GritSync email' })
+    }
+
+    const personal_email_normalized = personal_email.trim().toLowerCase()
+    const existingEmail = await query('SELECT id FROM users WHERE personal_email = $1', [personal_email_normalized])
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'This email address is already registered' })
+    }
+    const existingMobile = await query('SELECT id FROM users WHERE mobile = $1', [mobile.trim()])
+    if (existingMobile.rows.length > 0) {
+      return res.status(400).json({ error: 'This mobile number is already registered' })
+    }
+
+    const grit_id = generateGritId()
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    let gritsync_email = `${normalize(first_name)}.${normalize(last_name)}@gritsync.com`
+    let suffix = 1
+    while (true) {
+      const conflict = await query('SELECT id FROM users WHERE gritsync_email = $1', [gritsync_email])
+      if (conflict.rows.length === 0) break
+      gritsync_email = `${normalize(first_name)}.${normalize(last_name)}${suffix}@gritsync.com`
+      suffix++
+      if (suffix > 99) {
+        return res.status(500).json({ error: 'Unable to generate unique business email, please contact support' })
+      }
+    }
+
+    const password_hash = await bcrypt.hash(password, 12)
+    // Admin-created accounts are active and email-verified immediately.
+    const result = await query(
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+       RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, middle_name, grit_id, is_active, created_at`,
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name?.trim() || null, mobile.trim(), role, grit_id]
+    )
+    const user = result.rows[0]
+
+    let referral_code: string | null = null
+    if (role === 'affiliate' || role === 'advisor') {
+      referral_code = await ensureReferralCode(String(user.id))
+    }
+
+    res.status(201).json({
+      success: true,
+      user: {
+        ...user,
+        referral_code,
+        gmail_account: user.gritsync_email || user.email,
+      },
+    })
+  } catch (err: any) {
+    console.error('Admin create user error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/auth/advisor/clients  (advisor only) — create a client account
+// and assign it to the calling advisor.
+router.post('/advisor/clients', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'advisor') {
+    return res.status(403).json({ error: 'Advisor only' })
+  }
+  try {
+    const { password, first_name, last_name, middle_name, mobile, personal_email } = req.body
+    if (!password || !first_name || !last_name || !mobile) {
+      return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' })
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' })
+    }
+    if (!personal_email) {
+      return res.status(400).json({ error: 'Personal email address is required' })
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(personal_email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid personal email address' })
+    }
+    if (personal_email.trim().toLowerCase().endsWith('@gritsync.com')) {
+      return res.status(400).json({ error: 'Use a personal email address (e.g. Gmail, Yahoo), not a GritSync email' })
+    }
+
+    const personal_email_normalized = personal_email.trim().toLowerCase()
+    const existingEmail = await query('SELECT id FROM users WHERE personal_email = $1', [personal_email_normalized])
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'This email address is already registered' })
+    }
+    const existingMobile = await query('SELECT id FROM users WHERE mobile = $1', [mobile.trim()])
+    if (existingMobile.rows.length > 0) {
+      return res.status(400).json({ error: 'This mobile number is already registered' })
+    }
+
+    const grit_id = generateGritId()
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    let gritsync_email = `${normalize(first_name)}.${normalize(last_name)}@gritsync.com`
+    let suffix = 1
+    while (true) {
+      const conflict = await query('SELECT id FROM users WHERE gritsync_email = $1', [gritsync_email])
+      if (conflict.rows.length === 0) break
+      gritsync_email = `${normalize(first_name)}.${normalize(last_name)}${suffix}@gritsync.com`
+      suffix++
+      if (suffix > 99) {
+        return res.status(500).json({ error: 'Unable to generate unique business email, please contact support' })
+      }
+    }
+
+    const password_hash = await bcrypt.hash(password, 12)
+    const advisorId = authReq.user!.id
+    // Advisor-created clients are active, email-verified, and pre-linked to the
+    // advisor so they show up immediately in the Advisor Panel + earn referral
+    // credit.
+    const result = await query(
+      `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, advisor_id, referred_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'client', $9, true, $10, $10)
+       RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, middle_name, grit_id, is_active, created_at`,
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name?.trim() || null, mobile.trim(), grit_id, advisorId]
+    )
+    const user = result.rows[0]
+
+    res.status(201).json({
+      success: true,
+      user: { ...user, gmail_account: user.gritsync_email || user.email },
+    })
+  } catch (err: any) {
+    console.error('Advisor create client error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PATCH /api/auth/admin/users/:id/deactivate  (admin only)
 router.patch('/admin/users/:id/deactivate', authenticateToken, async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest
@@ -1058,6 +1258,39 @@ router.patch('/admin/users/:id/deactivate', authenticateToken, async (req: Reque
       return res.status(404).json({ error: 'User not found' })
     }
     res.json({ success: true, user: result.rows[0] })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PATCH /api/auth/admin/users/:id/role  (admin only) — change a user's role
+router.patch('/admin/users/:id/role', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const { id } = req.params
+    const { role } = req.body
+    const allowed = ['client', 'affiliate', 'advisor', 'admin']
+    if (!allowed.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be one of: ' + allowed.join(', ') })
+    }
+    if (authReq.user?.id === id && role !== 'admin') {
+      return res.status(400).json({ error: 'You cannot remove your own admin role' })
+    }
+    const result = await query(
+      `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, first_name, last_name, role, referral_code`,
+      [role, id]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    let referral_code: string | null = result.rows[0].referral_code
+    if ((role === 'affiliate' || role === 'advisor') && !referral_code) {
+      referral_code = await ensureReferralCode(String(id))
+    }
+    res.json({ success: true, user: { ...result.rows[0], referral_code } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

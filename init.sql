@@ -36,12 +36,19 @@ CREATE TABLE IF NOT EXISTS users (
   email_otp                       TEXT,
   email_otp_expires_at            TIMESTAMPTZ,
   welcome_email_sent_at           TIMESTAMPTZ,
+  last_seen_at                    TIMESTAMPTZ,
+  referral_code                   TEXT,
+  referred_by                     UUID REFERENCES users(id) ON DELETE SET NULL,
+  advisor_id                      UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx          ON users (LOWER(email));
 CREATE UNIQUE INDEX IF NOT EXISTS users_personal_email_idx ON users (LOWER(personal_email)) WHERE personal_email IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS users_mobile_idx         ON users (mobile) WHERE mobile IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx  ON users (referral_code) WHERE referral_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS users_referred_by_idx           ON users (referred_by);
+CREATE INDEX IF NOT EXISTS users_advisor_id_idx            ON users (advisor_id);
 
 -- ---------------------------------------------------------------------------
 -- PASSWORD RESET TOKENS
@@ -58,30 +65,87 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 -- ---------------------------------------------------------------------------
 -- USER DETAILS  (personal info used in applications)
 -- ---------------------------------------------------------------------------
+-- `user_details` is the canonical store for shared profile data. Both
+-- /app/my-details and /app/application/new write to this table so they
+-- stay 100% in sync. The names (first/middle/last) remain on the `users`
+-- table — everything else profile-related lives here.
 CREATE TABLE IF NOT EXISTS user_details (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  date_of_birth   DATE,
-  gender          TEXT,
-  nationality     TEXT,
-  passport_number TEXT,
-  passport_expiry DATE,
-  address         TEXT,
-  city            TEXT,
-  state           TEXT,
-  zip             TEXT,
-  country         TEXT,
-  ssn             TEXT,
-  license_number  TEXT,
-  license_state   TEXT,
-  license_expiry  DATE,
-  school_name     TEXT,
-  graduation_year INTEGER,
-  degree          TEXT,
-  major           TEXT,
-  extra           JSONB,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Personal information (names live in `users` but mirrored here for legacy reads)
+  first_name                      TEXT,
+  middle_name                     TEXT,
+  last_name                       TEXT,
+  email                           TEXT,
+  mobile_number                   TEXT,
+  gender                          TEXT,
+  marital_status                  TEXT,
+  single_full_name                TEXT,
+  date_of_birth                   DATE,
+  birth_place                     TEXT,
+  country_of_birth                TEXT,
+
+  -- Address
+  house_number                    TEXT,
+  street_name                     TEXT,
+  city                            TEXT,
+  province                        TEXT,
+  country                         TEXT,
+  zipcode                         TEXT,
+
+  -- Elementary school
+  elementary_school               TEXT,
+  elementary_city                 TEXT,
+  elementary_province             TEXT,
+  elementary_country              TEXT,
+  elementary_years_attended       TEXT,
+  elementary_start_date           DATE,
+  elementary_end_date             DATE,
+
+  -- High school
+  high_school                     TEXT,
+  high_school_city                TEXT,
+  high_school_province            TEXT,
+  high_school_country             TEXT,
+  high_school_years_attended      TEXT,
+  high_school_start_date          DATE,
+  high_school_end_date            DATE,
+  high_school_graduated           TEXT,
+  high_school_diploma_type        TEXT,
+  high_school_diploma_date        DATE,
+
+  -- Nursing school
+  nursing_school                  TEXT,
+  nursing_school_city             TEXT,
+  nursing_school_province         TEXT,
+  nursing_school_country          TEXT,
+  nursing_school_years_attended   TEXT,
+  nursing_school_start_date       DATE,
+  nursing_school_end_date         DATE,
+  nursing_school_major            TEXT,
+  nursing_school_diploma_date     DATE,
+
+  -- Signature & misc legacy fields kept for back-compat
+  signature                       TEXT,
+  nationality                     TEXT,
+  passport_number                 TEXT,
+  passport_expiry                 DATE,
+  address                         TEXT,
+  state                           TEXT,
+  zip                             TEXT,
+  ssn                             TEXT,
+  license_number                  TEXT,
+  license_state                   TEXT,
+  license_expiry                  DATE,
+  school_name                     TEXT,
+  graduation_year                 INTEGER,
+  degree                          TEXT,
+  major                           TEXT,
+  extra                           JSONB,
+
+  created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS user_details_user_id_idx ON user_details(user_id);
 
@@ -396,11 +460,16 @@ CREATE TABLE IF NOT EXISTS messages (
   subject      TEXT,
   body         TEXT NOT NULL,
   is_read      BOOLEAN NOT NULL DEFAULT false,
+  read_at      TIMESTAMPTZ,
+  edited_at    TIMESTAMPTZ,
+  deleted_at   TIMESTAMPTZ,
+  attachments  JSONB,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id    ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at   ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_pair         ON messages(sender_id, recipient_id, created_at);
 
 -- ---------------------------------------------------------------------------
 -- CONVERSATIONS
@@ -1310,6 +1379,266 @@ BEGIN
     'by_type',            COALESCE((SELECT jsonb_object_agg(document_type, c) FROM (SELECT document_type, COUNT(*) c FROM user_documents GROUP BY document_type) t), '{}'::jsonb)
   );
 END; $$;
+
+-- =============================================================================
+-- SCHEMA MIGRATIONS — idempotent, safe to re-run.
+-- Keeps existing databases aligned with what the app expects.
+-- =============================================================================
+
+-- ── services: staggered-payment + tax fields used by Admin → Settings → Services
+ALTER TABLE services
+  ADD COLUMN IF NOT EXISTS total_step1 NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS total_step2 NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS tax_amount  NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS tax_step1   NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS tax_step2   NUMERIC(10,2);
+
+-- ── service_required_documents: columns expected by the admin UI
+ALTER TABLE service_required_documents
+  ADD COLUMN IF NOT EXISTS service_type     TEXT,
+  ADD COLUMN IF NOT EXISTS name             TEXT,
+  ADD COLUMN IF NOT EXISTS accepted_formats TEXT[] NOT NULL DEFAULT ARRAY['.pdf','.jpg','.jpeg','.png'],
+  ADD COLUMN IF NOT EXISTS sort_order       INTEGER NOT NULL DEFAULT 0;
+
+-- The new admin UI keys requirements by service_type, not service_id; relax the
+-- legacy FK column so inserts without a service_id are allowed.
+ALTER TABLE service_required_documents
+  ALTER COLUMN service_id DROP NOT NULL;
+
+-- Backfill the new `name` column from the legacy `label` column if it exists
+-- and is non-empty.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'service_required_documents' AND column_name = 'label'
+  ) THEN
+    EXECUTE 'UPDATE service_required_documents SET name = COALESCE(NULLIF(name, ''''), label) WHERE name IS NULL OR name = ''''';
+  END IF;
+END $$;
+
+-- ── test_sessions / session_responses: the NCLEX question-bank routes write
+-- columns the base schema doesn't define (session_type, settings,
+-- time_started/completed, questions_answered, correct_answers — and on
+-- session_responses: user_answer, answered_at, question_order). Without these
+-- every /api/questions endpoint blows up with "column does not exist".
+ALTER TABLE test_sessions
+  ADD COLUMN IF NOT EXISTS session_type        TEXT,
+  ADD COLUMN IF NOT EXISTS settings            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS time_started        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS time_completed      TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS questions_answered  INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS correct_answers     INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE session_responses
+  ADD COLUMN IF NOT EXISTS user_answer     JSONB,
+  ADD COLUMN IF NOT EXISTS answered_at     TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS question_order  INTEGER;
+
+CREATE INDEX IF NOT EXISTS session_responses_answered_at_idx
+  ON session_responses(session_id, answered_at);
+
+-- ── user_documents: legacy `filename` alias + `uploaded_at` timestamp the
+-- admin client UI writes during upload. The base schema only has file_name +
+-- created_at; without these aliases, the insert in userDocumentsAPI.upload()
+-- fails with "column filename of relation user_documents does not exist".
+ALTER TABLE user_documents
+  ADD COLUMN IF NOT EXISTS filename    TEXT,
+  ADD COLUMN IF NOT EXISTS uploaded_at TIMESTAMPTZ;
+
+UPDATE user_documents
+SET uploaded_at = COALESCE(uploaded_at, created_at, NOW())
+WHERE uploaded_at IS NULL;
+
+ALTER TABLE user_documents
+  ALTER COLUMN uploaded_at SET DEFAULT NOW();
+
+-- ── promo_codes: columns the admin Promo Codes settings page reads/writes.
+-- The legacy schema (`uses_count`, `expires_at`, `applicable_types`) stays in
+-- place for the validate_promo_code() RPC; these aliases give the admin UI the
+-- columns it expects (description, application_type, current_uses, valid_*).
+ALTER TABLE promo_codes
+  ADD COLUMN IF NOT EXISTS description      TEXT,
+  ADD COLUMN IF NOT EXISTS application_type TEXT,
+  ADD COLUMN IF NOT EXISTS current_uses     INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS valid_from       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS valid_until      TIMESTAMPTZ;
+
+-- Keep the legacy and new "expiry" / "uses" columns in sync so the RPC and the
+-- admin UI never disagree about the same promo code.
+CREATE OR REPLACE FUNCTION promo_codes_sync_columns()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  -- Sync expiry: whichever side was set, mirror to the other.
+  IF NEW.valid_until IS DISTINCT FROM OLD.valid_until OR TG_OP = 'INSERT' THEN
+    NEW.expires_at := COALESCE(NEW.valid_until, NEW.expires_at);
+  END IF;
+  IF NEW.expires_at IS DISTINCT FROM OLD.expires_at OR TG_OP = 'INSERT' THEN
+    NEW.valid_until := COALESCE(NEW.valid_until, NEW.expires_at);
+  END IF;
+  -- Sync usage counters.
+  IF NEW.current_uses IS DISTINCT FROM OLD.current_uses OR TG_OP = 'INSERT' THEN
+    NEW.uses_count := COALESCE(NEW.current_uses, NEW.uses_count, 0);
+  END IF;
+  IF NEW.uses_count IS DISTINCT FROM OLD.uses_count OR TG_OP = 'INSERT' THEN
+    NEW.current_uses := COALESCE(NEW.uses_count, NEW.current_uses, 0);
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS promo_codes_sync_columns_trg ON promo_codes;
+CREATE TRIGGER promo_codes_sync_columns_trg
+  BEFORE INSERT OR UPDATE ON promo_codes
+  FOR EACH ROW EXECUTE FUNCTION promo_codes_sync_columns();
+
+-- One-time backfill so existing rows have the new columns populated.
+UPDATE promo_codes
+SET valid_until  = COALESCE(valid_until, expires_at),
+    current_uses = COALESCE(current_uses, uses_count, 0);
+
+-- ── users: avatar design preference selected by the user
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS default_avatar_design TEXT;
+
+-- ── email_addresses: full-feature mail-system shape used by the admin email
+-- pages and Header.tsx. The bare baseline created above only has
+-- {id,user_id,address,label,is_primary,...}; expand it here.
+ALTER TABLE email_addresses
+  ADD COLUMN IF NOT EXISTS email_address        TEXT,
+  ADD COLUMN IF NOT EXISTS display_name         TEXT,
+  ADD COLUMN IF NOT EXISTS is_system_address    BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS address_type         TEXT NOT NULL DEFAULT 'client',
+  ADD COLUMN IF NOT EXISTS department           TEXT,
+  ADD COLUMN IF NOT EXISTS is_active            BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS is_verified          BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS can_send             BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS can_receive          BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS forward_to_email     TEXT,
+  ADD COLUMN IF NOT EXISTS auto_reply_enabled   BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS auto_reply_message   TEXT,
+  ADD COLUMN IF NOT EXISTS notes                TEXT,
+  ADD COLUMN IF NOT EXISTS metadata             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS verified_at          TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS last_used_at         TIMESTAMPTZ;
+
+-- System (admin/support/department) addresses have no owning user.
+ALTER TABLE email_addresses
+  ALTER COLUMN user_id DROP NOT NULL;
+
+-- The legacy `address` column is unused by the app (writes go to
+-- `email_address`); relax NOT NULL so new inserts succeed.
+ALTER TABLE email_addresses
+  ALTER COLUMN address DROP NOT NULL;
+
+-- Backfill the new `email_address` column from the legacy `address`.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'email_addresses' AND column_name = 'address'
+  ) THEN
+    EXECUTE 'UPDATE email_addresses
+                SET email_address = COALESCE(NULLIF(email_address, ''''), address)
+              WHERE email_address IS NULL OR email_address = ''''';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS email_addresses_address_type_idx ON email_addresses(address_type);
+CREATE INDEX IF NOT EXISTS email_addresses_email_address_idx ON email_addresses(email_address);
+CREATE INDEX IF NOT EXISTS email_addresses_is_active_idx     ON email_addresses(is_active);
+
+-- ── email_signatures: the app filters on `is_active`; the baseline shape
+-- only has `is_default`. Add `is_active` so the filter resolves.
+ALTER TABLE email_signatures
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
+-- ── email_logs: full-feature log shape used by src/lib/email-api.ts and
+-- src/lib/email-service.ts. Baseline only had {id, to/from_address, subject,
+-- body, status, error, sent_at}; expand to match the EmailLog interface.
+ALTER TABLE email_logs
+  ADD COLUMN IF NOT EXISTS recipient_email        TEXT,
+  ADD COLUMN IF NOT EXISTS recipient_name         TEXT,
+  ADD COLUMN IF NOT EXISTS recipient_user_id      UUID,
+  ADD COLUMN IF NOT EXISTS body_html              TEXT,
+  ADD COLUMN IF NOT EXISTS body_text              TEXT,
+  ADD COLUMN IF NOT EXISTS sender_email           TEXT,
+  ADD COLUMN IF NOT EXISTS sender_name            TEXT,
+  ADD COLUMN IF NOT EXISTS sent_by_user_id        UUID,
+  ADD COLUMN IF NOT EXISTS email_type             TEXT,
+  ADD COLUMN IF NOT EXISTS email_category         TEXT,
+  ADD COLUMN IF NOT EXISTS email_provider         TEXT,
+  ADD COLUMN IF NOT EXISTS provider_message_id    TEXT,
+  ADD COLUMN IF NOT EXISTS provider_response      JSONB,
+  ADD COLUMN IF NOT EXISTS error_message          TEXT,
+  ADD COLUMN IF NOT EXISTS error_code             TEXT,
+  ADD COLUMN IF NOT EXISTS retry_count            INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS max_retries            INTEGER NOT NULL DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS application_id         UUID,
+  ADD COLUMN IF NOT EXISTS quotation_id           UUID,
+  ADD COLUMN IF NOT EXISTS donation_id            UUID,
+  ADD COLUMN IF NOT EXISTS sponsorship_id         UUID,
+  ADD COLUMN IF NOT EXISTS metadata               JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS tags                   TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS from_email_address_id  UUID,
+  ADD COLUMN IF NOT EXISTS to_email_address_id    UUID,
+  ADD COLUMN IF NOT EXISTS delivered_at           TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS failed_at              TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name='email_logs' AND column_name='to_address' AND is_nullable='NO') THEN
+    EXECUTE 'ALTER TABLE email_logs ALTER COLUMN to_address DROP NOT NULL';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS email_logs_from_email_address_id_idx ON email_logs(from_email_address_id);
+CREATE INDEX IF NOT EXISTS email_logs_to_email_address_id_idx   ON email_logs(to_email_address_id);
+CREATE INDEX IF NOT EXISTS email_logs_recipient_user_id_idx     ON email_logs(recipient_user_id);
+CREATE INDEX IF NOT EXISTS email_logs_status_idx                ON email_logs(status);
+CREATE INDEX IF NOT EXISTS email_logs_created_at_idx            ON email_logs(created_at DESC);
+
+-- ── GS Method automation agents: per-agent run-history tables. Referenced by
+-- server/routes/agents.ts (the /runs history endpoint) and written by
+-- server/agents/lib/persist.ts. All three share the same shape. Without these,
+-- the agent history endpoints 500 with "relation does not exist".
+CREATE TABLE IF NOT EXISTS mandatory_course_runs (
+  id             UUID PRIMARY KEY,
+  application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+  started_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  status         TEXT NOT NULL DEFAULT 'pending',
+  started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at       TIMESTAMPTZ,
+  result         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  events         JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE INDEX IF NOT EXISTS mandatory_course_runs_application_id_idx ON mandatory_course_runs(application_id);
+
+CREATE TABLE IF NOT EXISTS ny_application_runs (
+  id             UUID PRIMARY KEY,
+  application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+  started_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  status         TEXT NOT NULL DEFAULT 'pending',
+  started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at       TIMESTAMPTZ,
+  result         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  events         JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE INDEX IF NOT EXISTS ny_application_runs_application_id_idx ON ny_application_runs(application_id);
+
+CREATE TABLE IF NOT EXISTS pv_application_runs (
+  id             UUID PRIMARY KEY,
+  application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+  started_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  status         TEXT NOT NULL DEFAULT 'pending',
+  started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at       TIMESTAMPTZ,
+  result         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  events         JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE INDEX IF NOT EXISTS pv_application_runs_application_id_idx ON pv_application_runs(application_id);
 
 -- =============================================================================
 -- Done!  Start the server with:  npm run dev

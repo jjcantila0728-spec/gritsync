@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { useSearchParams, useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/Header'
-import { Footer } from '@/components/Footer'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -1769,8 +1768,6 @@ export function Tracking() {
           </div>
         )}
       </Modal>
-
-      <Footer />
     </div>
   )
 }

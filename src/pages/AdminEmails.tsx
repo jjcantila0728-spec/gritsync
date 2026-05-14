@@ -127,7 +127,8 @@ export function AdminEmails() {
   const [selectedReceivedEmail, setSelectedReceivedEmail] = useState<any | null>(null)
   const [, setSelectedSentEmailPreview] = useState<EmailLog | null>(null)
   const [, setSelectedInboxEmailPreview] = useState<EnrichedReceivedEmail | null>(null)
-  const [inboxHasMore, setInboxHasMore] = useState(false)
+  const [, setInboxHasMore] = useState(false)
+  const [inboxPage, setInboxPage] = useState(1)
   
   // Selection state for bulk actions
   const [selectedSentIds, setSelectedSentIds] = useState<Set<string>>(new Set())
@@ -607,7 +608,7 @@ export function AdminEmails() {
       const [logsResult, statsResult] = await Promise.all([
         emailLogsAPI.getAll({
           page: currentPage,
-          pageSize: 50,
+          pageSize: 20,
           status: statusFilter || undefined,
           emailType: typeFilter || undefined,
           emailCategory: categoryFilter || undefined,
@@ -635,26 +636,11 @@ export function AdminEmails() {
 
   const loadInboxEmails = async () => {
     setLoading(true)
+    setInboxPage(1)
     try {
       const result = await resendInboxAPI.list({
-        limit: 50,
+        limit: 100,
       })
-      
-      console.log('Admin Inbox - API Result:', result)
-      console.log('Admin Inbox - Emails data:', result.data)
-      console.log('Admin Inbox - Number of emails:', result.data?.length)
-      
-      if (result.data && result.data.length > 0) {
-        console.log('Admin Inbox - Email TO addresses:', result.data.slice(0, 5).map(e => ({ 
-          id: e.id, 
-          to: e.to, 
-          subject: e.subject,
-          hasHtml: !!e.html,
-          hasText: !!e.text,
-          htmlLength: e.html?.length || 0,
-          textLength: e.text?.length || 0,
-        })))
-      }
       
       // Get read email IDs from localStorage
       const getReadEmailIds = (): Set<string> => {
@@ -1060,7 +1046,7 @@ export function AdminEmails() {
   const loadEmailSetupData = async () => {
     try {
       setLoading(true)
-      const [addresses, logos] = await Promise.all([
+      const [addresses, logos, clientUsers] = await Promise.all([
         (async () => {
           const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
           // Load ALL email addresses, not just admin ones, to show noreply and support
@@ -1074,8 +1060,57 @@ export function AdminEmails() {
           }
           throw error
         }),
+        // Client mailboxes are derived from registered client users — show
+        // every signed-up client here without requiring a separate row in
+        // `email_addresses`. Existing email_addresses with address_type='client'
+        // win the dedupe below.
+        (async () => {
+          const { data, error } = await db
+            .from('users')
+            .select('id, email, first_name, last_name, role, created_at, last_seen_at')
+            .eq('role', 'client')
+            .order('created_at', { ascending: false })
+          if (error) {
+            console.warn('Could not load client users for email setup:', error)
+            return []
+          }
+          return data || []
+        })(),
       ])
-      setAdminEmailAddresses(addresses)
+
+      // Merge: real email_addresses rows + a virtual entry per client user.
+      const realEmails = new Set(
+        (addresses || [])
+          .filter((a: any) => a.address_type === 'client' && a.email_address)
+          .map((a: any) => String(a.email_address).toLowerCase())
+      )
+      const virtualClientEntries = (clientUsers as any[])
+        .filter((u) => u.email && !realEmails.has(String(u.email).toLowerCase()))
+        .map((u): any => ({
+          id: `user:${u.id}`,
+          email_address: u.email,
+          display_name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email,
+          user_id: u.id,
+          is_system_address: false,
+          address_type: 'client',
+          department: null,
+          is_active: true,
+          is_verified: false,
+          is_primary: false,
+          can_send: true,
+          can_receive: true,
+          forward_to_email: null,
+          auto_reply_enabled: false,
+          auto_reply_message: null,
+          notes: null,
+          metadata: { source: 'user_record' },
+          created_at: u.created_at,
+          verified_at: null,
+          last_used_at: u.last_seen_at || null,
+          updated_at: u.created_at,
+        }))
+
+      setAdminEmailAddresses([...(addresses || []), ...virtualClientEntries])
       setBusinessLogos(logos)
     } catch (error) {
       console.error('Error loading email setup data:', error)
@@ -1222,6 +1257,10 @@ export function AdminEmails() {
   }
 
   const handleEditEmail = (email: any) => {
+    if (String(email?.id).startsWith('user:')) {
+      showToast('Client mailboxes are derived from user accounts. Edit the user profile to change the display name.', 'info')
+      return
+    }
     setEditingEmail(email)
     setShowEmailEditor(true)
     // Clear any previous preview when opening editor
@@ -1315,6 +1354,12 @@ export function AdminEmails() {
   }
 
   const handleDeleteEmail = async (id: string, emailAddress: string) => {
+    // Virtual entries (id starts with "user:") are projections of a registered
+    // user, not stored email_addresses rows — refuse to "delete" them here.
+    if (String(id).startsWith('user:')) {
+      showToast('Client mailboxes are derived from user accounts. Delete the user instead.', 'info')
+      return
+    }
     if (!confirm(`Are you sure you want to delete "${emailAddress}"? This action cannot be undone.`)) {
       return
     }
@@ -2220,8 +2265,8 @@ export function AdminEmails() {
                           {totalPages > 1 && (
                             <div className="mt-6 flex items-center justify-between">
                           <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Showing {(currentPage - 1) * 50 + 1} to{' '}
-                            {Math.min(currentPage * 50, totalCount)} of {totalCount} emails
+                            Showing {(currentPage - 1) * 20 + 1} to{' '}
+                            {Math.min(currentPage * 20, totalCount)} of {totalCount} emails
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -2459,12 +2504,12 @@ export function AdminEmails() {
 
                             {/* Email Rows */}
                             <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                              {receivedEmails.map((email) => (
+                              {receivedEmails.slice((inboxPage - 1) * 20, inboxPage * 20).map((email) => (
                                 <div
                                   key={email.id}
                                   className="group relative flex flex-col sm:flex-row sm:items-center px-2 py-2 hover:shadow-sm transition-all cursor-pointer border-l-4 border-transparent hover:border-l-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                                   onClick={(e) => {
-                                    if ((e.target as HTMLElement).closest('input[type="checkbox"]') || 
+                                    if ((e.target as HTMLElement).closest('input[type="checkbox"]') ||
                                         (e.target as HTMLElement).closest('button')) {
                                       return
                                     }
@@ -2621,17 +2666,53 @@ export function AdminEmails() {
                             </div>
                           </div>
 
-                          {/* Load More */}
-                          {inboxHasMore && (
-                            <div className="mt-6 flex justify-center">
-                              <button
-                                onClick={loadInboxEmails}
-                                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                              >
-                                Load More Emails
-                              </button>
-                            </div>
-                          )}
+                          {/* Pagination */}
+                          {receivedEmails.length > 20 && (() => {
+                            const totalInboxPages = Math.ceil(receivedEmails.length / 20)
+                            return (
+                              <div className="mt-6 flex items-center justify-between">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  Showing {(inboxPage - 1) * 20 + 1} to{' '}
+                                  {Math.min(inboxPage * 20, receivedEmails.length)} of {receivedEmails.length} emails
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setInboxPage(Math.max(1, inboxPage - 1))}
+                                    disabled={inboxPage === 1}
+                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Previous
+                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    {Array.from({ length: Math.min(5, totalInboxPages) }, (_, i) => {
+                                      const page = i + 1
+                                      return (
+                                        <button
+                                          key={page}
+                                          onClick={() => setInboxPage(page)}
+                                          className={cn(
+                                            'px-4 py-2 border rounded-lg',
+                                            inboxPage === page
+                                              ? 'bg-primary-600 text-white border-primary-600'
+                                              : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                          )}
+                                        >
+                                          {page}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                  <button
+                                    onClick={() => setInboxPage(Math.min(totalInboxPages, inboxPage + 1))}
+                                    disabled={inboxPage === totalInboxPages}
+                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </>
                       )}
                 </>

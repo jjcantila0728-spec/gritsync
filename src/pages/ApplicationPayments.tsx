@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { applicationPaymentsAPI, applicationsAPI, servicesAPI } from '@/lib/api'
+import { db } from '@/lib/api-client'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getSignedFileUrl } from '@/lib/api-service'
 import { paymentSettings } from '@/lib/settings'
@@ -194,6 +195,55 @@ export function ApplicationPayments() {
       loadServices()
     }
   }, [application, payments])
+
+  // Self-heal pending payments whose amount is 0/missing. This happens when the
+  // server-side auto-trigger (timelineStepsAPI.update on form1_submitted) couldn't
+  // resolve the staggered service and inserted amount=0. As soon as the client
+  // has the service config loaded, recompute the real amount and patch the row.
+  useEffect(() => {
+    if (loadingServices || loadingPayments) return
+    if (!payments || payments.length === 0) return
+    const zeroPending = payments.filter(
+      (p) => p.status === 'pending' && (!p.amount || Number(p.amount) <= 0)
+    )
+    if (zeroPending.length === 0) return
+
+    const expectedFor = (p: Payment): number | null => {
+      if (p.payment_type === 'step1') {
+        return staggeredService?.total_step1 ? Number(staggeredService.total_step1) : null
+      }
+      if (p.payment_type === 'step2') {
+        if (application?.payment_type === 'retake' && retakeService) {
+          return Number(retakeService.total_step2 || retakeService.total_full || 0) || null
+        }
+        return staggeredService?.total_step2 ? Number(staggeredService.total_step2) : null
+      }
+      if (p.payment_type === 'full') {
+        return fullService?.total_full ? Number(fullService.total_full) : null
+      }
+      return null
+    }
+
+    let didUpdate = false
+    ;(async () => {
+      for (const p of zeroPending) {
+        const expected = expectedFor(p)
+        if (expected && expected > 0) {
+          try {
+            await db.from('application_payments').update({ amount: expected }).eq('id', p.id)
+            didUpdate = true
+          } catch (err) {
+            console.warn('Failed to repair pending payment amount', p.id, err)
+          }
+        }
+      }
+      if (didUpdate) {
+        // Refresh so the UI shows the corrected amount immediately
+        // (realtime will also pick it up, but this avoids the gap).
+        loadPayments()
+      }
+    })()
+  }, [loadingServices, loadingPayments, payments, staggeredService, fullService, retakeService, application])
 
   // Load services from admin quote service config
   async function loadServices() {

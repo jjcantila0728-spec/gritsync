@@ -36,6 +36,17 @@ export function Register() {
   const [resendCooldown, setResendCooldown] = useState(0)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
+  // Referral code from the registration link (?ref=CODE)
+  const [referralCode] = useState<string>(() => {
+    try {
+      const p = new URLSearchParams(window.location.search)
+      return (p.get('ref') || p.get('referral') || '').trim().toUpperCase()
+    } catch {
+      return ''
+    }
+  })
+  const [referrerName, setReferrerName] = useState<string | null>(null)
+
   const { signUp } = useAuth()
   const { showToast } = useToast()
 
@@ -45,6 +56,22 @@ export function Register() {
     const t = setTimeout(() => setResendCooldown(c => c - 1), 1000)
     return () => clearTimeout(t)
   }, [resendCooldown])
+
+  // Resolve the referral code to a partner name (best-effort, for display only)
+  useEffect(() => {
+    if (!referralCode) return
+    let cancelled = false
+    fetch(`/api/referrals/lookup/${encodeURIComponent(referralCode)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && d?.data) {
+          const n = `${d.data.first_name || ''} ${d.data.last_name || ''}`.trim()
+          setReferrerName(n || (d.data.role === 'advisor' ? 'your advisor' : 'a GritSync partner'))
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [referralCode])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -100,7 +127,7 @@ export function Register() {
     setLoading(true)
 
     try {
-      const result = await signUp(firstName, lastName, mobile, password, 'client', personalEmail)
+      const result = await signUp(firstName, lastName, mobile, password, 'client', personalEmail, referralCode || undefined)
       if (result && (result as any).requiresVerification) {
         setRegisteredEmail((result as any).personal_email || personalEmail)
         setVerificationSent(true)
@@ -390,6 +417,12 @@ export function Register() {
                 Sign up to get started with GritSync
               </p>
             </div>
+
+            {referralCode && (
+              <div className="mb-5 rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 px-4 py-3 text-sm text-primary-700 dark:text-primary-300">
+                You were invited{referrerName ? <> by <span className="font-semibold">{referrerName}</span></> : ''} — referral code <span className="font-mono font-semibold">{referralCode}</span>.
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-2 gap-4">

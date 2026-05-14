@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
-import { Shield, Settings, Bell, Lock, DollarSign, Calculator, Server, Tag, Package, Activity } from 'lucide-react'
+import { Shield, Settings, Bell, Lock, DollarSign, Calculator, Server, Tag, Package, Activity, Link2, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Tab {
@@ -17,7 +17,9 @@ const tabs: Tab[] = [
   { id: 'general', label: 'General', icon: Settings, path: '/admin/settings/general' },
   { id: 'notifications', label: 'Email & Notifications', icon: Bell, path: '/admin/settings/notifications' },
   { id: 'security', label: 'Security', icon: Lock, path: '/admin/settings/security' },
+  { id: 'permissions', label: 'Permissions', icon: ShieldCheck, path: '/admin/settings/permissions' },
   { id: 'payment', label: 'Payment', icon: DollarSign, path: '/admin/settings/payment' },
+  { id: 'referrals', label: 'Referrals', icon: Link2, path: '/admin/settings/referrals' },
   { id: 'promo-codes', label: 'Promo Codes', icon: Tag, path: '/admin/settings/promo-codes' },
   { id: 'currency', label: 'Currency', icon: Calculator, path: '/admin/settings/currency' },
   { id: 'services', label: 'Services', icon: Package, path: '/admin/settings/services' },

@@ -31,18 +31,18 @@ export function PWAInstallPrompt() {
       return
     }
 
-    // Listen for the beforeinstallprompt event
+    // Listen for the beforeinstallprompt event. Only suppress the browser's
+    // native banner when we actually intend to show our own UI — otherwise
+    // Chrome logs "Banner not shown: beforeinstallpromptevent.preventDefault()
+    // called" for prompts we never act on.
     const handleBeforeInstallPrompt = (e: Event) => {
+      const hasSeenPrompt = sessionStorage.getItem('pwa-prompt-seen')
+      if (hasSeenPrompt) return
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
-      
-      // Show prompt after a delay (don't be too aggressive)
-      const hasSeenPrompt = sessionStorage.getItem('pwa-prompt-seen')
-      if (!hasSeenPrompt) {
-        setTimeout(() => {
-          setShowPrompt(true)
-        }, 3000) // Show after 3 seconds
-      }
+      setTimeout(() => {
+        setShowPrompt(true)
+      }, 3000) // Show after 3 seconds
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)

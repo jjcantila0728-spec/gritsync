@@ -16,9 +16,30 @@ const MIME_TYPES: Record<string, string> = {
   png: 'image/png',
   gif: 'image/gif',
   webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  heic: 'image/heic',
   txt: 'text/plain',
+  csv: 'text/csv',
+  rtf: 'application/rtf',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  zip: 'application/zip',
+  rar: 'application/vnd.rar',
+  '7z': 'application/x-7z-compressed',
+  json: 'application/json',
+  xml: 'application/xml',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
 }
 
 function getMimeType(filename: string): string {
@@ -74,7 +95,10 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req: Aut
     if (!filePath) return res.status(400).json({ error: 'No path provided' })
 
     const key = sanitizeKey(filePath)
-    const contentType = getMimeType(filePath)
+    // Prefer the browser-reported MIME type (covers "all kinds" of files);
+    // fall back to extension-based detection.
+    const browserType = (req.file.mimetype || '').trim()
+    const contentType = browserType && browserType !== 'application/octet-stream' ? browserType : getMimeType(filePath)
 
     await pool.query(
       `INSERT INTO file_storage (storage_key, data, content_type, file_size)
@@ -145,8 +169,11 @@ router.get('/file', authenticateTokenOrQuery, async (req: AuthenticatedRequest, 
 
 router.get('/public/*filePath', async (req: Request, res: Response) => {
   try {
-    const filePath = (req.params as any).filePath
-    const key = sanitizeKey(filePath)
+    const raw = (req.params as any).filePath
+    // Express 5 returns wildcard captures as an array of segments; join them
+    // back into a slash-delimited path before sanitizing.
+    const filePath = Array.isArray(raw) ? raw.join('/') : String(raw || '')
+    const key = sanitizeKey(decodeURIComponent(filePath))
 
     const result = await pool.query(
       'SELECT data, content_type FROM file_storage WHERE storage_key = $1',
@@ -160,6 +187,7 @@ router.get('/public/*filePath', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'public, max-age=3600')
     res.send(row.data)
   } catch (error: any) {
+    console.error('Public file serve error:', error)
     res.status(500).json({ error: 'Failed to serve file' })
   }
 })

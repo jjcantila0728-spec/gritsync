@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { SEO, generateBreadcrumbSchema } from '@/components/SEO'
 import { Eye, EyeOff, Mail, Lock, RefreshCw } from 'lucide-react'
 import { appUrl, getSubdomainContext } from '@/lib/routing'
+import { homePathForRole } from '@/lib/permissions'
 
 
 export function Login() {
@@ -31,7 +32,7 @@ export function Login() {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      const dest = isAdmin() ? '/admin/dashboard' : '/dashboard'
+      const dest = homePathForRole(user.role)
       const ctx = getSubdomainContext()
       if (ctx === 'landing' || ctx === 'review') {
         window.location.href = appUrl(dest)
@@ -153,7 +154,7 @@ export function Login() {
 
   // Redirect if already logged in
   if (user) {
-    return <Navigate to={isAdmin() ? '/admin/dashboard' : '/dashboard'} replace />
+    return <Navigate to={homePathForRole(user.role)} replace />
   }
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''

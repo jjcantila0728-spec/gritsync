@@ -46,7 +46,7 @@ export function QuickActionsPanel({
       id: 'new-application',
       label: 'New Application',
       icon: Plus,
-      href: '/apply',
+      href: '/application/new',
       color: 'bg-primary-600 hover:bg-primary-700 text-white',
       description: 'Start a new NCLEX application'
     },

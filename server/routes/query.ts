@@ -8,6 +8,10 @@ const router = Router()
 const PUBLIC_INSERT_TABLES = new Set([
   'quotations', 'newsletter_subscriptions', 'career_applications',
   'donations', 'testimonials',
+  // NCLEX Sponsorship is a public application form — anonymous users can apply
+  // from /sponsorship/apply and the success flow at NCLEXSponsorship.tsx:205
+  // explicitly handles unauthenticated submissions.
+  'nclex_sponsorships',
 ])
 
 // Allowed tables for security (table names + read-only views the frontend uses)
@@ -43,8 +47,12 @@ const ALLOWED_TABLES = new Set([
 // of which table they live on. `SELECT *` is expanded to the table's real
 // columns minus this set; an explicit `select`/`returning` naming one of these
 // is rejected.
+// Columns that must never leave the server. Note: we deliberately do NOT
+// block the bare name `password` — only `password_hash`. `processing_accounts`
+// has a user-facing `password` column (the credential admins hand to the
+// applicant) that must remain readable/writable through this endpoint.
 const SENSITIVE_COLUMNS = new Set([
-  'password_hash', 'password',
+  'password_hash',
   'email_verification_token', 'email_verification_expires_at',
   'email_otp', 'email_otp_expires_at',
   'reset_token', 'password_reset_token',
@@ -92,19 +100,24 @@ function assertIdent(name: string): void {
   }
 }
 
-// Cache of public-schema column names per table (the schema is effectively
-// static at runtime; startup migrations run before requests are served).
-const columnCache = new Map<string, string[]>()
+// Short-TTL cache of public-schema column names per table. The cache exists
+// so we don't hit information_schema on every `SELECT *` expansion, but it
+// is intentionally short-lived (30s) so out-of-band ALTER TABLE migrations
+// applied while the server is running are picked up automatically. (When
+// the cache was forever, dev workflows that added columns mid-session kept
+// serving stale schemas until the process was restarted.)
+const COLUMN_CACHE_TTL_MS = 30_000
+const columnCache = new Map<string, { cols: string[]; expires: number }>()
 async function getTableColumns(table: string): Promise<string[]> {
   const cached = columnCache.get(table)
-  if (cached) return cached
+  if (cached && cached.expires > Date.now()) return cached.cols
   const r = await query(
     `SELECT column_name FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1`,
     [table]
   )
   const cols = r.rows.map((row: any) => row.column_name as string)
-  columnCache.set(table, cols)
+  columnCache.set(table, { cols, expires: Date.now() + COLUMN_CACHE_TTL_MS })
   return cols
 }
 
@@ -124,10 +137,27 @@ async function resolveColumnList(table: string, raw: string | undefined): Promis
   return parts.map((c) => `"${c}"`).join(', ')
 }
 
+// node-postgres serializes JS Arrays as Postgres array literals (`{...}`) and
+// plain JS objects as JSON via toString — neither of which is what we want for
+// `jsonb` columns the frontend writes (e.g. services.line_items,
+// email_addresses.metadata). Stringify anything that isn't a primitive / Date /
+// Buffer so jsonb columns receive valid JSON.
+function serializeForPg(v: any): any {
+  if (v === null || v === undefined) return v
+  const t = typeof v
+  if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint') return v
+  if (v instanceof Date) return v
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return v
+  // Arrays + plain objects → JSON-encode for jsonb.
+  return JSON.stringify(v)
+}
+
 function sendError(res: Response, err: any) {
   if (err instanceof HttpError) {
+    console.warn(`[/api/db] ${err.status}: ${err.message}`)
     return res.status(err.status).json({ data: null, error: { message: err.message } })
   }
+  console.error('[/api/db] 500:', err?.message || err)
   return res.status(500).json({ data: null, error: { message: err?.message || 'Server error' } })
 }
 
@@ -242,7 +272,7 @@ router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Resp
 
     const inserted: any[] = []
     for (const rec of records) {
-      const vals = cols.map(c => rec[c])
+      const vals = cols.map(c => serializeForPg(rec[c]))
       const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ')
 
       let sql = `INSERT INTO "${table}" (${colSQL}) VALUES (${placeholders})`
@@ -299,7 +329,7 @@ router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res
     }
 
     const setClause = setCols.map((k, i) => `"${k}" = $${i + 1}`).join(', ')
-    const setValues = setCols.map(k => updates[k])
+    const setValues = setCols.map(k => serializeForPg(updates[k]))
 
     const { sql: where, values: filterValues } = buildWhereClause(_filters)
     const adjustedWhere = where.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + setValues.length}`)

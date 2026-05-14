@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (firstName: string, lastName: string, mobile: string, password: string, role?: UserRole, personalEmail?: string) => Promise<{ requiresVerification?: boolean; personal_email?: string } | null>
+  signUp: (firstName: string, lastName: string, mobile: string, password: string, role?: UserRole, personalEmail?: string, referralCode?: string) => Promise<{ requiresVerification?: boolean; personal_email?: string } | null>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
@@ -15,6 +15,8 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   isAdmin: () => boolean
   isClient: () => boolean
+  isAffiliate: () => boolean
+  isAdvisor: () => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -103,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The profile will load automatically via the auth state change listener
   }
 
-  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client', personalEmail?: string) {
+  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client', personalEmail?: string, referralCode?: string) {
     const { data, error } = await db.auth.signUp({
       email: '',
       password,
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           mobile,
           role,
           personal_email: personalEmail,
+          referralCode: referralCode || undefined,
         },
       },
     })
@@ -211,6 +214,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user?.role === 'client'
   }
 
+  function isAffiliate() {
+    return user?.role === 'affiliate'
+  }
+
+  function isAdvisor() {
+    return user?.role === 'advisor'
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -225,6 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         isAdmin,
         isClient,
+        isAffiliate,
+        isAdvisor,
       }}
     >
       {children}
