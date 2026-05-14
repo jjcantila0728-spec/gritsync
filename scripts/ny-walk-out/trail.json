@@ -1,0 +1,4548 @@
+[
+  {
+    "step": "01-landing",
+    "url": "https://eservices.nysed.gov/professions/before/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Prerequisites",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Prerequisites"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Apply for a new license."
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "option-input-LICENSE",
+        "value": "5",
+        "label": "Apply for a new license.",
+        "selector": "#option-input-LICENSE"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Renew an existing license registration / certification."
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "renew",
+        "value": "renew",
+        "label": "Renew an existing license registration / certification.",
+        "selector": "#renew"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "https://www.op.nysed.gov/registration-renewal/online-registration-renewal",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "https://eservices.nysed.gov/professions/before/022",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "http://www.op.nysed.gov/prof/nurse/nurse-cnscert.htm",
+        "href": "http://www.op.nysed.gov/prof/nurse/nurse-cnscert.htm"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "http://www.op.nysed.gov/prof/nurse/nurse-cnsforms.htm",
+        "href": "http://www.op.nysed.gov/prof/nurse/nurse-cnsforms.htm"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "OPOnlineApplications@nysed.gov",
+        "href": "mailto:OPOnlineApplications@nysed.gov"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "use this link to continue your application",
+        "href": "https://eservices.nysed.gov/professions/continue"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "use this link to upload additional documentation",
+        "href": "https://eservices.nysed.gov/professions/addl-doc/"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "requirements",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/license-requirements"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Frequently Asked Questions",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/frequently-asked-questions"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "forms",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/application-forms"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Online Services Technical Assistance",
+        "href": "https://op-support.nysed.gov/hc/en-us/requests/new?ticket_form_id=1900000841165"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "submit",
+        "value": "Begin Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  },
+  {
+    "step": "02-after-license-radio",
+    "url": "https://eservices.nysed.gov/professions/before/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Prerequisites",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Prerequisites"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Apply for a new license."
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "option-input-LICENSE",
+        "value": "5",
+        "label": "Apply for a new license.",
+        "selector": "#option-input-LICENSE"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Renew an existing license registration / certification."
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "renew",
+        "value": "renew",
+        "label": "Renew an existing license registration / certification.",
+        "selector": "#renew"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "https://www.op.nysed.gov/registration-renewal/online-registration-renewal",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "https://eservices.nysed.gov/professions/before/022",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "http://www.op.nysed.gov/prof/nurse/nurse-cnscert.htm",
+        "href": "http://www.op.nysed.gov/prof/nurse/nurse-cnscert.htm"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "http://www.op.nysed.gov/prof/nurse/nurse-cnsforms.htm",
+        "href": "http://www.op.nysed.gov/prof/nurse/nurse-cnsforms.htm"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "OPOnlineApplications@nysed.gov",
+        "href": "mailto:OPOnlineApplications@nysed.gov"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "use this link to continue your application",
+        "href": "https://eservices.nysed.gov/professions/continue"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "use this link to upload additional documentation",
+        "href": "https://eservices.nysed.gov/professions/addl-doc/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "requirements",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/license-requirements"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Frequently Asked Questions",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/frequently-asked-questions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "forms",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/application-forms"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Online Services Technical Assistance",
+        "href": "https://op-support.nysed.gov/hc/en-us/requests/new?ticket_form_id=1900000841165"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "submit",
+        "value": "Begin Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  },
+  {
+    "step": "03-personal-information",
+    "url": "https://eservices.nysed.gov/professions/professions/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Personal Information",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Personal Information"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-yes",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#has-license-yes"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-no",
+        "value": "false",
+        "label": "No",
+        "selector": "#has-license-no"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Online Registration Renewal page.",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Delayed Registration Application.",
+        "href": "https://eservices.nysed.gov/professions/delayed-registration/"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Social Security Number?"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "showSsn",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#showSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "hideSsn",
+        "value": "false",
+        "label": "No",
+        "selector": "#hideSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number",
+        "id": "ssn-display-label",
+        "selector": "#ssn-display-label"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number*",
+        "id": "ssn-input-label",
+        "selector": "#ssn-input-label"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "ssn",
+        "id": "ssn",
+        "label": "Social Security Number*",
+        "selector": "#ssn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Date of Birth*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "dateOfBirth",
+        "id": "dob-input",
+        "placeholder": "MM/DD/YYYY",
+        "selector": "#dob-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "NYS DMV ID"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "nysDmvId",
+        "id": "nysDmvId",
+        "placeholder": "ID",
+        "label": "NYS DMV ID",
+        "selector": "#nysDmvId"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Country*"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].countryCode",
+        "id": "country-input",
+        "label": "Country*",
+        "selector": "#country-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "First Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "firstName",
+        "id": "firstName",
+        "placeholder": "First Name",
+        "label": "First Name*",
+        "selector": "#firstName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Middle Name"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "middleName",
+        "id": "middleName",
+        "placeholder": "Middle Name",
+        "label": "Middle Name",
+        "selector": "#middleName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Last Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "lastName",
+        "id": "lastName",
+        "placeholder": "Last Name",
+        "label": "Last Name*",
+        "selector": "#lastName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 1*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].address",
+        "id": "address-input",
+        "placeholder": "Address Line 1",
+        "label": "Address Line 1*",
+        "selector": "#address-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 2"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine2",
+        "id": "address-cont-input",
+        "placeholder": "Address Line 2",
+        "label": "Address Line 2",
+        "selector": "#address-cont-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Address Line 3"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].addressLine3",
+        "id": "address-cont2-input",
+        "placeholder": "Address Line 3",
+        "label": "Address Line 3",
+        "selector": "#address-cont2-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "ZIP Code*"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].zipCode5",
+        "id": "zipcode5-input",
+        "placeholder": "ZIP Code",
+        "label": "ZIP Code*",
+        "selector": "#zipcode5-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Postal Code*"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].foreignPostalCode",
+        "id": "foreignPostalCode-input",
+        "placeholder": "Postal Code",
+        "label": "Postal Code*",
+        "selector": "#foreignPostalCode-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "City*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].city",
+        "id": "city-input",
+        "placeholder": "City",
+        "label": "City*",
+        "selector": "#city-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "State"
+      },
+      {
+        "tag": "select",
+        "visible": false,
+        "type": "select-one",
+        "name": "addresses[0].state",
+        "id": "state-input",
+        "label": "State",
+        "selector": "#state-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Non-US State"
+      },
+      {
+        "tag": "select",
+        "visible": false,
+        "type": "select-one",
+        "name": "addresses[0].nonUsState",
+        "id": "foreign-state-input",
+        "label": "Non-US State",
+        "selector": "#foreign-state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Additional Address Information\n(optional)"
+      },
+      {
+        "tag": "textarea",
+        "visible": true,
+        "type": "textarea",
+        "name": "personNote.note",
+        "id": "person-note",
+        "placeholder": "Please provide your full address if your address would not fit in the fields above.",
+        "label": "Additional Address Information\n(optional)",
+        "selector": "#person-note"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#addresses0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#addresses0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Phone Number"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "phones[0].contactValue",
+        "id": "phone-input",
+        "placeholder": "Enter phone number (optional)",
+        "label": "Phone Number",
+        "selector": "#phone-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Phone Number Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#phones0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#phones0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emails[0].contactValue",
+        "id": "email-input",
+        "placeholder": "Email",
+        "label": "E-Mail Address*",
+        "selector": "#email-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "E-mail Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#emails0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#emails0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Verify E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emailVerification",
+        "id": "emailVerification",
+        "placeholder": "Please re-enter your e-mail address.",
+        "label": "Verify E-Mail Address*",
+        "selector": "#emailVerification"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "submit",
+        "id": "personalInformationFormButton",
+        "value": "Continue Application",
+        "selector": "#personalInformationFormButton"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      },
+      {
+        "tag": "h4",
+        "visible": false,
+        "text": "Duplicate Application Warning"
+      },
+      {
+        "tag": "h1",
+        "visible": false,
+        "text": "Warning!"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Start Over",
+        "href": "https://eservices.nysed.gov/professions/professions/start-over"
+      }
+    ]
+  },
+  {
+    "step": "04-after-country-philippines",
+    "url": "https://eservices.nysed.gov/professions/professions/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Personal Information",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Personal Information"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-yes",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#has-license-yes"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-no",
+        "value": "false",
+        "label": "No",
+        "selector": "#has-license-no"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Online Registration Renewal page.",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Delayed Registration Application.",
+        "href": "https://eservices.nysed.gov/professions/delayed-registration/"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Social Security Number?"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "showSsn",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#showSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "hideSsn",
+        "value": "false",
+        "label": "No",
+        "selector": "#hideSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number",
+        "id": "ssn-display-label",
+        "selector": "#ssn-display-label"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number*",
+        "id": "ssn-input-label",
+        "selector": "#ssn-input-label"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "ssn",
+        "id": "ssn",
+        "label": "Social Security Number*",
+        "selector": "#ssn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Date of Birth*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "dateOfBirth",
+        "id": "dob-input",
+        "placeholder": "MM/DD/YYYY",
+        "value": "01/15/1990",
+        "selector": "#dob-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "NYS DMV ID"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "nysDmvId",
+        "id": "nysDmvId",
+        "placeholder": "ID",
+        "label": "NYS DMV ID",
+        "selector": "#nysDmvId"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Country*"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].countryCode",
+        "id": "country-input",
+        "value": "PH",
+        "label": "Country*",
+        "selector": "#country-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "First Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "firstName",
+        "id": "firstName",
+        "placeholder": "First Name",
+        "label": "First Name*",
+        "selector": "#firstName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Middle Name"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "middleName",
+        "id": "middleName",
+        "placeholder": "Middle Name",
+        "label": "Middle Name",
+        "selector": "#middleName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Last Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "lastName",
+        "id": "lastName",
+        "placeholder": "Last Name",
+        "label": "Last Name*",
+        "selector": "#lastName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 1*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].address",
+        "id": "address-input",
+        "placeholder": "Address Line 1",
+        "label": "Address Line 1*",
+        "selector": "#address-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 2"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine2",
+        "id": "address-cont-input",
+        "placeholder": "Address Line 2",
+        "label": "Address Line 2",
+        "selector": "#address-cont-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 3"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine3",
+        "id": "address-cont2-input",
+        "placeholder": "Address Line 3",
+        "label": "Address Line 3",
+        "selector": "#address-cont2-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "ZIP Code*"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].zipCode5",
+        "id": "zipcode5-input",
+        "placeholder": "ZIP Code",
+        "label": "ZIP Code*",
+        "selector": "#zipcode5-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Postal Code*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].foreignPostalCode",
+        "id": "foreignPostalCode-input",
+        "placeholder": "Postal Code",
+        "label": "Postal Code*",
+        "selector": "#foreignPostalCode-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "City*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].city",
+        "id": "city-input",
+        "placeholder": "City",
+        "label": "City*",
+        "selector": "#city-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "State"
+      },
+      {
+        "tag": "select",
+        "visible": false,
+        "type": "select-one",
+        "name": "addresses[0].state",
+        "id": "state-input",
+        "label": "State",
+        "selector": "#state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Non-US State"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].nonUsState",
+        "id": "foreign-state-input",
+        "label": "Non-US State",
+        "selector": "#foreign-state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Additional Address Information\n(optional)"
+      },
+      {
+        "tag": "textarea",
+        "visible": true,
+        "type": "textarea",
+        "name": "personNote.note",
+        "id": "person-note",
+        "placeholder": "Please provide your full address if your address would not fit in the fields above.",
+        "label": "Additional Address Information\n(optional)",
+        "selector": "#person-note"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#addresses0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#addresses0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Phone Number"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "phones[0].contactValue",
+        "id": "phone-input",
+        "placeholder": "Enter phone number (optional)",
+        "label": "Phone Number",
+        "selector": "#phone-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Phone Number Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#phones0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#phones0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emails[0].contactValue",
+        "id": "email-input",
+        "placeholder": "Email",
+        "label": "E-Mail Address*",
+        "selector": "#email-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "E-mail Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#emails0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#emails0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Verify E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emailVerification",
+        "id": "emailVerification",
+        "placeholder": "Please re-enter your e-mail address.",
+        "label": "Verify E-Mail Address*",
+        "selector": "#emailVerification"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "submit",
+        "id": "personalInformationFormButton",
+        "value": "Continue Application",
+        "selector": "#personalInformationFormButton"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      },
+      {
+        "tag": "h4",
+        "visible": false,
+        "text": "Duplicate Application Warning"
+      },
+      {
+        "tag": "h1",
+        "visible": false,
+        "text": "Warning!"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Start Over",
+        "href": "https://eservices.nysed.gov/professions/professions/start-over"
+      }
+    ]
+  },
+  {
+    "step": "05-personal-info-filled",
+    "url": "https://eservices.nysed.gov/professions/professions/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Personal Information",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Personal Information"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-yes",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#has-license-yes"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-no",
+        "value": "false",
+        "label": "No",
+        "selector": "#has-license-no"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Online Registration Renewal page.",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Delayed Registration Application.",
+        "href": "https://eservices.nysed.gov/professions/delayed-registration/"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Social Security Number?"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "showSsn",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#showSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "hideSsn",
+        "value": "false",
+        "label": "No",
+        "selector": "#hideSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number",
+        "id": "ssn-display-label",
+        "selector": "#ssn-display-label"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number*",
+        "id": "ssn-input-label",
+        "selector": "#ssn-input-label"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "ssn",
+        "id": "ssn",
+        "label": "Social Security Number*",
+        "selector": "#ssn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Date of Birth*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "dateOfBirth",
+        "id": "dob-input",
+        "placeholder": "MM/DD/YYYY",
+        "value": "01/15/1990",
+        "selector": "#dob-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "NYS DMV ID"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "nysDmvId",
+        "id": "nysDmvId",
+        "placeholder": "ID",
+        "label": "NYS DMV ID",
+        "selector": "#nysDmvId"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Country*"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].countryCode",
+        "id": "country-input",
+        "value": "PH",
+        "label": "Country*",
+        "selector": "#country-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "First Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "firstName",
+        "id": "firstName",
+        "placeholder": "First Name",
+        "value": "Krizza",
+        "label": "First Name*",
+        "selector": "#firstName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Middle Name"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "middleName",
+        "id": "middleName",
+        "placeholder": "Middle Name",
+        "value": "Mae",
+        "label": "Middle Name",
+        "selector": "#middleName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Last Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "lastName",
+        "id": "lastName",
+        "placeholder": "Last Name",
+        "value": "Cantila",
+        "label": "Last Name*",
+        "selector": "#lastName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 1*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].address",
+        "id": "address-input",
+        "placeholder": "Address Line 1",
+        "value": "123 Sample St",
+        "label": "Address Line 1*",
+        "selector": "#address-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 2"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine2",
+        "id": "address-cont-input",
+        "placeholder": "Address Line 2",
+        "label": "Address Line 2",
+        "selector": "#address-cont-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 3"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine3",
+        "id": "address-cont2-input",
+        "placeholder": "Address Line 3",
+        "label": "Address Line 3",
+        "selector": "#address-cont2-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "ZIP Code*"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].zipCode5",
+        "id": "zipcode5-input",
+        "placeholder": "ZIP Code",
+        "label": "ZIP Code*",
+        "selector": "#zipcode5-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Postal Code*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].foreignPostalCode",
+        "id": "foreignPostalCode-input",
+        "placeholder": "Postal Code",
+        "value": "1000",
+        "label": "Postal Code*",
+        "selector": "#foreignPostalCode-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "City*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].city",
+        "id": "city-input",
+        "placeholder": "City",
+        "value": "Manila",
+        "label": "City*",
+        "selector": "#city-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "State"
+      },
+      {
+        "tag": "select",
+        "visible": false,
+        "type": "select-one",
+        "name": "addresses[0].state",
+        "id": "state-input",
+        "label": "State",
+        "selector": "#state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Non-US State"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].nonUsState",
+        "id": "foreign-state-input",
+        "label": "Non-US State",
+        "selector": "#foreign-state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Additional Address Information\n(optional)"
+      },
+      {
+        "tag": "textarea",
+        "visible": true,
+        "type": "textarea",
+        "name": "personNote.note",
+        "id": "person-note",
+        "placeholder": "Please provide your full address if your address would not fit in the fields above.",
+        "value": "123 Sample St, Manila, Metro Manila 1000, Philippines",
+        "label": "Additional Address Information\n(optional)",
+        "selector": "#person-note"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#addresses0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#addresses0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Phone Number"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "phones[0].contactValue",
+        "id": "phone-input",
+        "placeholder": "Enter phone number (optional)",
+        "value": "9171234567",
+        "label": "Phone Number",
+        "selector": "#phone-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Phone Number Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#phones0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#phones0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emails[0].contactValue",
+        "id": "email-input",
+        "placeholder": "Email",
+        "value": "recon@example.com",
+        "label": "E-Mail Address*",
+        "selector": "#email-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "E-mail Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#emails0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#emails0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Verify E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emailVerification",
+        "id": "emailVerification",
+        "placeholder": "Please re-enter your e-mail address.",
+        "value": "recon@example.com",
+        "label": "Verify E-Mail Address*",
+        "selector": "#emailVerification"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "submit",
+        "id": "personalInformationFormButton",
+        "value": "Continue Application",
+        "selector": "#personalInformationFormButton"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      },
+      {
+        "tag": "h4",
+        "visible": false,
+        "text": "Duplicate Application Warning"
+      },
+      {
+        "tag": "h1",
+        "visible": false,
+        "text": "Warning!"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Start Over",
+        "href": "https://eservices.nysed.gov/professions/professions/start-over"
+      }
+    ]
+  },
+  {
+    "step": "06-after-personal-submit",
+    "url": "https://eservices.nysed.gov/professions/professions/022",
+    "title": "NYSED Office of the Professions - Registered Nurse - Personal Information",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Personal Information"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-yes",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#has-license-yes"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-no",
+        "value": "false",
+        "label": "No",
+        "selector": "#has-license-no"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Online Registration Renewal page.",
+        "href": "https://www.op.nysed.gov/taxonomy/term/12871"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Delayed Registration Application.",
+        "href": "https://eservices.nysed.gov/professions/delayed-registration/"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Social Security Number?"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "showSsn",
+        "value": "true",
+        "label": "Yes",
+        "selector": "#showSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "hideSsn",
+        "value": "false",
+        "label": "No",
+        "selector": "#hideSsn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number",
+        "id": "ssn-display-label",
+        "selector": "#ssn-display-label"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "Social Security Number*",
+        "id": "ssn-input-label",
+        "selector": "#ssn-input-label"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "ssn",
+        "id": "ssn",
+        "label": "Social Security Number*",
+        "selector": "#ssn"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Date of Birth*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "dateOfBirth",
+        "id": "dob-input",
+        "placeholder": "MM/DD/YYYY",
+        "value": "01/15/1990",
+        "selector": "#dob-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "NYS DMV ID"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "nysDmvId",
+        "id": "nysDmvId",
+        "placeholder": "ID",
+        "label": "NYS DMV ID",
+        "selector": "#nysDmvId"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Country*"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].countryCode",
+        "id": "country-input",
+        "value": "PH",
+        "label": "Country*",
+        "selector": "#country-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "First Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "firstName",
+        "id": "firstName",
+        "placeholder": "First Name",
+        "value": "Krizza",
+        "label": "First Name*",
+        "selector": "#firstName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Middle Name"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "middleName",
+        "id": "middleName",
+        "placeholder": "Middle Name",
+        "value": "Mae",
+        "label": "Middle Name",
+        "selector": "#middleName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Last Name*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "lastName",
+        "id": "lastName",
+        "placeholder": "Last Name",
+        "value": "Cantila",
+        "label": "Last Name*",
+        "selector": "#lastName"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 1*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].address",
+        "id": "address-input",
+        "placeholder": "Address Line 1",
+        "value": "123 Sample St",
+        "label": "Address Line 1*",
+        "selector": "#address-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 2"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine2",
+        "id": "address-cont-input",
+        "placeholder": "Address Line 2",
+        "label": "Address Line 2",
+        "selector": "#address-cont-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Address Line 3"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].addressLine3",
+        "id": "address-cont2-input",
+        "placeholder": "Address Line 3",
+        "label": "Address Line 3",
+        "selector": "#address-cont2-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "ZIP Code*"
+      },
+      {
+        "tag": "input",
+        "visible": false,
+        "type": "text",
+        "name": "addresses[0].zipCode5",
+        "id": "zipcode5-input",
+        "placeholder": "ZIP Code",
+        "label": "ZIP Code*",
+        "selector": "#zipcode5-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Postal Code*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].foreignPostalCode",
+        "id": "foreignPostalCode-input",
+        "placeholder": "Postal Code",
+        "value": "1000",
+        "label": "Postal Code*",
+        "selector": "#foreignPostalCode-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "City*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "addresses[0].city",
+        "id": "city-input",
+        "placeholder": "City",
+        "value": "Manila",
+        "label": "City*",
+        "selector": "#city-input"
+      },
+      {
+        "tag": "label",
+        "visible": false,
+        "text": "State"
+      },
+      {
+        "tag": "select",
+        "visible": false,
+        "type": "select-one",
+        "name": "addresses[0].state",
+        "id": "state-input",
+        "label": "State",
+        "selector": "#state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Non-US State"
+      },
+      {
+        "tag": "select",
+        "visible": true,
+        "type": "select-one",
+        "name": "addresses[0].nonUsState",
+        "id": "foreign-state-input",
+        "label": "Non-US State",
+        "selector": "#foreign-state-input"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Additional Address Information\n(optional)"
+      },
+      {
+        "tag": "textarea",
+        "visible": true,
+        "type": "textarea",
+        "name": "personNote.note",
+        "id": "person-note",
+        "placeholder": "Please provide your full address if your address would not fit in the fields above.",
+        "value": "123 Sample St, Manila, Metro Manila 1000, Philippines",
+        "label": "Additional Address Information\n(optional)",
+        "selector": "#person-note"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#addresses0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#addresses0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Phone Number"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "phones[0].contactValue",
+        "id": "phone-input",
+        "placeholder": "Enter phone number (optional)",
+        "value": "9171234567",
+        "label": "Phone Number",
+        "selector": "#phone-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "Phone Number Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#phones0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#phones0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emails[0].contactValue",
+        "id": "email-input",
+        "placeholder": "Email",
+        "value": "recon@example.com",
+        "label": "E-Mail Address*",
+        "selector": "#email-input"
+      },
+      {
+        "tag": "legend",
+        "visible": true,
+        "text": "E-mail Type"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id1",
+        "value": "1",
+        "label": "Business",
+        "selector": "#emails0\\.locationType\\.id1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Business"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id2",
+        "value": "2",
+        "label": "Personal",
+        "selector": "#emails0\\.locationType\\.id2"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Personal"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Verify E-Mail Address*"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "name": "emailVerification",
+        "id": "emailVerification",
+        "placeholder": "Please re-enter your e-mail address.",
+        "value": "recon@example.com",
+        "label": "Verify E-Mail Address*",
+        "selector": "#emailVerification"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "submit",
+        "id": "personalInformationFormButton",
+        "value": "Continue Application",
+        "selector": "#personalInformationFormButton"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      },
+      {
+        "tag": "h4",
+        "visible": false,
+        "text": "Duplicate Application Warning"
+      },
+      {
+        "tag": "h1",
+        "visible": false,
+        "text": "Warning!"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Start Over",
+        "href": "https://eservices.nysed.gov/professions/professions/start-over"
+      }
+    ]
+  },
+  {
+    "step": "07-after-submit",
+    "url": "https://eservices.nysed.gov/professions/application#/",
+    "title": "NYSED Office of the Professions - Registered Nurse - Application",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Personal Information",
+        "href": "https://eservices.nysed.gov/professions/professions/022"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Page List"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Request for Reasonable Testing Accommodations",
+        "href": "https://www.op.nysed.gov/about/general-information-policies#testing"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_1_0",
+        "id": "input_1_0-0",
+        "value": "1001",
+        "label": "Yes",
+        "selector": "#input_1_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_1_0",
+        "id": "input_1_0-1",
+        "value": "1002",
+        "label": "No",
+        "selector": "#input_1_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6281_0",
+        "id": "input_6281_0-0",
+        "value": "624281",
+        "label": "Yes",
+        "selector": "#input_6281_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6281_0",
+        "id": "input_6281_0-1",
+        "value": "624381",
+        "label": "No",
+        "selector": "#input_6281_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_3_0",
+        "id": "input_3_0-0",
+        "value": "1",
+        "label": "Yes",
+        "selector": "#input_3_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_3_0",
+        "id": "input_3_0-1",
+        "value": "2",
+        "label": "No",
+        "selector": "#input_3_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_10_0",
+        "id": "input_10_0-0",
+        "value": "3",
+        "label": "Yes",
+        "selector": "#input_10_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_10_0",
+        "id": "input_10_0-1",
+        "value": "4",
+        "label": "No",
+        "selector": "#input_10_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_11_0",
+        "id": "input_11_0-0",
+        "value": "5",
+        "label": "Yes",
+        "selector": "#input_11_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_11_0",
+        "id": "input_11_0-1",
+        "value": "6",
+        "label": "No",
+        "selector": "#input_11_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_13_0",
+        "id": "input_13_0-0",
+        "value": "1005",
+        "label": "Yes",
+        "selector": "#input_13_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_13_0",
+        "id": "input_13_0-1",
+        "value": "1006",
+        "label": "No",
+        "selector": "#input_13_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_14_0",
+        "id": "input_14_0-0",
+        "value": "1007",
+        "label": "Yes",
+        "selector": "#input_14_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_14_0",
+        "id": "input_14_0-1",
+        "value": "1008",
+        "label": "No",
+        "selector": "#input_14_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_15_0",
+        "id": "input_15_0-0",
+        "value": "1009",
+        "label": "Yes",
+        "selector": "#input_15_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_15_0",
+        "id": "input_15_0-1",
+        "value": "1010",
+        "label": "No",
+        "selector": "#input_15_0-1"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Submit"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  },
+  {
+    "step": "08-after-submit",
+    "url": "https://eservices.nysed.gov/professions/application#/10209",
+    "title": "NYSED Office of the Professions - Registered Nurse - Application",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Personal Information",
+        "href": "https://eservices.nysed.gov/professions/professions/022"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Page List"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2161_0",
+        "id": "input_2161_0-0",
+        "value": "2121",
+        "label": "Yes",
+        "selector": "#input_2161_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2161_0",
+        "id": "input_2161_0-1",
+        "value": "2122",
+        "label": "No",
+        "selector": "#input_2161_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9682_0",
+        "id": "input_9682_0-0",
+        "value": "920195",
+        "label": "Yes",
+        "selector": "#input_9682_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9682_0",
+        "id": "input_9682_0-1",
+        "value": "920196",
+        "label": "No",
+        "selector": "#input_9682_0-1"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Submit"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  },
+  {
+    "step": "09-after-submit",
+    "url": "https://eservices.nysed.gov/professions/application#/10202",
+    "title": "NYSED Office of the Professions - Registered Nurse - Application",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Personal Information",
+        "href": "https://eservices.nysed.gov/professions/professions/022"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Page List"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_21_0",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_21_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_22_0",
+        "label": "*City",
+        "selector": "#input_22_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_23_0",
+        "label": "*State/Province",
+        "selector": "#input_23_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_24_0",
+        "label": "*Country",
+        "selector": "#input_24_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_25_0",
+        "label": "*Number of years attended",
+        "selector": "#input_25_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_26_0",
+        "label": "*Start Date",
+        "selector": "#input_26_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_27_0",
+        "label": "*End Date",
+        "selector": "#input_27_0"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_28_0",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_28_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_29_0",
+        "label": "*City",
+        "selector": "#input_29_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_30_0",
+        "label": "*State/Province",
+        "selector": "#input_30_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_31_0",
+        "label": "*Country",
+        "selector": "#input_31_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_32_0",
+        "label": "*Number of years attended",
+        "selector": "#input_32_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_33_0",
+        "label": "*Start Date",
+        "selector": "#input_33_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_34_0",
+        "label": "*End Date",
+        "selector": "#input_34_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6261_0",
+        "id": "input_6261_0-0",
+        "value": "603281",
+        "label": "Yes",
+        "selector": "#input_6261_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6261_0",
+        "id": "input_6261_0-1",
+        "value": "603981",
+        "label": "No",
+        "selector": "#input_6261_0-1"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_41_0",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_41_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_35_0",
+        "label": "*City",
+        "selector": "#input_35_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_36_0",
+        "label": "*State/Province",
+        "selector": "#input_36_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_37_0",
+        "label": "*Country",
+        "selector": "#input_37_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_38_0",
+        "label": "*Number of years attended",
+        "selector": "#input_38_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2241_0",
+        "id": "input_2241_0-0",
+        "value": "12281",
+        "label": "Yes",
+        "selector": "#input_2241_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2241_0",
+        "id": "input_2241_0-1",
+        "value": "12381",
+        "label": "No",
+        "selector": "#input_2241_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_39_0",
+        "label": "*Start Date",
+        "selector": "#input_39_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_40_0",
+        "label": "*End Date",
+        "selector": "#input_40_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Major/Concentration"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_49_0",
+        "label": "Major/Concentration",
+        "selector": "#input_49_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Title of Degree/Diploma/Certificate awarded (in the original language)"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_51_0",
+        "label": "Title of Degree/Diploma/Certificate awarded (in the original language)",
+        "selector": "#input_51_0"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New Program",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Form 2",
+        "href": "https://www.op.nysed.gov/taxonomy/term/9336"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2341_0",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_2341_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2342_0",
+        "label": "*City",
+        "selector": "#input_2342_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2343_0",
+        "label": "*State/Province",
+        "selector": "#input_2343_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2344_0",
+        "label": "*Country",
+        "selector": "#input_2344_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2345_0",
+        "label": "*Number of years attended",
+        "selector": "#input_2345_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2347_0",
+        "label": "*Start Date",
+        "selector": "#input_2347_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2348_0",
+        "label": "*End Date",
+        "selector": "#input_2348_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Major/Concentration"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2349_0",
+        "label": "Major/Concentration",
+        "selector": "#input_2349_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Title of Degree/Diploma/Certificate awarded (in the original language)"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2350_0",
+        "label": "Title of Degree/Diploma/Certificate awarded (in the original language)",
+        "selector": "#input_2350_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2346_0",
+        "id": "input_2346_0-0",
+        "value": "12281",
+        "label": "Yes",
+        "selector": "#input_2346_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2346_0",
+        "id": "input_2346_0-1",
+        "value": "12381",
+        "label": "No",
+        "selector": "#input_2346_0-1"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Remove School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9981_0",
+        "id": "input_9981_0-0",
+        "value": "936182",
+        "label": "Yes",
+        "selector": "#input_9981_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9981_0",
+        "id": "input_9981_0-1",
+        "value": "936183",
+        "label": "No",
+        "selector": "#input_9981_0-1"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Submit"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  },
+  {
+    "step": "10-after-submit",
+    "url": "https://eservices.nysed.gov/professions/application#/10202",
+    "title": "NYSED Office of the Professions - Registered Nurse - Application",
+    "elements": [
+      {
+        "tag": "button",
+        "visible": false,
+        "text": "Toggle navigation"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us"
+      },
+      {
+        "tag": "a",
+        "visible": false,
+        "text": "Return Home",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions"
+      },
+      {
+        "tag": "h1",
+        "visible": true,
+        "text": "Office of the Professions\nRegistered Nurse - Application"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Personal Information",
+        "href": "https://eservices.nysed.gov/professions/professions/022"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Page List"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_21_0",
+        "value": "Sample",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_21_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_22_0",
+        "value": "Sample",
+        "label": "*City",
+        "selector": "#input_22_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_23_0",
+        "value": "Sample",
+        "label": "*State/Province",
+        "selector": "#input_23_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_24_0",
+        "value": "Sample",
+        "label": "*Country",
+        "selector": "#input_24_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_25_0",
+        "value": "Sample",
+        "label": "*Number of years attended",
+        "selector": "#input_25_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_26_0",
+        "label": "*Start Date",
+        "selector": "#input_26_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_27_0",
+        "label": "*End Date",
+        "selector": "#input_27_0"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_28_0",
+        "value": "Sample",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_28_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_29_0",
+        "value": "Sample",
+        "label": "*City",
+        "selector": "#input_29_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_30_0",
+        "value": "Sample",
+        "label": "*State/Province",
+        "selector": "#input_30_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_31_0",
+        "value": "Sample",
+        "label": "*Country",
+        "selector": "#input_31_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_32_0",
+        "value": "Sample",
+        "label": "*Number of years attended",
+        "selector": "#input_32_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_33_0",
+        "label": "*Start Date",
+        "selector": "#input_33_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_34_0",
+        "label": "*End Date",
+        "selector": "#input_34_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6261_0",
+        "id": "input_6261_0-0",
+        "value": "603281",
+        "label": "Yes",
+        "selector": "#input_6261_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_6261_0",
+        "id": "input_6261_0-1",
+        "value": "603981",
+        "label": "No",
+        "selector": "#input_6261_0-1"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_41_0",
+        "value": "Sample",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_41_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_35_0",
+        "value": "Sample",
+        "label": "*City",
+        "selector": "#input_35_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_36_0",
+        "value": "Sample",
+        "label": "*State/Province",
+        "selector": "#input_36_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_37_0",
+        "value": "Sample",
+        "label": "*Country",
+        "selector": "#input_37_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_38_0",
+        "value": "Sample",
+        "label": "*Number of years attended",
+        "selector": "#input_38_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2241_0",
+        "id": "input_2241_0-0",
+        "value": "12281",
+        "label": "Yes",
+        "selector": "#input_2241_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2241_0",
+        "id": "input_2241_0-1",
+        "value": "12381",
+        "label": "No",
+        "selector": "#input_2241_0-1"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_39_0",
+        "label": "*Start Date",
+        "selector": "#input_39_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_40_0",
+        "label": "*End Date",
+        "selector": "#input_40_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Major/Concentration"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_49_0",
+        "value": "Sample",
+        "label": "Major/Concentration",
+        "selector": "#input_49_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Title of Degree/Diploma/Certificate awarded (in the original language)"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_51_0",
+        "value": "Sample",
+        "label": "Title of Degree/Diploma/Certificate awarded (in the original language)",
+        "selector": "#input_51_0"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New Program",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Form 2",
+        "href": "https://www.op.nysed.gov/taxonomy/term/9336"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Name of School/Issuer"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2341_0",
+        "value": "Sample",
+        "label": "*Name of School/Issuer",
+        "selector": "#input_2341_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*City"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2342_0",
+        "value": "Sample",
+        "label": "*City",
+        "selector": "#input_2342_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*State/Province"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2343_0",
+        "value": "Sample",
+        "label": "*State/Province",
+        "selector": "#input_2343_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Country"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2344_0",
+        "value": "Sample",
+        "label": "*Country",
+        "selector": "#input_2344_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Number of years attended"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2345_0",
+        "value": "Sample",
+        "label": "*Number of years attended",
+        "selector": "#input_2345_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*Start Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2347_0",
+        "label": "*Start Date",
+        "selector": "#input_2347_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "*End Date"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2348_0",
+        "label": "*End Date",
+        "selector": "#input_2348_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Major/Concentration"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2349_0",
+        "value": "Sample",
+        "label": "Major/Concentration",
+        "selector": "#input_2349_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Title of Degree/Diploma/Certificate awarded (in the original language)"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "text",
+        "id": "input_2350_0",
+        "value": "Sample",
+        "label": "Title of Degree/Diploma/Certificate awarded (in the original language)",
+        "selector": "#input_2350_0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2346_0",
+        "id": "input_2346_0-0",
+        "value": "12281",
+        "label": "Yes",
+        "selector": "#input_2346_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_2346_0",
+        "id": "input_2346_0-1",
+        "value": "12381",
+        "label": "No",
+        "selector": "#input_2346_0-1"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Remove School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Add New School",
+        "href": "https://eservices.nysed.gov/professions/application#"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "Yes"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9981_0",
+        "id": "input_9981_0-0",
+        "value": "936182",
+        "label": "Yes",
+        "selector": "#input_9981_0-0"
+      },
+      {
+        "tag": "label",
+        "visible": true,
+        "text": "No"
+      },
+      {
+        "tag": "input",
+        "visible": true,
+        "type": "radio",
+        "name": "input_9981_0",
+        "id": "input_9981_0-1",
+        "value": "936183",
+        "label": "No",
+        "selector": "#input_9981_0-1"
+      },
+      {
+        "tag": "button",
+        "visible": true,
+        "text": "Submit"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use"
+      },
+      {
+        "tag": "a",
+        "visible": true,
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy"
+      }
+    ]
+  }
+]

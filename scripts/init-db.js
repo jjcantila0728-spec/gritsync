@@ -19,13 +19,35 @@ import pg from 'pg'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // ---------------------------------------------------------------------------
-// Config — read from env or fall back to defaults
+// Config — pull from .env's DATABASE_URL when present, otherwise from
+// DB_* env vars, otherwise fall back to local Postgres defaults.
 // ---------------------------------------------------------------------------
-const DB_USER     = process.env.DB_USER     || 'postgres'
-const DB_PASSWORD = process.env.DB_PASSWORD || 'postgres'
-const DB_HOST     = process.env.DB_HOST     || 'localhost'
-const DB_PORT     = parseInt(process.env.DB_PORT || '5432', 10)
-const DB_NAME     = process.env.DB_NAME     || 'gritsync'
+function readDatabaseUrlFromEnv() {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL
+  try {
+    const envPath = resolve(__dirname, '..', '.env')
+    const content = readFileSync(envPath, 'utf8')
+    const m = content.match(/^DATABASE_URL=(.+)$/m)
+    return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : null
+  } catch { return null }
+}
+
+let DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME
+const databaseUrl = readDatabaseUrlFromEnv()
+if (databaseUrl) {
+  const u = new URL(databaseUrl)
+  DB_USER     = decodeURIComponent(u.username || 'postgres')
+  DB_PASSWORD = decodeURIComponent(u.password || '')
+  DB_HOST     = u.hostname || 'localhost'
+  DB_PORT     = parseInt(u.port || '5432', 10)
+  DB_NAME     = (u.pathname || '/gritsync').slice(1) || 'gritsync'
+} else {
+  DB_USER     = process.env.DB_USER     || 'postgres'
+  DB_PASSWORD = process.env.DB_PASSWORD || 'postgres'
+  DB_HOST     = process.env.DB_HOST     || 'localhost'
+  DB_PORT     = parseInt(process.env.DB_PORT || '5432', 10)
+  DB_NAME     = process.env.DB_NAME     || 'gritsync'
+}
 
 // ---------------------------------------------------------------------------
 // Step 1 — Create the database if it doesn't exist

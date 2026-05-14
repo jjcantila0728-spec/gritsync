@@ -22,7 +22,49 @@ import agentsRoutes from './routes/agents'
 import { query } from './db'
 import { getSeedQuestions } from './data/nclex-seed'
 
+async function bootstrapDatabaseIfEmpty() {
+  // Check whether the database has been initialised yet (users table must exist).
+  const res = await query(`
+    SELECT COUNT(*) AS cnt
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'users'
+  `)
+  const exists = parseInt(res.rows[0]?.cnt ?? '0', 10) > 0
+  if (exists) return  // already initialised — nothing to do
+
+  console.log('[bootstrap] Fresh database detected — running full schema initialisation…')
+
+  // Resolve paths relative to the project root.  In Vercel lambdas, process.cwd()
+  // returns /var/task which is the project root; locally it is the repo root too.
+  const root = process.cwd()
+  const sqlFiles = [
+    path.join(root, 'init.sql'),
+    path.join(root, 'server', 'sql', 'nclex-schema.sql'),
+  ]
+
+  for (const file of sqlFiles) {
+    if (!fs.existsSync(file)) {
+      console.warn(`[bootstrap] SQL file not found, skipping: ${file}`)
+      continue
+    }
+    const sql = fs.readFileSync(file, 'utf8')
+    console.log(`[bootstrap] Executing ${path.basename(file)} …`)
+    try {
+      await query(sql)
+      console.log(`[bootstrap] ✅  ${path.basename(file)} done`)
+    } catch (err: any) {
+      // Non-fatal: IF NOT EXISTS guards most statements; log and continue.
+      console.warn(`[bootstrap] ⚠️  ${path.basename(file)} error (may be partial):`, err.message)
+    }
+  }
+
+  console.log('[bootstrap] Database initialisation complete.')
+}
+
 async function runStartupMigrations() {
+  // Always run the bootstrap first — safe no-op if the DB is already initialised.
+  await bootstrapDatabaseIfEmpty()
+
   try {
     // Fix test_sessions.user_id type: ensure it is UUID to match users.id.
     // PostgreSQL cannot automatically cast integer→uuid using ALTER COLUMN SET DATA TYPE,
@@ -398,6 +440,30 @@ async function runStartupMigrations() {
     console.log('Social tables ready.')
   } catch (err) {
     console.warn('Startup migration warning (social tables):', err)
+  }
+
+  // GS Method automation agents — per-agent run-history tables. Referenced by
+  // routes/agents.ts (the /runs history endpoint) and written by
+  // agents/lib/persist.ts. All three share the same shape.
+  try {
+    for (const table of ['mandatory_course_runs', 'ny_application_runs', 'pv_application_runs']) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS ${table} (
+          id             UUID PRIMARY KEY,
+          application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+          started_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+          status         TEXT NOT NULL DEFAULT 'pending',
+          started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ended_at       TIMESTAMPTZ,
+          result         JSONB NOT NULL DEFAULT '{}'::jsonb,
+          events         JSONB NOT NULL DEFAULT '[]'::jsonb
+        )
+      `)
+      await query(`CREATE INDEX IF NOT EXISTS ${table}_application_id_idx ON ${table}(application_id)`)
+    }
+    console.log('Agent run-history tables ready.')
+  } catch (err) {
+    console.warn('Startup migration warning (agent run tables):', err)
   }
 
   // ── Email admin features — bring legacy tables up to the shape the UI APIs

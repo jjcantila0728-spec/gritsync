@@ -1,0 +1,448 @@
+{
+  "landing": {
+    "url": "https://eservices.nysed.gov/professions/before/022",
+    "elements": [
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us",
+        "selector": "a:has-text(\"Contact Us\")"
+      },
+      {
+        "tag": "a",
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions",
+        "selector": "a:has-text(\"Dashboard\")"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "option-input-LICENSE",
+        "value": "5",
+        "selector": "#option-input-LICENSE"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "renew",
+        "value": "renew",
+        "selector": "#renew"
+      },
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility",
+        "selector": "a:has-text(\"Accessibility\")"
+      },
+      {
+        "tag": "a",
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use",
+        "selector": "a:has-text(\"Terms of Use\")"
+      },
+      {
+        "tag": "a",
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy",
+        "selector": "a:has-text(\"Privacy Policy\")"
+      }
+    ]
+  },
+  "afterRadio": {
+    "elements": [
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us",
+        "selector": "a:has-text(\"Contact Us\")"
+      },
+      {
+        "tag": "a",
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions",
+        "selector": "a:has-text(\"Dashboard\")"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "option-input-LICENSE",
+        "value": "5",
+        "selector": "#option-input-LICENSE"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "requiredProfessionAppSettingsOption",
+        "id": "renew",
+        "value": "renew",
+        "selector": "#renew"
+      },
+      {
+        "tag": "a",
+        "text": "use this link to continue your application",
+        "href": "https://eservices.nysed.gov/professions/continue",
+        "selector": "a:has-text(\"use this link to continue your applicati\")"
+      },
+      {
+        "tag": "a",
+        "text": "use this link to upload additional documentation",
+        "href": "https://eservices.nysed.gov/professions/addl-doc/",
+        "selector": "a:has-text(\"use this link to upload additional docum\")"
+      },
+      {
+        "tag": "a",
+        "text": "requirements",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/license-requirements",
+        "selector": "a:has-text(\"requirements\")"
+      },
+      {
+        "tag": "a",
+        "text": "Frequently Asked Questions",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/frequently-asked-questions",
+        "selector": "a:has-text(\"Frequently Asked Questions\")"
+      },
+      {
+        "tag": "a",
+        "text": "forms",
+        "href": "https://www.op.nysed.gov/professions/registered-professional-nursing/application-forms",
+        "selector": "a:has-text(\"forms\")"
+      },
+      {
+        "tag": "a",
+        "text": "Online Services Technical Assistance",
+        "href": "https://op-support.nysed.gov/hc/en-us/requests/new?ticket_form_id=1900000841165",
+        "selector": "a:has-text(\"Online Services Technical Assistance\")"
+      },
+      {
+        "tag": "input",
+        "type": "submit",
+        "value": "Begin Application",
+        "selector": "input"
+      },
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility",
+        "selector": "a:has-text(\"Accessibility\")"
+      },
+      {
+        "tag": "a",
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use",
+        "selector": "a:has-text(\"Terms of Use\")"
+      },
+      {
+        "tag": "a",
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy",
+        "selector": "a:has-text(\"Privacy Policy\")"
+      }
+    ]
+  },
+  "afterClick": {
+    "url": "https://eservices.nysed.gov/professions/professions/022",
+    "elements": [
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Contact Us",
+        "href": "https://eservices.nysed.gov/professions/contact-us",
+        "selector": "a:has-text(\"Contact Us\")"
+      },
+      {
+        "tag": "a",
+        "text": "Dashboard",
+        "href": "https://eservices.nysed.gov/professions",
+        "selector": "a:has-text(\"Dashboard\")"
+      },
+      {
+        "tag": "a",
+        "text": "Prerequisites",
+        "href": "https://eservices.nysed.gov/professions/before/022",
+        "selector": "a:has-text(\"Prerequisites\")"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-yes",
+        "value": "true",
+        "selector": "#has-license-yes"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "hasLicense",
+        "id": "has-license-no",
+        "value": "false",
+        "selector": "#has-license-no"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "showSsn",
+        "value": "true",
+        "selector": "#showSsn"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "hasSsn",
+        "id": "hideSsn",
+        "value": "false",
+        "selector": "#hideSsn"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "dateOfBirth",
+        "id": "dob-input",
+        "placeholder": "MM/DD/YYYY",
+        "selector": "#dob-input"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "nysDmvId",
+        "id": "nysDmvId",
+        "placeholder": "ID",
+        "selector": "#nysDmvId"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "name": "addresses[0].countryCode",
+        "id": "country-input",
+        "selector": "#country-input"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "firstName",
+        "id": "firstName",
+        "placeholder": "First Name",
+        "selector": "#firstName"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "middleName",
+        "id": "middleName",
+        "placeholder": "Middle Name",
+        "selector": "#middleName"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "lastName",
+        "id": "lastName",
+        "placeholder": "Last Name",
+        "selector": "#lastName"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "addresses[0].address",
+        "id": "address-input",
+        "placeholder": "Address Line 1",
+        "selector": "#address-input"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "addresses[0].addressLine2",
+        "id": "address-cont-input",
+        "placeholder": "Address Line 2",
+        "selector": "#address-cont-input"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "addresses[0].city",
+        "id": "city-input",
+        "placeholder": "City",
+        "selector": "#city-input"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "name": "personNote.note",
+        "id": "person-note",
+        "placeholder": "Please provide your full address if your address would not fit in the fields above.",
+        "selector": "#person-note"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id1",
+        "value": "1",
+        "selector": "#addresses0\\.locationType\\.id1"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "addresses[0].locationType.id",
+        "id": "addresses0.locationType.id2",
+        "value": "2",
+        "selector": "#addresses0\\.locationType\\.id2"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "phones[0].contactValue",
+        "id": "phone-input",
+        "placeholder": "Enter phone number (optional)",
+        "selector": "#phone-input"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id1",
+        "value": "1",
+        "selector": "#phones0\\.locationType\\.id1"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "phones[0].locationType.id",
+        "id": "phones0.locationType.id2",
+        "value": "2",
+        "selector": "#phones0\\.locationType\\.id2"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "emails[0].contactValue",
+        "id": "email-input",
+        "placeholder": "Email",
+        "selector": "#email-input"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id1",
+        "value": "1",
+        "selector": "#emails0\\.locationType\\.id1"
+      },
+      {
+        "tag": "input",
+        "type": "radio",
+        "name": "emails[0].locationType.id",
+        "id": "emails0.locationType.id2",
+        "value": "2",
+        "selector": "#emails0\\.locationType\\.id2"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "name": "emailVerification",
+        "id": "emailVerification",
+        "placeholder": "Please re-enter your e-mail address.",
+        "selector": "#emailVerification"
+      },
+      {
+        "tag": "input",
+        "type": "submit",
+        "id": "personalInformationFormButton",
+        "value": "Continue Application",
+        "selector": "#personalInformationFormButton"
+      },
+      {
+        "tag": "a",
+        "text": "NYSED Home",
+        "href": "http://www.nysed.gov/",
+        "selector": "a:has-text(\"NYSED Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Professions Home",
+        "href": "https://www.op.nysed.gov/node/66156",
+        "selector": "a:has-text(\"Professions Home\")"
+      },
+      {
+        "tag": "a",
+        "text": "Accessibility",
+        "href": "http://www.nysed.gov/terms-of-use#Accessibility",
+        "selector": "a:has-text(\"Accessibility\")"
+      },
+      {
+        "tag": "a",
+        "text": "Terms of Use",
+        "href": "http://www.nysed.gov/terms-of-use",
+        "selector": "a:has-text(\"Terms of Use\")"
+      },
+      {
+        "tag": "a",
+        "text": "Privacy Policy",
+        "href": "http://www.nysed.gov/privacy-policy",
+        "selector": "a:has-text(\"Privacy Policy\")"
+      }
+    ]
+  }
+}
