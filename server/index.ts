@@ -1039,9 +1039,12 @@ app.use('/api/social', socialRoutes)
 app.use('/api/social/ai', socialAiRoutes)
 app.use('/api/nclex', nclexRoutes)
 app.use('/api/processing-accounts', processingAccountsRoutes)
-// Playwright-based agents: only available outside Vercel serverless
+// Playwright-based agents: only available outside Vercel serverless.
+// Use a computed path so esbuild cannot statically trace the import and
+// bundle playwright (a native binary) into the lambda.
 if (!process.env.VERCEL) {
-  import('./routes/agents').then(({ default: agentsRoutes }) => {
+  const agentsModule = './routes/' + 'agents'
+  import(agentsModule).then(({ default: agentsRoutes }) => {
     app.use('/api/agents', agentsRoutes)
   }).catch((err) => {
     console.warn('Agents route failed to load (Playwright may be missing):', err.message)

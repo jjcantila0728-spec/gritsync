@@ -10,7 +10,8 @@
   "functions": {
     "api/index.ts": {
       "memory": 1024,
-      "maxDuration": 30
+      "maxDuration": 30,
+      "excludeFiles": "{node_modules/playwright/**,node_modules/@playwright/**}"
     }
   },
   "headers": [
