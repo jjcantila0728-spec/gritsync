@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
+// fileURLToPath removed — using CJS-compatible __dirname / process.cwd() instead
 import { json, urlencoded } from 'express'
 import authRoutes from './routes/auth'
 import queryRoutes from './routes/query'
@@ -198,7 +198,8 @@ async function runStartupMigrations() {
 
   // NCLEX schema (imported from grit) — idempotent CREATE TABLE statements.
   try {
-    const here = path.dirname(fileURLToPath(import.meta.url))
+    // process.cwd() is /var/task (project root) on Vercel; server/ is a subdir of it
+    const here = path.join(process.cwd(), 'server')
     const sqlPath = path.join(here, 'sql', 'nclex-schema.sql')
     if (fs.existsSync(sqlPath)) {
       const sql = fs.readFileSync(sqlPath, 'utf8')
@@ -1006,8 +1007,8 @@ async function runStartupMigrations() {
   }
 }
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// __filename and __dirname are CJS globals provided by Node.js / ncc bundle
+// (they exist automatically in CommonJS; no need to declare them from import.meta.url)
 
 const app = express()
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3001
