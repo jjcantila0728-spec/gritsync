@@ -409,7 +409,7 @@ export const abTestingAPI = {
   /**
    * Get recommendation for test duration
    */
-  getRecommendedDuration(sampleSize: number, expectedEffect: number = 0.1): number {
+  getRecommendedDuration(sampleSize: number, _expectedEffect: number = 0.1): number {
     // Simplified calculation: larger sample = longer test
     // Base: 24 hours for 100 recipients
     const baseHours = 24

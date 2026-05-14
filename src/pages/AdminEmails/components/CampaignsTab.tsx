@@ -14,7 +14,6 @@ import {
   Eye,
   Edit,
   Trash2,
-  Play,
   Pause,
   X,
   Clock,
@@ -22,11 +21,7 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
-  Search,
-  Filter,
-  Download,
-  Upload,
-  BarChart3
+  Search
 } from 'lucide-react'
 import { emailCampaignsAPI, EmailCampaign, CampaignType, CampaignStatus } from '@/lib/email-campaigns-api'
 import { Loading } from '@/components/ui/Loading'

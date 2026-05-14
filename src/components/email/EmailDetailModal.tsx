@@ -13,20 +13,20 @@ interface EmailDetailModalProps {
   onClose: () => void
   email: {
     id: string
-    subject?: string
-    from?: string
-    to?: string
+    subject?: string | null
+    from?: string | null
+    to?: string | string[] | null
     created_at: string
-    html?: string
-    text?: string
-    body_html?: string
-    body_text?: string
+    html?: string | null
+    text?: string | null
+    body_html?: string | null
+    body_text?: string | null
     attachments?: any[]
-    status?: string
-    senderName?: string
-    senderAvatar?: string
-    recipient_name?: string
-    recipient_email?: string
+    status?: string | null
+    senderName?: string | null
+    senderAvatar?: string | null
+    recipient_name?: string | null
+    recipient_email?: string | null
   }
   type: 'inbox' | 'sent'
   onReply?: () => void
@@ -215,8 +215,8 @@ export function EmailDetailModal({
         {/* Email Body - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6">
           <EmailPreview
-            html={email.html || email.body_html}
-            text={email.text || email.body_text}
+            html={email.html || email.body_html || undefined}
+            text={email.text || email.body_text || undefined}
             className="min-h-full"
           />
         </div>

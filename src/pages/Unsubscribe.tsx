@@ -3,7 +3,7 @@
  * Accessible at: /unsubscribe/:token
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Mail, CheckCircle2, XCircle, ArrowLeft, Settings, AlertTriangle } from 'lucide-react'
 import { subscribersAPI } from '@/lib/subscribers-api'

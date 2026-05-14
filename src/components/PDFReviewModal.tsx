@@ -12,7 +12,7 @@ interface PDFReviewModalProps {
 
 export function PDFReviewModal({ isOpen, onClose, onReviewComplete, pdfBlob, documentName }: PDFReviewModalProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [hasReviewed, setHasReviewed] = useState(false)
+  const [, setHasReviewed] = useState(false)
 
   useEffect(() => {
     if (isOpen && pdfBlob) {

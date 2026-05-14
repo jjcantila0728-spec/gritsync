@@ -95,7 +95,7 @@ export function Tracking() {
     setImageError(false)
 
     try {
-      const result = await trackingAPI.track(id.trim())
+      const result = await trackingAPI.getByGritAppId(id.trim())
       setTrackingResult(result as Application)
       setTrackingId(id.trim())
     } catch (err: any) {
@@ -116,7 +116,7 @@ export function Tracking() {
 
     try {
       // Use API to fetch latest timeline updates
-      const result = await trackingAPI.track(trackingId.trim())
+      const result = await trackingAPI.getByGritAppId(trackingId.trim())
       setTrackingResult(result as Application)
     } catch (err: any) {
       setTrackingError(err.message || 'Failed to refresh tracking information.')
@@ -478,11 +478,12 @@ export function Tracking() {
       let comparison = 0
       
       switch (sortField) {
-        case 'name':
+        case 'name': {
           const nameA = (a.display_name || `${a.first_name} ${a.last_name}`).toLowerCase()
           const nameB = (b.display_name || `${b.first_name} ${b.last_name}`).toLowerCase()
           comparison = nameA.localeCompare(nameB)
           break
+        }
         case 'date':
           comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           break
@@ -542,7 +543,7 @@ export function Tracking() {
     setTrackingResult(null)
 
     try {
-      const result = await trackingAPI.track(trackingId.trim())
+      const result = await trackingAPI.getByGritAppId(trackingId.trim())
       setTrackingResult(result as Application)
       
       // Navigate to tracking URL with ID as query parameter

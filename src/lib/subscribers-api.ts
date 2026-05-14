@@ -13,8 +13,8 @@ export interface EmailSubscriber {
   phone_number?: string
   status: 'subscribed' | 'unsubscribed' | 'bounced' | 'complained' | 'pending'
   subscribed_at?: string
-  unsubscribed_at?: string
-  unsubscribe_reason?: string
+  unsubscribed_at?: string | null
+  unsubscribe_reason?: string | null
   unsubscribe_token?: string
   email_preferences?: {
     marketing?: boolean

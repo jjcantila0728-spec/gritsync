@@ -16,7 +16,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, AlertTriangle, MessageSquare } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'

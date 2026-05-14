@@ -1,6 +1,6 @@
 /**
  * Payment Email Service
- * Sends payment receipt emails with PDF attachments
+ * Sends payment receipt confirmation emails.
  */
 
 import { db } from './api-client'
@@ -89,66 +89,6 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
     if (!userEmail) {
       console.error('No email found for payment receipt')
       return false
-    }
-
-    // Calculate invoice totals
-    const subtotal = data.receipt.items.reduce((sum, item) => sum + item.amount, 0)
-    const tax = data.receipt.amount - subtotal // Assuming tax is included in total
-    const total = data.receipt.amount
-
-    // Generate PDFs using edge function
-    console.log('Generating PDFs via edge function...')
-    const { data: pdfData, error: pdfError } = await db.functions.invoke('generate-payment-pdfs', {
-      body: {
-        receipt: {
-          receipt_number: data.receipt.receipt_number,
-          amount: data.receipt.amount,
-          payment_type: data.receipt.payment_type,
-          items: data.receipt.items,
-          created_at: data.receipt.created_at,
-          application_id: data.receipt.application_id,
-          user_name: userName,
-          user_email: userEmail,
-        },
-        invoice: {
-          invoice_number: `INV-${data.receipt.receipt_number.replace('RCP-', '')}`,
-          amount: data.receipt.amount,
-          payment_type: data.receipt.payment_type,
-          items: data.receipt.items.map(item => ({ ...item, taxable: true })),
-          subtotal,
-          tax,
-          total,
-          created_at: data.receipt.created_at,
-          application_id: data.receipt.application_id,
-          user_name: userName,
-          user_email: userEmail,
-          billing_address: data.application ? {
-            name: data.application.first_name && data.application.last_name
-              ? `${data.application.first_name} ${data.application.last_name}`
-              : data.application.first_name || undefined,
-            email: data.application.email,
-            address: undefined, // Could be added if available
-            city: data.application.city,
-            state: data.application.province,
-            zip: data.application.zipcode,
-            country: data.application.country,
-          } : undefined,
-        },
-      },
-    })
-
-    if (pdfError || !pdfData?.success) {
-      console.error('Error generating PDFs:', pdfError || pdfData)
-      // Fallback: try to send email without PDFs
-      console.warn('Attempting to send email without PDF attachments...')
-    }
-
-    const receiptBase64 = pdfData?.receipt
-    const invoiceBase64 = pdfData?.invoice
-
-    if (!receiptBase64 || !invoiceBase64) {
-      console.error('Failed to generate PDFs. Email will be sent without attachments.')
-      // Continue with email sending but without attachments
     }
 
     // Payment type label
@@ -288,16 +228,7 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
               </table>
             </div>
 
-            <div class="attachments-note">
-              <p style="margin: 0;"><strong>📎 Attachments:</strong></p>
-              <p style="margin: 5px 0 0 0;">Please find attached:</p>
-              <ul style="margin: 10px 0 0 20px; padding: 0;">
-                <li>Official Receipt PDF</li>
-                <li>Invoice PDF</li>
-              </ul>
-            </div>
-
-            <p>Thank you for your payment! These documents serve as your official receipt and invoice for tax purposes. Please keep them for your records.</p>
+            <p>Thank you for your payment! Please keep this email as a record of your payment. If you need an official receipt or invoice document, contact our support team.</p>
 
             <p>If you have any questions about your payment, please don't hesitate to contact our support team.</p>
           </div>
@@ -310,24 +241,6 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
       </html>
     `
 
-    // Prepare attachments (only if PDFs were generated successfully)
-    const attachments = []
-    if (receiptBase64) {
-      attachments.push({
-        filename: `Official_Receipt_${data.receipt.receipt_number}.pdf`,
-        content: receiptBase64,
-        type: 'application/pdf',
-      })
-    }
-    if (invoiceBase64) {
-      attachments.push({
-        filename: `Invoice_${`INV-${data.receipt.receipt_number.replace('RCP-', '')}`}.pdf`,
-        content: invoiceBase64,
-        type: 'application/pdf',
-      })
-    }
-
-    // Send email with attachments (if available)
     return await sendEmail({
       to: userEmail,
       subject: `Payment Receipt ${data.receipt.receipt_number} - GritSync`,
@@ -337,19 +250,17 @@ export async function sendPaymentReceiptEmailWithAttachments(data: PaymentReceip
       recipientName: userName,
       recipientUserId: data.user?.id || data.receipt.user_id,
       applicationId: data.application?.id || data.receipt.application_id,
-      attachments: attachments.length > 0 ? attachments : undefined,
       metadata: {
         receiptNumber: data.receipt.receipt_number,
         amount: data.receipt.amount,
         paymentType: data.receipt.payment_type,
         paymentId: data.payment.id,
         applicationId: data.application?.id || data.receipt.application_id,
-        pdfsGenerated: !!receiptBase64 && !!invoiceBase64,
       },
       tags: ['payment', 'receipt', 'invoice'],
     })
   } catch (error) {
-    console.error('Error sending payment receipt email with attachments:', error)
+    console.error('Error sending payment receipt email:', error)
     return false
   }
 }

@@ -47,8 +47,6 @@ const AdminQuoteManagement = lazy(() => import('./pages/AdminQuoteManagement').t
 const MyDetails = lazy(() => import('./pages/MyDetails').then(m => ({ default: m.MyDetails })))
 const AccountSettings = lazy(() => import('./pages/AccountSettings').then(m => ({ default: m.AccountSettings })))
 const Documents = lazy(() => import('./pages/Documents').then(m => ({ default: m.Documents })))
-const TestApi = lazy(() => import('./pages/TestApi').then(m => ({ default: m.TestApi })))
-const TestProofOfPaymentUpload = lazy(() => import('./pages/TestProofOfPaymentUpload').then(m => ({ default: m.TestProofOfPaymentUpload })))
 const TermsOfService = lazy(() => import('./pages/TermsOfService').then(m => ({ default: m.TermsOfService })))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(m => ({ default: m.PrivacyPolicy })))
 const AboutUs = lazy(() => import('./pages/AboutUs').then(m => ({ default: m.AboutUs })))
@@ -235,8 +233,6 @@ function LandingRoutes() {
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/sign" element={<SignaturePage />} />
-        <Route path="/test-api" element={<TestApi />} />
-        <Route path="/test-upload" element={<TestProofOfPaymentUpload />} />
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

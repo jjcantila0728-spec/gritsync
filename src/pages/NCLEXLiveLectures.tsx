@@ -1,6 +1,6 @@
 import { NCLEXLayout } from '@/layouts/NCLEXLayout'
 import { useEffect, useState } from 'react'
-import { Radio, Calendar, Clock, Users, Crown, Bell, Lock, Star } from 'lucide-react'
+import { Radio, Calendar, Clock, Users, Crown, Bell, Lock } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
 

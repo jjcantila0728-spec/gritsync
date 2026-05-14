@@ -9,10 +9,7 @@ import {
   Plus, 
   DollarSign, 
   Upload, 
-  Settings, 
-  MessageSquare,
-  Calendar,
-  CheckCircle,
+  Settings,
   AlertCircle,
   Clock,
   Zap

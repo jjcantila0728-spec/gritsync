@@ -4,12 +4,16 @@ import { cn } from '@/lib/utils'
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
+  /** Small helper text shown below the field. `help` is an alias for `hint`. */
+  hint?: string
+  help?: string
   options?: { value: string; label: string }[]
   children?: ReactNode
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, options, children, ...props }, ref) => {
+  ({ className, label, error, hint, help, options, children, ...props }, ref) => {
+    const helperText = hint ?? help
     return (
       <div className="w-full">
         {label && (
@@ -36,13 +40,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             children
           )}
         </select>
-        {error && (
+        {error ? (
           <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
-        )}
+        ) : helperText ? (
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helperText}</p>
+        ) : null}
       </div>
     )
   }
 )
 
 Select.displayName = 'Select'
-

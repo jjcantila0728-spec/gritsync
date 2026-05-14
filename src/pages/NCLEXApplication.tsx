@@ -11,7 +11,6 @@ import { applicationsAPI, userDetailsAPI, userDocumentsAPI, getSignedFileUrl, ap
 import { getCachedSignedUrl } from '@/lib/image-cache'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { X, Info, CheckCircle, Eye, ArrowLeft, Download, Image, File as FileIcon, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react'
-import { ProgressBar } from '@/components/ProgressBar'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, cn } from '@/lib/utils'
 import { db } from '@/lib/api-client'
@@ -134,7 +133,7 @@ export function NCLEXApplication() {
 
   const validatePhone = (phone: string): string => {
     if (!phone) return 'Mobile number is required'
-    const phoneRegex = /^[\d\s\-\+\(\)]+$/
+    const phoneRegex = /^[\d\s\-+()]+$/
     if (!phoneRegex.test(phone) || phone.replace(/\D/g, '').length < 7) {
       return 'Please enter a valid phone number (at least 7 digits)'
     }
@@ -519,6 +518,8 @@ export function NCLEXApplication() {
 
 
   async function loadSavedDetails() {
+    // Fetched from email_addresses; declared here so the catch block can also use it.
+    let gritsyncEmail = ''
     try {
       const details = await userDetailsAPI.get()
       const typedDetails = details as {
@@ -564,7 +565,6 @@ export function NCLEXApplication() {
       } | null
       
       // Fetch GritSync email from email_addresses table
-      let gritsyncEmail = ''
       if (user?.id) {
         try {
           const { data: emailData, error: emailError } = await db
@@ -987,17 +987,6 @@ export function NCLEXApplication() {
                               (passport || (useUploadedDocs.passport && uploadedDocuments.passport))
   const isReviewComplete = signature.trim().length > 0
   const isPaymentComplete = paymentCategory !== '' && paymentType !== ''
-
-  const completedSteps = [
-    isPersonalInfoComplete,
-    isAddressComplete,
-    isElementaryComplete,
-    isHighSchoolComplete,
-    isNursingSchoolComplete,
-    isDocumentsComplete,
-    isReviewComplete,
-    isPaymentComplete
-  ].filter(Boolean).length
 
   const totalSteps = 8
   const stepTitles = [

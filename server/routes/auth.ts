@@ -6,6 +6,26 @@ import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } 
 
 const router = Router()
 
+// --- Dev-only / out-of-band auth configuration -------------------------------
+// In development, skip the "verify your email before logging in" gate so new
+// accounts are usable immediately. Never active in production, regardless of
+// the env var.
+const SKIP_EMAIL_VERIFICATION =
+  process.env.NODE_ENV !== 'production' && process.env.SKIP_EMAIL_VERIFICATION === 'true'
+
+// Server-controlled admin allowlist (comma-separated personal emails). A user
+// who registers with one of these addresses is created as an admin. This is the
+// only way to mint an admin via the API — the request body cannot set `role`.
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+)
+function isAdminEmail(email?: string | null): boolean {
+  return !!email && ADMIN_EMAILS.has(email.trim().toLowerCase())
+}
+
 function generateGritId(): string {
   const num = Math.floor(100000 + Math.random() * 900000)
   return `GRIT${num}`
@@ -182,7 +202,9 @@ async function sendWelcomeEmail(personalEmail: string, firstName: string, lastNa
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { password, first_name, last_name, middle_name, mobile, personal_email, role = 'client' } = req.body
+    const { password, first_name, last_name, middle_name, mobile, personal_email } = req.body
+    // The request body can never set `role`. Accounts are clients unless the
+    // email is on the server-controlled ADMIN_EMAILS allowlist (see below).
 
     if (!password || !first_name || !last_name || !mobile) {
       return res.status(400).json({ error: 'First name, last name, mobile number, and password are required' })
@@ -238,6 +260,12 @@ router.post('/register', async (req: Request, res: Response) => {
     const password_hash = await bcrypt.hash(password, 12)
     const personal_email_normalized = personal_email.trim().toLowerCase()
 
+    // Admin allowlist + dev convenience: admins are created verified, and in
+    // dev (SKIP_EMAIL_VERIFICATION) every new account is created verified.
+    const isAdmin = isAdminEmail(personal_email_normalized)
+    const role = isAdmin ? 'admin' : 'client'
+    const emailVerified = isAdmin || SKIP_EMAIL_VERIFICATION
+
     // Generate email verification token (valid 24 hours) + OTP (valid 15 minutes)
     const verification_token = crypto.randomBytes(32).toString('hex')
     const verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -246,21 +274,62 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const result = await query(
       `INSERT INTO users (email, gritsync_email, personal_email, password_hash, first_name, last_name, middle_name, mobile, role, grit_id, email_verified, email_verification_token, email_verification_expires_at, email_otp, email_otp_expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11, $12, $13, $14)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING id, email, gritsync_email, personal_email, role, first_name, last_name, grit_id, created_at`,
-      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, verification_token, verification_expires, otp, otp_expires]
+      [gritsync_email, gritsync_email, personal_email_normalized, password_hash, first_name.trim(), last_name.trim(), middle_name || null, mobile.trim(), role, grit_id, emailVerified, verification_token, verification_expires, otp, otp_expires]
     )
 
     const user = result.rows[0]
 
-    // Send verification email asynchronously (don't await, don't block registration)
-    sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token, otp)
+    if (!emailVerified) {
+      // Send verification email asynchronously (don't await, don't block registration)
+      sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token, otp)
+      return res.status(201).json({
+        requiresVerification: true,
+        message: 'Account created! Please check your email to verify your account.',
+        personal_email: personal_email_normalized,
+      })
+    }
 
-    // Do NOT create a session — user must verify email first
+    // Verification is satisfied (admin allowlist or dev mode) — log the user in.
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      grit_id: user.grit_id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      middle_name: middle_name || null,
+    })
+    const refresh_token = signRefreshToken({ id: user.id })
+    await query(
+      `INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '7 days') ON CONFLICT DO NOTHING`,
+      [user.id, token]
+    ).catch(() => {})
+
     res.status(201).json({
-      requiresVerification: true,
-      message: 'Account created! Please check your email to verify your account.',
-      personal_email: personal_email_normalized,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        grit_id: user.grit_id,
+        created_at: user.created_at,
+      },
+      session: {
+        access_token: token,
+        refresh_token,
+        token_type: 'bearer',
+        expires_in: 604800,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          user_metadata: { first_name: user.first_name, last_name: user.last_name, grit_id: user.grit_id, role: user.role },
+          app_metadata: { role: user.role },
+        },
+      },
     })
   } catch (err: any) {
     console.error('Register error:', err)
@@ -427,13 +496,20 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Your account has been deactivated. Please contact support.' })
     }
 
-    // Block login if email not verified
-    if (user.email_verified === false) {
+    // Block login if email not verified (bypassed in dev via SKIP_EMAIL_VERIFICATION)
+    if (!SKIP_EMAIL_VERIFICATION && user.email_verified === false) {
       return res.status(403).json({
         error: 'Please verify your email address before logging in. Check your inbox for the verification link.',
         requiresVerification: true,
         personal_email: user.personal_email,
       })
+    }
+
+    // Self-heal: if this account's email is on the admin allowlist but the row
+    // predates that, promote it now.
+    if (user.role !== 'admin' && isAdminEmail(user.personal_email)) {
+      await query('UPDATE users SET role = $1 WHERE id = $2', ['admin', user.id]).catch(() => {})
+      user.role = 'admin'
     }
 
     const token = signToken({

@@ -266,26 +266,26 @@ export const emailLogsAPI = {
 
     // Calculate statistics
     const total = data.length
-    const sent = data.filter(log => log.status === 'sent' || log.status === 'delivered').length
-    const delivered = data.filter(log => log.status === 'delivered').length
-    const failed = data.filter(log => log.status === 'failed').length
-    const bounced = data.filter(log => log.status === 'bounced').length
-    const pending = data.filter(log => log.status === 'pending').length
+    const sent = data.filter((log: any) => log.status === 'sent' || log.status === 'delivered').length
+    const delivered = data.filter((log: any) => log.status === 'delivered').length
+    const failed = data.filter((log: any) => log.status === 'failed').length
+    const bounced = data.filter((log: any) => log.status === 'bounced').length
+    const pending = data.filter((log: any) => log.status === 'pending').length
 
     const deliveryRate = total > 0 ? (delivered / total) * 100 : 0
     const failureRate = total > 0 ? (failed / total) * 100 : 0
 
     // Calculate average send time
     const sendTimes = data
-      .filter(log => log.sent_at && log.created_at)
-      .map(log => {
+      .filter((log: any) => log.sent_at && log.created_at)
+      .map((log: any) => {
         const created = new Date(log.created_at).getTime()
         const sent = new Date(log.sent_at!).getTime()
         return (sent - created) / 1000 // in seconds
       })
 
     const avgSendTime = sendTimes.length > 0
-      ? sendTimes.reduce((a, b) => a + b, 0) / sendTimes.length
+      ? sendTimes.reduce((a: number, b: number) => a + b, 0) / sendTimes.length
       : 0
 
     return {
@@ -421,7 +421,7 @@ export const emailLogsAPI = {
     }
 
     const counts: Record<string, number> = {}
-    data.forEach(log => {
+    data.forEach((log: any) => {
       counts[log.status] = (counts[log.status] || 0) + 1
     })
 
@@ -470,7 +470,7 @@ export const emailLogsAPI = {
       to: log.recipient_email,
       subject: log.subject,
       html: log.body_html || '',
-      text: log.body_text,
+      text: log.body_text ?? undefined,
     })
 
     if (success) {
@@ -513,7 +513,7 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
 
   try {
     // Get current user for sender info (using cached helper to minimize auth calls)
-    const userId = await getCurrentUserId()
+    await getCurrentUserId()
     const { data: { user } } = await db.auth.getUser()
     
     // Get email config
@@ -601,8 +601,5 @@ export async function sendEmailWithLogging(options: SendEmailOptions): Promise<b
   }
 }
 
-/**
- * Export for API consumers
- */
-export { EmailLog, EmailAnalytics, EmailStats, SendEmailOptions }
+// EmailLog, EmailAnalytics, EmailStats, SendEmailOptions are already exported above via `export interface`.
 

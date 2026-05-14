@@ -17,7 +17,6 @@ import {
   Clock, 
   Database,
   Zap,
-  TrendingUp,
   AlertTriangle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -37,7 +36,6 @@ export function MonitoringDashboard() {
     refreshHealth,
     refreshStats,
     getHealthReport,
-    getPerformanceSummary,
   } = useMonitoring({ autoCheck: true, checkInterval: 30000 })
 
   const { session, isValid: sessionValid, isExpired: sessionExpired } = useSession()

@@ -139,8 +139,6 @@ export function SEO({
   return null
 }
 
-const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://gritsync.com'
-
 export function generateOrganizationSchema() {
   return {
     '@context': 'https://schema.org',

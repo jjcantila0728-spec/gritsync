@@ -35,7 +35,17 @@ gritsync.db*
 storage/
 !storage/.gitkeep
 
-# Uploads (removed - using Supabase Storage)
+# Local file uploads (runtime-generated, not source)
+uploads/*
+!uploads/.gitkeep
+
+# Replit / agent environment scratch dirs
+.config/
+.local/
+.agents/
+agents/
+artifacts/
+attached_assets/
 
 # IDE
 .vscode/

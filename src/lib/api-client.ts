@@ -58,6 +58,11 @@ async function apiRequest(path: string, options: RequestInit = {}): Promise<{ da
 }
 
 // Query builder — chainable interface for DB queries
+interface SelectOptions {
+  count?: 'exact' | 'planned' | 'estimated'
+  head?: boolean
+}
+
 class QueryBuilder {
   private table: string
   private _select: string = '*'
@@ -67,13 +72,17 @@ class QueryBuilder {
   private _offset: number | null = null
   private _single = false
   private _maybeSingle = false
+  private _count = false
+  private _head = false
 
   constructor(table: string) {
     this.table = table
   }
 
-  select(cols: string = '*') {
+  select(cols: string = '*', opts?: SelectOptions) {
     this._select = cols
+    if (opts?.count) this._count = true
+    if (opts?.head) this._head = true
     return this
   }
 
@@ -87,15 +96,20 @@ class QueryBuilder {
   ilike(col: string, val: any) { this._filters[col] = { _op: 'like', value: val }; return this }
   in(col: string, vals: any[]) { this._filters[col] = { _op: 'in', value: vals }; return this }
   is(col: string, val: any) { this._filters[col] = val; return this }
+  contains(col: string, val: any) { this._filters[col] = { _op: 'contains', value: val }; return this }
+  containedBy(col: string, val: any) { this._filters[col] = { _op: 'containedBy', value: val }; return this }
+  overlaps(col: string, val: any) { this._filters[col] = { _op: 'overlaps', value: val }; return this }
   filter(col: string, op: string, val: any) {
     this._filters[col] = { _op: op, value: val }
     return this
   }
-  not(col: string, op: string, val: any) {
+  not(col: string, _op: string, val: any) {
     this._filters[col] = { _op: 'neq', value: val }
     return this
   }
   or(_filters: string) { return this } // simplified
+  // Accepted for API compatibility; aborting is not wired through the fetch layer yet.
+  abortSignal(_signal: AbortSignal) { return this }
 
   order(col: string, opts: { ascending?: boolean } = {}) {
     this._order = `${col}.${opts.ascending !== false ? 'asc' : 'desc'}`
@@ -122,7 +136,27 @@ class QueryBuilder {
     }
   }
 
-  async _execute(): Promise<{ data: any; error: any }> {
+  async _execute(): Promise<{ data: any; error: any; count?: number | null }> {
+    const token = getStoredToken()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    // Resolve a row count up-front when requested (mirrors PostgREST's `count` option).
+    let count: number | null = null
+    if (this._count) {
+      try {
+        const countRes = await fetch(`${API_BASE}/db/${this.table}/count`, {
+          method: 'POST', headers, body: JSON.stringify(this._filters),
+        })
+        const countBody = await countRes.json().catch(() => ({}))
+        if (countRes.ok) count = Number(countBody.data) || 0
+      } catch {
+        count = null
+      }
+      // `head: true` means "I only want the count, not the rows".
+      if (this._head) return { data: null, count, error: null }
+    }
+
     // Build query string from filters + options
     const params = new URLSearchParams()
     params.set('select', this._select)
@@ -140,25 +174,21 @@ class QueryBuilder {
       }
     }
 
-    const token = getStoredToken()
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
     const res = await fetch(`${API_BASE}/db/${this.table}?${params}`, { headers })
     const body = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
+      return { data: null, count, error: { message: body.error?.message || body.error || `HTTP ${res.status}` } }
     }
 
     const rows = body.data || []
     if (this._single) {
-      return rows.length > 0 ? { data: rows[0], error: null } : { data: null, error: { message: 'No rows found', code: 'PGRST116' } }
+      return rows.length > 0 ? { data: rows[0], count, error: null } : { data: null, count, error: { message: 'No rows found', code: 'PGRST116' } }
     }
     if (this._maybeSingle) {
-      return { data: rows[0] || null, error: null }
+      return { data: rows[0] || null, count, error: null }
     }
-    return { data: rows, error: null }
+    return { data: rows, count, error: null }
   }
 }
 
@@ -180,6 +210,16 @@ class MutationBuilder {
   select(cols: string = '*') { this._returning = cols; return this }
   single() { this._single = true; return this }
   eq(col: string, val: any) { this._filters[col] = val; return this }
+  neq(col: string, val: any) { this._filters[col] = { _op: 'neq', value: val }; return this }
+  gt(col: string, val: any) { this._filters[col] = { _op: 'gt', value: val }; return this }
+  gte(col: string, val: any) { this._filters[col] = { _op: 'gte', value: val }; return this }
+  lt(col: string, val: any) { this._filters[col] = { _op: 'lt', value: val }; return this }
+  lte(col: string, val: any) { this._filters[col] = { _op: 'lte', value: val }; return this }
+  like(col: string, val: any) { this._filters[col] = { _op: 'like', value: val }; return this }
+  ilike(col: string, val: any) { this._filters[col] = { _op: 'like', value: val }; return this }
+  in(col: string, vals: any[]) { this._filters[col] = { _op: 'in', value: vals }; return this }
+  is(col: string, val: any) { this._filters[col] = val; return this }
+  not(col: string, _op: string, val: any) { this._filters[col] = { _op: 'neq', value: val }; return this }
 
   then(resolve: (val: any) => any, reject?: (err: any) => any): Promise<any> {
     return this._execute().then(resolve, reject)
@@ -236,10 +276,10 @@ class MutationBuilder {
 export const db = {
   from(table: string) {
     return {
-      select: (cols = '*') => new QueryBuilder(table).select(cols),
+      select: (cols = '*', opts?: SelectOptions) => new QueryBuilder(table).select(cols, opts),
       insert: (data: any) => new MutationBuilder(table, 'insert', data),
       update: (data: any) => new MutationBuilder(table, 'update', data),
-      upsert: (data: any, opts?: { onConflict?: string }) => {
+      upsert: (data: any, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
       const builder = new MutationBuilder(table, 'upsert', data)
       if (opts?.onConflict) (builder as any)._onConflict = opts.onConflict
       return builder
@@ -357,7 +397,10 @@ export const db = {
   storage: {
     from(_bucket: string) {
       return {
-        async upload(path: string, file: File) {
+        // `options` (contentType / cacheControl / upsert) is accepted for
+        // Supabase-storage call-site compatibility; the Express upload endpoint
+        // currently ignores it.
+        async upload(path: string, file: File | Blob, _options?: { contentType?: string; cacheControl?: string; upsert?: boolean }) {
           const formData = new FormData()
           formData.append('file', file)
           formData.append('path', path)
@@ -396,8 +439,8 @@ export const db = {
           const body = await res.json()
           return { data: { signedUrl: body.url }, error: null }
         },
-        async list(_prefix?: string) {
-          return { data: [], error: null }
+        async list(_prefix?: string, _options?: { limit?: number; offset?: number; search?: string; sortBy?: { column: string; order: string } }) {
+          return { data: [] as Array<{ name: string; id?: string; created_at?: string }>, error: null }
         },
         async remove(paths: string[]) {
           const token = getStoredToken()
@@ -447,9 +490,10 @@ export const db = {
   removeAllChannels() {},
 }
 
-// Re-export error handling utilities (keep for backward compat)
+// Re-export error handling utilities
 export {
-  handleSupabaseError,
+  handleDBError,
+  handleDBError as handleSupabaseError, // backward compat alias
   normalizeError,
   getUserFriendlyMessage,
   classifyError,
@@ -457,3 +501,22 @@ export {
   ErrorType,
   ErrorSeverity
 } from './error-handler'
+
+// ---------------------------------------------------------------------------
+// Legacy Supabase-shaped type aliases.
+// Several modules still `import type { Session, RealtimeChannel } from '@db/db-js'`
+// (an alias that resolves here). Realtime is a no-op stub in this environment,
+// so these are intentionally loose.
+// ---------------------------------------------------------------------------
+export interface Session {
+  access_token: string
+  refresh_token: string | null
+  user: any
+  expires_at?: number
+}
+
+export interface RealtimeChannel {
+  on(...args: any[]): RealtimeChannel
+  subscribe(cb?: (status: string) => void): { unsubscribe: () => void }
+  unsubscribe(): void
+}

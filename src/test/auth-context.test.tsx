@@ -1,298 +1,133 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { renderHook, act, waitFor } from '@testing-library/react'
+import { ReactNode } from 'react'
+
+/**
+ * Tests for AuthContext against the local-Postgres `db.auth` shim.
+ * `@/lib/api-client` is mocked so no backend is needed.
+ */
+
+// --- mock the data layer ------------------------------------------------------
+// `vi.mock` is hoisted above imports, so the mock objects must be created via
+// `vi.hoisted` to be referenceable here.
+const { auth } = vi.hoisted(() => ({
+  auth: {
+    getSession: vi.fn(),
+    getUser: vi.fn(),
+    onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+    signInWithPassword: vi.fn(),
+    signUp: vi.fn(),
+    signOut: vi.fn(),
+    updateUser: vi.fn(),
+  },
+}))
+vi.mock('@/lib/api-client', () => ({ db: { auth } }))
+// signOut() dynamically imports clearAuthCache from api-service — keep it light
+vi.mock('@/lib/api-service', () => ({ clearAuthCache: vi.fn() }))
+
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 
-// Mock Supabase
-vi.mock('@/lib/api-client', () => {
-  const mockSignUp = vi.fn()
-  const mockSignIn = vi.fn()
-  const mockSignOut = vi.fn()
-  const mockGetSession = vi.fn()
-  const mockOnAuthStateChange = vi.fn()
-  const mockFrom = vi.fn()
+const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
-  return {
-    db: {
-      auth: {
-        signUp: mockSignUp,
-        signInWithPassword: mockSignIn,
-        signOut: mockSignOut,
-        getSession: mockGetSession,
-        onAuthStateChange: mockOnAuthStateChange,
-      },
-      from: mockFrom,
-    },
-    handleSupabaseError: vi.fn((error: any) => {
-      throw new Error(error?.message || 'An unexpected error occurred')
-    }),
+function mockNoSession() {
+  auth.getSession.mockResolvedValue({ data: { session: null }, error: null })
+}
+function mockSession(user: any) {
+  // The real /auth/me always echoes the role into user_metadata/app_metadata,
+  // which is where AuthContext reads it from — mirror that here.
+  const authUser = {
+    ...user,
+    user_metadata: { role: user.role, first_name: user.first_name, last_name: user.last_name, grit_id: user.grit_id, ...(user.user_metadata || {}) },
+    app_metadata: { role: user.role, ...(user.app_metadata || {}) },
   }
-})
-
-import * as supabaseModule from '@/lib/api-client'
-
-// Test component that uses auth
-function TestComponent() {
-  const { user, loading, signIn, signUp, signOut, isAdmin, isClient } = useAuth()
-
-  if (loading) return <div>Loading...</div>
-
-  return (
-    <div>
-      <div data-testid="user">{user ? user.email : 'No user'}</div>
-      <div data-testid="role">{user?.role || 'No role'}</div>
-      <button onClick={() => signIn('test@example.com', 'password')}>Sign In</button>
-      <button onClick={() => signUp('John', 'Doe', 'test@example.com', 'password')}>Sign Up</button>
-      <button onClick={() => signOut()}>Sign Out</button>
-      <div data-testid="is-admin">{isAdmin() ? 'true' : 'false'}</div>
-      <div data-testid="is-client">{isClient() ? 'true' : 'false'}</div>
-    </div>
-  )
+  auth.getSession.mockResolvedValue({ data: { session: { access_token: 't', refresh_token: 'r', user: authUser } }, error: null })
+  auth.getUser.mockResolvedValue({ data: { user: authUser }, error: null })
 }
 
-describe('AuthContext', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
-      data: { session: null },
-    })
-    ;(supabaseModule.db.auth.onAuthStateChange as any).mockReturnValue({
-      data: { subscription: { unsubscribe: vi.fn() } },
-    })
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('should provide auth context to children', async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toBeInTheDocument()
-    }, { timeout: 3000 })
-  })
-
-  it('should handle sign in', async () => {
-    const user = { id: 'user-123', email: 'test@example.com' }
-    const session = { user }
-
-    ;(supabaseModule.db.auth.signInWithPassword as any).mockResolvedValue({
-      data: { user, session },
-      error: null,
-    })
-
-      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
-        if (table === 'users') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'user-123',
-                email: 'test@example.com',
-                role: 'client',
-                full_name: 'Test User',
-              },
-              error: null,
-            }),
-          }
-        }
-        return {}
-      })
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
-    }, { timeout: 3000 })
-
-    const signInButton = screen.getByText('Sign In')
-    await userEvent.click(signInButton)
-
-      await waitFor(() => {
-        expect(supabaseModule.db.auth.signInWithPassword).toHaveBeenCalledWith({
-          email: 'test@example.com',
-          password: 'password',
-        })
-      })
-  })
-
-  it('should handle sign up', async () => {
-    const user = { id: 'user-123', email: 'test@example.com' }
-    const session = { user }
-
-    ;(supabaseModule.db.auth.signUp as any).mockResolvedValue({
-      data: { user, session },
-      error: null,
-    })
-
-      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
-        if (table === 'users') {
-          return {
-            update: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockResolvedValue({
-              data: null,
-              error: null,
-            }),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'user-123',
-                email: 'test@example.com',
-                role: 'client',
-                full_name: 'John Doe',
-              },
-              error: null,
-            }),
-          }
-        }
-        return {}
-      })
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
-    }, { timeout: 3000 })
-
-    const signUpButton = screen.getByText('Sign Up')
-    await userEvent.click(signUpButton)
-
-      await waitFor(() => {
-        expect(supabaseModule.db.auth.signUp).toHaveBeenCalledWith({
-          email: 'test@example.com',
-          password: 'password',
-          options: {
-            data: {
-              first_name: 'John',
-              last_name: 'Doe',
-            },
-          },
-        })
-      })
-  })
-
-  it('should handle sign out', async () => {
-    ;(supabaseModule.db.auth.signOut as any).mockResolvedValue({ error: null })
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
-    }, { timeout: 3000 })
-
-    const signOutButton = screen.getByText('Sign Out')
-    await userEvent.click(signOutButton)
-
-      await waitFor(() => {
-        expect(supabaseModule.db.auth.signOut).toHaveBeenCalled()
-      })
-  })
-
-  it('should correctly identify admin role', async () => {
-    const user = { id: 'admin-123', email: 'admin@example.com' }
-    const session = { user }
-
-    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
-      data: { session },
-    })
-
-      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
-        if (table === 'users') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'admin-123',
-                email: 'admin@example.com',
-                role: 'admin',
-                full_name: 'Admin User',
-              },
-              error: null,
-            }),
-          }
-        }
-        return {}
-      })
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByTestId('is-admin')).toHaveTextContent('true')
-    })
-  })
-
-  it('should correctly identify client role', async () => {
-    const user = { id: 'client-123', email: 'client@example.com' }
-    const session = { user }
-
-    ;(supabaseModule.db.auth.getSession as any).mockResolvedValue({
-      data: { session },
-    })
-
-      ;(supabaseModule.db.from as any).mockImplementation((table: string) => {
-        if (table === 'users') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'client-123',
-                email: 'client@example.com',
-                role: 'client',
-                full_name: 'Client User',
-              },
-              error: null,
-            }),
-          }
-        }
-        return {}
-      })
-
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      </BrowserRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByTestId('is-client')).toHaveTextContent('true')
-    })
-  })
+beforeEach(() => {
+  vi.clearAllMocks()
+  auth.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
 })
 
+describe('AuthContext', () => {
+  it('starts unauthenticated and finishes loading when there is no session', async () => {
+    mockNoSession()
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toBeNull()
+  })
+
+  it('loads the user profile from db.auth.getUser when a session exists', async () => {
+    mockSession({ id: 'u1', email: 'jane@example.com', first_name: 'Jane', last_name: 'Doe', role: 'admin', created_at: '2024-01-01' })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+    expect(result.current.user?.email).toBe('jane@example.com')
+    expect(result.current.user?.first_name).toBe('Jane')
+    expect(result.current.isAdmin()).toBe(true)
+    expect(result.current.isClient()).toBe(false)
+  })
+
+  it('reads the role from user_metadata when there is no top-level role', async () => {
+    mockSession({ id: 'u2', email: 'c@example.com', created_at: '2024-01-01', user_metadata: { role: 'client' } })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+    expect(result.current.isClient()).toBe(true)
+    expect(result.current.isAdmin()).toBe(false)
+  })
+
+  it('signIn() calls db.auth.signInWithPassword and resolves on success', async () => {
+    mockNoSession()
+    auth.signInWithPassword.mockResolvedValue({ data: { session: {}, user: {} }, error: null })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.signIn('a@b.com', 'pw')
+    })
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({ email: 'a@b.com', password: 'pw' })
+  })
+
+  it('signIn() throws the backend error message on failure', async () => {
+    mockNoSession()
+    auth.signInWithPassword.mockResolvedValue({ data: { session: null, user: null }, error: { message: 'Invalid login credentials' } })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await expect(result.current.signIn('a@b.com', 'bad')).rejects.toThrow('Invalid login credentials')
+  })
+
+  it('signUp() forwards the form fields and returns the verification result', async () => {
+    mockNoSession()
+    auth.signUp.mockResolvedValue({ data: { requiresVerification: true, personal_email: 'me@gmail.com' }, error: null })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let out: any
+    await act(async () => {
+      out = await result.current.signUp('Jane', 'Doe', '5551234567', 'pw', 'client', 'me@gmail.com')
+    })
+    expect(out).toEqual({ requiresVerification: true, personal_email: 'me@gmail.com' })
+    expect(auth.signUp).toHaveBeenCalledWith({
+      email: '',
+      password: 'pw',
+      options: { data: { first_name: 'Jane', last_name: 'Doe', mobile: '5551234567', role: 'client', personal_email: 'me@gmail.com' } },
+    })
+  })
+
+  it('signOut() calls db.auth.signOut and clears the user', async () => {
+    mockSession({ id: 'u1', email: 'a@b.com', role: 'client', created_at: '2024-01-01' })
+    auth.signOut.mockResolvedValue({ error: null })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.signOut()
+    })
+    expect(auth.signOut).toHaveBeenCalled()
+    expect(result.current.user).toBeNull()
+  })
+
+  it('useAuth() throws when used outside an AuthProvider', () => {
+    expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/)
+  })
+})

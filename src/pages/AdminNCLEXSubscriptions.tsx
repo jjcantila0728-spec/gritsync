@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
@@ -7,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import {
   Users, Crown, Zap, BookOpen, TrendingUp, Search,
-  CheckCircle, XCircle, Clock, BarChart2,
+  CheckCircle, XCircle, BarChart2,
   Edit2, RefreshCw, Image as ImageIcon,
 } from 'lucide-react'
 
@@ -319,7 +318,6 @@ function ReviewModal({
 }
 
 export function AdminNCLEXSubscriptions() {
-  const { user } = useAuth()
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'users' | 'pending'>('users')
   const [users, setUsers] = useState<UserRow[]>([])

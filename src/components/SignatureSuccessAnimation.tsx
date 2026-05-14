@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle, Loader2 } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 
 interface SignatureSuccessAnimationProps {
   onComplete: () => void

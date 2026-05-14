@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
-import { getCachedSignedUrl } from '@/lib/image-cache'
 import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
@@ -114,12 +113,13 @@ export function Documents() {
           return 'Employer Letter'
         case 'ead_paystub':
           return 'Paystub'
-        default:
+        default: {
           // For other EAD types, format them nicely
           const eadName = type.replace('ead_', '').replace(/_/g, ' ')
-          return eadName.split(' ').map(word => 
+          return eadName.split(' ').map(word =>
             word.charAt(0).toUpperCase() + word.slice(1)
           ).join(' ')
+        }
       }
     }
     
@@ -465,70 +465,6 @@ export function Documents() {
       default:
         return <FileText className="h-5 w-5" />
     }
-  }
-
-  // Component to display authenticated images from Supabase Storage
-  const AuthenticatedImage = ({ src, alt, className }: { src: string, alt: string, className?: string }) => {
-    const [imageSrc, setImageSrc] = useState<string | null>(null)
-    const [error, setError] = useState(false)
-    const imgRef = useRef<HTMLImageElement>(null)
-
-    useEffect(() => {
-      // Validate src is a string
-      if (!src || typeof src !== 'string') {
-        setError(true)
-        return
-      }
-
-      // If src is already a URL (legacy), use it directly
-      if (src.startsWith('http://') || src.startsWith('https://')) {
-        setImageSrc(src)
-        return
-      }
-
-      // For Supabase Storage paths, get cached signed URL
-      getCachedSignedUrl(
-        src,
-        (path) => getSignedFileUrl(path, 3600),
-        3600000 // Cache for 1 hour
-      )
-        .then(url => {
-          if (typeof url === 'string') {
-            setImageSrc(url)
-          } else {
-            setError(true)
-          }
-        })
-        .catch(() => {
-          setError(true)
-        })
-    }, [src])
-
-    if (error) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <Image className="h-12 w-12 text-gray-400" />
-        </div>
-      )
-    }
-
-    if (!imageSrc) {
-      return (
-        <div className={`${className} flex items-center justify-center bg-gray-100 dark:bg-gray-700`}>
-          <div className="animate-pulse text-gray-400">Loading...</div>
-        </div>
-      )
-    }
-
-    return (
-      <img
-        ref={imgRef}
-        src={imageSrc}
-        alt={alt}
-        className={className}
-        onError={() => setError(true)}
-      />
-    )
   }
 
   // Component for document image preview (uses file path directly)

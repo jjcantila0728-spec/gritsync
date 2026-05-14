@@ -1,13 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { appUrl } from '@/lib/routing'
 import { NCLEXLayout } from '@/layouts/NCLEXLayout'
 import {
   BarChart2, Plus, Filter, ChevronRight, Crown, Zap,
-  BookOpen, CheckCircle, XCircle, Clock, RotateCcw,
-  TrendingUp, AlertCircle, X, Brain, Target,
-  ChevronDown, ChevronUp, Lock, Gift, Sparkles, Bookmark, Trash2,
+  BookOpen, CheckCircle, Clock, RotateCcw,
+  TrendingUp, AlertCircle, X, Brain, Target, Gift, Sparkles, Bookmark, Trash2,
 } from 'lucide-react'
 
 function getToken() { return localStorage.getItem('gritsync_token') }
@@ -1182,7 +1180,7 @@ export function NCLEXReview() {
                   {user?.role === 'admin' && (
                     <div className="flex gap-2">
                       <button
-                        onClick={seedQuestions}
+                        onClick={() => seedQuestions()}
                         disabled={seedingLoading}
                         className="px-4 py-2 rounded-lg bg-[#17c3b2] text-white text-sm font-semibold hover:bg-[#14a99a]"
                       >

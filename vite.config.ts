@@ -8,7 +8,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-
+      // Legacy alias kept for `import ... from '@db/db-js'` imports that
+      // predate the local-Postgres API client.
+      '@db/db-js': path.resolve(__dirname, './src/lib/api-client.ts'),
     },
   },
   test: {

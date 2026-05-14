@@ -22,7 +22,7 @@ export function SignatureModal({ isOpen, onClose, onSignatureComplete, applicati
   const [signatureUrl, setSignatureUrl] = useState<string>('')
   const [isLocalhost, setIsLocalhost] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [, setIsProcessing] = useState(false)
   const [signatureSessionId] = useState(() => `sign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   const checkForSignatureRef = useRef<(() => Promise<boolean>) | null>(null)
 

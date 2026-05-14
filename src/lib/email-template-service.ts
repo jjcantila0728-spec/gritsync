@@ -5,13 +5,13 @@
  */
 
 import { sendEmail } from './email-service'
-import { emailTemplatesAPI, EmailTemplate, renderTemplate } from './email-templates-api'
+import { emailTemplatesAPI, renderTemplate } from './email-templates-api'
 
 export interface SendTemplateEmailOptions {
   templateSlug: string
   to: string
   variables: Record<string, string>
-  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated'
+  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated' | 'reminder'
   recipientUserId?: string
   recipientName?: string
   applicationId?: string

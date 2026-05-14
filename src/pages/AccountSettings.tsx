@@ -12,7 +12,7 @@ import { getFullNameWithMiddle } from '@/lib/utils'
 import { 
   Lock, Eye, EyeOff, Save, Shield, User, Mail, Calendar, 
   Key, LogOut, AlertTriangle, CheckCircle2, XCircle, 
-  Info, Bell, Clock, QrCode, Copy, 
+  Info, Bell, Clock, Copy, 
   Check, X, Download, ChevronRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'

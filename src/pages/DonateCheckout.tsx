@@ -24,7 +24,6 @@ function DonationPaymentForm({
   const stripe = useStripe()
   const elements = useElements()
   const navigate = useNavigate()
-  const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
 

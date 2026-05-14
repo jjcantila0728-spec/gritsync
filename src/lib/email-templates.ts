@@ -49,6 +49,7 @@ async function getBrandingSettings(): Promise<{
   phoneNumber: string
   logoUrl: string
   primaryColor: string
+  primaryDark: string
   secondaryColor: string
   companyAddress: string
   companyDescription: string
@@ -784,13 +785,6 @@ export async function createSchoolLetterEmail(data: {
   instructions?: string
 }): Promise<{ subject: string; html: string }> {
   const { userName, schoolName, letterUrl, applicationId, instructions } = data
-  const branding = await getBrandingSettings()
-  const colors = {
-    ...defaultColors,
-    primary: branding.primaryColor,
-    primaryDark: branding.primaryDark,
-    secondary: branding.secondaryColor,
-  }
 
   const content = `
     <div class="email-content">
@@ -871,7 +865,7 @@ export async function createFullInstructionsEmail(data: {
 
       <h2>Step-by-Step Guide</h2>
 
-      ${steps.map((step, index) => `
+      ${steps.map((step) => `
         <div class="card" style="border-left: 4px solid ${colors.primary};">
           <div style="display: flex; align-items: start;">
             <div style="flex-shrink: 0; width: 40px; height: 40px; background: linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-right: 15px;">
@@ -1238,13 +1232,6 @@ export async function createDocumentApprovedEmail(data: {
   notes?: string
 }): Promise<{ subject: string; html: string }> {
   const { userName, applicationId, documentName, approvedDate, approvedBy, applicationUrl, notes } = data
-  const branding = await getBrandingSettings()
-  const colors = {
-    ...defaultColors,
-    primary: branding.primaryColor,
-    primaryDark: branding.primaryDark,
-    secondary: branding.secondaryColor,
-  }
 
   const content = `
     <div class="email-content">
@@ -1317,13 +1304,6 @@ export async function createDocumentRejectedEmail(data: {
   reviewedBy?: string
 }): Promise<{ subject: string; html: string }> {
   const { userName, applicationId, documentName, rejectionDate, rejectionReason, requiredActions, uploadUrl, reviewedBy } = data
-  const branding = await getBrandingSettings()
-  const colors = {
-    ...defaultColors,
-    primary: branding.primaryColor,
-    primaryDark: branding.primaryDark,
-    secondary: branding.secondaryColor,
-  }
 
   const actionsHtml = requiredActions && requiredActions.length > 0 ? `
     <div class="warning-box">

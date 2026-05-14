@@ -3,29 +3,22 @@
  * Manages email subscribers for newsletters and campaigns
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Users,
   Plus,
   Search,
-  Filter,
   Download,
   Upload,
   Trash2,
   Edit,
   X,
   Save,
-  Mail,
-  UserPlus,
-  UserMinus,
-  Tag,
   CheckCircle2,
   XCircle,
   AlertCircle,
   TrendingUp,
-  TrendingDown,
   RefreshCw,
-  MoreVertical,
 } from 'lucide-react'
 import { subscribersAPI, EmailSubscriber, SubscriberStats } from '@/lib/subscribers-api'
 import { Loading } from '@/components/ui/Loading'
@@ -42,13 +35,12 @@ export function SubscribersTab({ showToast }: SubscribersTabProps) {
   const [stats, setStats] = useState<SubscriberStats | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
-  const [sourceFilter, setSourceFilter] = useState<string>('')
+  const [sourceFilter] = useState<string>('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingSubscriber, setEditingSubscriber] = useState<EmailSubscriber | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadSubscribers()

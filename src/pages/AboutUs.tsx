@@ -294,7 +294,7 @@ export function AboutUs() {
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-            {advisors.map((advisor, i) => (
+            {advisors.map((advisor) => (
               <div
                 key={advisor.name + advisor.board}
                 className="group bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden hover:border-primary-700 hover:shadow-xl hover:shadow-primary-900/20 transition-all duration-300"

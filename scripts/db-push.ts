@@ -10,6 +10,7 @@
  *      npm run db:push -- --force   (same — --force is ignored, always safe)
  */
 
+import 'dotenv/config'
 import { Pool } from 'pg'
 
 const pool = new Pool({

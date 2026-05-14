@@ -17,25 +17,19 @@ import { useToast } from '@/components/ui/Toast'
 import { 
   Mail, 
   Send, 
-  RefreshCw, 
-  Download,
+  RefreshCw,
   Trash2,
   Clock,
   CheckCircle2,
   XCircle,
   Plus,
-  Reply,
-  Forward,
-  Printer,
   Paperclip,
-  ChevronLeft,
 } from 'lucide-react'
 import { emailLogsAPI, EmailLog } from '@/lib/email-api'
 import { Loading } from '@/components/ui/Loading'
-import { cn, sanitizeHTML } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
-import { receivedEmailsAPI, ReceivedEmail as DBReceivedEmail } from '@/lib/received-emails-api'
 import { emailAddressesAPI, EmailAddress } from '@/lib/email-addresses-api'
 import { userDetailsAPI } from '@/lib/api-service'
 import { db } from '@/lib/api-client'
@@ -77,7 +71,7 @@ export function ClientEmails() {
   const [selectedEmail, setSelectedEmail] = useState<EmailLog | null>(null)
   const [selectedReceivedEmail, setSelectedReceivedEmail] = useState<EnrichedReceivedEmail | null>(null)
   const [showEmailDetail, setShowEmailDetail] = useState(false)
-  const [inboxHasMore, setInboxHasMore] = useState(false)
+  const [, setInboxHasMore] = useState(false)
   const [clientEmailAddress, setClientEmailAddress] = useState<EmailAddress | null>(null)
   const [userFullName, setUserFullName] = useState<string>('')
   const [readEmailIds, setReadEmailIds] = useState<Set<string>>(new Set())
@@ -118,9 +112,8 @@ export function ClientEmails() {
   }, [location.state, location.pathname])
   
   // Filters
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
-  const [showFilters, setShowFilters] = useState(false)
+  const [searchQuery] = useState('')
+  const [statusFilter] = useState<string>('')
 
   // Compose email state
   const [composing, setComposing] = useState(false)
@@ -140,7 +133,7 @@ export function ClientEmails() {
   const [sending, setSending] = useState(false)
   
   // Email templates
-  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
+  const [emailTemplates] = useState<EmailTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({})
 
@@ -677,6 +670,7 @@ export function ClientEmails() {
         fromEmailAddressId: clientEmailAddress.id,
         cc: '',
         bcc: '',
+        replyTo: '',
       })
       setSelectedTemplateId('')
       setTemplateVariables({})
@@ -935,46 +929,10 @@ export function ClientEmails() {
     }
   }
 
-  const handleDeleteSentEmail = async (logId: string, subject: string) => {
+  const handleDeleteSentEmail = async (_logId: string, _subject: string) => {
     showToast('⚠️ Cannot delete sent email logs. Contact admin if needed.', 'warning')
     // Note: Sent emails are logs and typically shouldn't be deleted by clients
     // Only admins should have this ability
-  }
-
-  const handleBatchDeleteInbox = async () => {
-    const selectedIds = Array.from(selectedInboxIds)
-    
-    if (selectedIds.length === 0) {
-      showToast('⚠️ No emails selected', 'warning')
-      return
-    }
-
-    if (!confirm(`Hide ${selectedIds.length} selected email(s)?\n\nNote: Emails will be hidden from your view but not permanently deleted.`)) {
-      return
-    }
-
-    try {
-      const result = await resendInboxAPI.batchDelete(selectedIds)
-      
-      if (result.success > 0) {
-        showToast(`✅ Hidden ${result.success} email(s)`, 'success')
-        // Remove from local state
-        setReceivedEmails(prev => prev.filter(e => !selectedIds.includes(e.id)))
-        setSelectedInboxIds(new Set())
-        
-        // Store hidden email IDs in localStorage
-        const hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails') || '[]')
-        hiddenEmails.push(...selectedIds)
-        localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails))
-      }
-      
-      if (result.failed > 0) {
-        showToast(`⚠️ Failed to hide ${result.failed} email(s)`, 'warning')
-      }
-    } catch (error: any) {
-      console.error('Error batch hiding:', error)
-      showToast(`❌ Failed to hide emails: ${error.message}`, 'error')
-    }
   }
 
   if (!user || !isClient()) {
@@ -1473,6 +1431,7 @@ export function ClientEmails() {
                 fromEmailAddressId: clientEmailAddress?.id || '',
                 cc: '',
                 bcc: '',
+                replyTo: '',
               })
               setSelectedTemplateId('')
               setTemplateVariables({})

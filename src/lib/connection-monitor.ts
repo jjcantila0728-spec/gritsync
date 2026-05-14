@@ -45,11 +45,14 @@ export async function checkConnectionHealth(timeoutMs: number = 5000): Promise<C
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-    const { error } = await db
+    const query = db
       .from('users')
       .select('id')
       .limit(1)
-      .abortSignal(controller.signal)
+    // `abortSignal` is not on the API-client query builder type; call it if present.
+    const { error } = await (typeof (query as any).abortSignal === 'function'
+      ? (query as any).abortSignal(controller.signal)
+      : query)
 
     clearTimeout(timeoutId)
     

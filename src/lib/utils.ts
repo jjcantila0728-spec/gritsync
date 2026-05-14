@@ -209,7 +209,7 @@ export function sanitizeHTML(html: string, options?: { allowEmailTemplates?: boo
           ],
           ALLOW_DATA_ATTR: true,
           ALLOW_UNKNOWN_PROTOCOLS: false,
-          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i,
           KEEP_CONTENT: true,
           RETURN_DOM: false,
           RETURN_DOM_FRAGMENT: false,
@@ -230,7 +230,7 @@ export function sanitizeHTML(html: string, options?: { allowEmailTemplates?: boo
           'href', 'src', 'alt', 'title', 'class', 'id', 'style', 'width', 'height',
           'align', 'valign', 'colspan', 'rowspan', 'target', 'rel'
         ],
-        ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+        ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i,
         KEEP_CONTENT: true,
         RETURN_DOM: false,
         RETURN_DOM_FRAGMENT: false,

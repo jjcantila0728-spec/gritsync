@@ -1,6 +1,4 @@
-import { useState } from 'react'
-import { useToast } from '@/components/ui/Toast'
-import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
+import { EmailSignature } from '@/lib/email-signatures-api'
 import { Plus, PenTool, Edit, Star, Trash2 } from 'lucide-react'
 import { cn, sanitizeHTML } from '@/lib/utils'
 

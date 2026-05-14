@@ -30,14 +30,6 @@ async function getAllSettings(): Promise<Record<string, string>> {
     if (error) {
       console.error('Error fetching settings:', error)
       
-      // Check if it's a CORS error
-      if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
-        console.error(
-          'CORS Error: Please ensure http://localhost:5000 is added to your Supabase project\'s allowed origins.\n' +
-          'Go to: Supabase Dashboard > Settings > API > Allowed Origins'
-        )
-      }
-      
       // Return cached settings if available, even if expired
       return settingsCache || {}
     }

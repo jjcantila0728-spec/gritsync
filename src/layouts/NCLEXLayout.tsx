@@ -3,8 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { appUrl } from '@/lib/routing'
 import {
-  BookOpen, Video, FileText, Radio, ShoppingBag,
-  ChevronLeft, Crown, Zap, Menu, X, Home,
+  BookOpen, Video, FileText, Radio, ShoppingBag, Crown, Zap, Menu, X, Home,
   Flag, Bookmark, AlignLeft, Settings, Calculator, MessageSquare,
 } from 'lucide-react'
 
@@ -199,9 +198,7 @@ export function NCLEXExamLayout({
   isBookmarked,
   onToggleMark,
   onToggleBookmark,
-  onClose,
 }: ExamLayoutProps) {
-  const navigate = useNavigate()
   const { user } = useAuth()
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'User'
   const lastName = user?.last_name || ''

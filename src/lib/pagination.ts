@@ -56,7 +56,7 @@ export function createPaginationResult<T>(
  * Pagination helper for Supabase queries
  * Returns optimized query with range and count
  */
-export function applyPagination<T>(
+export function applyPagination(
   query: any,
   page: number,
   pageSize: number

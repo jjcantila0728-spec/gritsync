@@ -17,7 +17,6 @@ import {
   Briefcase,
   Building2,
   Mail,
-  FileText,
   BookOpen,
   Crown,
   MessageSquare,

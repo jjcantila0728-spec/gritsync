@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { Settings, Save, Palette, Globe, Image as ImageIcon, MapPin, Share2 } from 'lucide-react'
+import { Settings, Save, Palette, Share2 } from 'lucide-react'
 import { Loading } from '@/components/ui/Loading'
 import { useSettings } from './useSettings'
 

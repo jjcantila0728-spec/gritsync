@@ -171,7 +171,7 @@ export function subscribeToCompilationJob(
         table: 'document_compilation_jobs',
         filter: `id=eq.${jobId}`,
       },
-      (payload) => {
+      (payload: any) => {
         callback({
           eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
           new: payload.new,

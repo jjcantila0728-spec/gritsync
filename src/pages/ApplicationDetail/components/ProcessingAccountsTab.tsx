@@ -1,11 +1,8 @@
 ﻿import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
 import { Loading } from '@/components/ui/Loading'
 import { CheckCircle, XCircle, Plus, Edit, Trash2, Copy, Mail, ExternalLink, Lock } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
-import { processingAccountsAPI } from '@/lib/api'
 import { copyToClipboard as copyToClipboardUtil } from '../utils/clipboardHelpers'
 
 interface ProcessingAccountsTabProps {
@@ -34,19 +31,8 @@ export function ProcessingAccountsTab({
   processingAccounts,
   loadingAccounts,
   isAdmin,
-  showAccountModal,
-  setShowAccountModal,
-  editingAccount,
-  setEditingAccount,
-  accountForm,
-  setAccountForm,
-  isUserForm,
   setIsUserForm,
-  savingAccount,
-  setSavingAccount,
-  setProcessingAccounts,
   showToast,
-  application,
   openAccountModal,
   handleDeleteAccount,
   user

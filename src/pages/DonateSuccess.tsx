@@ -5,7 +5,7 @@ import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { CheckCircle, Home, Heart, Sparkles, Share2, Download, ArrowRight, Gift, TrendingUp } from 'lucide-react'
+import { CheckCircle, Home, Heart, Sparkles, Share2, ArrowRight, Gift, TrendingUp } from 'lucide-react'
 import { donationsAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { sendDonationReceipt } from '@/lib/email-service'
@@ -17,10 +17,9 @@ export function DonateSuccess() {
   const [loading, setLoading] = useState(true)
   const [donationId, setDonationId] = useState<string | null>(null)
   const [donationAmount, setDonationAmount] = useState<number | null>(null)
-  const [donationDetails, setDonationDetails] = useState<any>(null)
+  const [, setDonationDetails] = useState<any>(null)
 
   useEffect(() => {
-    const sessionId = searchParams.get('session_id')
     const donationIdParam = searchParams.get('donation_id')
 
     // session_id is optional - payment intent ID works too

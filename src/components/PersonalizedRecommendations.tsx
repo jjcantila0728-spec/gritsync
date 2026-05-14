@@ -6,7 +6,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
-  Lightbulb, 
   FileText, 
   DollarSign, 
   Clock, 
@@ -19,7 +18,6 @@ import {
   UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatDistanceToNow } from '@/lib/utils'
 import { applicationsAPI, userDocumentsAPI, applicationPaymentsAPI, userDetailsAPI } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 

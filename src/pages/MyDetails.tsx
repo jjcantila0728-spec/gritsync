@@ -122,7 +122,7 @@ export function MyDetails() {
 
   const validatePhone = (phone: string): string => {
     if (!phone) return ''
-    const phoneRegex = /^[\d\s\-\+\(\)]+$/
+    const phoneRegex = /^[\d\s\-+()]+$/
     if (!phoneRegex.test(phone) || phone.replace(/\D/g, '').length < 7) {
       return 'Please enter a valid phone number (at least 7 digits)'
     }
@@ -840,10 +840,7 @@ export function MyDetails() {
       // Upload new avatar
       const { error: uploadError } = await db.storage
         .from('documents')
-        .upload(filePath, avatarPreview.file, {
-          cacheControl: '3600',
-          upsert: false,
-        })
+        .upload(filePath, avatarPreview.file)
       
       if (uploadError) throw uploadError
       

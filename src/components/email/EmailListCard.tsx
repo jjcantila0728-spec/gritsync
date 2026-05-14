@@ -4,7 +4,7 @@
  */
 
 import { format } from 'date-fns'
-import { Mail, Clock, CheckCircle2, XCircle, AlertCircle, Eye, Trash2, User } from 'lucide-react'
+import { Mail, Clock, CheckCircle2, XCircle, AlertCircle, Eye, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmailLog } from '@/lib/email-api'
 import { useState, useEffect } from 'react'

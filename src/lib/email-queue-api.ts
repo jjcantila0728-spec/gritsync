@@ -4,7 +4,6 @@
  */
 
 import { db } from './api-client'
-import { Tables } from './database.types'
 
 export interface EmailQueueItem {
   id?: string
@@ -34,6 +33,9 @@ export interface EmailQueueItem {
   created_by_user_id?: string | null
   created_at?: string
   updated_at?: string
+  sent_at?: string | null
+  failed_at?: string | null
+  cancelled_at?: string | null
 }
 
 export interface EmailQueueFilters {

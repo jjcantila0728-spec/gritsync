@@ -258,10 +258,12 @@ export function AdminCareers() {
       }
 
       if (selectedCareer) {
-        await careersAPI.update(selectedCareer.id, careerData)
+        // careersAPI types omit some real DB columns (deadline, instructions, partner agency);
+        // cast to match the looser runtime contract.
+        await careersAPI.update(selectedCareer.id, careerData as any)
         showToast('Career updated successfully', 'success')
       } else {
-        await careersAPI.create(careerData)
+        await careersAPI.create(careerData as any)
         showToast('Career created successfully', 'success')
       }
       setShowCareerModal(false)

@@ -92,7 +92,7 @@ export function PromoCodeSettings() {
     
     try {
       setSubmitting(true)
-      const { data, error } = await db
+      const { error } = await db
         .from('promo_codes')
         .insert({
           code: code.toUpperCase(),
@@ -434,7 +434,7 @@ export function PromoCodeSettings() {
                       variant="outline"
                       size="sm"
                       onClick={() => togglePromoCode(promo.id, promo.is_active)}
-                      disabled={isExpired || isMaxedOut}
+                      disabled={Boolean(isExpired || isMaxedOut)}
                       title={isExpired ? 'Cannot activate expired code' : isMaxedOut ? 'Cannot activate maxed out code' : promo.is_active ? 'Deactivate' : 'Activate'}
                       className="flex-1 sm:flex-initial"
                     >

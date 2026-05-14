@@ -9,8 +9,7 @@ import {
   CreditCard, 
   Clock, 
   User,
-  CheckCircle,
-  Trash2
+  CheckCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'

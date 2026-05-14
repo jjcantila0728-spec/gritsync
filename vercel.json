@@ -2,15 +2,17 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "vite",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",

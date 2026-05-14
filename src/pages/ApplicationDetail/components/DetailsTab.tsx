@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/Card'
-import { Copy, User, Mail, Phone, MapPin, Calendar, GraduationCap, School, Building2, FileText } from 'lucide-react'
+import { Copy, User, Mail, Phone, MapPin, Calendar, GraduationCap, School } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { copyToClipboard } from '../utils/clipboardHelpers'
 
@@ -39,8 +39,6 @@ interface DetailsTabProps {
 export function DetailsTab({
   application,
   detailsSubTab,
-  setDetailsSubTab,
-  setApplication,
   showToast,
   applicationId,
   isAdmin
@@ -339,7 +337,7 @@ export function DetailsTab({
                   <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.elementary_school || 'N/A'}</span>
                   {application.elementary_school && (
                     <button
-                      onClick={() => copyToClipboard(application.elementary_school, 'Elementary school', showToast)}
+                      onClick={() => copyToClipboard(application.elementary_school || '', 'Elementary school', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy School Name"
                     >
@@ -410,7 +408,7 @@ export function DetailsTab({
                   <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.high_school || 'N/A'}</span>
                   {application.high_school && (
                     <button
-                      onClick={() => copyToClipboard(application.high_school, 'High school', showToast)}
+                      onClick={() => copyToClipboard(application.high_school || '', 'High school', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy School Name"
                     >
@@ -469,7 +467,7 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Graduated:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.high_school_graduated}</span>
                     <button
-                      onClick={() => copyToClipboard(application.high_school_graduated, 'High school graduated', showToast)}
+                      onClick={() => copyToClipboard(application.high_school_graduated || '', 'High school graduated', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy Graduated"
                     >
@@ -482,7 +480,7 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Diploma:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{formatDate(application.high_school_diploma_date)}</span>
                     <button
-                      onClick={() => copyToClipboard(application.high_school_diploma_date, 'High school diploma date', showToast)}
+                      onClick={() => copyToClipboard(application.high_school_diploma_date || '', 'High school diploma date', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy Diploma Date"
                     >
@@ -507,7 +505,7 @@ export function DetailsTab({
                   <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.nursing_school || 'N/A'}</span>
                   {application.nursing_school && (
                     <button
-                      onClick={() => copyToClipboard(application.nursing_school, 'Nursing school', showToast)}
+                      onClick={() => copyToClipboard(application.nursing_school || '', 'Nursing school', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy School Name"
                     >
@@ -566,7 +564,7 @@ export function DetailsTab({
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[70px]">Major:</span>
                     <span className="text-xs text-gray-900 dark:text-gray-100 flex-1 truncate font-mono">{application.nursing_school_major}</span>
                     <button
-                      onClick={() => copyToClipboard(application.nursing_school_major, 'Nursing school major', showToast)}
+                      onClick={() => copyToClipboard(application.nursing_school_major || '', 'Nursing school major', showToast)}
                       className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0 opacity-60 hover:opacity-100"
                       title="Copy Major"
                     >

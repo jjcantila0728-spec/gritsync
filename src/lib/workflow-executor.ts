@@ -6,7 +6,6 @@
 import { workflowsAPI, Workflow, WorkflowAction } from './workflows-api'
 import { db } from './api-client'
 import { sendEmail } from './email-service'
-import { sendApplicationStatusEmail } from './email-notifications'
 
 export interface WorkflowEvent {
   triggerType: string
@@ -252,7 +251,7 @@ async function executeSendEmailAction(
   const { template, to, subject, body, variables } = config
 
   // Resolve variables from event data
-  let resolvedTo = resolveVariables(to, eventData)
+  const resolvedTo = resolveVariables(to, eventData)
   let resolvedSubject = resolveVariables(subject, eventData)
   let resolvedBody = resolveVariables(body, eventData)
 
@@ -321,7 +320,7 @@ async function executeCreateTaskAction(
 ): Promise<boolean> {
   // This would create a task in a tasks table
   // For now, we'll create a notification instead
-  const { title, description, assigned_to, priority } = config
+  const { title, description, assigned_to } = config
 
   const { notificationsAPI } = await import('./api-service')
   

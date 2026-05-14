@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
-import { Mail, Plus, Edit2, Trash2, Check, X, Shield } from 'lucide-react'
+import { Mail, Plus, Trash2, Shield } from 'lucide-react'
 import { emailAddressesAPI, EmailAddress } from '@/lib/email-addresses-api'
 import { Loading } from '@/components/ui/Loading'
 import { cn } from '@/lib/utils'
@@ -17,8 +17,7 @@ export function AdminEmailAddresses() {
   const [loading, setLoading] = useState(true)
   const [emailAddresses, setEmailAddresses] = useState<EmailAddress[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingAddress, setEditingAddress] = useState<EmailAddress | null>(null)
-  
+
   const [formData, setFormData] = useState({
     email_address: '',
     display_name: '',

@@ -19,7 +19,7 @@ export function ApplicationCheckout() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user, loading: authLoading } = useAuth()
+  const { user } = useAuth()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [application, setApplication] = useState<any>(null)
@@ -103,7 +103,7 @@ export function ApplicationCheckout() {
 
     setProcessingPayment(true)
     try {
-      const result = await applicationPaymentsAPI.complete(
+      await applicationPaymentsAPI.complete(
         payment.id,
         undefined,
         paymentMethod === 'card' ? paymentIntentId : undefined,

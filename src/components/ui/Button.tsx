@@ -4,10 +4,12 @@ import { cn } from '@/lib/utils'
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'ghost' | 'outline' | 'destructive' | 'success'
   size?: 'sm' | 'md' | 'lg'
+  /** When true, disables the button (e.g. while an async action is in flight). */
+  loading?: boolean
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'md', ...props }, ref) => {
+  ({ className, variant = 'default', size = 'md', loading = false, disabled, ...props }, ref) => {
     return (
       <button
         className={cn(
@@ -25,6 +27,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         ref={ref}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
       />
     )

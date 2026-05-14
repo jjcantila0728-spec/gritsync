@@ -12,6 +12,10 @@ export interface User {
   mobile?: string
   middle_name?: string
   created_at: string
+  // Legacy Supabase-shaped metadata bags. Still read in a few places that
+  // predate the local-auth migration; kept optional so they typecheck.
+  user_metadata?: Record<string, any>
+  app_metadata?: Record<string, any>
 }
 
 export interface Application {

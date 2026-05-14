@@ -85,10 +85,10 @@ export function Quote() {
       try {
         const services = await servicesAPI.getAll()
         // Get unique service names, excluding EAD Processing
-        const uniqueServices = Array.from(new Set(
+        const uniqueServices = Array.from(new Set<string>(
           services
             .filter((s: any) => s.service_name !== 'EAD Processing')
-            .map((s: any) => s.service_name)
+            .map((s: any) => String(s.service_name))
         ))
         setAvailableServices(uniqueServices.sort())
       } catch (error) {
@@ -111,10 +111,10 @@ export function Quote() {
         // Get unique states for the selected service
         const statesForService = services
           .filter((s: any) => s.service_name === formData.service)
-          .map((s: any) => s.state)
-        const uniqueStates = Array.from(new Set(statesForService))
+          .map((s: any) => String(s.state))
+        const uniqueStates = Array.from(new Set<string>(statesForService))
         setAvailableStates(uniqueStates.sort())
-        
+
         // If only one state is available, auto-select it
         if (uniqueStates.length === 1 && !formData.state) {
           setFormData(prev => ({ ...prev, state: uniqueStates[0] }))
@@ -1006,7 +1006,7 @@ export function Quote() {
           if (value.trim().length < 2) return `${field} must be at least 2 characters`
           if (!/^[a-zA-Z\s'-]+$/.test(value.trim())) return `${field} can only contain letters, spaces, hyphens, and apostrophes`
         } else if (field === 'Mobile Number') {
-          const cleaned = value.replace(/[\s\-\(\)\+]/g, '')
+          const cleaned = value.replace(/[\s\-()+]/g, '')
           if (!/^\d+$/.test(cleaned)) return 'Mobile number can only contain digits and formatting characters'
           if (cleaned.length < 7 || cleaned.length > 15) return 'Mobile number must be between 7 and 15 digits'
         }
@@ -2136,7 +2136,7 @@ export function Quote() {
                               }
                             }}
                             onBlur={() => {
-                              const cleaned = formData.mobileNumber.replace(/[\s\-\(\)\+]/g, '')
+                              const cleaned = formData.mobileNumber.replace(/[\s\-()+]/g, '')
                               const error = !formData.mobileNumber.trim() 
                                 ? 'Mobile number is required'
                                 : !/^\d+$/.test(cleaned)

@@ -297,14 +297,14 @@ export async function getTemplateStats() {
 
   const stats = {
     total: data.length,
-    active: data.filter(t => t.is_active).length,
-    inactive: data.filter(t => !t.is_active).length,
+    active: data.filter((t: any) => t.is_active).length,
+    inactive: data.filter((t: any) => !t.is_active).length,
     byCategory: {} as Record<string, number>,
     byType: {} as Record<string, number>,
-    totalUsage: data.reduce((sum, t) => sum + (t.usage_count || 0), 0),
+    totalUsage: data.reduce((sum: number, t: any) => sum + (t.usage_count || 0), 0),
   };
 
-  data.forEach(template => {
+  data.forEach((template: any) => {
     stats.byCategory[template.category] = (stats.byCategory[template.category] || 0) + 1;
     stats.byType[template.template_type] = (stats.byType[template.template_type] || 0) + 1;
   });

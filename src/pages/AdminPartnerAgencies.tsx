@@ -177,10 +177,12 @@ export function AdminPartnerAgencies() {
       }
 
       if (editingAgency) {
-        await partnerAgenciesAPI.update(editingAgency.id, agencyData)
+        // partnerAgenciesAPI types omit some real DB columns (zipcode, contact person fields, notes);
+        // cast to match the looser runtime contract.
+        await partnerAgenciesAPI.update(editingAgency.id, agencyData as any)
         showToast('Partner agency updated successfully', 'success')
       } else {
-        await partnerAgenciesAPI.create(agencyData)
+        await partnerAgenciesAPI.create(agencyData as any)
         showToast('Partner agency created successfully', 'success')
       }
 

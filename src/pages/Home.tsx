@@ -109,7 +109,6 @@ export function Home() {
   const count500 = useCountUp(500, 1800, statsStarted)
   const count98 = useCountUp(98, 1600, statsStarted)
   const count50 = useCountUp(50, 1500, statsStarted)
-  const count1200 = useCountUp(1200, 2000, statsStarted)
 
   useEffect(() => {
     if (location.hash) {

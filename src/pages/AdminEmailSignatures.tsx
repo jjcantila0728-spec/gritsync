@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Image as ImageIcon, Upload, Check, Star, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Image as ImageIcon, Upload, Check, Star } from 'lucide-react';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { cn, sanitizeHTML } from '../lib/utils';

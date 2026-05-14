@@ -532,7 +532,7 @@ export function Dashboard() {
           : []
         
         // Check which pending applications are actually completed via timeline steps
-        let completedAppIds = new Set<string>()
+        const completedAppIds = new Set<string>()
         if (pendingApplications.length > 0) {
           try {
             const appIdsToCheck = pendingApplications.map((app: any) => app.id)

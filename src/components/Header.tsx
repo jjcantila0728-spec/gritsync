@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
-import { appUrl, reviewUrl, landingUrl, getSubdomainContext } from '@/lib/routing'
+import { appUrl, landingUrl, getSubdomainContext } from '@/lib/routing'
 import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { NotificationDropdown } from './NotificationDropdown'
@@ -310,7 +310,6 @@ export function Header() {
       
       // Fetch avatar from users table (same source as MyDetails page)
       // Always check database to detect avatar changes, but use cache to prevent flicker
-      const cachedAvatarKey = `avatar_${user.id}`
       const cachedAvatarPathKey = `avatar_path_${user.id}`
       
       // Only fetch if we're not already fetching
@@ -603,7 +602,7 @@ export function Header() {
     try {
       await notificationsAPI.markAsRead(notificationId)
       setNotifications(prev => prev.map(n => 
-        n.id === notificationId ? { ...n, read: 1 } : n
+        n.id === notificationId ? { ...n, read: true } : n
       ))
       setUnreadCount(prev => Math.max(0, prev - 1))
     } catch (error) {
@@ -614,7 +613,7 @@ export function Header() {
   const handleMarkAllAsRead = async () => {
     try {
       await notificationsAPI.markAllAsRead()
-      setNotifications(prev => prev.map(n => ({ ...n, read: 1 })))
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (error) {
       console.error('Error marking all as read:', error)

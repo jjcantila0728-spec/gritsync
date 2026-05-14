@@ -9,7 +9,6 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
-import { Textarea } from '@/components/ui/Textarea'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
 import { db } from '@/lib/api-client'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
@@ -66,7 +65,7 @@ export function Career() {
           }
         }
 
-        const agencies = await partnerAgenciesAPI.getAll(true)
+        const agencies = await partnerAgenciesAPI.getAll()
         setPartnerAgencies(agencies)
       } catch (error) {
         console.error('Error loading data:', error)
@@ -126,10 +125,7 @@ export function Career() {
 
       const { error } = await db.storage
         .from('documents')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        })
+        .upload(filePath, file)
 
       if (error) throw new Error(error.message)
       return filePath
@@ -208,7 +204,8 @@ export function Career() {
         partner_agency_id: career?.partner_agency_id || null,
       }
 
-      await careerApplicationsAPI.create(applicationData)
+      // careerApplicationsAPI.create types use optional-undefined fields; this form uses nulls. Cast to bridge.
+      await careerApplicationsAPI.create(applicationData as any)
 
       showToast('Career application submitted successfully! GritSync will automatically forward your application to our partner agencies in the USA.', 'success')
       

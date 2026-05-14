@@ -3,7 +3,6 @@
  * Used for Admin Inbox and Sent views
  */
 
-import { useState } from 'react'
 import { format } from 'date-fns'
 import { 
   Mail, 

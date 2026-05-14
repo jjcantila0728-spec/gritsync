@@ -14,7 +14,7 @@ interface EmailAttachment {
   type?: string
 }
 
-interface EmailOptions {
+export interface EmailOptions {
   to: string
   subject: string
   html: string
@@ -231,7 +231,7 @@ function generatePlainTextEmail(data: EmailTemplateData): string {
  * Now includes automatic logging to email_logs table
  */
 export async function sendEmail(options: EmailOptions & {
-  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated'
+  emailType?: 'transactional' | 'notification' | 'marketing' | 'manual' | 'automated' | 'reminder'
   emailCategory?: string
   recipientUserId?: string
   recipientName?: string
@@ -275,7 +275,7 @@ export async function sendEmail(options: EmailOptions & {
     }
     
     // Resolve from email address if ID provided
-    let fromEmailAddressId = options.fromEmailAddressId || null
+    const fromEmailAddressId = options.fromEmailAddressId || null
     let fromEmail = options.from || `${config.fromName} <${config.fromEmail}>`
     
     if (options.fromEmailAddressId) {

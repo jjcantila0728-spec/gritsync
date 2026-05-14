@@ -254,9 +254,9 @@ export const workflowsAPI = {
       .from('workflows')
       .select('execution_count, success_count, failure_count')
 
-    const totalExecutions = workflows?.reduce((sum, w) => sum + (w.execution_count || 0), 0) || 0
-    const totalSuccess = workflows?.reduce((sum, w) => sum + (w.success_count || 0), 0) || 0
-    const totalFailures = workflows?.reduce((sum, w) => sum + (w.failure_count || 0), 0) || 0
+    const totalExecutions = workflows?.reduce((sum: number, w: any) => sum + (w.execution_count || 0), 0) || 0
+    const totalSuccess = workflows?.reduce((sum: number, w: any) => sum + (w.success_count || 0), 0) || 0
+    const totalFailures = workflows?.reduce((sum: number, w: any) => sum + (w.failure_count || 0), 0) || 0
     const successRate = totalExecutions > 0 ? (totalSuccess / totalExecutions) * 100 : 0
 
     return {

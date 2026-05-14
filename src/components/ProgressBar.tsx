@@ -3,7 +3,7 @@
  * Visual progress indicator for multi-step processes
  */
 
-import { CheckCircle, Circle } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ProgressStep {
@@ -96,7 +96,7 @@ export function ProgressBar({
 
         {/* Steps */}
         <div className="relative flex justify-between">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <div key={step.id} className="flex flex-col items-center flex-1">
               <div
                 className={cn(

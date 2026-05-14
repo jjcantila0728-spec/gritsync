@@ -1,14 +1,9 @@
 import { db } from './api-client'
 import type { Database } from './database.types'
 import { imageUrlCache } from './image-cache'
-import { 
-  handleSupabaseError, 
-  normalizeError, 
-  retryWithBackoff,
-  isRetryableError,
+import {
+  normalizeError,
   AppError,
-  ErrorType,
-  ErrorSeverity,
   logError
 } from './error-handler'
 
@@ -24,110 +19,6 @@ let cachedUserFetchedAt = 0
 let cachedIsAdmin: boolean | null = null
 let cachedAdminFetchedAt = 0
 const USER_CACHE_TTL_MS = 60 * 1000 // 1 minute cache
-
-/**
- * Enhanced Supabase query wrapper with error handling, retry logic, and session validation
- * Automatically refreshes sessions on auth errors and retries the query
- */
-async function executeQuery<T>(
-  queryFn: () => Promise<{ data: T | null; error: any }>,
-  context?: Record<string, any>,
-  retry: boolean = true,
-  requireAuth: boolean = true
-): Promise<T> {
-  // Ensure valid session before executing query (if auth is required)
-  if (requireAuth) {
-    try {
-      const { ensureValidSession } = await import('./session-utils')
-      await ensureValidSession()
-    } catch (sessionError) {
-      // If session validation fails, log but don't fail yet - let the query fail naturally
-      console.warn('Session validation warning:', sessionError)
-    }
-  }
-
-  const execute = async (attempt: number = 1): Promise<T> => {
-    const startTime = performance.now()
-    const { data, error } = await queryFn()
-    const duration = performance.now() - startTime
-
-    // Track query performance (async import to avoid circular dependencies)
-    try {
-      const { trackQueryPerformance } = await import('./query-performance')
-      const { trackSuccessfulQuery, trackFailedQuery } = await import('./connection-monitor')
-      
-      if (error) {
-        trackQueryPerformance(
-          context?.operation || 'unknown',
-          duration,
-          false,
-          error.message,
-          context
-        )
-        trackFailedQuery()
-      } else {
-        trackQueryPerformance(
-          context?.operation || 'unknown',
-          duration,
-          true,
-          undefined,
-          context
-        )
-        trackSuccessfulQuery()
-      }
-    } catch (importError) {
-      // Silently fail if performance tracking is unavailable
-      console.warn('Failed to track query performance:', importError)
-    }
-
-    if (error) {
-      // Check if this is an auth error that we can recover from
-      const isAuthError = error?.code === 'PGRST301' || 
-                         error?.message?.includes('JWT') ||
-                         error?.message?.includes('token') ||
-                         error?.message?.includes('session') ||
-                         error?.status === 401
-
-      // If auth error on first attempt and we require auth, try refreshing session and retry once
-      if (isAuthError && requireAuth && attempt === 1) {
-        try {
-          const { forceRefreshSession } = await import('./session-utils')
-          const refreshedSession = await forceRefreshSession()
-          
-          if (refreshedSession) {
-            console.log('Session refreshed, retrying query...')
-            // Retry the query once after refreshing session
-            return await execute(attempt + 1)
-          }
-        } catch (refreshError) {
-          console.error('Failed to refresh session:', refreshError)
-        }
-      }
-
-      const normalizedError = normalizeError(error, context)
-      throw normalizedError
-    }
-    
-    if (data === null) {
-      throw normalizeError(new Error('No data returned'), context)
-    }
-    
-    return data
-  }
-
-  if (retry) {
-    try {
-      return await execute()
-    } catch (error: any) {
-      if (isRetryableError(error)) {
-        return await retryWithBackoff(() => execute(), 3, 1000, error)
-      }
-      throw error
-    }
-  }
-
-  return await execute()
-}
 
 // Helper to get current user ID
 // Combined function to get both userId and admin status in one call
@@ -751,7 +642,7 @@ export const applicationsAPI = {
       query = query.eq('id', id)
     }
     
-    let { data, error } = await query
+    const { data, error } = await query
     
     // If authenticated query fails, try without filters to see what's available
     if (error || (Array.isArray(data) && data.length === 0)) {
@@ -1261,7 +1152,7 @@ export const quotationsAPI = {
     amount: number,
     description: string,
     email: string,
-    _name?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    _name?: string,
     service?: string,
     state?: string,
     payment_type?: 'full' | 'staggered',
@@ -1417,9 +1308,9 @@ export const quotationsAPI = {
       throw normalizeError(new Error('Quotation not found or you do not have permission to delete it'), { operation: 'quotationsAPI.delete', quotationId: id })
     }
     
-    // Get user info (includes admin check)
-    const { isAdmin: adminCheck } = await getCurrentUserInfo()
-    
+    // Ensure the user is authenticated (and warm the user-info cache) before deleting
+    await getCurrentUserInfo()
+
     // Perform the deletion
     const { data, error } = await db
       .from('quotations')
@@ -2121,7 +2012,7 @@ export const userPreferencesAPI = {
     return codes
   },
 
-  verify2FACode: async (_secret: string, _code: string): Promise<boolean> => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  verify2FACode: async (_secret: string, _code: string): Promise<boolean> => {
     // In production, use a proper TOTP library like 'otplib'
     // For now, return false as placeholder
     // This should verify the TOTP code against the secret
@@ -2626,7 +2517,7 @@ export async function getSignedFileUrl(filePath: string, expiresIn: number = 360
     
     if (error) {
       // For silent mode, immediately cache as negative and return null without trying alternatives
-      if (shouldBeSilent && (error.message?.includes('not found') || error.message?.includes('Object not found') || error.statusCode === 400)) {
+      if (shouldBeSilent && (error.message?.includes('not found') || error.message?.includes('Object not found') || (error as any).statusCode === 400)) {
         negativeCache.set(normalizedPath, { expiresAt: now + NEGATIVE_CACHE_TTL })
         return null as any
       }
@@ -3115,7 +3006,7 @@ function generateSecurityAnswers(
   elementarySchool: string | null,
   gender: string | null,
   middleName: string | null,
-  maritalStatus: string | null
+  _maritalStatus: string | null
 ): { question1: string; question2: string; question3: string } {
   // Question 1: What was the name of the first school you attended?
   // Answer: First name of elementary school (lowercase, one word)
@@ -3208,36 +3099,38 @@ export const processingAccountsAPI = {
     }
     const existingAccounts = accounts || []
     
-    // Check if Gmail and Pearson Vue accounts exist
-    const typedAccounts = existingAccounts as Array<{ account_type?: string }>
+    // Check if GritSync and Pearson Vue accounts exist
+    const typedAccounts = existingAccounts as Array<{ account_type?: string; email?: string }>
     const existingGritsync = typedAccounts.find(acc => acc.account_type === 'gritsync')
     const existingPearson = typedAccounts.find(acc => acc.account_type === 'pearson_vue')
-    
-    // Get user's grit_id for password
+
+    // Get user's grit_id (for the password) and gritsync_email (for the Pearson account login)
     const { data: user } = await db
       .from('users')
-      .select('grit_id')
+      .select('grit_id, gritsync_email')
       .eq('id', typedApplication.user_id)
       .single()
-    
+
     // Generate password: "@GRiT" + numeric part of grit_id
     // Example: GRIT414821 -> @GRiT414821
     let password = ''
-    const userData = user as { grit_id?: string } | null
+    const userData = user as { grit_id?: string; gritsync_email?: string } | null
     if (userData?.grit_id) {
       const gritId = userData.grit_id
       // Extract numeric part (everything after "GRIT")
       const numericPart = gritId.replace(/^GRIT/i, '')
       password = `@GRiT${numericPart}`
     }
-    
-    // GritSync accounts are now created via database triggers/functions
-    // No need to generate email client-side - rely on server-side generation
-    
+    // The Pearson Vue account uses the same login as the GritSync account.
+    // GritSync accounts are created server-side, so fall back through the
+    // sources we have available.
+    const gritsyncEmail = existingGritsync?.email || userData?.gritsync_email || typedApplication.email || ''
+    const { first_name: firstName, last_name: lastName } = typedApplication
+
     // Create Pearson Vue account if it doesn't exist (same email and password as GritSync)
     if (!existingPearson) {
       try {
-        if (password && firstName && lastName) {
+        if (password && gritsyncEmail && firstName && lastName) {
           // Generate security question answers
           const securityAnswers = generateSecurityAnswers(
             typedApplication.elementary_school || null,
@@ -3245,7 +3138,7 @@ export const processingAccountsAPI = {
             typedApplication.middle_name || null,
             typedApplication.marital_status || null
           )
-          
+
           const { error: pearsonError } = await db
             .from('processing_accounts')
             .insert({
@@ -3392,8 +3285,8 @@ export const processingAccountsAPI = {
           throw new Error('Unauthorized - You can only update accounts for your own applications')
         }
         
-        // For Gmail accounts, clients can only update status and password
-        if (isGmailAccount) {
+        // For GritSync (Gmail-based) accounts, clients can only update status and password
+        if (isGritsyncAccount) {
           const allowedFields = ['status', 'password']
           const updateKeys = Object.keys(updates)
           const disallowedFields = updateKeys.filter(key => !allowedFields.includes(key))
@@ -3737,8 +3630,8 @@ export const dashboardAPI = {
           if (completedSteps && completedSteps.length > 0) {
             // Count unique applications with completed exam steps
             // Only count apps that aren't already counted
-            const uniqueCompletedAppIds = new Set(completedSteps.map((s: any) => s.application_id))
-            uniqueCompletedAppIds.forEach((appId: string) => {
+            const uniqueCompletedAppIds = new Set<string>(completedSteps.map((s: any) => s.application_id))
+            uniqueCompletedAppIds.forEach((appId) => {
               if (!statusCompletedAppIds.has(appId)) {
                 completedCount++
               }
@@ -4056,8 +3949,7 @@ export const applicationPaymentsAPI = {
     const isGritAppId = /^AP[0-9A-Z]{12}$/.test(applicationId)
     
     let actualApplicationId = applicationId
-    let applicationOwnerId: string | undefined = undefined
-    
+
     if (isGritAppId) {
       // Look up the application by grit_app_id to get the UUID
       const { data: application, error: appError } = await db
@@ -4070,18 +3962,15 @@ export const applicationPaymentsAPI = {
         throw new Error(appError?.message || 'Application not found')
       }
       
-      // Get application owner's user_id
-      const appData = application as { user_id?: string }
-      applicationOwnerId = appData.user_id
-      
       // Check if user owns the application or is admin
+      const appData = application as { user_id?: string }
       if (appData.user_id !== currentUserId) {
         const admin = await isAdmin()
         if (!admin) {
           throw new Error('Unauthorized')
         }
       }
-      
+
       const typedApp = application as { id?: string }
       actualApplicationId = typedApp.id || ''
     } else {
@@ -4097,8 +3986,7 @@ export const applicationPaymentsAPI = {
       }
       
       const appData = application as { user_id?: string }
-      applicationOwnerId = appData.user_id
-      
+
       // Check if user owns the application or is admin
       if (appData.user_id !== currentUserId) {
         const admin = await isAdmin()
@@ -4108,12 +3996,8 @@ export const applicationPaymentsAPI = {
       }
     }
     
-    // Use application owner's user_id (not admin's user_id) so client can see the payment
-    const paymentUserId = applicationOwnerId || currentUserId
-    
-    // Calculate service fee amount for this payment type
-    const serviceFeeAmount = calculateServiceFee(paymentType)
-    
+    // Note: the application_payments table is keyed by application_id (not user_id),
+    // so the client sees the payment via the application it belongs to.
     const { data, error } = await db
       .from('application_payments')
       .insert({
@@ -4391,7 +4275,7 @@ export const applicationPaymentsAPI = {
         let receiptItems: Array<{ name: string; amount: number }> = [
           {
             name: `NCLEX Application Processing (${typedPayment.payment_type})`,
-            amount: typedPayment.amount,
+            amount: typedPayment.amount || 0,
           },
         ]
         
@@ -4446,7 +4330,7 @@ export const applicationPaymentsAPI = {
             application_id: typedPayment.application_id,
             user_id: receiptUserId,
             receipt_number: receiptNumber,
-            amount: typedPayment.amount,
+            amount: typedPayment.amount || 0,
             payment_type: typedPayment.payment_type,
             items: receiptItems,
           })
@@ -4485,7 +4369,7 @@ export const applicationPaymentsAPI = {
             const { sendPaymentReceiptEmailWithAttachments } = await import('./payment-email')
             sendPaymentReceiptEmailWithAttachments({
               receipt: receipt as any,
-              payment: payment as any,
+              payment: paymentData as any,
               application: applicationData,
               user: userData,
             }).catch((emailError) => {
@@ -4642,7 +4526,7 @@ export const applicationPaymentsAPI = {
           let receiptItems: Array<{ name: string; amount: number }> = [
             {
               name: `NCLEX Application Processing (${typedPayment.payment_type})`,
-              amount: typedPayment.amount,
+              amount: typedPayment.amount || 0,
             },
           ]
           
@@ -4690,8 +4574,8 @@ export const applicationPaymentsAPI = {
                     const total = subtotal + tax
                     
                     // If total doesn't match payment amount, adjust the last item
-                    if (Math.abs(total - typedPayment.amount) > 0.01) {
-                      const difference = typedPayment.amount - total
+                    if (Math.abs(total - (typedPayment.amount || 0)) > 0.01) {
+                      const difference = (typedPayment.amount || 0) - total
                       if (receiptItems.length > 0) {
                         receiptItems[receiptItems.length - 1].amount += difference
                       }
@@ -4712,7 +4596,7 @@ export const applicationPaymentsAPI = {
               application_id: typedPayment.application_id,
               user_id: typedPayment.user_id,
               receipt_number: receiptNumber,
-              amount: typedPayment.amount,
+              amount: typedPayment.amount || 0,
               payment_type: typedPayment.payment_type,
               items: receiptItems,
             })
@@ -4857,12 +4741,12 @@ export const applicationPaymentsAPI = {
     }
     
     // Get the updated payment
-    const { data: updatedPayment, error: selectError } = await db
+    const { data: updatedPayment } = await db
       .from('application_payments')
       .select('*')
       .eq('id', paymentId)
       .single()
-    
+
     // Invalidate payment cache
     try {
       const { invalidateApplicationCache } = await import('./query-cache')

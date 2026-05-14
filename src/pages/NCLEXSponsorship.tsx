@@ -10,11 +10,10 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
-import { sponsorshipsAPI, userDocumentsAPI } from '@/lib/api'
+import { sponsorshipsAPI } from '@/lib/api'
 import { db } from '@/lib/api-client'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { CheckCircle, Upload, FileText, AlertCircle, ArrowLeft } from 'lucide-react'
-import { Modal } from '@/components/ui/Modal'
 
 export function NCLEXSponsorship() {
   const { user } = useAuth()
@@ -44,9 +43,6 @@ export function NCLEXSponsorship() {
   const [transcript, setTranscript] = useState<File | null>(null)
   const [recommendationLetter, setRecommendationLetter] = useState<File | null>(null)
   const [uploadingFiles, setUploadingFiles] = useState(false)
-
-  // View file modal
-  const [viewingFile, setViewingFile] = useState<{ url: string; fileName: string; isImage: boolean } | null>(null)
 
   // Load user details if logged in
   useEffect(() => {
@@ -118,10 +114,7 @@ export function NCLEXSponsorship() {
 
       const { error } = await db.storage
         .from('documents')
-        .upload(filePath, compressedFile, {
-          cacheControl: '3600',
-          upsert: false,
-        })
+        .upload(filePath, compressedFile)
 
       if (error) throw new Error(error.message)
       return filePath
@@ -199,7 +192,9 @@ export function NCLEXSponsorship() {
         recommendation_letter_path: recommendationLetterPath,
       }
 
-      await sponsorshipsAPI.create(sponsorshipData)
+      // sponsorshipsAPI.create types use optional-undefined fields; this form uses nulls plus an
+      // extra how_will_this_help column. Cast to bridge.
+      await sponsorshipsAPI.create(sponsorshipData as any)
 
       showToast('Sponsorship application submitted successfully! We will review your application and get back to you soon.', 'success')
       
@@ -246,14 +241,6 @@ export function NCLEXSponsorship() {
     else if (type === 'recommendation_letter') setRecommendationLetter(file)
 
     e.target.value = ''
-  }
-
-  const getFilePreview = (file: File | null): string | null => {
-    if (!file) return null
-    if (file.type.startsWith('image/')) {
-      return URL.createObjectURL(file)
-    }
-    return null
   }
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''

@@ -9,6 +9,7 @@
 
 import { db } from './api-client'
 import type { RealtimeChannel } from '@db/db-js'
+import { trackChannelSubscribed, trackChannelUnsubscribed } from './connection-monitor'
 
 /**
  * Subscribe to multiple events on a single channel (optimized)
@@ -51,7 +52,6 @@ export function subscribeToMultipleEvents(
   
   // Track channel subscription for monitoring
   try {
-    const { trackChannelSubscribed } = require('./connection-monitor')
     trackChannelSubscribed()
   } catch {
     // Silently fail if monitoring is not available
@@ -172,7 +172,6 @@ export function unsubscribe(channel: RealtimeChannel): void {
     
     // Track channel unsubscription for monitoring
     try {
-      const { trackChannelUnsubscribed } = require('./connection-monitor')
       trackChannelUnsubscribed()
     } catch {
       // Silently fail if monitoring is not available

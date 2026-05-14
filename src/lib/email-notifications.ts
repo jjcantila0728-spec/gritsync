@@ -3,6 +3,7 @@
  * High-level functions to send specific notification emails
  */
 
+import { db } from './api-client'
 import { sendEmail } from './email-service'
 import * as EmailTemplates from './email-templates'
 
@@ -196,7 +197,7 @@ export async function sendApplicationStatusEmail(
   email: string,
   userName: string,
   applicationId: string,
-  oldStatus: string,
+  _oldStatus: string,
   newStatus: string,
   message?: string,
   additionalData?: {

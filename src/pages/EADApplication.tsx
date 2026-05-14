@@ -72,8 +72,8 @@ export function EADApplication() {
 
   // Part 1: Reason for Applying
   const [reasonForFiling, setReasonForFiling] = useState('')
-  const [hasAttorney, setHasAttorney] = useState('No') // Always "No", cannot be changed
-  const [uscisOnlineAccountNumber, setUscisOnlineAccountNumber] = useState('')
+  const [hasAttorney] = useState('No') // Always "No", cannot be changed
+  const [uscisOnlineAccountNumber] = useState('')
 
   // Part 1 & 2: Legal Name Information
   const [lastName, setLastName] = useState('')
@@ -524,13 +524,11 @@ export function EADApplication() {
       // Required fields for applications table (mapped from EAD fields)
       // These fields are required by the database schema, so we provide defaults if not filled yet
       email: emailAddress || (user?.email as string) || 'draft@temp.com', // Required field - use user email or temp
-      mobile_number: phoneNumber || mobileNumber || '000-000-0000', // Required field
       gender: sex || 'Not Specified', // Required field (maps from 'sex' to 'gender')
       marital_status: maritalStatus || 'Not Specified', // Required field
       date_of_birth: dateOfBirth ? convertToDatabaseFormat(dateOfBirth) : '1900-01-01', // Required field
       birth_place: birthPlace || 'N/A', // Required field
       city: city || 'N/A', // Required field
-      country: birthCountry || 'N/A', // Required field
       zipcode: zipCode || '00000', // Required field
       // Map street_address to required street_name and house_number
       street_name: streetAddress || 'N/A', // Required field (mapped from street_address)
@@ -641,8 +639,9 @@ export function EADApplication() {
       }
 
       if (draftApplicationId) {
-        // Update existing draft
-        await applicationsAPI.update(draftApplicationId, draftData)
+        // Update existing draft. The EAD form carries fields not present in the
+        // applications table type; cast to bridge the looser runtime contract.
+        await applicationsAPI.update(draftApplicationId, draftData as any)
         showToast('Progress saved!', 'success')
       } else {
         // Create new draft
@@ -772,7 +771,7 @@ export function EADApplication() {
         const updated = await applicationsAPI.update(draftApplicationId, {
           ...applicationData,
           status: 'pending' as const,
-        })
+        } as any)
         application = updated
       } else {
         application = await applicationsAPI.create({
@@ -1255,7 +1254,7 @@ export function EADApplication() {
           </div>
         )
 
-      case 5:
+      case 5: {
         const isInitialPermission = reasonForFiling === 'initial'
         return (
           <div className="space-y-6">
@@ -1328,6 +1327,7 @@ export function EADApplication() {
             </div>
           </div>
         )
+      }
 
       case 6:
         return (

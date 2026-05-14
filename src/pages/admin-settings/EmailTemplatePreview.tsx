@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Mail, Eye, Send } from 'lucide-react'
@@ -17,7 +17,7 @@ interface TemplateDemo {
 export function EmailTemplatePreview() {
   const { showToast } = useToast()
   const { user } = useAuth()
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  const [, setSelectedTemplate] = useState<string>('')
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [sending, setSending] = useState(false)
 

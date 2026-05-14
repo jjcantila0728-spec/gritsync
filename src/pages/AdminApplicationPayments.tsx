@@ -83,7 +83,7 @@ export function AdminApplicationPayments() {
   const [staggeredService, setStaggeredService] = useState<any>(null)
   const [fullService, setFullService] = useState<any>(null)
   const [retakeService, setRetakeService] = useState<any>(null)
-  const [loadingServices, setLoadingServices] = useState(false)
+  const [, setLoadingServices] = useState(false)
   const [missingPayments, setMissingPayments] = useState<Array<{ type: 'step1' | 'step2' | 'full'; label: string; amount: number; reason: string }>>([])
   
   // Component for proof of payment thumbnail preview
@@ -218,7 +218,7 @@ export function AdminApplicationPayments() {
               alt="Proof of Payment" 
               className="w-full h-full object-contain"
               crossOrigin="anonymous"
-              onError={async (e) => {
+              onError={async () => {
                 console.error('Image failed to load:', thumbnailUrl, 'File path:', filePath)
                 // Try to fetch as blob to see if it's a CORS issue
                 try {
@@ -1465,7 +1465,7 @@ export function AdminApplicationPayments() {
                             transition: isDragging ? 'none' : 'transform 0.1s ease-out'
                           }}
                           draggable={false}
-                          onError={async (e) => {
+                          onError={async () => {
                             console.error('Modal image failed to load:', viewingProof.url)
                             // Try to fetch as blob
                             try {

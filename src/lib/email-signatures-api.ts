@@ -54,6 +54,7 @@ export interface BusinessLogo {
   usage_count: number;
   last_used_at?: string;
   alt_text?: string;
+  associated_email?: string | null;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -311,9 +312,11 @@ export async function uploadLogo(
   const filePath = `${logoType}/${fileName}`;
 
   // Upload file to storage
-  const { error: uploadError } = await db.storage
+  // Note: api-client's storage.upload type only declares (path, file); the options
+  // object is accepted at runtime, so we cast to call it with upload options.
+  const { error: uploadError } = await (db.storage
     .from('email-logos')
-    .upload(filePath, file, {
+    .upload as (path: string, file: File, options?: { cacheControl?: string; upsert?: boolean }) => Promise<{ error: any }>)(filePath, file, {
       cacheControl: '3600',
       upsert: false,
     });

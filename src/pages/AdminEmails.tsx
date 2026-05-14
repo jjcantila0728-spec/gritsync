@@ -23,46 +23,30 @@ import {
   Filter, 
   Download,
   Trash2,
-  Eye,
   Clock,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   Activity,
   Plus,
   X,
   FileText,
-  Type,
   Edit,
-  Copy,
   Save,
   EyeOff,
-  Code,
-  Monitor,
-  Smartphone,
   Star,
   PenTool,
   Settings,
   Upload,
-  Image as ImageIcon,
-  File as FileIcon,
-  MoreVertical,
   Paperclip,
-  Minimize2,
-  Reply,
-  ReplyAll,
-  Forward,
-  Printer,
-  ExternalLink,
   FlaskConical,
   Users,
   User,
 } from 'lucide-react'
 import { emailLogsAPI, sendEmailWithLogging, EmailLog, EmailStats } from '@/lib/email-api'
 import { Loading } from '@/components/ui/Loading'
-import { cn, sanitizeHTML } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { emailTemplatesAPI, EmailTemplate } from '@/lib/email-templates-api'
+import { emailTemplatesAPI } from '@/lib/email-templates-api'
 import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
@@ -72,7 +56,7 @@ import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, ge
 
 // Import types and utilities
 import type { Tab, EnrichedReceivedEmail } from './AdminEmails/types'
-import { getEmailPreview, getEmailLogo, getAvatarForEmail, exportToCSV as exportToCSVUtil } from './AdminEmails/utils/emailHelpers'
+import { getEmailPreview, exportToCSV as exportToCSVUtil } from './AdminEmails/utils/emailHelpers'
 
 // Import extracted components
 import { EmailTemplatesManager } from './AdminEmails/components/EmailTemplatesManager'
@@ -82,7 +66,6 @@ import { EmailAnalyticsTab } from './AdminEmails/components/EmailAnalyticsTab'
 import { CampaignsTab } from './AdminEmails/components/CampaignsTab'
 import { SubscribersTab } from './AdminEmails/components/SubscribersTab'
 import { ABTestingTab } from './AdminEmails/components/ABTestingTab'
-import { EmailListWithPreview } from './AdminEmails/components/EmailListWithPreview'
 import { EmailDetailModal } from '@/components/email/EmailDetailModal'
 import { ComposeEmailModal } from '@/components/email/ComposeEmailModal'
 
@@ -141,10 +124,9 @@ export function AdminEmails() {
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [selectedEmail, setSelectedEmail] = useState<EmailLog | null>(null)
   const [selectedReceivedEmail, setSelectedReceivedEmail] = useState<any | null>(null)
-  const [selectedSentEmailPreview, setSelectedSentEmailPreview] = useState<EmailLog | null>(null)
-  const [selectedInboxEmailPreview, setSelectedInboxEmailPreview] = useState<EnrichedReceivedEmail | null>(null)
+  const [, setSelectedSentEmailPreview] = useState<EmailLog | null>(null)
+  const [, setSelectedInboxEmailPreview] = useState<EnrichedReceivedEmail | null>(null)
   const [inboxHasMore, setInboxHasMore] = useState(false)
   
   // Selection state for bulk actions
@@ -159,7 +141,7 @@ export function AdminEmails() {
   const [showEmailDetail, setShowEmailDetail] = useState(false)
   
   // Delete confirmation modal
-  const [deleteModal, setDeleteModal] = useState<{
+  const [, setDeleteModal] = useState<{
     isOpen: boolean
     type: 'sent' | 'inbox'
     emailId: string | null
@@ -173,12 +155,12 @@ export function AdminEmails() {
 
   // Email signatures state
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
-  const [editingSignature, setEditingSignature] = useState<Partial<EmailSignature> | null>(null)
-  const [showSignatureEditor, setShowSignatureEditor] = useState(false)
+  const [, setEditingSignature] = useState<Partial<EmailSignature> | null>(null)
+  const [, setShowSignatureEditor] = useState(false)
 
   // Email setup state
   const [businessLogos, setBusinessLogos] = useState<BusinessLogo[]>([])
-  const [showLogoUpload, setShowLogoUpload] = useState(false)
+  const [, setShowLogoUpload] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [editingEmail, setEditingEmail] = useState<any | null>(null)
   const [showEmailEditor, setShowEmailEditor] = useState(false)
@@ -218,16 +200,15 @@ export function AdminEmails() {
   })
   const [htmlBody, setHtmlBody] = useState('')
   const [sending, setSending] = useState(false)
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [, setShowAdvancedOptions] = useState(false)
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
   const [showSignatureMenu, setShowSignatureMenu] = useState(false)
-  const [isMinimized, setIsMinimized] = useState(false)
-  const [attachments, setAttachments] = useState<File[]>([])
+  const [, setIsMinimized] = useState(false)
+  const [, setAttachments] = useState<File[]>([])
   const [emailViewMode, setEmailViewMode] = useState<'html' | 'text' | 'preview'>('html')
   const templateMenuRef = useRef<HTMLDivElement>(null)
   const signatureMenuRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
+
   // Email addresses
   const [adminEmailAddresses, setAdminEmailAddresses] = useState<any[]>([])
   const [_loadingAddresses, setLoadingAddresses] = useState(false)
@@ -967,36 +948,6 @@ export function AdminEmails() {
     }
   }
 
-  const confirmDelete = async () => {
-    if (!deleteModal.emailId) return
-
-    try {
-      if (deleteModal.type === 'sent') {
-        await emailLogsAPI.delete(deleteModal.emailId)
-        setSelectedSentIds(prev => {
-          const next = new Set(prev)
-          next.delete(deleteModal.emailId!)
-          return next
-        })
-        loadData()
-      } else {
-        await resendInboxAPI.delete(deleteModal.emailId)
-        setSelectedInboxIds(prev => {
-          const next = new Set(prev)
-          next.delete(deleteModal.emailId!)
-          return next
-        })
-        loadInboxEmails()
-      }
-      
-      setDeleteModal({ isOpen: false, type: 'sent', emailId: null, emailSubject: '' })
-      showToast('Email deleted successfully', 'success')
-    } catch (error) {
-      console.error('Error deleting email:', error)
-      showToast('Failed to delete email', 'error')
-    }
-  }
-
   const handleBulkDelete = async () => {
     const selectedIds = activeTab === 'sent' ? selectedSentIds : selectedInboxIds
     
@@ -1079,31 +1030,6 @@ export function AdminEmails() {
   const handleEditSignature = (signature: EmailSignature) => {
     setEditingSignature(signature)
     setShowSignatureEditor(true)
-  }
-
-  const handleSaveSignature = async () => {
-    if (!editingSignature) return
-
-    if (!editingSignature.name || !editingSignature.signature_html) {
-      showToast('Please fill in name and HTML content', 'warning')
-      return
-    }
-
-    try {
-      if (editingSignature.id) {
-        await emailSignaturesAPI.update(editingSignature.id, editingSignature)
-        showToast('Signature updated successfully', 'success')
-      } else {
-        await emailSignaturesAPI.create(editingSignature)
-        showToast('Signature created successfully', 'success')
-      }
-      setShowSignatureEditor(false)
-      setEditingSignature(null)
-      loadSignaturesData()
-    } catch (error) {
-      console.error('Error saving signature:', error)
-      showToast('Failed to save signature', 'error')
-    }
   }
 
   const handleDeleteSignature = async (id: string, name: string) => {
@@ -1421,38 +1347,6 @@ export function AdminEmails() {
     }
   }
 
-  const handleDeleteAvatar = async (logoId: string, logoFileName: string) => {
-    // Check if this avatar is currently assigned to the editing email
-    const isCurrentlyAssigned = editingEmail && getEmailLogoLocal(editingEmail)?.id === logoId
-    
-    if (!confirm(`Are you sure you want to delete "${logoFileName}"?${isCurrentlyAssigned ? ' This avatar is currently assigned to this email address.' : ''}`)) {
-      return
-    }
-
-    try {
-      await businessLogosAPI.delete(logoId)
-      showToast('Avatar deleted successfully', 'success')
-      
-      // If the deleted avatar was assigned to the editing email, remove it
-      if (isCurrentlyAssigned && editingEmail) {
-        await handleAssignLogo(editingEmail.id, null)
-        setEditingEmail({
-          ...editingEmail,
-          metadata: {
-            ...(editingEmail.metadata || {}),
-            logo_id: null,
-          },
-        })
-      }
-      
-      // Reload email setup data to refresh the avatar list
-      loadEmailSetupData()
-    } catch (error: any) {
-      console.error('Error deleting avatar:', error)
-      showToast(error.message || 'Failed to delete avatar', 'error')
-    }
-  }
-
   // Helper functions are now imported from utils
   // Note: getEmailLogo and getAvatarForEmail need businessLogos and adminEmailAddresses as parameters
   const getEmailLogoLocal = (email: any): BusinessLogo | null => {
@@ -1577,58 +1471,6 @@ export function AdminEmails() {
               if (signedUrl) {
                 setImgSrc(signedUrl)
                 setImgError(false)
-              } else {
-                setImgError(true)
-              }
-            } catch {
-              setImgError(true)
-            }
-          } else {
-            setImgError(true)
-          }
-        }}
-      />
-    )
-  }
-
-  // Avatar Thumbnail Component for selection grid
-  const AvatarThumbnail = ({ logo }: { logo: BusinessLogo }) => {
-    const [imgSrc, setImgSrc] = useState<string | null>(logo.public_url || null)
-    const [imgError, setImgError] = useState(false)
-    
-    useEffect(() => {
-      // If no public URL, try signed URL
-      if (logo.storage_path && !imgSrc && !imgError) {
-        getSignedFileUrl(logo.storage_path, 3600, true)
-          .then(url => {
-            if (url) {
-              setImgSrc(url)
-            } else {
-              setImgError(true)
-            }
-          })
-          .catch(() => {
-            setImgError(true)
-          })
-      }
-    }, [logo.storage_path, imgSrc, imgError])
-    
-    if (imgError || !imgSrc) {
-      return <div className="text-xs text-gray-400">-</div>
-    }
-    
-    return (
-      <img
-        src={imgSrc}
-        alt={logo.alt_text || logo.file_name}
-        className="w-full h-full object-cover rounded-full"
-        onError={async () => {
-          // Try signed URL if public URL fails
-          if (logo.storage_path && !imgError) {
-            try {
-              const signedUrl = await getSignedFileUrl(logo.storage_path, 3600, true)
-              if (signedUrl) {
-                setImgSrc(signedUrl)
               } else {
                 setImgError(true)
               }
@@ -1828,15 +1670,6 @@ export function AdminEmails() {
     } finally {
       setSending(false)
     }
-  }
-
-  const handleFileAdd = (files: File[]) => {
-    const newFiles = Array.from(files)
-    setAttachments(prev => [...prev, ...newFiles])
-  }
-
-  const handleFileRemove = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
   const clearFilters = () => {
@@ -3419,7 +3252,7 @@ export function AdminEmails() {
                                 src={uploadedAvatarPreview}
                                 alt="Uploaded avatar"
                                 className="h-8 w-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
-                                onError={(e) => {
+                                onError={() => {
                                   // If preview fails, clear it
                                   URL.revokeObjectURL(uploadedAvatarPreview)
                                   setUploadedAvatarPreview(null)
@@ -3539,7 +3372,7 @@ export function AdminEmails() {
                 setComposing(true)
               } : undefined}
               onDelete={selectedInboxEmail ? () => {
-                handleDeleteInboxEmail(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
+                handleDeleteInbox(selectedInboxEmail.id, selectedInboxEmail.subject || '(no subject)')
                 setShowEmailDetail(false)
               } : undefined}
               getAvatarInitial={getInitials}

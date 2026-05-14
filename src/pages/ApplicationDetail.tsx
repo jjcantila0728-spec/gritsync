@@ -15,9 +15,7 @@ import { db } from '@/lib/api-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
 import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import { coverLetterTemplate } from '@/templates/cover-letter-template'
 import { stripePromise } from '@/lib/stripe'
 import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
@@ -723,64 +721,6 @@ export function ApplicationDetail() {
       }
       
       showToast(errorMessage, 'error')
-    } finally {
-      setProcessingPayments(false)
-    }
-  }
-
-  async function handlePaymentSuccess(
-    paymentIntentId: string, 
-    paymentMethod?: 'card' | 'gcash' | 'mobile_banking',
-    gcashDetails?: { number: string; reference: string },
-    proofOfPaymentFile?: File
-  ) {
-    if (!selectedPayment) return
-
-    setProcessingPayments(true)
-    try {
-      // Map payment method to API format
-      let apiPaymentMethod: 'stripe' | 'gcash' | 'mobile_banking' = 'stripe'
-      if (paymentMethod === 'gcash') {
-        apiPaymentMethod = 'gcash'
-      } else if (paymentMethod === 'mobile_banking') {
-        apiPaymentMethod = 'mobile_banking'
-      }
-
-      // For mobile banking, use the paymentIntentId as a placeholder
-      const stripePaymentIntentId = (paymentMethod === 'card' && paymentIntentId) ? paymentIntentId : undefined
-
-      await applicationPaymentsAPI.complete(
-        selectedPayment.id, 
-        undefined, 
-        stripePaymentIntentId,
-        apiPaymentMethod,
-        gcashDetails,
-        proofOfPaymentFile
-      )
-      
-      // Fetch receipt separately if payment is completed
-      try {
-        const receipt = await applicationPaymentsAPI.getReceipt(selectedPayment.id)
-        setReceipts({ ...receipts, [selectedPayment.id]: receipt })
-      } catch {
-        // Receipt might not be generated yet, that's okay
-      }
-      
-      if (paymentMethod === 'gcash') {
-        showToast('GCash payment submitted! Your payment will be verified manually. You will receive a confirmation once verified.', 'success')
-      } else if (paymentMethod === 'mobile_banking') {
-        showToast('Mobile banking payment submitted! Your proof of payment has been uploaded. An admin will review and approve your payment. You will receive a confirmation once approved.', 'success')
-      } else {
-        showToast('Payment completed successfully! Receipt generated.', 'success')
-      }
-      
-      setShowPaymentModal(false)
-      setSelectedPayment(null)
-      setClientSecret(null)
-      setPaymentIntentId(null)
-      await fetchPayments()
-    } catch (error: any) {
-      showToast(error.message || 'Failed to complete payment', 'error')
     } finally {
       setProcessingPayments(false)
     }
@@ -2133,79 +2073,6 @@ export function ApplicationDetail() {
     }
   }
 
-  async function generateCoverLetter(): Promise<Blob> {
-    try {
-      if (!application) {
-        throw new Error('Application data is required')
-      }
-
-      showToast('Generating cover letter...', 'info')
-
-      // Get forms verified data for service center info
-      const formsVerifiedData = getStepData('ead_forms_verified')
-
-      // Call edge function to generate cover letter
-      const { data, error } = await db.functions.invoke('generate-cover-letter', {
-        body: {
-          applicationData: {
-            first_name: application.first_name,
-            middle_name: application.middle_name,
-            last_name: application.last_name,
-            application_type: application.application_type,
-            house_number: application.house_number,
-            street_address: application.street_address,
-            street_name: application.street_name,
-            apartment_suite: application.apartment_suite,
-            apartment: application.apartment,
-            suite: application.suite,
-            floor: application.floor,
-            city: application.city,
-            state: application.state,
-            province: application.province,
-            zip_code: application.zip_code,
-            zipcode: application.zipcode,
-            country: application.country,
-            mobile_number: application.mobile_number,
-            email: application.email,
-            spouse_name: application.spouse_name,
-            spouse_first_name: application.spouse_first_name,
-            spouse_middle_name: application.spouse_middle_name,
-            spouse_last_name: application.spouse_last_name,
-          },
-          formsVerifiedData: formsVerifiedData || undefined,
-        },
-      })
-
-      if (error) {
-        console.error('Edge function error:', error)
-        throw new Error(error.message || 'Failed to generate cover letter')
-      }
-
-      if (!data || !data.success || !data.pdf) {
-        throw new Error(data?.error || 'Failed to generate cover letter: Invalid response')
-      }
-
-      // Convert base64 PDF back to Blob
-      const pdfBase64 = data.pdf
-      const binaryString = atob(pdfBase64)
-      const pdfBytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        pdfBytes[i] = binaryString.charCodeAt(i)
-      }
-
-      showToast('Cover letter compiled successfully!', 'success')
-      return new Blob([pdfBytes], { type: 'application/pdf' })
-    } catch (error) {
-      handleErrorSilently(error, { operation: 'generateCoverLetter', applicationId: id })
-      
-      // Show user-friendly error message
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate cover letter'
-      showToast(`Error: ${errorMessage}`, 'error')
-      
-      throw error
-    }
-  }
-
   // Calculate completion percentage based on timeline steps (matching tracking calculation)
   function calculateCompletionPercentage(): number {
     if (!application) {
@@ -2484,98 +2351,6 @@ export function ApplicationDetail() {
       setProcessingAccounts([])
     } finally {
       setLoadingAccounts(false)
-    }
-  }
-
-  async function handleSaveAccount() {
-    if (!application?.id) {
-      showToast('Application ID is required', 'error')
-      return
-    }
-
-    // Validate based on account type
-    if (accountForm.account_type === 'custom') {
-      if (!accountForm.name || !accountForm.email || !accountForm.password) {
-        showToast('Please fill in Name, Email/Username, and Password', 'error')
-        return
-      }
-    } else {
-      if (!accountForm.email || !accountForm.password) {
-        showToast('Please fill in all required fields', 'error')
-        return
-      }
-    }
-
-    setSavingAccount(true)
-    try {
-      if (!application?.id) {
-        throw new Error('Application ID is required')
-      }
-
-      // For editing, preserve the original account type
-      // For creating, non-admin users can only create custom accounts
-      const accountType = editingAccount 
-        ? accountForm.account_type  // When editing, keep the original type
-        : (!isAdmin() ? 'custom' : accountForm.account_type)  // When creating, non-admins can only create custom
-      
-      // Check if client is editing a Gmail account (clients can only update status and password)
-      const isClientEditingGmail = editingAccount && accountType === 'gmail' && !isAdmin()
-      
-      const accountData: any = {
-        account_type: accountType,
-        email: accountForm.email,
-        password: accountForm.password,
-        status: accountForm.status || 'inactive'
-      }
-
-      // For clients editing Gmail accounts, only send status and password
-      if (isClientEditingGmail) {
-        const clientAccountData: any = {
-          status: accountForm.status || 'inactive',
-          password: accountForm.password
-        }
-        await processingAccountsAPI.update(editingAccount.id, clientAccountData)
-      } else {
-        // Add name and link for custom accounts
-        if (accountType === 'custom') {
-          accountData.name = accountForm.name
-          accountData.link = accountForm.link || null
-        }
-
-        // Only include security questions for pearson_vue accounts
-        if (accountType === 'pearson_vue') {
-          accountData.security_question_1 = accountForm.security_question_1 || null
-          accountData.security_question_2 = accountForm.security_question_2 || null
-          accountData.security_question_3 = accountForm.security_question_3 || null
-        }
-
-        if (editingAccount) {
-          await processingAccountsAPI.update(editingAccount.id, accountData)
-        } else {
-          await processingAccountsAPI.create(application.id, accountData)
-        }
-      }
-
-      showToast(editingAccount ? 'Account updated successfully' : 'Account added successfully', 'success')
-      setShowAccountModal(false)
-      setEditingAccount(null)
-      setIsUserForm(false)
-      setAccountForm({ 
-        account_type: 'gmail', 
-        name: '',
-        link: '',
-        email: '', 
-        password: '',
-        security_question_1: '',
-        security_question_2: '',
-        security_question_3: '',
-        status: 'active'
-      })
-      fetchProcessingAccounts()
-    } catch (error: any) {
-      showToast(error.message || 'Failed to save account', 'error')
-    } finally {
-      setSavingAccount(false)
     }
   }
 
@@ -3088,7 +2863,6 @@ export function ApplicationDetail() {
                               verifyUSCISForms={verifyUSCISForms}
                               generateG1145Form={generateG1145Form}
                               generateI765Form={generateI765Form}
-                              generateCoverLetter={generateCoverLetter}
                               viewingPdfUrl={viewingPdfUrl}
                               viewingPdfName={viewingPdfName}
                               showPdfModal={showPdfModal}
@@ -3215,7 +2989,7 @@ export function ApplicationDetail() {
                                 // Check if all sub-steps are completed by fetching fresh data from API
                                 if (application?.id) {
                                   const steps = await timelineStepsAPI.getByApplication(application.id)
-                                  const stepsMap = new Map((steps || []).map((s: any) => [s.step_key, s]))
+                                  const stepsMap = new Map<string, any>((steps || []).map((s: any) => [s.step_key, s] as [string, any]))
                                   
                                   const appSubmitted = stepsMap.get('ead_application_submitted')?.status === 'completed'
                                   const receiptReceived = stepsMap.get('ead_receipt_received')?.status === 'completed'
@@ -3265,7 +3039,7 @@ export function ApplicationDetail() {
                                 // Check if all sub-steps are completed by fetching fresh data from API
                                 if (application?.id) {
                                   const steps = await timelineStepsAPI.getByApplication(application.id)
-                                  const stepsMap = new Map((steps || []).map((s: any) => [s.step_key, s]))
+                                  const stepsMap = new Map<string, any>((steps || []).map((s: any) => [s.step_key, s] as [string, any]))
                                   
                                   const cardProduction = stepsMap.get('ead_card_production')?.status === 'completed'
                                   const cardMailed = stepsMap.get('ead_card_mailed')?.status === 'completed'

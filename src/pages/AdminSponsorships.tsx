@@ -127,7 +127,8 @@ export function AdminSponsorships() {
 
     setUpdatingStatus(true)
     try {
-      await sponsorshipsAPI.updateStatus(selectedSponsorship.id, newStatus, adminNotes || undefined)
+      // The sponsorshipsAPI status union differs slightly from this page's; cast to avoid the mismatch.
+      await sponsorshipsAPI.update(selectedSponsorship.id, { status: newStatus as any, admin_notes: adminNotes || undefined })
       showToast('Sponsorship status updated successfully', 'success')
       setShowStatusModal(false)
       await fetchSponsorships()

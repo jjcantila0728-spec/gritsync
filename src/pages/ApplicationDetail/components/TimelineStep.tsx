@@ -10,7 +10,6 @@ import { useErrorHandler } from '@/lib/use-error-handler'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { PDFDocument } from 'pdf-lib'
-import { employerVerificationEmailTemplate } from '@/templates/employer-verification-email-template'
 import { getRenderedTemplate } from '@/lib/email-template-service'
 import { SignatureModal } from '@/components/SignatureModal'
 import { PDFReviewModal } from '@/components/PDFReviewModal'
@@ -39,7 +38,6 @@ export function TimelineStep({
   verifyUSCISForms,
   generateG1145Form,
   generateI765Form,
-  generateCoverLetter,
   viewingPdfUrl,
   viewingPdfName,
   showPdfModal,
@@ -66,7 +64,6 @@ export function TimelineStep({
   const [eadCardTrackingNumber, setEadCardTrackingNumber] = useState<string>('')
   const [savingEadData, setSavingEadData] = useState(false)
   const [generatingEmail, setGeneratingEmail] = useState(false)
-  const [compilingDocuments, setCompilingDocuments] = useState(false)
   const [generatingFinalPackage, setGeneratingFinalPackage] = useState(false)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
   const [signatureDocumentName, setSignatureDocumentName] = useState<string>('')
@@ -238,7 +235,7 @@ export function TimelineStep({
       safeSet('MHC2[0].Page2[0].ApplicantName[0].Answer[0]', fullName)
 
       const filledBytes = await pdfDoc.save()
-      const blob = new Blob([filledBytes], { type: 'application/pdf' })
+      const blob = new Blob([new Uint8Array(filledBytes)], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -749,40 +746,6 @@ export function TimelineStep({
                             >
                               <FileText className="h-3 w-3 mr-1" />
                               Open I-765
-                            </Button>
-                            {subStep.data?.generated_at && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                Generated: {formatDate(subStep.data.generated_at)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {subStep.key === 'ead_cover_letter_generated' && subStep.completed && isAdmin && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  if (!generateCoverLetter) return
-                                  const pdfBlob = await generateCoverLetter()
-                                  const url = URL.createObjectURL(pdfBlob)
-                                  
-                                  // Open PDF in modal
-                                  if (setViewingPdfUrl && setViewingPdfName && setShowPdfModal) {
-                                    setViewingPdfUrl(url)
-                                    setViewingPdfName(`Cover_Letter_${application?.first_name || 'Form'}_${application?.last_name || ''}_${new Date().toISOString().split('T')[0]}.pdf`)
-                                    setShowPdfModal(true)
-                                  }
-                                } catch (error) {
-                                  handleErrorSilently(error, { operation: 'openCoverLetter', applicationId: application?.id })
-                                  if (showToast) showToast('Failed to open cover letter', 'error')
-                                }
-                              }}
-                              size="sm"
-                              variant="outline"
-                              className="text-xs"
-                            >
-                              <FileText className="h-3 w-3 mr-1" />
-                              Open Cover Letter
                             </Button>
                             {subStep.data?.generated_at && (
                               <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -1473,14 +1436,11 @@ export function TimelineStep({
                                     const dateStr = new Date().toISOString().split('T')[0]
                                     const fileName = `Final_Application_Package_${clientName}_${dateStr}.pdf`
                                     const filePath = `${application.user_id}/final_package.pdf`
-                                    
+                                    const finalPdfFile = new File([new Uint8Array(finalPdfBytes)], fileName, { type: 'application/pdf' })
+
                                     const { error: uploadError } = await db.storage
                                       .from('documents')
-                                      .upload(filePath, finalPdfBytes, {
-                                        contentType: 'application/pdf',
-                                        cacheControl: '3600',
-                                        upsert: true, // Overwrite if exists
-                                      })
+                                      .upload(filePath, finalPdfFile)
                                     
                                     if (uploadError) {
                                       throw new Error(`Failed to upload final package: ${uploadError.message}`)
@@ -1556,10 +1516,7 @@ export function TimelineStep({
                                       const filePath = `${application.user_id}/final_package.pdf`
                                       const { error: uploadError } = await db.storage
                                         .from('documents')
-                                        .upload(filePath, pdfFile, {
-                                          cacheControl: '3600',
-                                          upsert: true, // Overwrite if exists
-                                        })
+                                        .upload(filePath, pdfFile)
                                       
                                       if (uploadError) {
                                         handleErrorSilently(uploadError, { operation: 'uploadFinalPackage', applicationId: application?.id })
@@ -2203,7 +2160,7 @@ export function TimelineStep({
                                   } catch (error) {
                                     handleErrorSilently(error, { operation: 'updateLetterSubmittedDate', applicationId: application?.id })
                                   }
-                                } else if (dateValue && onUpdateSubStep && application?.id) {
+                                } else if (!dateValue && onUpdateSubStep && application?.id) {
                                   // If date is cleared, mark as pending
                                   await onUpdateSubStep('letter_submitted', 'pending', {})
                                 }
@@ -2235,7 +2192,7 @@ export function TimelineStep({
                                   } catch (error) {
                                     handleErrorSilently(error, { operation: 'updateMandatoryCoursesDate', applicationId: application?.id })
                                   }
-                                } else if (dateValue && onUpdateSubStep && application?.id) {
+                                } else if (!dateValue && onUpdateSubStep && application?.id) {
                                   await onUpdateSubStep('mandatory_courses', 'pending', {})
                                 }
                               }}
@@ -2322,7 +2279,7 @@ export function TimelineStep({
                                   } catch (error) {
                                     handleErrorSilently(error, { operation: 'updateNCLEXEligibilityApprovedDate', applicationId: application?.id })
                                   }
-                                } else if (dateValue && onUpdateSubStep && application?.id) {
+                                } else if (!dateValue && onUpdateSubStep && application?.id) {
                                   await onUpdateSubStep('nclex_eligibility_approved', 'pending', {})
                                 }
                               }}
@@ -2575,7 +2532,7 @@ export function TimelineStep({
                                   } catch (error) {
                                     handleErrorSilently(error, { operation: 'updatePearsonAccountCreatedDate', applicationId: application?.id })
                                   }
-                                } else if (dateValue && onUpdateSubStep && application?.id) {
+                                } else if (!dateValue && onUpdateSubStep && application?.id) {
                                   await onUpdateSubStep('pearson_account_created', 'pending', {})
                                 }
                               }}
@@ -2637,7 +2594,7 @@ export function TimelineStep({
                                   } catch (error) {
                                     handleErrorSilently(error, { operation: 'updateOfficialDocumentsDate', applicationId: application?.id })
                                   }
-                                } else if (dateValue && onUpdateSubStep && application?.id) {
+                                } else if (!dateValue && onUpdateSubStep && application?.id) {
                                   // If date is cleared, mark as pending
                                   await onUpdateSubStep('official_docs_submitted', 'pending', {})
                                 }
@@ -3161,172 +3118,6 @@ export function TimelineStep({
                               {subStep.actionButtonLabel || 'Generate I-765'}
                             </Button>
                           </div>
-                        )}
-                        {subStep.hasActionButton && subStep.key === 'ead_cover_letter_generated' && isAdmin && (
-                          <Button
-                            onClick={async () => {
-                              if (!onUpdateSubStep || !application?.id || !application?.user_id) return
-                              try {
-                                if (showToast) showToast('Generating cover letter...', 'info')
-                                if (!generateCoverLetter) {
-                                  if (showToast) showToast('Generation function not available', 'error')
-                                  return
-                                }
-                                const pdfBlob = await generateCoverLetter()
-                                
-                                // Create descriptive filename: Cover Letter - [Client Name] - [Date].pdf
-                                const clientName = `${application?.first_name || ''}_${application?.last_name || ''}`.trim() || 'Client'
-                                const dateStr = new Date().toISOString().split('T')[0]
-                                const fileName = `Cover Letter - ${clientName} - ${dateStr}.pdf`
-                                const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' })
-                                
-                                // Save to documents/additional with unique document type to prevent overwriting
-                                await userDocumentsAPI.uploadForUser(application.user_id, 'additional_cover_letter', pdfFile)
-                                
-                                // Also download the PDF
-                                const url = URL.createObjectURL(pdfBlob)
-                                const link = document.createElement('a')
-                                link.href = url
-                                link.download = fileName
-                                document.body.appendChild(link)
-                                link.click()
-                                document.body.removeChild(link)
-                                URL.revokeObjectURL(url)
-                                
-                                // Save to documents/additional (this creates the document entry automatically)
-                                
-                                await onUpdateSubStep('ead_cover_letter_generated', 'completed', {
-                                  date: new Date().toISOString(),
-                                  generated_at: new Date().toISOString(),
-                                  file_name: fileName,
-                                  saved_to_additional: true
-                                })
-                                if (showToast) showToast('Cover letter generated, saved to Additional Documents, and downloaded successfully', 'success')
-                              } catch (error) {
-                                handleErrorSilently(error, { operation: 'generateCoverLetter', applicationId: application?.id })
-                                if (showToast) showToast('Failed to generate cover letter', 'error')
-                              }
-                            }}
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {subStep.actionButtonLabel || 'Generate Cover Letter'}
-                          </Button>
-                        )}
-                        {subStep.hasActionButton && subStep.key === 'ead_documents_compiled' && isAdmin && (
-                          <Button
-                            onClick={async () => {
-                              if (!onUpdateSubStep || !application?.id) return
-                              if (compilingDocuments) return // Prevent multiple clicks
-                              try {
-                                setCompilingDocuments(true)
-                                if (showToast) showToast('Merging all documents...', 'info')
-                                
-                                // Call merge-documents edge function
-                                const { data, error } = await db.functions.invoke('merge-documents', {
-                                  body: {
-                                    application_id: application.id,
-                                  },
-                                })
-
-                                if (error) {
-                                  console.error('Merge documents error:', error)
-                                  throw new Error(error.message || 'Failed to merge documents')
-                                }
-
-                                if (!data || !data.success) {
-                                  throw new Error(data?.error || 'Failed to merge documents: Invalid response')
-                                }
-
-                                // Show success message with details
-                                const processedCount = data.processed_documents?.length || 0
-                                const skippedCount = data.skipped_documents?.length || 0
-                                const fileSizeMB = data.file_size_mb || 0
-                                
-                                let successMessage = `Successfully merged ${processedCount} document${processedCount !== 1 ? 's' : ''}`
-                                if (skippedCount > 0) {
-                                  successMessage += ` (${skippedCount} skipped)`
-                                }
-                                successMessage += `. File size: ${fileSizeMB.toFixed(2)}MB`
-                                
-                                if (showToast) showToast(successMessage, 'success')
-
-                                // Update sub-step with merge information
-                                if (onUpdateSubStep) {
-                                  await onUpdateSubStep('ead_documents_compiled', 'completed', {
-                                    merged_at: new Date().toISOString(),
-                                    file_path: data.file_path,
-                                    file_name: data.file_name,
-                                    file_size: data.file_size,
-                                    file_size_mb: data.file_size_mb,
-                                    processed_documents: data.processed_documents,
-                                    skipped_documents: data.skipped_documents,
-                                    signed_url: data.signed_url,
-                                  })
-                                }
-
-                                // If there's a signed URL, optionally open it
-                                if (data.signed_url && setViewingPdfUrl && setViewingPdfName && setShowPdfModal) {
-                                  setViewingPdfUrl(data.signed_url)
-                                  setViewingPdfName(data.file_name || 'Merged Documents.pdf')
-                                  setShowPdfModal(true)
-                                }
-                              } catch (error: any) {
-                                handleErrorSilently(error, { operation: 'compileDocuments', applicationId: application?.id })
-                                
-                                // Provide more specific error messages
-                                const errorMessage = error instanceof Error ? error.message : String(error)
-                                
-                                if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
-                                  if (showToast) {
-                                    showToast(
-                                      'Merging is taking longer than expected. The job may still be processing on the server. Please check back in a few moments.',
-                                      'warning'
-                                    )
-                                  }
-                                } else if (errorMessage.includes('No documents') || errorMessage.includes('documents found')) {
-                                  if (showToast) {
-                                    showToast(
-                                      'No documents found to merge. Please ensure documents are uploaded before merging.',
-                                      'error'
-                                    )
-                                  }
-                                } else if (errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
-                                  if (showToast) {
-                                    showToast(
-                                      'Network error occurred. Please check your connection and try again.',
-                                      'error'
-                                    )
-                                  }
-                                } else {
-                                  // Generic error message
-                                  if (showToast) {
-                                    showToast(
-                                      errorMessage || 'Failed to merge documents. Please try again.',
-                                      'error'
-                                    )
-                                  }
-                                }
-                              } finally {
-                                // Always reset compiling state, even on error
-                                setCompilingDocuments(false)
-                              }
-                            }}
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            disabled={compilingDocuments}
-                          >
-                            {compilingDocuments ? (
-                              <>
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Merging...
-                              </>
-                            ) : (
-                              subStep.actionButtonLabel || 'Merge All Docs'
-                            )}
-                          </Button>
                         )}
                         {/* Request via Email button for employer verification letter */}
                         {subStep.key === 'ead_employer_verification_requested' && user && navigate && (
@@ -4283,10 +4074,7 @@ export function TimelineStep({
                 // Upload to Supabase storage - admins can upload to any user's folder (Policy 5)
                 const { error: signatureUploadError } = await db.storage
                   .from('documents')
-                  .upload(signatureFilePath, signatureFile, {
-                    cacheControl: '3600',
-                    upsert: true, // Allow overwriting existing signatures
-                  })
+                  .upload(signatureFilePath, signatureFile)
                 
                 if (signatureUploadError) {
                   // Log error but don't block signing process
@@ -4374,10 +4162,7 @@ export function TimelineStep({
                 // Upload to Supabase storage
                 const { error: signatureUploadError } = await db.storage
                   .from('documents')
-                  .upload(signatureFilePath, signatureFile, {
-                    cacheControl: '3600',
-                    upsert: true,
-                  })
+                  .upload(signatureFilePath, signatureFile)
                 
                 if (signatureUploadError) {
                   console.error('Failed to upload client signature image:', signatureUploadError)

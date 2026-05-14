@@ -593,10 +593,6 @@ function NotificationsManagementTab({ notifications, loading, onToggle, onDelete
 
 // Reminders Tab
 function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCreate, deletingId, onUpdateNotification }: any) {
-  if (loading) {
-    return <Loading text="Loading reminders..." />
-  }
-
   // Sort reminders by sort_order, then by name
   const sortedReminders = [...notifications].sort((a: NotificationType, b: NotificationType) => {
     if (a.sort_order !== b.sort_order) {
@@ -636,7 +632,7 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
 
   const handleUpdateConfig = async (updates: any) => {
     if (!profileReminder) return
-    
+
     const newConfig = { ...reminderConfig, ...updates }
     try {
       await onUpdateNotification(profileReminder.id, { config: newConfig })
@@ -644,6 +640,10 @@ function RemindersTab({ notifications, loading, onToggle, onDelete, onEdit, onCr
     } catch (error) {
       console.error('Failed to update reminder config:', error)
     }
+  }
+
+  if (loading) {
+    return <Loading text="Loading reminders..." />
   }
 
   return (

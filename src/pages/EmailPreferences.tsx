@@ -9,7 +9,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Mail, CheckCircle2, XCircle, AlertCircle, Settings, ArrowLeft, Shield } from 'lucide-react'
 import { subscribersAPI, EmailSubscriber } from '@/lib/subscribers-api'
 import { Loading } from '@/components/ui/Loading'
-import { cn } from '@/lib/utils'
 
 export default function EmailPreferences() {
   const { token } = useParams<{ token: string }>()
@@ -46,11 +45,12 @@ export default function EmailPreferences() {
       }
 
       setSubscriber(data)
-      setPreferences(data.email_preferences || {
-        marketing: true,
-        newsletters: true,
-        notifications: true,
-        promotions: true,
+      const prefs = data.email_preferences
+      setPreferences({
+        marketing: prefs?.marketing ?? true,
+        newsletters: prefs?.newsletters ?? true,
+        notifications: prefs?.notifications ?? true,
+        promotions: prefs?.promotions ?? true,
       })
     } catch (err: any) {
       console.error('Error loading subscriber:', err)

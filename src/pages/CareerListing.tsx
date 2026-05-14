@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -18,7 +17,6 @@ import {
   ArrowRight,
   Building2,
   Calendar,
-  Users,
   Star,
   Zap,
   Globe,
@@ -66,7 +64,6 @@ interface Career {
 }
 
 export function CareerListing() {
-  const navigate = useNavigate()
   const [careers, setCareers] = useState<Career[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')

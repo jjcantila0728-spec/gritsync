@@ -142,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     const { error } = await db.auth.signOut()
     if (error) {
-      throw new Error(error.message)
+      throw new Error((error as { message?: string }).message ?? 'Sign out failed')
     }
     setUser(null)
   }

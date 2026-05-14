@@ -405,9 +405,9 @@ export async function safeAsync<T>(
 }
 
 /**
- * Enhanced Supabase error handler
+ * Enhanced database/API error handler
  */
-export function handleSupabaseError(error: any, context?: Record<string, any>): never {
+export function handleDBError(error: any, context?: Record<string, any>): never {
   const normalizedError = normalizeError(error, context)
   logError(normalizedError, context)
   throw normalizedError

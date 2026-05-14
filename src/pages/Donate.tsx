@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { donationsAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
-import { Heart, DollarSign, Users, CheckCircle, Shield, Lock, TrendingUp, Sparkles, Star, ArrowRight, Gift, Loader2 } from 'lucide-react'
+import { Heart, Users, CheckCircle, Shield, Lock, TrendingUp, Sparkles, Star, ArrowRight, Gift, Loader2 } from 'lucide-react'
 import { AppError, ErrorType } from '@/lib/error-handler'
 
 export function Donate() {
@@ -28,7 +28,7 @@ export function Donate() {
   const [donorPhone, setDonorPhone] = useState('')
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [message, setMessage] = useState('')
-  const [sponsorshipId, setSponsorshipId] = useState<string | null>(null)
+  const [sponsorshipId] = useState<string | null>(null)
   const [publicStats, setPublicStats] = useState<{ total: number; count: number } | null>(null)
 
   // Predefined amounts
@@ -39,7 +39,7 @@ export function Donate() {
     const loadStats = async () => {
       try {
         const stats = await donationsAPI.getPublicStats()
-        setPublicStats(stats)
+        setPublicStats({ total: stats.total_raised, count: stats.total_donors })
       } catch (error) {
         console.error('Error loading donation stats:', error)
         // Don't show error - stats are optional
@@ -113,8 +113,7 @@ export function Donate() {
     if (!validateForm()) return
 
     setLoading(true)
-    let createdDonationId: string | null = null
-    
+
     try {
       // Create donation record
       const donationData = {
@@ -129,8 +128,9 @@ export function Donate() {
         sponsorship_id: sponsorshipId || null,
       }
 
-      const donation = await donationsAPI.create(donationData)
-      createdDonationId = donation.id
+      // donationsAPI.create types use optional-undefined fields; this form uses nulls and an extra
+      // sponsorship_id column. Cast to bridge.
+      const donation = await donationsAPI.create(donationData as any)
 
       // Navigate to checkout page
       navigate(`/donate/checkout?donation_id=${donation.id}&amount=${parseFloat(amount)}`)
@@ -142,8 +142,6 @@ export function Donate() {
       
       // Handle AppError instances with better context
       if (error instanceof AppError) {
-        const errorMsg = error.message.toLowerCase()
-        
         // Use error type to determine message
         switch (error.type) {
           case ErrorType.NETWORK:

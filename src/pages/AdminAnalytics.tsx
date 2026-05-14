@@ -30,19 +30,11 @@ import {
   Users,
   FileText,
   DollarSign,
-  Calendar,
   RefreshCw,
-  Download,
-  Filter,
   BarChart3,
-  Activity,
-  CheckCircle2,
-  XCircle,
-  Clock,
 } from 'lucide-react'
 import { analyticsAPI, ApplicationAnalytics, FinancialAnalytics, UserAnalytics, DocumentAnalytics } from '@/lib/analytics-api'
 import { format, subDays, parseISO } from 'date-fns'
-import { cn } from '@/lib/utils'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#00D4FF', '#FF6B9D']
 
@@ -294,9 +286,9 @@ export function AdminAnalytics() {
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
-                      {applicationStatusData.map((entry, index) => (
+                      {applicationStatusData.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -349,7 +341,7 @@ export function AdminAnalytics() {
                       itemStyle={{ color: 'var(--text-secondary)' }}
                     />
                     <Bar dataKey="value" fill="#8884d8">
-                      {paymentTypeData.map((entry, index) => (
+                      {paymentTypeData.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Bar>
@@ -394,9 +386,9 @@ export function AdminAnalytics() {
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
-                      {documentStatusData.map((entry, index) => (
+                      {documentStatusData.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

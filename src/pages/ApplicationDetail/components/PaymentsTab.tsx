@@ -1,21 +1,14 @@
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Loading } from '@/components/ui/Loading'
-import { Modal } from '@/components/ui/Modal'
-import { Elements } from '@stripe/react-stripe-js'
-import { StripePaymentForm } from '@/components/StripePaymentForm'
-import { stripePromise } from '@/lib/stripe'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { 
   DollarSign, 
   CreditCard, 
-  Receipt, 
   CheckCircle, 
-  XCircle, 
   Clock,
   Download,
   Eye,
-  ExternalLink,
   History
 } from 'lucide-react'
 
@@ -50,19 +43,6 @@ interface PaymentsTabProps {
 export function PaymentsTab({
   payments,
   loadingPayments,
-  showPaymentModal,
-  setShowPaymentModal,
-  selectedPayment,
-  setSelectedPayment,
-  clientSecret,
-  paymentIntentId,
-  showReceiptModal,
-  setShowReceiptModal,
-  viewingReceipt,
-  setViewingReceipt,
-  isAdmin,
-  showToast,
-  application,
   handleViewReceipt,
   handleDownloadReceipt,
   handleProcessPayment,

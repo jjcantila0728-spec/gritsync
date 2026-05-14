@@ -97,8 +97,14 @@ export function AdminDonations() {
 
   async function fetchStats() {
     try {
-      const statsData = await donationsAPI.getStats()
-      setStats(statsData)
+      const all = (await donationsAPI.getAll()) as Donation[]
+      const completed = all.filter((d) => d.status === 'completed')
+      setStats({
+        total: completed.reduce((sum, d) => sum + Number(d.amount || 0), 0),
+        count: completed.length,
+        pending: all.filter((d) => d.status === 'pending').length,
+        failed: all.filter((d) => d.status === 'failed').length,
+      })
     } catch (error: any) {
       console.error('Error fetching stats:', error)
     }

@@ -6,16 +6,13 @@
 import { useState, useEffect } from 'react'
 import { 
   Clock, 
-  Send, 
   XCircle, 
   RefreshCw, 
-  Search, 
-  Filter,
+  Search,
   Calendar,
   CheckCircle2,
   AlertCircle,
-  Trash2,
-  Edit
+  Trash2
 } from 'lucide-react'
 import { emailQueueAPI, EmailQueueItem } from '@/lib/email-queue-api'
 import { Loading } from '@/components/ui/Loading'
@@ -129,14 +126,6 @@ export function ScheduledEmailsTab({ showToast }: ScheduledEmailsTabProps) {
       }
       return next
     })
-  }
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredEmails.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(filteredEmails.map(e => e.id!)))
-    }
   }
 
   const filteredEmails = scheduledEmails.filter(email => {

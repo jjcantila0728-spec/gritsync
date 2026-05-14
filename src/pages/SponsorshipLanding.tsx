@@ -255,7 +255,7 @@ export function SponsorshipLanding() {
               </div>
 
               <div className="space-y-4">
-                {eligibility.map((e, i) => (
+                {eligibility.map((e) => (
                   <div key={e.title} className="flex items-start gap-4 p-5 rounded-2xl bg-gray-900 border border-gray-800 hover:border-primary-800 transition-colors group">
                     <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-primary-900/50 border border-primary-800 flex items-center justify-center group-hover:bg-primary-900 transition-colors">
                       <e.icon className="h-5 w-5 text-primary-400" />

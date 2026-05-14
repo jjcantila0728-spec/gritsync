@@ -10,7 +10,6 @@ import {
   Play,
   Square,
   Trophy,
-  TrendingUp,
   Eye,
   Edit,
   Trash2,
@@ -25,11 +24,11 @@ import {
   Target,
   Zap,
 } from 'lucide-react'
-import { abTestingAPI, ABTest, ABTestResult, ABTestVariant } from '@/lib/ab-testing-api'
+import { abTestingAPI, ABTest, ABTestResult } from '@/lib/ab-testing-api'
 import { Loading } from '@/components/ui/Loading'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 interface ABTestingTabProps {
   showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void

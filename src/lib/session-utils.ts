@@ -28,7 +28,8 @@ export async function ensureValidSession(): Promise<Session | null> {
     }
     
     // Check if session is expired (with 5 minute buffer)
-    const expiresAt = session.expires_at ? session.expires_at * 1000 : 0 // Convert to milliseconds
+    const sessionExpiresAt = (session as { expires_at?: number }).expires_at
+    const expiresAt = sessionExpiresAt ? sessionExpiresAt * 1000 : 0 // Convert to milliseconds
     const now = Date.now()
     const bufferMs = 5 * 60 * 1000 // 5 minutes
     
@@ -141,7 +142,8 @@ export async function isSessionExpired(): Promise<boolean> {
     return true
   }
   
-  const expiresAt = session.expires_at ? session.expires_at * 1000 : 0
+  const sessionExpiresAt = (session as { expires_at?: number }).expires_at
+  const expiresAt = sessionExpiresAt ? sessionExpiresAt * 1000 : 0
   const now = Date.now()
   const bufferMs = 1 * 60 * 1000 // 1 minute buffer
   

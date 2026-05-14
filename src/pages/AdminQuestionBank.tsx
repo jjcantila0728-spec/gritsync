@@ -1093,7 +1093,7 @@ export function AdminQuestionBank() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => {
-                                  setFilterTag(item.tag)
+                                  setFilterTags([item.tag])
                                   setActiveTab('questions')
                                   setPage(1)
                                 }}
