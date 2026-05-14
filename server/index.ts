@@ -18,7 +18,8 @@ import socialRoutes, { processDuePosts } from './routes/social'
 import socialAiRoutes from './routes/social-ai'
 import nclexRoutes from './routes/nclex'
 import processingAccountsRoutes from './routes/processing-accounts'
-import agentsRoutes from './routes/agents'
+// agentsRoutes uses Playwright (Chromium) which cannot run in Vercel serverless.
+// Loaded dynamically below — skipped entirely when process.env.VERCEL is set.
 import { query } from './db'
 import { getSeedQuestions } from './data/nclex-seed'
 
@@ -1038,7 +1039,14 @@ app.use('/api/social', socialRoutes)
 app.use('/api/social/ai', socialAiRoutes)
 app.use('/api/nclex', nclexRoutes)
 app.use('/api/processing-accounts', processingAccountsRoutes)
-app.use('/api/agents', agentsRoutes)
+// Playwright-based agents: only available outside Vercel serverless
+if (!process.env.VERCEL) {
+  import('./routes/agents').then(({ default: agentsRoutes }) => {
+    app.use('/api/agents', agentsRoutes)
+  }).catch((err) => {
+    console.warn('Agents route failed to load (Playwright may be missing):', err.message)
+  })
+}
 
 // On Vercel the Vite build is served as static files by the CDN; the Express
 // app only handles /api/* routes.  Locally / on self-hosted servers we still
