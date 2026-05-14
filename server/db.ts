@@ -7,8 +7,15 @@ import { Pool, types } from 'pg'
 // different TZs. Keeping DATE as a string sidesteps the whole conversion.
 types.setTypeParser(1082, (v: string) => v)
 
+// Support both DATABASE_URL (manual) and POSTGRES_URL (Vercel Supabase integration).
+// POSTGRES_PRISMA_URL is the pooler variant Vercel sets; prefer it over the direct host.
+const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 })
 
