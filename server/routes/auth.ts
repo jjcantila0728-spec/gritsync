@@ -639,8 +639,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' })
 
     const user = result.rows[0]
-    const { signToken: sign } = await import('../middleware/auth')
-    const token = sign({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
+    // Use the statically-imported signToken (avoids dynamic import cycle on Node 22+)
+    const token = signToken({ id: user.id, email: user.email, role: user.role, grit_id: user.grit_id })
 
     res.json({
       session: {
