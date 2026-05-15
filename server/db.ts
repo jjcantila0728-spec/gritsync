@@ -2,16 +2,21 @@
  * Database access layer.
  *
  * Uses one-shot pg.Client (never pg.Pool) so there are no persistent
- * connections to manage in Vercel's serverless environment.
- * Each query opens a client, runs, and closes — Supabase's Supavisor
- * pooler (POSTGRES_PRISMA_URL) handles actual connection pooling
- * server-side, so this is cheap.
+ * connections to manage in Vercel's serverless environment. Each query
+ * opens a client, runs, and closes — Supabase's Supavisor pooler
+ * (POSTGRES_PRISMA_URL) handles real pooling server-side, so this is cheap.
+ *
+ * SSL: we parse the connection URL ourselves rather than passing
+ * `connectionString` straight to pg, because pg-connection-string maps
+ * `sslmode=require` (which Supabase URLs use) to `verify-full`, and that
+ * rejects Supabase's self-signed leaf cert. Passing discrete params plus
+ * an explicit `ssl: { rejectUnauthorized: false }` avoids that path.
  *
  * The supabaseAdmin export is used by routes that prefer the HTTP
  * PostgREST API (e.g. server/routes/query.ts).
  */
 
-import { Client, types } from 'pg'
+import { Client, types, ClientConfig } from 'pg'
 
 // Return DATE columns as raw 'YYYY-MM-DD' string, not a JS Date.
 types.setTypeParser(1082, (v: string) => v)
@@ -38,14 +43,25 @@ function needsSsl(): boolean {
   )
 }
 
-/** Run a single SQL statement, opening and closing a fresh client each time. */
-export async function query(text: string, params?: any[]) {
-  const client = new Client({
-    connectionString,
+function buildClientConfig(): ClientConfig {
+  if (!connectionString) return {}
+  const url = new URL(connectionString)
+  const config: ClientConfig = {
+    host: url.hostname,
+    port: url.port ? parseInt(url.port, 10) : 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, '') || undefined,
     ssl: needsSsl() ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 8_000,
     statement_timeout: 25_000,
-  })
+  }
+  return config
+}
+
+/** Run a single SQL statement, opening and closing a fresh client each time. */
+export async function query(text: string, params?: any[]) {
+  const client = new Client(buildClientConfig())
   await client.connect()
   try {
     return await client.query(text, params)
@@ -58,12 +74,7 @@ export async function query(text: string, params?: any[]) {
 export async function withTransaction<T>(
   fn: (q: (text: string, params?: any[]) => Promise<any>) => Promise<T>
 ): Promise<T> {
-  const client = new Client({
-    connectionString,
-    ssl: needsSsl() ? { rejectUnauthorized: false } : false,
-    connectionTimeoutMillis: 8_000,
-    statement_timeout: 25_000,
-  })
+  const client = new Client(buildClientConfig())
   await client.connect()
   try {
     await client.query('BEGIN')
@@ -86,11 +97,7 @@ export async function withTransaction<T>(
  */
 const pool = {
   async connect() {
-    const client = new Client({
-      connectionString,
-      ssl: needsSsl() ? { rejectUnauthorized: false } : false,
-      connectionTimeoutMillis: 8_000,
-    })
+    const client = new Client(buildClientConfig())
     await client.connect()
     return {
       query: (text: string, params?: any[]) => client.query(text, params),
