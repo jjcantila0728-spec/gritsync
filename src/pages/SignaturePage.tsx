@@ -3,6 +3,7 @@ import { SignaturePad } from '@/components/SignaturePad'
 import { SignatureSuccessAnimation } from '@/components/SignatureSuccessAnimation'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { db } from '@/lib/api-client'
+import { SEO } from '@/components/SEO'
 
 export function SignaturePage() {
   const [searchParams] = useSearchParams()
@@ -131,6 +132,7 @@ export function SignaturePage() {
 
   return (
     <>
+      <SEO title="Sign Document — GritSync" description="Secure document signing page." noindex nofollow />
       <SignaturePad
         isOpen={true}
         onClose={handleClose}

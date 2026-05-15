@@ -8,6 +8,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Mail, CheckCircle2, XCircle, ArrowLeft, Settings, AlertTriangle } from 'lucide-react'
 import { subscribersAPI } from '@/lib/subscribers-api'
 import { Loading } from '@/components/ui/Loading'
+import { SEO } from '@/components/SEO'
+
+const unsubscribeSeo = <SEO title="Unsubscribe — GritSync" description="Manage your email subscription." noindex nofollow />
+
 
 export default function Unsubscribe() {
   const { token } = useParams<{ token: string }>()
@@ -57,6 +61,7 @@ export default function Unsubscribe() {
   if (!showReasonForm && !unsubscribed && !error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+        {unsubscribeSeo}
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full mb-4">
@@ -102,6 +107,7 @@ export default function Unsubscribe() {
   if (showReasonForm && !unsubscribed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+        {unsubscribeSeo}
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8">
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
@@ -173,6 +179,7 @@ export default function Unsubscribe() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        {unsubscribeSeo}
         <Loading text="Processing your request..." />
       </div>
     )
@@ -181,6 +188,7 @@ export default function Unsubscribe() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+        {unsubscribeSeo}
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 text-center">
           <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
@@ -204,6 +212,7 @@ export default function Unsubscribe() {
   if (unsubscribed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+        {unsubscribeSeo}
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 text-center">
           <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">

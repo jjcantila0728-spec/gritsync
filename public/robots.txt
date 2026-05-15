@@ -1,9 +1,20 @@
 # robots.txt for GritSync — https://gritsync.com
 
 # ── Standard crawlers ─────────────────────────────────────────────
+# Notes:
+#   • Pages that already serve `<meta name="robots" content="noindex">`
+#     (Login, Register, ForgotPassword, ResetPassword, VerifyEmail,
+#      DonateCheckout, DonateSuccess, Unsubscribe, SignaturePage) are
+#     deliberately NOT listed here — they must be crawlable so bots can
+#     read the noindex directive. Blocking them in robots.txt would prevent
+#     that and leave naked URLs in search results.
+#   • Disallow rules below are for application surfaces with no noindex
+#     meta (the authed product itself).
 User-agent: *
 Allow: /
 Disallow: /admin/
+Disallow: /app/
+Disallow: /api/
 Disallow: /dashboard
 Disallow: /application/new
 Disallow: /applications/
@@ -11,15 +22,23 @@ Disallow: /my-details
 Disallow: /account-settings
 Disallow: /documents
 Disallow: /test-supabase
+Disallow: /sso
+Disallow: /handoff
+Disallow: /preferences/
 
 # ── Google ────────────────────────────────────────────────────────
 User-agent: Googlebot
 Allow: /
 Disallow: /admin/
+Disallow: /app/
+Disallow: /api/
 Disallow: /dashboard
 Disallow: /applications/
 Disallow: /my-details
 Disallow: /account-settings
+Disallow: /sso
+Disallow: /handoff
+Disallow: /preferences/
 
 User-agent: Googlebot-Image
 Allow: /assets/

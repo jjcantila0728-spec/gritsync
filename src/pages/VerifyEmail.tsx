@@ -5,6 +5,7 @@ import { Footer } from '@/components/Footer'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { CheckCircle, XCircle, Loader2, Mail } from 'lucide-react'
+import { SEO } from '@/components/SEO'
 
 export function VerifyEmail() {
   const [searchParams] = useSearchParams()
@@ -55,8 +56,14 @@ export function VerifyEmail() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title="Verify Email — GritSync"
+        description="Email verification page for new GritSync accounts."
+        noindex
+        nofollow
+      />
       <Header />
-      <main className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+      <main className="container mx-auto px-4 py-12 sm:py-16 flex items-center justify-center min-h-[calc(100vh-4rem)]">
         <Card className="w-full max-w-md border-0 shadow-xl">
           <div className="p-8 text-center">
             {status === 'loading' && (

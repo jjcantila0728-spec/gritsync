@@ -6,6 +6,7 @@ import { Footer } from '@/components/Footer'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { CheckCircle, Home, Heart, Sparkles, Share2, ArrowRight, Gift, TrendingUp } from 'lucide-react'
+import { SEO } from '@/components/SEO'
 import { donationsAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { sendDonationReceipt } from '@/lib/email-service'
@@ -105,6 +106,12 @@ export function DonateSuccess() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title="Thank You for Donating — GritSync"
+        description="Donation confirmation page."
+        noindex
+        nofollow
+      />
       <Header />
       <main className="flex-1">
         {/* Success Hero Section */}

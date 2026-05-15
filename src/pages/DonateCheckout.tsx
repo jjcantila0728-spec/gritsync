@@ -10,6 +10,7 @@ import { stripePromise } from '@/lib/stripe'
 import { donationsAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { CreditCard, Lock, ArrowLeft, Loader2, CheckCircle, Heart, Shield, Zap, Sparkles } from 'lucide-react'
+import { SEO } from '@/components/SEO'
 
 // Payment Form Component
 function DonationPaymentForm({ 
@@ -251,6 +252,12 @@ export function DonateCheckout() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <SEO
+        title="Complete Your Donation — GritSync"
+        description="Secure donation checkout for GritSync's sponsorship program for Filipino nurses."
+        noindex
+        nofollow
+      />
       <Header />
       <main className="flex-1">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-6xl">
