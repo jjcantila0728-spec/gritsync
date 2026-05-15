@@ -55,6 +55,13 @@ attached_assets/
 *.swo
 *~
 
+# Claude Code
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Test harness output
+scripts/test-output/
+
 # OS
 Thumbs.db
 
