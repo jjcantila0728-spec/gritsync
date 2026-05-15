@@ -117,14 +117,19 @@ export async function sendEmail(
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
+    const data: any = await res.json().catch(() => null)
     if (!res.ok) {
-      const data: unknown = await res.json().catch(() => null)
-      const message = data !== null && typeof data === 'object' && 'message' in data
-        ? String((data as Record<string, unknown>).message)
-        : String(res.status)
-      console.warn('Email send failed:', message)
+      const message = data?.message ? String(data.message) : String(res.status)
+      console.error('[email] Resend rejected:', {
+        status: res.status,
+        from: payload.from,
+        to: payload.to,
+        subject,
+        resendError: data,
+      })
       return { ok: false, error: message }
     }
+    console.log('[email] Resend accepted:', { id: data?.id, from: payload.from, to: payload.to, subject })
     return { ok: true }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
