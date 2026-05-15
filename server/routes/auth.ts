@@ -1038,13 +1038,9 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
 
     // Send to the email the user provided (handles accounts where personal_email is null)
     const sendTo = user.personal_email || emailInput
-    const sendResult = await sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
+    await sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
 
-    res.json({
-      message: 'Verification email resent. Please check your inbox.',
-      // TEMP DEBUG — surface Resend's reply so we can diagnose the silent failure.
-      debug: sendResult,
-    })
+    res.json({ message: 'Verification email resent. Please check your inbox.' })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
