@@ -5,8 +5,10 @@ dist
 .env.*
 !.env.example
 
-# Dev/admin scripts — not needed on Vercel
-scripts/
+# Dev/admin scripts — not needed in the deployed lambda, but the
+# build-server bundle script IS needed during build.
+scripts/*
+!scripts/build-server.cjs
 
 # Docker / Replit / local tooling
 docker*

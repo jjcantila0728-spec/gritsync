@@ -63,3 +63,4 @@ Thumbs.db
 
 # Vercel
 .vercel
+api/_server.cjs
