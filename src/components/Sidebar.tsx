@@ -6,6 +6,10 @@ import { roleUrl, type AppRole, type RolePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
 import { reviewUrl } from '@/lib/routing'
+
+// Hide the NCLEX Review entry while the review subdomain is being upgraded.
+// Flip back to true once the upgrade ships.
+const SHOW_NCLEX_REVIEW = false
 import { useToast } from '@/components/ui/Toast'
 import {
   LayoutDashboard,
@@ -536,7 +540,7 @@ export function Sidebar() {
           )
         })}
         {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
-        {!isAdmin() && (
+        {SHOW_NCLEX_REVIEW && !isAdmin() && (
           <a
             href={reviewUrl('/')}
             target="_blank"
@@ -998,7 +1002,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           )
         })}
         {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
-        {!isAdmin() && (
+        {SHOW_NCLEX_REVIEW && !isAdmin() && (
           <a
             href={reviewUrl('/')}
             target="_blank"

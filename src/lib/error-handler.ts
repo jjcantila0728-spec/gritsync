@@ -75,6 +75,26 @@ export function classifyError(error: any): ErrorClassification {
   const errorCode = error?.code || error?.status || error?.statusCode
   const errorName = error?.name || ''
 
+  // Dynamic-import / chunk-load failures — happen when a new deploy lands mid-
+  // session and a lazy()'d route tries to fetch a chunk that no longer exists,
+  // or when Vite HMR rebuilds during local dev. Don't conflate with real
+  // network outages — the right action is "refresh", not "check your wifi".
+  if (
+    errorMessage.includes('Failed to fetch dynamically imported module') ||
+    errorMessage.includes('Loading chunk') ||
+    errorMessage.includes('Importing a module script failed') ||
+    errorName === 'ChunkLoadError'
+  ) {
+    return {
+      type: ErrorType.NETWORK,
+      severity: ErrorSeverity.LOW,
+      userMessage: 'The app was updated. Please refresh the page to load the latest version.',
+      retryable: true,
+      retryDelay: 1000,
+      logLevel: 'info',
+    }
+  }
+
   // Network errors
   if (
     errorMessage.includes('network') ||
