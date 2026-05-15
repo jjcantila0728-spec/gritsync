@@ -25,8 +25,6 @@ import {
   GripVertical, ChevronDown, ChevronUp, ExternalLink, Lightbulb,
 } from 'lucide-react'
 
-const BRAND_BLUE = '#0070C0'
-
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function getToken() {
@@ -269,12 +267,12 @@ export function AdminNclex() {
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 min-w-0">
-          <div className="sticky top-16 z-20 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur px-6 pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">NCLEX Management</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <div className="sticky top-16 z-20 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur px-4 sm:px-6 lg:px-8 pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">NCLEX Management</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Manage NCLEX content, sessions, and user access
             </p>
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
               {TABS.map(({ id, label, Icon }) => {
                 const active = tab === id
                 return (
@@ -283,10 +281,9 @@ export function AdminNclex() {
                     onClick={() => setTab(id)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
                       active
-                        ? 'text-white shadow-sm'
+                        ? 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200/60 dark:hover:bg-gray-800/60'
                     }`}
-                    style={active ? { backgroundColor: BRAND_BLUE } : undefined}
                   >
                     <Icon className="h-4 w-4" />
                     {label}
@@ -296,7 +293,7 @@ export function AdminNclex() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6 lg:p-8">
             {tab === 'stats' && <StatsTab />}
             {tab === 'questions' && <QuestionsTab />}
             {tab === 'generator' && <GeneratorTab />}
@@ -375,8 +372,8 @@ function StatsTab() {
               <div className="w-40 text-xs text-gray-700 dark:text-gray-300">{FORMAT_LABELS[b.format as Format] || b.format}</div>
               <div className="flex-1 h-3 bg-gray-100 dark:bg-gray-800 rounded">
                 <div
-                  className="h-3 rounded"
-                  style={{ width: `${(Number(b._count) / maxFormatCount) * 100}%`, backgroundColor: BRAND_BLUE }}
+                  className="h-3 rounded bg-primary-600"
+                  style={{ width: `${(Number(b._count) / maxFormatCount) * 100}%` }}
                 />
               </div>
               <div className="w-12 text-right text-xs text-gray-700 dark:text-gray-300">{b._count}</div>
@@ -466,7 +463,7 @@ function QuestionsTab() {
           <Input value={topic} onChange={(e) => { setTopic(e.target.value); setPage(1) }} placeholder="topic…" />
         </div>
         <Button variant="outline" onClick={load} className="flex items-center gap-1"><RefreshCw className="h-4 w-4" />Refresh</Button>
-        <Button onClick={() => { setEditing(null); setShowEditor(true) }} style={{ backgroundColor: BRAND_BLUE }} className="text-white">
+        <Button onClick={() => { setEditing(null); setShowEditor(true) }} className="bg-primary-600 hover:bg-primary-700 text-white">
           <Plus className="h-4 w-4 mr-1" /> New
         </Button>
       </div>
@@ -686,7 +683,7 @@ function QuestionEditorModal({ question, onClose, onSaved }: { question: Questio
         <aside className="space-y-3">
           <Card className="p-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <Lightbulb className="h-4 w-4" style={{ color: BRAND_BLUE }} />
+              <Lightbulb className="h-4 w-4 text-primary-600" />
               Strategy: {FORMAT_LABELS[format]}
             </h3>
             <ol className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300 list-decimal list-inside">
@@ -701,7 +698,7 @@ function QuestionEditorModal({ question, onClose, onSaved }: { question: Questio
 
       <div className="mt-6 flex items-center justify-end gap-2">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={onSubmit} disabled={saving} style={{ backgroundColor: BRAND_BLUE }} className="text-white">
+        <Button onClick={onSubmit} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">
           {saving ? 'Saving…' : (isEdit ? 'Save' : 'Create')}
         </Button>
       </div>
@@ -1061,8 +1058,8 @@ function GeneratorTab() {
   return (
     <div className="space-y-6">
       <div className="flex gap-2">
-        <button onClick={() => setMode('questions')} className={`px-4 py-2 rounded text-sm font-medium ${mode === 'questions' ? 'text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`} style={mode === 'questions' ? { backgroundColor: BRAND_BLUE } : undefined}>Questions</button>
-        <button onClick={() => setMode('case')} className={`px-4 py-2 rounded text-sm font-medium ${mode === 'case' ? 'text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`} style={mode === 'case' ? { backgroundColor: BRAND_BLUE } : undefined}>Case Study</button>
+        <button onClick={() => setMode('questions')} className={`px-4 py-2 rounded text-sm font-medium ${mode === 'questions' ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>Questions</button>
+        <button onClick={() => setMode('case')} className={`px-4 py-2 rounded text-sm font-medium ${mode === 'case' ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>Case Study</button>
       </div>
       {mode === 'questions' ? <GenerateQuestionsForm /> : <GenerateCaseStudyForm />}
       <PendingReview />
@@ -1132,7 +1129,7 @@ function GenerateQuestionsForm() {
         </div>
       </div>
       <div className="mt-4 flex justify-end">
-        <Button onClick={submit} disabled={busy} style={{ backgroundColor: BRAND_BLUE }} className="text-white">
+        <Button onClick={submit} disabled={busy} className="bg-primary-600 hover:bg-primary-700 text-white">
           <Sparkles className="h-4 w-4 mr-1" /> {busy ? 'Generating…' : 'Generate'}
         </Button>
       </div>
@@ -1190,8 +1187,7 @@ function GenerateCaseStudyForm() {
               <button
                 key={f}
                 onClick={() => toggle(f)}
-                className={`px-3 py-1 rounded-full text-xs border ${formats.includes(f) ? 'text-white border-transparent' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'}`}
-                style={formats.includes(f) ? { backgroundColor: BRAND_BLUE } : undefined}
+                className={`px-3 py-1 rounded-full text-xs border ${formats.includes(f) ? 'bg-primary-600 hover:bg-primary-700 text-white border-transparent' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'}`}
               >
                 {FORMAT_LABELS[f]}
               </button>
@@ -1204,7 +1200,7 @@ function GenerateCaseStudyForm() {
         </div>
       </div>
       <div className="mt-4 flex justify-end">
-        <Button onClick={submit} disabled={busy} style={{ backgroundColor: BRAND_BLUE }} className="text-white">
+        <Button onClick={submit} disabled={busy} className="bg-primary-600 hover:bg-primary-700 text-white">
           <Sparkles className="h-4 w-4 mr-1" /> {busy ? 'Generating…' : 'Generate case study'}
         </Button>
       </div>
@@ -1218,8 +1214,8 @@ function PendingReview() {
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex-1">Pending review</h3>
-        <button onClick={() => setSub('questions')} className={`px-3 py-1 rounded text-xs ${sub === 'questions' ? 'text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700'}`} style={sub === 'questions' ? { backgroundColor: BRAND_BLUE } : undefined}>Questions</button>
-        <button onClick={() => setSub('cases')} className={`px-3 py-1 rounded text-xs ${sub === 'cases' ? 'text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700'}`} style={sub === 'cases' ? { backgroundColor: BRAND_BLUE } : undefined}>Case Studies</button>
+        <button onClick={() => setSub('questions')} className={`px-3 py-1 rounded text-xs ${sub === 'questions' ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700'}`}>Questions</button>
+        <button onClick={() => setSub('cases')} className={`px-3 py-1 rounded text-xs ${sub === 'cases' ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700'}`}>Case Studies</button>
       </div>
       {sub === 'questions' ? <PendingQuestions /> : <PendingCaseStudies />}
     </Card>
@@ -1280,7 +1276,7 @@ function PendingQuestions() {
           <option value="">All</option>
         </Select>
         <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
-        {picked.size > 0 && <Button onClick={bulkApprove} style={{ backgroundColor: BRAND_BLUE }} className="text-white">Bulk approve ({picked.size})</Button>}
+        {picked.size > 0 && <Button onClick={bulkApprove} className="bg-primary-600 hover:bg-primary-700 text-white">Bulk approve ({picked.size})</Button>}
       </div>
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
       {!loading && list.length === 0 && <div className="text-sm text-gray-500">Nothing pending.</div>}
@@ -1307,7 +1303,7 @@ function PendingQuestions() {
                     {expanded === p.id ? 'Hide' : 'Preview'}
                   </Button>
                   {p.status === 'PENDING' && <>
-                    <Button size="sm" onClick={() => approve(p.id)} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Check className="h-4 w-4" /></Button>
+                    <Button size="sm" onClick={() => approve(p.id)} className="bg-primary-600 hover:bg-primary-700 text-white"><Check className="h-4 w-4" /></Button>
                     <Button variant="outline" size="sm" onClick={() => reject(p.id)}><X className="h-4 w-4" /></Button>
                   </>}
                   <Button variant="ghost" size="sm" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
@@ -1399,7 +1395,7 @@ function PendingCaseStudies() {
             <div className="mt-2 flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => expand(p.id)}>{expanded === p.id ? 'Hide' : 'Preview'}</Button>
               {p.status === 'PENDING' && <>
-                <Button size="sm" onClick={() => approve(p.id)} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Check className="h-4 w-4" /></Button>
+                <Button size="sm" onClick={() => approve(p.id)} className="bg-primary-600 hover:bg-primary-700 text-white"><Check className="h-4 w-4" /></Button>
                 <Button variant="outline" size="sm" onClick={() => reject(p.id)}><X className="h-4 w-4" /></Button>
               </>}
               <Button variant="ghost" size="sm" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
@@ -1469,7 +1465,7 @@ function CasesTab() {
           </Select>
         </div>
         <Button variant="outline" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
-        <Button onClick={() => { setEditing(null); setShowEditor(true) }} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Plus className="h-4 w-4 mr-1" />New case</Button>
+        <Button onClick={() => { setEditing(null); setShowEditor(true) }} className="bg-primary-600 hover:bg-primary-700 text-white"><Plus className="h-4 w-4 mr-1" />New case</Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {loading && <div className="text-gray-500">Loading…</div>}
@@ -1553,7 +1549,7 @@ function CaseStudyEditorModal({ cs, onClose, onSaved }: { cs: CaseStudy | null; 
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={save} disabled={saving} style={{ backgroundColor: BRAND_BLUE }} className="text-white">{saving ? 'Saving…' : 'Save'}</Button>
+        <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">{saving ? 'Saving…' : 'Save'}</Button>
       </div>
     </Modal>
   )
@@ -1606,7 +1602,7 @@ function AccessTab() {
           <label className="text-xs text-gray-500">Payment ref (optional)</label>
           <Input value={grantRef} onChange={(e) => setGrantRef(e.target.value)} />
         </div>
-        <Button onClick={grant} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Plus className="h-4 w-4 mr-1" />Grant</Button>
+        <Button onClick={grant} className="bg-primary-600 hover:bg-primary-700 text-white"><Plus className="h-4 w-4 mr-1" />Grant</Button>
       </Card>
       <div className="flex items-center gap-2">
         <div className="flex-1"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search granted users…" /></div>
@@ -1693,7 +1689,7 @@ function UpgradeRequests() {
                 </a>
               )}
               <div className="flex gap-1">
-                <Button size="sm" onClick={() => approve(userId)} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Check className="h-4 w-4" /></Button>
+                <Button size="sm" onClick={() => approve(userId)} className="bg-primary-600 hover:bg-primary-700 text-white"><Check className="h-4 w-4" /></Button>
                 <Button variant="outline" size="sm" onClick={() => reject(userId)}><X className="h-4 w-4" /></Button>
               </div>
             </div>
@@ -1770,7 +1766,7 @@ function ProfilesList() {
                     const has = access.includes(k)
                     return (
                       <td key={k} className="px-3 py-2">
-                        <button onClick={() => toggleAccess(uid, k, has)} className={`px-2 py-1 rounded text-xs ${has ? 'text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600'}`} style={has ? { backgroundColor: BRAND_BLUE } : undefined}>
+                        <button onClick={() => toggleAccess(uid, k, has)} className={`px-2 py-1 rounded text-xs ${has ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600'}`}>
                           {has ? 'ON' : 'OFF'}
                         </button>
                       </td>
@@ -1840,7 +1836,7 @@ function PlansTab() {
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Plans</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={addPlan}><Plus className="h-4 w-4" />Add plan</Button>
-          <Button onClick={save} disabled={saving} style={{ backgroundColor: BRAND_BLUE }} className="text-white">{saving ? 'Saving…' : 'Save all'}</Button>
+          <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">{saving ? 'Saving…' : 'Save all'}</Button>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1929,7 +1925,7 @@ function VideosTab() {
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Lecture videos</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={add}><Plus className="h-4 w-4" />Add video</Button>
-          <Button onClick={save} disabled={saving} style={{ backgroundColor: BRAND_BLUE }} className="text-white">{saving ? 'Saving…' : 'Save all'}</Button>
+          <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">{saving ? 'Saving…' : 'Save all'}</Button>
         </div>
       </div>
       <div className="space-y-2">
@@ -2001,7 +1997,7 @@ function TestimonialsTab() {
               <p className="text-sm text-gray-900 dark:text-gray-100">{t.content}</p>
               <p className="mt-1 text-xs text-gray-500">— {t.clientName}</p>
             </div>
-            <Button size="sm" onClick={() => approve(t.id)} style={{ backgroundColor: BRAND_BLUE }} className="text-white"><Check className="h-4 w-4 mr-1" />Approve</Button>
+            <Button size="sm" onClick={() => approve(t.id)} className="bg-primary-600 hover:bg-primary-700 text-white"><Check className="h-4 w-4 mr-1" />Approve</Button>
           </Card>
         ))}
       </div>

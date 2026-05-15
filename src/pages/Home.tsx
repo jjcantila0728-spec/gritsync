@@ -619,8 +619,8 @@ export function Home() {
               </p>
             </div>
             
-            <div className="grid md:grid-cols-5 gap-8">
-              <div className="md:col-span-3 bg-gradient-to-br from-primary-50 to-white dark:from-gray-800 dark:to-gray-800/50 rounded-2xl p-8 border border-primary-100 dark:border-gray-700 shadow-sm">
+            <div className="grid md:grid-cols-5 gap-6 md:gap-8">
+              <div className="md:col-span-3 bg-gradient-to-br from-primary-50 to-white dark:from-gray-800 dark:to-gray-800/50 rounded-2xl p-5 sm:p-6 md:p-8 border border-primary-100 dark:border-gray-700 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center">
                     <Mail className="h-6 w-6 text-white" />
@@ -628,7 +628,7 @@ export function Home() {
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Send us a Message</h3>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input type="text" name="name" label="Your Name" placeholder="Enter your name" value={formData.name} onChange={handleInputChange} required disabled={isSubmitting} />
                     <Input type="email" name="email" label="Your Email" placeholder="Enter your email" value={formData.email} onChange={handleInputChange} required disabled={isSubmitting} />
                   </div>

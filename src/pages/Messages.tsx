@@ -589,7 +589,6 @@ export function Messages() {
       } catch { setBcResults([]) } finally { setBcSearching(false) }
     }, 250)
     return () => { if (bcDebounceRef.current) clearTimeout(bcDebounceRef.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showBroadcast, bcMode, bcQuery])
 
   const toggleBcRecipient = (u: DirectoryUser) => {
