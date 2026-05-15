@@ -12,8 +12,9 @@
  *   - findMany with relation includes are split into multiple queries and
  *     stitched in JS.
  *   - Admin routes inline-check req.user.role === 'admin' (gritsync convention).
- *   - AI handlers (Anthropic/Claude) are stubbed with 501; porting the AI
- *     prompts/HTTP wiring belongs in a separate task.
+ *   - AI handlers (Anthropic/Claude) live in ../lib/nclex-ai.ts and write
+ *     into nclex_pending_questions / nclex_pending_case_studies. Requires
+ *     ANTHROPIC_API_KEY to be set; model is claude-opus-4-7.
  *   - File upload for upgrade receipts is optional (multer memoryStorage); we
  *     accept multipart, but only store the original filename if a file was
  *     attached — there's no bucket wired up here yet.
@@ -24,6 +25,7 @@ import multer from 'multer'
 import crypto from 'crypto'
 import { query, withTransaction } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
+import { generateQuestions as aiGenerateQuestions, generateCaseStudy as aiGenerateCaseStudy } from '../lib/nclex-ai'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
@@ -1870,23 +1872,181 @@ router.put('/admin/videos', async (req: AuthenticatedRequest, res) => {
 // AI generation / pending review endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// NOTE: AI generation endpoints (generateQuestions, generateCaseStudy, suggestTest)
-// from `ai-generate.controller.ts` make outbound calls to Anthropic Claude. They
-// require ANTHROPIC_API_KEY, the Anthropic SDK, and the elaborate NCLEX prompt
-// context that lives in the original controller. We stub these here and expose
-// only the CRUD/review side of the pending tables (which is pure SQL and works
-// fine without the AI engine).
+// AI generation endpoints call Anthropic Claude (model claude-opus-4-7) via
+// ../lib/nclex-ai.ts and insert rows into the pending-review tables. The
+// admin UI then approves/rejects/edits before items move to the live bank.
 //
 
-// AI generation — stubbed
+// AI question generation — calls Anthropic (claude-opus-4-7) and inserts the
+// result as pending rows for admin review.
 router.post('/admin/generate-questions', async (req: AuthenticatedRequest, res) => {
   if (!requireAdminInline(req, res)) return
-  notImplemented(res, 'AI question generation not yet ported. TODO: port ai-generate.controller.ts (generateQuestions) — needs ANTHROPIC_API_KEY and the @anthropic-ai/sdk dependency.')
+  try {
+    const { format, bank, topic, count, customContext } = req.body || {}
+    if (!format || !VALID_FORMATS.has(format)) return badRequest(res, 'Invalid format')
+    if (!bank || !VALID_BANKS.has(bank)) return badRequest(res, 'Invalid bank')
+    if (!topic || typeof topic !== 'string') return badRequest(res, 'Topic is required')
+    const n = Math.max(1, Math.min(50, Number(count) || 1))
+
+    const { questions, raw } = await aiGenerateQuestions({
+      format,
+      bank,
+      topic,
+      count: n,
+      customContext: typeof customContext === 'string' ? customContext : undefined,
+    })
+
+    const batchId = newId()
+    const inserted = await withTransaction(async (q) => {
+      const rows: any[] = []
+      for (const item of questions) {
+        const id = newId()
+        const r = await q(
+          `INSERT INTO nclex_pending_questions (
+             id, bank, format, stem, options, correct_answer, rationale,
+             additional_info, topic, subtopic, difficulty, discrimination,
+             status, generated_by, generation_batch, ai_raw, cognitive_skill,
+             metadata, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7,
+             $8, $9, $10, $11, $12,
+             'PENDING', 'claude', $13, $14, $15,
+             $16::jsonb, NOW(), NOW()
+           ) RETURNING *`,
+          [
+            id,
+            bank,
+            format,
+            String(item.stem ?? ''),
+            JSON.stringify(item.options ?? []),
+            JSON.stringify(item.correctAnswer ?? null),
+            String(item.rationale ?? ''),
+            item.additionalInfo ?? null,
+            item.topic ?? topic,
+            item.subtopic ?? null,
+            Number.isFinite(Number(item.difficulty)) ? Number(item.difficulty) : 0,
+            Number.isFinite(Number(item.discrimination)) ? Number(item.discrimination) : 1,
+            batchId,
+            raw,
+            item.cognitiveSkill ?? null,
+            JSON.stringify(item.metadata ?? null),
+          ]
+        )
+        rows.push(r.rows[0])
+      }
+      return rows
+    })
+
+    created(res, {
+      batch: batchId,
+      count: inserted.length,
+      pending: inserted.map(camelPendingQuestion),
+    }, 'Generated and queued for review')
+  } catch (err: any) {
+    console.error('[admin/generate-questions]', err)
+    res.status(500).json({ success: false, message: err?.message || 'AI generation failed' })
+  }
 })
 
+// AI case-study generation — produces one pending case study and its child
+// pending questions in a single transaction.
 router.post('/admin/generate-case-study', async (req: AuthenticatedRequest, res) => {
   if (!requireAdminInline(req, res)) return
-  notImplemented(res, 'AI case study generation not yet ported. TODO: port ai-generate.controller.ts (generateCaseStudy) — needs ANTHROPIC_API_KEY and the @anthropic-ai/sdk dependency.')
+  try {
+    const { caseType, topic, formats, customContext } = req.body || {}
+    if (caseType !== 'UNFOLDING' && caseType !== 'STANDALONE') {
+      return badRequest(res, 'caseType must be UNFOLDING or STANDALONE')
+    }
+    if (!topic || typeof topic !== 'string') return badRequest(res, 'Topic is required')
+    if (!Array.isArray(formats) || formats.length === 0) {
+      return badRequest(res, 'formats[] is required')
+    }
+    for (const f of formats) {
+      if (!VALID_FORMATS.has(f)) return badRequest(res, `Invalid format: ${f}`)
+    }
+
+    const { caseStudy, raw } = await aiGenerateCaseStudy({
+      caseType,
+      topic,
+      formats,
+      customContext: typeof customContext === 'string' ? customContext : undefined,
+    })
+
+    const batchId = newId()
+    const result = await withTransaction(async (q) => {
+      const csId = newId()
+      const csRow = await q(
+        `INSERT INTO nclex_pending_case_studies (
+           id, title, scenario, tabs, case_type, status, generated_by,
+           generation_batch, ai_raw, created_at, updated_at
+         ) VALUES (
+           $1, $2, $3, $4::jsonb, $5, 'PENDING', 'claude',
+           $6, $7, NOW(), NOW()
+         ) RETURNING *`,
+        [
+          csId,
+          String(caseStudy.title ?? `Case Study: ${topic}`),
+          String(caseStudy.scenario ?? ''),
+          JSON.stringify(caseStudy.tabs ?? []),
+          caseType,
+          batchId,
+          raw,
+        ]
+      )
+      const qRows: any[] = []
+      let i = 1
+      for (const item of caseStudy.questions ?? []) {
+        const qid = newId()
+        const fmt = VALID_FORMATS.has(item.format) ? item.format : (formats[0] as string)
+        const r = await q(
+          `INSERT INTO nclex_pending_questions (
+             id, bank, format, stem, options, correct_answer, rationale,
+             additional_info, topic, subtopic, difficulty, discrimination,
+             status, generated_by, generation_batch, ai_raw, cognitive_skill,
+             item_number, pending_case_study_id, metadata,
+             created_at, updated_at
+           ) VALUES (
+             $1, 'NGN', $2, $3, $4::jsonb, $5::jsonb, $6,
+             $7, $8, $9, $10, $11,
+             'PENDING', 'claude', $12, $13, $14,
+             $15, $16, $17::jsonb,
+             NOW(), NOW()
+           ) RETURNING *`,
+          [
+            qid,
+            fmt,
+            String(item.stem ?? ''),
+            JSON.stringify(item.options ?? []),
+            JSON.stringify(item.correctAnswer ?? null),
+            String(item.rationale ?? ''),
+            item.additionalInfo ?? null,
+            item.topic ?? topic,
+            item.subtopic ?? null,
+            Number.isFinite(Number(item.difficulty)) ? Number(item.difficulty) : 0,
+            Number.isFinite(Number(item.discrimination)) ? Number(item.discrimination) : 1,
+            batchId,
+            raw,
+            item.cognitiveSkill ?? null,
+            Number.isFinite(Number(item.itemNumber)) ? Number(item.itemNumber) : i,
+            csId,
+            JSON.stringify((item as any).metadata ?? null),
+          ]
+        )
+        qRows.push(r.rows[0])
+        i++
+      }
+      return { caseStudy: csRow.rows[0], questions: qRows }
+    })
+
+    created(res, {
+      batch: batchId,
+      caseStudy: camelPendingCaseStudy(result.caseStudy),
+      questions: result.questions.map(camelPendingQuestion),
+    }, 'Generated and queued for review')
+  } catch (err: any) {
+    console.error('[admin/generate-case-study]', err)
+    res.status(500).json({ success: false, message: err?.message || 'AI generation failed' })
+  }
 })
 
 // Pending questions CRUD (no AI dep)

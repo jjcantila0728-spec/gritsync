@@ -80,8 +80,7 @@ const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').the
 const ClientEmails = lazy(() => import('./pages/ClientEmails').then(m => ({ default: m.ClientEmails })))
 const EmailPreferences = lazy(() => import('./pages/EmailPreferences'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
-const AdminQuestionBank = lazy(() => import('./pages/AdminQuestionBank').then(m => ({ default: m.AdminQuestionBank })))
-const AdminNCLEXSubscriptions = lazy(() => import('./pages/AdminNCLEXSubscriptions').then(m => ({ default: m.AdminNCLEXSubscriptions })))
+const AdminNclex = lazy(() => import('./pages/AdminNclex').then(m => ({ default: m.AdminNclex })))
 const NCLEXExam = lazy(() => import('./pages/NCLEXExam').then(m => ({ default: m.NCLEXExam })))
 const NCLEXVideoLibrary = lazy(() => import('./pages/NCLEXVideoLibrary').then(m => ({ default: m.NCLEXVideoLibrary })))
 const NCLEXCheatSheets = lazy(() => import('./pages/NCLEXCheatSheets').then(m => ({ default: m.NCLEXCheatSheets })))
@@ -95,6 +94,7 @@ const NclexReviewPage = lazy(() => import('./pages/nclex/NclexReview').then(m =>
 const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })))
 const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ default: m.AdminSocial })))
 const AdminAds = lazy(() => import('./pages/AdminAds').then(m => ({ default: m.AdminAds })))
+const Sso = lazy(() => import('./pages/Sso').then(m => ({ default: m.Sso })))
 
 // Loading fallback component
 function PageLoader() {
@@ -332,6 +332,8 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* SSO landing — for cross-subdomain hops */}
+        <Route path="/sso" element={<Sso />} />
         {/* Auth pages */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
@@ -450,8 +452,7 @@ function AppRoutes() {
         <Route path="/admin/donations" element={<AdminRoute><AdminDonations /></AdminRoute>} />
         <Route path="/admin/careers" element={<AdminRoute><AdminCareers /></AdminRoute>} />
         <Route path="/admin/partner-agencies" element={<AdminRoute><AdminPartnerAgencies /></AdminRoute>} />
-        <Route path="/admin/question-bank" element={<AdminRoute><AdminQuestionBank /></AdminRoute>} />
-        <Route path="/admin/nclex-subscriptions" element={<AdminRoute><AdminNCLEXSubscriptions /></AdminRoute>} />
+        <Route path="/admin/nclex" element={<AdminRoute><AdminNclex /></AdminRoute>} />
         <Route path="/admin/emails" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/emails/inbox" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/emails/sent" element={<AdminRoute><AdminEmails /></AdminRoute>} />
@@ -496,6 +497,8 @@ function ReviewRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* SSO landing — exchanges a cross-subdomain hop token for a normal session */}
+        <Route path="/sso" element={<Sso />} />
         <Route path="/" element={<NCLEXReview />} />
         <Route path="/exam/:id" element={<NCLEXExam />} />
         <Route path="/video-library" element={<NCLEXVideoLibrary />} />
