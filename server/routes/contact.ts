@@ -1,15 +1,8 @@
 import { Router, Request, Response } from 'express'
 import { query } from '../db'
+import { sendEmail } from '../utils/email'
 
 const router = Router()
-
-async function getResendApiKey(): Promise<string | null> {
-  if (process.env.RESEND_API_KEY) return process.env.RESEND_API_KEY
-  try {
-    const r = await query(`SELECT value FROM settings WHERE key = 'resendApiKey' LIMIT 1`)
-    return r.rows[0]?.value || null
-  } catch { return null }
-}
 
 async function getAdminEmail(): Promise<string> {
   try {
@@ -30,11 +23,6 @@ router.post('/', async (req: Request, res: Response) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email address' })
-    }
-
-    const apiKey = await getResendApiKey()
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Email service not configured' })
     }
 
     const adminEmail = await getAdminEmail()
@@ -81,25 +69,13 @@ router.post('/', async (req: Request, res: Response) => {
       </div>
     `
 
-    const sendRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'GritSync Contact <no-reply@gritsync.com>',
-        to: [adminEmail],
-        reply_to: email,
-        subject: `Contact Form: ${subject}`,
-        html,
-        text: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
-      }),
+    const result = await sendEmail(adminEmail, `Contact Form: ${subject}`, html, {
+      from: 'GritSync Contact <no-reply@gritsync.com>',
+      replyTo: email,
+      text: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
     })
 
-    if (!sendRes.ok) {
-      const err = await sendRes.text()
-      console.error('Resend error:', err)
+    if (!result.ok) {
       return res.status(500).json({ error: 'Failed to send email' })
     }
 

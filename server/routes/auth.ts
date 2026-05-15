@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } from '../middleware/auth'
 import { ensureReferralCode } from './referrals'
+import { sendEmail } from '../utils/email'
 
 const router = Router()
 
@@ -33,21 +34,11 @@ function generateGritId(): string {
   return `GRIT${num}`
 }
 
-async function getResendApiKey(): Promise<string | null> {
-  if (process.env.RESEND_API_KEY) return process.env.RESEND_API_KEY
-  try {
-    const r = await query(`SELECT value FROM settings WHERE key = 'resendApiKey' LIMIT 1`)
-    return r.rows[0]?.value || null
-  } catch { return null }
-}
-
 function generateOTP(): string {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
 async function sendVerificationEmail(personalEmail: string, firstName: string, token: string, otp?: string) {
-  const apiKey = await getResendApiKey()
-  if (!apiKey) return
   const verifyUrl = `${process.env.APP_URL || 'https://gritsync.com'}/verify-email?token=${token}`
   const otpSection = otp ? `
         <div style="text-align:center;margin:28px 0;">
@@ -88,25 +79,15 @@ async function sendVerificationEmail(personalEmail: string, firstName: string, t
       </div>
     </div>
   `
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'GritSync <no-reply@gritsync.com>',
-        to: [personalEmail],
-        subject: 'Verify your GritSync account email',
-        html,
-      }),
-    })
-  } catch (e) {
-    console.error('Failed to send verification email:', e)
-  }
+  await sendEmail(
+    personalEmail,
+    'Verify your GritSync account email',
+    html,
+    { from: 'GritSync <no-reply@gritsync.com>' },
+  )
 }
 
 async function sendWelcomeEmail(personalEmail: string, firstName: string, lastName: string, gritId: string, gritsyncEmail: string) {
-  const apiKey = await getResendApiKey()
-  if (!apiKey) return
   const appUrl = process.env.APP_URL || 'https://gritsync.com'
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
@@ -185,20 +166,12 @@ async function sendWelcomeEmail(personalEmail: string, firstName: string, lastNa
       </div>
     </div>
   `
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'JJ Cantila at GritSync <no-reply@gritsync.com>',
-        to: [personalEmail],
-        subject: `[Important] Welcome to GritSync — Your First Steps, ${firstName}`,
-        html,
-      }),
-    })
-  } catch (e) {
-    console.error('Failed to send welcome email:', e)
-  }
+  await sendEmail(
+    personalEmail,
+    `[Important] Welcome to GritSync — Your First Steps, ${firstName}`,
+    html,
+    { from: 'JJ Cantila at GritSync <no-reply@gritsync.com>' },
+  )
 }
 
 // POST /api/auth/register
@@ -764,8 +737,6 @@ router.post('/admin-login-as', authenticateToken, async (req: AuthenticatedReque
 })
 
 async function sendPasswordResetEmail(personalEmail: string, firstName: string, token: string, otp: string) {
-  const apiKey = await getResendApiKey()
-  if (!apiKey) return
   const resetUrl = `${process.env.APP_URL || 'https://gritsync.com'}/reset-password?token=${token}`
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
@@ -803,20 +774,12 @@ async function sendPasswordResetEmail(personalEmail: string, firstName: string, 
       </div>
     </div>
   `
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'GritSync <no-reply@gritsync.com>',
-        to: [personalEmail],
-        subject: 'Reset your GritSync password',
-        html,
-      }),
-    })
-  } catch (e) {
-    console.error('Failed to send password reset email:', e)
-  }
+  await sendEmail(
+    personalEmail,
+    'Reset your GritSync password',
+    html,
+    { from: 'GritSync <no-reply@gritsync.com>' },
+  )
 }
 
 // POST /api/auth/reset-password-request

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
-import { getResendApiKey } from '../utils/email'
+import { getResendApiKey, wrapEmailHtml } from '../utils/email'
 
 const router = Router()
 
@@ -89,10 +89,11 @@ router.post('/send', authenticateToken, async (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: 'Missing required fields: to, subject, html' })
     }
 
+    // Wrap admin-composed HTML in the brand template (logo + footer)
     const payload: Record<string, any> = {
       to,
       subject,
-      html,
+      html: wrapEmailHtml(html),
       from: from || 'GritSync <noreply@gritsync.com>',
     }
     if (text) payload.text = text
@@ -222,11 +223,13 @@ router.post('/send-quote', async (req, res) => {
 
           <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(135deg,#b91c1c 0%,#dc2626 100%);padding:32px 40px;text-align:center;">
-              <div style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
-                <span style="color:#fca5a5;">GRIT</span>SYNC
-              </div>
-              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:0.5px;text-transform:uppercase;">NCLEX Application Processing</p>
+            <td style="background:#ffffff;padding:28px 40px 8px;text-align:center;">
+              <img src="${process.env.APP_URL || 'https://app.gritsync.com'}/gritsync_logo.png" alt="GritSync" width="180" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;height:auto;max-width:180px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background:linear-gradient(135deg,#b91c1c 0%,#dc2626 100%);padding:18px 40px;text-align:center;">
+              <p style="margin:0;color:rgba(255,255,255,0.95);font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">NCLEX Application Processing</p>
             </td>
           </tr>
 
