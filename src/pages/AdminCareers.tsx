@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -79,6 +80,26 @@ const statusIcons: Record<string, any> = {
   rejected: XCircle,
 }
 
+interface PartnerAgency {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  website: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  country: string
+  zipcode: string | null
+  contact_person_name: string | null
+  contact_person_email: string | null
+  contact_person_phone: string | null
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface Career {
   id: string
   title: string
@@ -103,11 +124,17 @@ interface Career {
 export function AdminCareers() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
-  const [activeTab, setActiveTab] = useState<'careers' | 'applications'>('careers')
-  
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = (() => {
+    const t = searchParams.get('tab')
+    if (t === 'applications' || t === 'agencies' || t === 'careers') return t
+    return 'careers' as const
+  })()
+  const [activeTab, setActiveTab] = useState<'careers' | 'applications' | 'agencies'>(initialTab)
+
   // Applications state
   const [applications, setApplications] = useState<CareerApplication[]>([])
-  const [partnerAgencies, setPartnerAgencies] = useState<any[]>([])
+  const [partnerAgencies, setPartnerAgencies] = useState<PartnerAgency[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -134,6 +161,27 @@ export function AdminCareers() {
   const [deletingCareer, setDeletingCareer] = useState(false)
   const [savingCareer, setSavingCareer] = useState(false)
   
+  // Partner agency state
+  const [editingAgency, setEditingAgency] = useState<PartnerAgency | null>(null)
+  const [showAgencyModal, setShowAgencyModal] = useState(false)
+  const [savingAgency, setSavingAgency] = useState(false)
+  const [agencyForm, setAgencyForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    website: '',
+    address: '',
+    city: '',
+    state: '',
+    country: 'USA',
+    zipcode: '',
+    contact_person_name: '',
+    contact_person_email: '',
+    contact_person_phone: '',
+    is_active: true,
+    notes: '',
+  })
+
   // Career form fields
   const [careerForm, setCareerForm] = useState({
     title: '',
@@ -200,6 +248,122 @@ export function AdminCareers() {
       fetchData()
     }
   }, [activeTab])
+
+  useEffect(() => {
+    const current = searchParams.get('tab')
+    if (current !== activeTab) {
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', activeTab)
+      setSearchParams(next, { replace: true })
+    }
+  }, [activeTab])
+
+  async function fetchAgencies() {
+    try {
+      const data = await partnerAgenciesAPI.getAll()
+      setPartnerAgencies(data as PartnerAgency[])
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to load partner agencies', 'error')
+    }
+  }
+
+  const resetAgencyForm = () => {
+    setAgencyForm({
+      name: '',
+      email: '',
+      phone: '',
+      website: '',
+      address: '',
+      city: '',
+      state: '',
+      country: 'USA',
+      zipcode: '',
+      contact_person_name: '',
+      contact_person_email: '',
+      contact_person_phone: '',
+      is_active: true,
+      notes: '',
+    })
+  }
+
+  const handleCreateAgency = () => {
+    setEditingAgency(null)
+    resetAgencyForm()
+    setShowAgencyModal(true)
+  }
+
+  const handleEditAgency = (agency: PartnerAgency) => {
+    setEditingAgency(agency)
+    setAgencyForm({
+      name: agency.name,
+      email: agency.email,
+      phone: agency.phone || '',
+      website: agency.website || '',
+      address: agency.address || '',
+      city: agency.city || '',
+      state: agency.state || '',
+      country: agency.country || 'USA',
+      zipcode: agency.zipcode || '',
+      contact_person_name: agency.contact_person_name || '',
+      contact_person_email: agency.contact_person_email || '',
+      contact_person_phone: agency.contact_person_phone || '',
+      is_active: agency.is_active,
+      notes: agency.notes || '',
+    })
+    setShowAgencyModal(true)
+  }
+
+  const handleSaveAgency = async () => {
+    if (!agencyForm.name.trim() || !agencyForm.email.trim()) {
+      showToast('Name and email are required', 'error')
+      return
+    }
+    setSavingAgency(true)
+    try {
+      const payload = {
+        name: agencyForm.name.trim(),
+        email: agencyForm.email.trim(),
+        phone: agencyForm.phone.trim() || null,
+        website: agencyForm.website.trim() || null,
+        address: agencyForm.address.trim() || null,
+        city: agencyForm.city.trim() || null,
+        state: agencyForm.state.trim() || null,
+        country: agencyForm.country.trim() || 'USA',
+        zipcode: agencyForm.zipcode.trim() || null,
+        contact_person_name: agencyForm.contact_person_name.trim() || null,
+        contact_person_email: agencyForm.contact_person_email.trim() || null,
+        contact_person_phone: agencyForm.contact_person_phone.trim() || null,
+        is_active: agencyForm.is_active,
+        notes: agencyForm.notes.trim() || null,
+      }
+      if (editingAgency) {
+        await partnerAgenciesAPI.update(editingAgency.id, payload as any)
+        showToast('Partner agency updated successfully', 'success')
+      } else {
+        await partnerAgenciesAPI.create(payload as any)
+        showToast('Partner agency created successfully', 'success')
+      }
+      setShowAgencyModal(false)
+      setEditingAgency(null)
+      resetAgencyForm()
+      await fetchAgencies()
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to save partner agency', 'error')
+    } finally {
+      setSavingAgency(false)
+    }
+  }
+
+  const handleDeleteAgency = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this partner agency?')) return
+    try {
+      await partnerAgenciesAPI.delete(id)
+      showToast('Partner agency deleted successfully', 'success')
+      await fetchAgencies()
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to delete partner agency', 'error')
+    }
+  }
 
   const handleCreateCareer = () => {
     setSelectedCareer(null)
@@ -446,6 +610,18 @@ export function AdminCareers() {
               >
                 <FileText className="h-4 w-4" />
                 Applications
+              </button>
+              <button
+                onClick={() => setActiveTab('agencies')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                  activeTab === 'agencies'
+                    ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                )}
+              >
+                <Building2 className="h-4 w-4" />
+                Partner Agencies
               </button>
             </nav>
           </div>
@@ -961,6 +1137,239 @@ export function AdminCareers() {
             </Modal>
           )}
             </>
+          )}
+
+          {/* Partner Agencies Tab Content */}
+          {activeTab === 'agencies' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Agencies you can forward career applications to.
+                </p>
+                <Button onClick={handleCreateAgency}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Agency
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                      <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{partnerAgencies.length}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Agencies</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                      <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        {partnerAgencies.filter(a => a.is_active).length}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Active</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
+                      <XCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        {partnerAgencies.filter(a => !a.is_active).length}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Inactive</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {loading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <CardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : partnerAgencies.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">No partner agencies yet</p>
+                  <Button onClick={handleCreateAgency}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add First Agency
+                  </Button>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {partnerAgencies.map((agency) => (
+                    <Card key={agency.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{agency.name}</h3>
+                            {agency.is_active ? (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1">
+                                <CheckCircle className="h-3 w-3" />
+                                Active
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-1">
+                                <XCircle className="h-3 w-3" />
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <p>Email: {agency.email}</p>
+                            {agency.phone && <p>Phone: {agency.phone}</p>}
+                            {agency.contact_person_name && <p>Contact: {agency.contact_person_name}</p>}
+                            {agency.contact_person_email && <p>Contact Email: {agency.contact_person_email}</p>}
+                            {agency.city && agency.state && (
+                              <p>Location: {agency.city}, {agency.state}</p>
+                            )}
+                            <p>Created: {formatDate(agency.created_at)}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => handleEditAgency(agency)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleDeleteAgency(agency.id)}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Partner Agency Create/Edit Modal */}
+          {showAgencyModal && (
+            <Modal
+              isOpen={showAgencyModal}
+              onClose={() => {
+                setShowAgencyModal(false)
+                setEditingAgency(null)
+                resetAgencyForm()
+              }}
+              title={editingAgency ? 'Edit Partner Agency' : 'Add Partner Agency'}
+              size="lg"
+            >
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                      Agency Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input value={agencyForm.name} onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })} placeholder="Enter agency name" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <Input type="email" value={agencyForm.email} onChange={(e) => setAgencyForm({ ...agencyForm, email: e.target.value })} placeholder="Enter agency email" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Phone</label>
+                    <Input value={agencyForm.phone} onChange={(e) => setAgencyForm({ ...agencyForm, phone: e.target.value })} placeholder="Enter phone number" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Website</label>
+                    <Input value={agencyForm.website} onChange={(e) => setAgencyForm({ ...agencyForm, website: e.target.value })} placeholder="Enter website URL" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Address</label>
+                    <Input value={agencyForm.address} onChange={(e) => setAgencyForm({ ...agencyForm, address: e.target.value })} placeholder="Enter street address" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">City</label>
+                    <Input value={agencyForm.city} onChange={(e) => setAgencyForm({ ...agencyForm, city: e.target.value })} placeholder="Enter city" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">State</label>
+                    <Input value={agencyForm.state} onChange={(e) => setAgencyForm({ ...agencyForm, state: e.target.value })} placeholder="Enter state" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Country</label>
+                    <Input value={agencyForm.country} onChange={(e) => setAgencyForm({ ...agencyForm, country: e.target.value })} placeholder="Enter country" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Zipcode</label>
+                    <Input value={agencyForm.zipcode} onChange={(e) => setAgencyForm({ ...agencyForm, zipcode: e.target.value })} placeholder="Enter zipcode" />
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Contact Person</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Contact Person Name</label>
+                      <Input value={agencyForm.contact_person_name} onChange={(e) => setAgencyForm({ ...agencyForm, contact_person_name: e.target.value })} placeholder="Enter contact person name" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Contact Person Email</label>
+                      <Input type="email" value={agencyForm.contact_person_email} onChange={(e) => setAgencyForm({ ...agencyForm, contact_person_email: e.target.value })} placeholder="Enter contact person email" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Contact Person Phone</label>
+                      <Input value={agencyForm.contact_person_phone} onChange={(e) => setAgencyForm({ ...agencyForm, contact_person_phone: e.target.value })} placeholder="Enter contact person phone" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Notes</label>
+                  <Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Add any additional notes..." rows={3} />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="agencyIsActive"
+                    checked={agencyForm.is_active}
+                    onChange={(e) => setAgencyForm({ ...agencyForm, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <label htmlFor="agencyIsActive" className="text-sm text-gray-700 dark:text-gray-300">
+                    Active (applications can be forwarded to this agency)
+                  </label>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAgencyModal(false)
+                      setEditingAgency(null)
+                      resetAgencyForm()
+                    }}
+                    className="flex-1"
+                    disabled={savingAgency}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSaveAgency} disabled={savingAgency} className="flex-1">
+                    {savingAgency ? 'Saving...' : editingAgency ? 'Update' : 'Create'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
           )}
 
           {/* Career Create/Edit Modal */}

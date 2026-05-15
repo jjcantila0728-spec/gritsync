@@ -294,7 +294,7 @@ function MessageAttachment({ attachment, mine, pending }: { attachment: Attachme
 }
 
 const ROLE_BADGE_META: Record<string, { label: string; className: string; icon: typeof Shield }> = {
-  admin: { label: 'Staff', className: 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300', icon: Shield },
+  admin: { label: 'Admin', className: 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300', icon: Shield },
   affiliate: { label: 'Affiliate', className: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300', icon: Link2 },
   advisor: { label: 'Advisor', className: 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300', icon: Briefcase },
 }
