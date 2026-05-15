@@ -47,7 +47,10 @@ if (!DATABASE_URL || DATABASE_URL.includes('localhost')) {
   process.exit(1)
 }
 
-console.log('🔗  Connecting to:', DATABASE_URL.replace(/:([^:@]+)@/, ':****@'))
+// Strip sslmode/pgbouncer params from URL — we set SSL via client config instead
+const cleanUrl = DATABASE_URL.replace(/[?&](sslmode|pgbouncer|supa|uselibpqcompat)=[^&]*/g, '').replace(/[?&]$/, '')
+
+console.log('🔗  Connecting to:', cleanUrl.replace(/:([^:@]+)@/, ':****@'))
 
 // ── 2. SQL files to run in order ────────────────────────────────────────────
 const sqlFiles = [
@@ -58,7 +61,7 @@ const sqlFiles = [
 // ── 3. Run ───────────────────────────────────────────────────────────────────
 async function main () {
   const client = new Client({
-    connectionString: DATABASE_URL,
+    connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false },  // required for Supabase
   })
 

@@ -11,8 +11,7 @@
   "functions": {
     "api/index.ts": {
       "memory": 1024,
-      "maxDuration": 30,
-      "runtime": "nodejs20.x"
+      "maxDuration": 30
     }
   },
   "headers": [
