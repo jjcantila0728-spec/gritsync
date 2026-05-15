@@ -4,8 +4,7 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/api/:path((?!health$).*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
