@@ -49,6 +49,16 @@ async function apiRequest(path: string, options: RequestInit = {}): Promise<{ da
     const body = await res.json().catch(() => ({}))
 
     if (!res.ok) {
+      // A 401 with a token in storage means the token is stale/invalid — wipe it
+      // so subsequent loads don't keep replaying the same failed request. Without
+      // this, AuthContext's initial fetch + onAuthStateChange listener fire two
+      // 401s on every page load.
+      if (res.status === 401 && token) {
+        try {
+          localStorage.removeItem('gritsync_token')
+          localStorage.removeItem('gritsync_user')
+        } catch {}
+      }
       return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}`, status: res.status, code: res.status } }
     }
     return { data: body, error: null }

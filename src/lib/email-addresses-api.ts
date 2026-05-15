@@ -259,7 +259,10 @@ export const emailAddressesAPI = {
       }
       throw createError
     }
-    return (created as any).email_address as string
+    // Some api-client adapters return { data: null, error: null } from
+    // .insert().select().single() even when the insert succeeded. Fall back
+    // to the email we just attempted to insert — we know that's what landed.
+    return ((created as any)?.email_address as string) || emailAddress
   },
 
   /**

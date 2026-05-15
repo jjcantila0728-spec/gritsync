@@ -3,10 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// Register the self-unregistering service worker in production only.
-// Dev builds don't ship /sw.js, so registering it just floods the console
-// with "Failed to update a ServiceWorker … Not found" errors on every page.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// Register the self-unregistering service worker. Production serves
+// /sw.js from public/; dev does not, so skip there to keep the console
+// clean. We still want this to run in prod so users who carry the old
+// caching worker pick up its eviction.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

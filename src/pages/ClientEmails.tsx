@@ -260,15 +260,24 @@ export function ClientEmails() {
         try {
           const generatedEmail = await emailAddressesAPI.generateClientEmail(user.id)
           console.log('Generated new client email:', generatedEmail)
-          
-          const updatedAddresses = await emailAddressesAPI.getUserAddresses(user.id)
-          const newAddress = updatedAddresses.find(addr => addr.email_address === generatedEmail)
-          
+
+          // Retry the fetch a couple of times — some adapters return stale data
+          // immediately after an insert (read-your-own-write lag).
+          let newAddress: EmailAddress | undefined
+          for (let attempt = 0; attempt < 3 && !newAddress; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 250))
+            const updatedAddresses = await emailAddressesAPI.getUserAddresses(user.id)
+            newAddress = updatedAddresses.find(addr => addr.email_address === generatedEmail)
+              || updatedAddresses.find(addr => addr.is_primary && addr.is_active)
+              || updatedAddresses.find(addr => addr.is_active)
+              || updatedAddresses[0]
+          }
+
           if (newAddress) {
             setClientEmailAddress(newAddress)
-            setComposeData(prev => ({ ...prev, fromEmailAddressId: newAddress.id }))
+            setComposeData(prev => ({ ...prev, fromEmailAddressId: newAddress!.id }))
           } else {
-            throw new Error('Failed to retrieve generated email address')
+            throw new Error(`Failed to retrieve generated email address (generated=${generatedEmail || 'undefined'})`)
           }
         } catch (genError: any) {
           console.error('Error generating client email:', genError)
