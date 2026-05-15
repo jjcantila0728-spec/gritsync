@@ -1,0 +1,29 @@
+# Build artifacts and local dev
+node_modules
+dist
+.env
+.env.*
+!.env.example
+
+# Dev/admin scripts — not needed on Vercel
+scripts/
+
+# Docker / Replit / local tooling
+docker*
+Docker*
+.dockerignore
+.replit
+replit.nix
+.local/
+
+# Test output
+coverage/
+*.test.ts
+*.spec.ts
+__tests__/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

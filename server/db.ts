@@ -12,11 +12,35 @@ types.setTypeParser(1082, (v: string) => v)
 const connectionString =
   process.env.DATABASE_URL ||
   process.env.POSTGRES_PRISMA_URL ||
-  process.env.POSTGRES_URL
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_URL_NON_POOLING   // Vercel Supabase direct connection
+
+if (!connectionString) {
+  console.error('[db] FATAL: No database connection string found. Set DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL in your environment variables.')
+}
+
+// SSL: enable for Supabase/any cloud host; auto-detect from the connection string.
+// Never reject self-signed certs (Supabase uses a CA that Node trusts, but
+// reject:false is needed for the Supavisor pooler's TLS termination).
+const needsSsl =
+  !!connectionString && (
+    connectionString.includes('supabase') ||
+    connectionString.includes('amazonaws') ||
+    connectionString.includes('neon.tech') ||
+    process.env.NODE_ENV === 'production'
+  )
 
 const pool = new Pool({
   connectionString,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: needsSsl ? { rejectUnauthorized: false } : false,
+  // Serverless-optimised pool settings:
+  // Keep max low — each cold-start creates a new Pool and Supabase free tier
+  // allows ~20 simultaneous connections across ALL deployments.
+  max: process.env.VERCEL ? 3 : 10,
+  // Release idle connections quickly (Vercel functions are short-lived).
+  idleTimeoutMillis: 10_000,
+  // Give up on connecting after 8 s so we surface errors fast.
+  connectionTimeoutMillis: 8_000,
 })
 
 export default pool

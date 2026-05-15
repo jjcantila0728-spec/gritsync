@@ -1073,25 +1073,45 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ error: err.message || 'Internal server error' })
 })
 
+// ─── Startup Migrations (Vercel-safe lazy-init pattern) ─────────────────────
+//
+// Problem: on Vercel, the serverless function must respond within maxDuration
+// (30 s). Running runStartupMigrations() synchronously on cold-start risks
+// exhausting that window before the first real request is handled.
+//
+// Solution: fire migrations in the background on cold-start; the first request
+// is served immediately from the already-initialised Express app. Subsequent
+// requests also run instantly — the migration promise is a singleton.
+// If migrations fail they log loudly but never crash the handler.
+// ────────────────────────────────────────────────────────────────────────────
+
+let _migrationPromise: Promise<void> | null = null
+
+function startMigrations(): Promise<void> {
+  if (_migrationPromise) return _migrationPromise
+  _migrationPromise = runStartupMigrations()
+    .then(() => console.log('[startup] migrations complete'))
+    .catch((err) => {
+      console.error('[startup] migrations error (non-fatal):', err?.message ?? err)
+      // Reset so the next cold-start retries.
+      _migrationPromise = null
+    })
+  return _migrationPromise
+}
+
 if (process.env.VERCEL) {
-  // Serverless: run migrations on cold-start; skip listen() and the
-  // setInterval scheduler (not supported in ephemeral functions).
-  runStartupMigrations().catch((err) =>
-    console.error('Startup migrations error (Vercel cold-start):', err)
-  )
+  // Fire-and-forget on cold-start. The Express app is already exported and ready
+  // to handle requests; migrations run in the background.
+  startMigrations()
 } else {
   app.listen(PORT, () => {
     console.log(`API Server running on port ${PORT} (${isProd ? 'production' : 'development'})`)
-    runStartupMigrations()
-      .catch((err) => {
-        console.error('Unhandled error in startup migrations (non-fatal):', err)
-      })
-      .finally(() => {
-        // Poll for due scheduled social posts every minute.
-        setInterval(() => {
-          processDuePosts().catch((err) => console.error('Scheduled post tick failed:', err))
-        }, 60_000)
-      })
+    startMigrations().finally(() => {
+      // Poll for due scheduled social posts every minute (local/self-hosted only).
+      setInterval(() => {
+        processDuePosts().catch((err) => console.error('Scheduled post tick failed:', err))
+      }, 60_000)
+    })
   })
 }
 
