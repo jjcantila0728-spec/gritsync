@@ -25,6 +25,12 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any
+    // Reject single-use SSO tokens here — they are only accepted by
+    // /api/auth/sso/exchange. Smuggling one as a Bearer would otherwise leak
+    // an authenticated session with no role/email claims attached.
+    if (decoded?.aud === SSO_AUD) {
+      return res.status(401).json({ error: 'Invalid token type' })
+    }
     req.user = decoded
     next()
   } catch {
@@ -60,4 +66,30 @@ export function signToken(payload: object): string {
 
 export function signRefreshToken(payload: object): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' })
+}
+
+// ---------------------------------------------------------------------------
+// Single-use SSO tokens — for hopping a user from one subdomain to another
+// (e.g. app.gritsync.com → review.gritsync.com) without re-entering credentials.
+// The token is short-lived, has its own `aud` claim, and is NOT accepted by
+// authenticateToken (which only honors tokens without `aud` or with the app
+// audience — see below). The receiving subdomain exchanges it via
+// /api/auth/sso/exchange for a normal access/refresh pair.
+// ---------------------------------------------------------------------------
+export const SSO_AUD = 'sso-hop'
+
+export function signSsoToken(userId: string, targetSubdomain: string): string {
+  return jwt.sign(
+    { sub: userId, target: targetSubdomain },
+    JWT_SECRET,
+    { expiresIn: '60s', audience: SSO_AUD }
+  )
+}
+
+export function verifySsoToken(token: string): { sub: string; target: string } {
+  const decoded = jwt.verify(token, JWT_SECRET, { audience: SSO_AUD }) as any
+  if (!decoded?.sub || !decoded?.target) {
+    throw new Error('Malformed SSO token')
+  }
+  return { sub: decoded.sub, target: decoded.target }
 }

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { query } from '../db'
-import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } from '../middleware/auth'
+import { authenticateToken, signToken, signRefreshToken, signSsoToken, verifySsoToken, AuthenticatedRequest } from '../middleware/auth'
 import { ensureReferralCode } from './referrals'
 import { sendEmail } from '../utils/email'
 
@@ -639,6 +639,96 @@ router.post('/refresh', async (req: Request, res: Response) => {
 // POST /api/auth/logout
 router.post('/logout', authenticateToken, async (_req: AuthenticatedRequest, res: Response) => {
   res.json({ message: 'Logged out successfully' })
+})
+
+// ---------------------------------------------------------------------------
+// Cross-subdomain single-sign-on hop.
+//
+// Flow:
+//   1. User is logged in on app.gritsync.com.
+//   2. User clicks the "NCLEX Review" link in the sidebar. The client calls
+//      POST /api/auth/sso/issue with their normal bearer token. Server returns
+//      a 60-second SSO token bound to the target subdomain.
+//   3. Client redirects the browser to https://<target>.gritsync.com/sso?token=...
+//   4. The /sso route on the target subdomain calls POST /api/auth/sso/exchange
+//      with the SSO token. Server validates it, looks up the user, and returns
+//      a normal access/refresh pair. /sso stores those in its own localStorage
+//      and redirects to /.
+//   5. Direct visits to review.gritsync.com (no SSO token) hit the normal
+//      login page.
+// ---------------------------------------------------------------------------
+
+const SSO_ALLOWED_TARGETS = new Set(['review', 'app'])
+
+// POST /api/auth/sso/issue — auth required
+router.post('/sso/issue', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const target = String(req.body?.target || '').toLowerCase()
+    if (!SSO_ALLOWED_TARGETS.has(target)) {
+      return res.status(400).json({ error: `Invalid SSO target. Allowed: ${[...SSO_ALLOWED_TARGETS].join(', ')}` })
+    }
+    const ssoToken = signSsoToken(req.user!.id, target)
+    res.json({ sso_token: ssoToken, expires_in: 60, target })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/auth/sso/exchange — public; trades an SSO token for normal session tokens
+router.post('/sso/exchange', async (req: Request, res: Response) => {
+  try {
+    const { sso_token } = req.body || {}
+    if (!sso_token) return res.status(400).json({ error: 'sso_token required' })
+
+    let claims: { sub: string; target: string }
+    try {
+      claims = verifySsoToken(sso_token)
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired SSO token' })
+    }
+
+    const result = await query(
+      `SELECT id, email, role, first_name, last_name, middle_name, grit_id, avatar_path, mobile, gritsync_email, created_at, is_active, email_verified
+       FROM users WHERE id = $1`,
+      [claims.sub]
+    )
+    if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' })
+
+    const user = result.rows[0]
+    if (user.is_active === false) {
+      return res.status(403).json({ error: 'Account is deactivated' })
+    }
+
+    const access_token = signToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      grit_id: user.grit_id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      middle_name: user.middle_name,
+    })
+    const refresh_token = signRefreshToken({ id: user.id })
+
+    res.json({
+      session: {
+        access_token,
+        refresh_token,
+        token_type: 'bearer',
+        expires_in: 604800,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          user_metadata: { first_name: user.first_name, last_name: user.last_name, grit_id: user.grit_id, role: user.role },
+          app_metadata: { role: user.role },
+        },
+      },
+      target: claims.target,
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // PUT /api/auth/update

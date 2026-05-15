@@ -6,11 +6,41 @@ import { roleUrl, type AppRole, type RolePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
 import { reviewUrl } from '@/lib/routing'
-
-// Hide the NCLEX Review entry while the review subdomain is being upgraded.
-// Flip back to true once the upgrade ships.
-const SHOW_NCLEX_REVIEW = false
 import { useToast } from '@/components/ui/Toast'
+
+const SHOW_NCLEX_REVIEW = true
+
+/**
+ * Cross-subdomain SSO hop: ask the backend for a 60-second SSO token, then
+ * redirect to https://review.gritsync.com/sso?token=... where the token is
+ * exchanged for a normal session. Falls back to opening review without SSO if
+ * the issue call fails — the user will just see the login screen there.
+ */
+async function openReviewWithSso() {
+  try {
+    const accessToken = localStorage.getItem('gritsync_token')
+    if (!accessToken) {
+      window.location.href = reviewUrl('/')
+      return
+    }
+    const res = await fetch('/api/auth/sso/issue', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ target: 'review' }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || !body?.sso_token) {
+      window.location.href = reviewUrl('/')
+      return
+    }
+    window.location.href = reviewUrl(`/sso?token=${encodeURIComponent(body.sso_token)}`)
+  } catch {
+    window.location.href = reviewUrl('/')
+  }
+}
 import {
   LayoutDashboard,
   DollarSign,
@@ -21,10 +51,8 @@ import {
   Award,
   Heart,
   Briefcase,
-  Building2,
   Mail,
   BookOpen,
-  Crown,
   MessageSquare,
   Link2,
   ArrowUpRight,
@@ -52,12 +80,10 @@ const adminNavItems: NavItem[] = [
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare },
   { label: 'Social', path: '/admin/social', icon: Share2 },
   { label: 'AI Ads', path: '/admin/ads', icon: Megaphone },
-  { label: 'Question Bank', path: '/admin/question-bank', icon: BookOpen },
-  { label: 'NCLEX Subscriptions', path: '/admin/nclex-subscriptions', icon: Crown },
+  { label: 'NCLEX', path: '/admin/nclex', icon: BookOpen },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
   { label: 'Donations', path: '/admin/donations', icon: Heart },
   { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },
-  { label: 'Partner Agencies', path: '/admin/partner-agencies', icon: Building2 },
   { label: 'Settings', path: '/admin/settings', icon: Settings },
 ]
 
@@ -539,18 +565,17 @@ export function Sidebar() {
             </Link>
           )
         })}
-        {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
+        {/* NCLEX Review — cross-subdomain link, SSO-hop on click */}
         {SHOW_NCLEX_REVIEW && !isAdmin() && (
-          <a
-            href={reviewUrl('/')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); openReviewWithSso() }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />
-            <span className="flex-1 min-w-0">NCLEX Review</span>
+            <span className="flex-1 min-w-0 text-left">NCLEX Review</span>
             <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-          </a>
+          </button>
         )}
       </nav>
     </aside>
@@ -1001,20 +1026,18 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             </Link>
           )
         })}
-        {/* NCLEX Review — cross-subdomain link, opens in a new tab */}
+        {/* NCLEX Review — cross-subdomain link, SSO-hop on click */}
         {SHOW_NCLEX_REVIEW && !isAdmin() && (
-          <a
-            href={reviewUrl('/')}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={onNavigate}
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); onNavigate?.(); openReviewWithSso() }}
             className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             style={{ visibility: 'visible', display: 'flex' }}
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />
-            <span className="flex-1 min-w-0 block">NCLEX Review</span>
+            <span className="flex-1 min-w-0 block text-left">NCLEX Review</span>
             <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-          </a>
+          </button>
         )}
       </nav>
     </aside>

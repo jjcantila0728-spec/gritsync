@@ -36,6 +36,12 @@ function clearSession() {
   authListeners.forEach(cb => cb('SIGNED_OUT', null))
 }
 
+/** Externally-callable session adopter — used by the SSO exchange flow to
+ *  install a session received from /api/auth/sso/exchange. */
+export function adoptSession(session: any) {
+  setSession(session)
+}
+
 async function apiRequest(path: string, options: RequestInit = {}): Promise<{ data: any; error: any }> {
   const token = getStoredToken()
   const headers: Record<string, string> = {
