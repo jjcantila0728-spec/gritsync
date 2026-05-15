@@ -79,7 +79,7 @@ async function sendVerificationEmail(personalEmail: string, firstName: string, t
       </div>
     </div>
   `
-  await sendEmail(
+  return await sendEmail(
     personalEmail,
     'Verify your GritSync account email',
     html,
@@ -1038,9 +1038,13 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
 
     // Send to the email the user provided (handles accounts where personal_email is null)
     const sendTo = user.personal_email || emailInput
-    await sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
+    const sendResult = await sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
 
-    res.json({ message: 'Verification email resent. Please check your inbox.' })
+    res.json({
+      message: 'Verification email resent. Please check your inbox.',
+      // TEMP DEBUG — surface Resend's reply so we can diagnose the silent failure.
+      debug: sendResult,
+    })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
