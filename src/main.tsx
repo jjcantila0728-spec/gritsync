@@ -3,10 +3,10 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// Register the self-unregistering service worker so every browser that
-// previously had the stale caching worker will receive this new one,
-// which immediately evicts itself and stops intercepting requests.
-if ('serviceWorker' in navigator) {
+// Register the self-unregistering service worker in production only.
+// Dev builds don't ship /sw.js, so registering it just floods the console
+// with "Failed to update a ServiceWorker … Not found" errors on every page.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

@@ -517,8 +517,16 @@ export function Header() {
       // Derive count directly from fetched data — avoids the broken head-count API
       const unread = list.filter((n: any) => !n.read).length
       setUnreadCount(unread)
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
+    } catch (error: any) {
+      // Network/timeout errors are expected to fail transiently (the poll retries
+      // every 15s) — log as warn instead of error so they don't dominate the console.
+      const isTransient = error?.type === 'NETWORK' || error?.type === 'TIMEOUT' ||
+        /fetch|network|timeout/i.test(error?.message || '')
+      if (isTransient) {
+        console.warn('Notifications fetch transient failure (will retry):', error?.message || error)
+      } else {
+        console.error('Error fetching notifications:', error)
+      }
     } finally {
       setLoadingNotifications(false)
     }

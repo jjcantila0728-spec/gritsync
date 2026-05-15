@@ -61,6 +61,8 @@ attached_assets/
 
 # Test harness output
 scripts/test-output/
+scripts/e2e-output/
+scripts/e2e-test-users.json
 
 # OS
 Thumbs.db

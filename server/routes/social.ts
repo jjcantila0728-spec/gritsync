@@ -566,8 +566,9 @@ async function publishToPlatform(
 // Exported so server/index.ts can start the interval at boot.
 // ---------------------------------------------------------------------------
 let publishing = false
+let socialPostsTableMissing = false
 export async function processDuePosts() {
-  if (publishing) return
+  if (publishing || socialPostsTableMissing) return
   publishing = true
   try {
     const due = await query(
@@ -577,7 +578,15 @@ export async function processDuePosts() {
           OR (status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW())
        ORDER BY COALESCE(scheduled_at, created_at) ASC
        LIMIT 25`
-    )
+    ).catch((err: any) => {
+      if (err?.code === '42P01') {
+        socialPostsTableMissing = true
+        console.warn('[social] social_posts table missing — scheduler disabled until migration is applied')
+        return null
+      }
+      throw err
+    })
+    if (!due) { publishing = false; return }
 
     for (const post of due.rows) {
       await query(`UPDATE social_posts SET status = 'publishing', updated_at = NOW() WHERE id = $1`, [post.id])
