@@ -1,14 +1,32 @@
 /**
  * Vercel serverless entry-point.
  *
- * Vercel calls the default export as an HTTP handler — it passes (req, res)
- * directly to the Express app, so no `listen()` is needed here.
- *
- * Static import (not dynamic) so esbuild bundles everything into a single
- * CJS file. A dynamic import() causes esbuild to code-split the dependency
- * into a separate ESM chunk, and require()ing an ESM chunk with cyclical
- * imports throws ERR_REQUIRE_CYCLE_MODULE on Node 22.
+ * Captures any module-load error from server/index so we can surface
+ * the full stack trace in the HTTP response (production logs truncate
+ * the message and hide the failing module path).
  */
-import app from '../server/index'
+let app: any = null
+let loadErr: any = null
 
-export default app
+try {
+
+  app = require('../server/index').default
+} catch (e: any) {
+  loadErr = e
+}
+
+export default function handler(req: any, res: any) {
+  if (loadErr) {
+    res.setHeader('Content-Type', 'application/json')
+    res.statusCode = 500
+    res.end(JSON.stringify({
+      error: 'module-load-failed',
+      name: loadErr.name,
+      code: loadErr.code,
+      message: loadErr.message,
+      stack: typeof loadErr.stack === 'string' ? loadErr.stack.split('\n').slice(0, 20) : null,
+    }, null, 2))
+    return
+  }
+  return app(req, res)
+}
