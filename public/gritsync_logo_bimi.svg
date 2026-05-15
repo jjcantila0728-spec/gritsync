@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>GritSync</title>
+  <desc>GritSync brand mark — stylized iS letterforms on red</desc>
+  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="#CA1515"/>
+  <!-- i: dot -->
+  <circle cx="200" cy="200" r="140" fill="#FFFFFF"/>
+  <!-- i: stem -->
+  <rect x="125" y="420" width="150" height="510" rx="75" ry="75" fill="#FFFFFF"/>
+  <!-- S: top bar -->
+  <rect x="380" y="80" width="580" height="220" rx="110" ry="110" fill="#FFFFFF"/>
+  <!-- S: middle bar -->
+  <rect x="380" y="402" width="580" height="220" rx="110" ry="110" fill="#FFFFFF"/>
+  <!-- S: bottom bar -->
+  <rect x="380" y="724" width="580" height="220" rx="110" ry="110" fill="#FFFFFF"/>
+</svg>
