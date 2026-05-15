@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
 import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, AuthenticatedRequest } from '../middleware/auth'
 import { ensureReferralCode } from './referrals'
@@ -627,9 +628,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const { refresh_token } = req.body
     if (!refresh_token) return res.status(400).json({ error: 'Refresh token required' })
 
-    const jwt = await import('jsonwebtoken')
     const JWT_SECRET = process.env.JWT_SECRET || 'gritsync-jwt-secret-key-2024'
-    const decoded = jwt.default.verify(refresh_token, JWT_SECRET) as any
+    const decoded = jwt.verify(refresh_token, JWT_SECRET) as any
 
     const result = await query(
       'SELECT id, email, role, first_name, last_name, grit_id FROM users WHERE id = $1',
