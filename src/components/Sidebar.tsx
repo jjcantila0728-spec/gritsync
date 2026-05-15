@@ -49,7 +49,6 @@ import {
   Settings,
   FolderOpen,
   Award,
-  Heart,
   Briefcase,
   Mail,
   BookOpen,
@@ -57,7 +56,6 @@ import {
   Link2,
   ArrowUpRight,
   Share2,
-  Megaphone,
 } from 'lucide-react'
 import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
@@ -79,10 +77,8 @@ const adminNavItems: NavItem[] = [
   { label: 'Emails', path: '/admin/emails', icon: Mail },
   { label: 'Messages', path: '/admin/messages', icon: MessageSquare },
   { label: 'Social', path: '/admin/social', icon: Share2 },
-  { label: 'AI Ads', path: '/admin/ads', icon: Megaphone },
   { label: 'NCLEX', path: '/admin/nclex', icon: BookOpen },
   { label: 'Sponsorships', path: '/admin/sponsorships', icon: Award },
-  { label: 'Donations', path: '/admin/donations', icon: Heart },
   { label: 'Career Applications', path: '/admin/careers', icon: Briefcase },
   { label: 'Settings', path: '/admin/settings', icon: Settings },
 ]

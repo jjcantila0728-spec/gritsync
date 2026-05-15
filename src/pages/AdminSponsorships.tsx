@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -11,20 +12,22 @@ import { Textarea } from '@/components/ui/Textarea'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { sponsorshipsAPI } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
-import { 
-  Search, 
-  RefreshCw, 
-  ChevronLeft, 
-  ChevronRight, 
-  Eye, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Search,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  CheckCircle,
+  XCircle,
   Clock,
   Award,
   FileText,
-  MessageSquare
+  MessageSquare,
+  Heart as HeartIcon,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { DonationsBody } from './AdminDonations'
 
 interface Sponsorship {
   id: string
@@ -69,7 +72,11 @@ const statusIcons: Record<string, any> = {
   awarded: Award,
 }
 
-export function AdminSponsorships() {
+/**
+ * Body-only component — no Header/Sidebar/page shell. Used as the
+ * "Sponsorships" tab inside the AdminSponsorships host below.
+ */
+export function SponsorshipsBody() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const [sponsorships, setSponsorships] = useState<Sponsorship[]>([])
@@ -173,36 +180,14 @@ export function AdminSponsorships() {
 
   if (!isAdmin()) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Header />
-        <div className="flex">
-          <Sidebar />
-          <main className="flex-1 p-4 md:p-8">
-            <div className="text-center py-12">
-              <p className="text-gray-600 dark:text-gray-400">
-                Access denied. Admin privileges required.
-              </p>
-            </div>
-          </main>
-        </div>
+      <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+        Access denied. Admin privileges required.
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
-      <Header />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-              NCLEX Sponsorships
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Manage sponsorship applications from nurses
-            </p>
-          </div>
+    <div>
 
           {/* Filters and Search */}
           <Card className="mb-6">
@@ -519,6 +504,71 @@ export function AdminSponsorships() {
               </div>
             </Modal>
           )}
+    </div>
+  )
+}
+
+/**
+ * Host page for the combined Sponsorships + Donations admin. Two-tab nav
+ * (deep-linkable via ?tab=sponsorships|donations); the old /admin/donations
+ * route redirects here with ?tab=donations.
+ */
+export function AdminSponsorships() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = (searchParams.get('tab') === 'donations' ? 'donations' : 'sponsorships') as 'sponsorships' | 'donations'
+  const [tab, setTab] = useState<'sponsorships' | 'donations'>(initialTab)
+
+  useEffect(() => {
+    if (searchParams.get('tab') !== tab) {
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', tab)
+      setSearchParams(next, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <Header />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
+          <div className="mb-6">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+              Sponsorships &amp; Donations
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Review NCLEX sponsorship applications and track donations.
+            </p>
+          </div>
+
+          <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+            <nav className="flex flex-wrap gap-1">
+              {([
+                { id: 'sponsorships' as const, label: 'Sponsorships', Icon: Award },
+                { id: 'donations' as const, label: 'Donations', Icon: HeartIcon },
+              ]).map((t) => {
+                const Icon = t.Icon
+                const active = tab === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      active
+                        ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {t.label}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+
+          {tab === 'sponsorships' ? <SponsorshipsBody /> : <DonationsBody />}
         </main>
       </div>
     </div>

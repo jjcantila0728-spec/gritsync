@@ -67,11 +67,9 @@ const Donate = lazy(() => import('./pages/Donate').then(m => ({ default: m.Donat
 const DonateCheckout = lazy(() => import('./pages/DonateCheckout').then(m => ({ default: m.DonateCheckout })))
 const DonateSuccess = lazy(() => import('./pages/DonateSuccess').then(m => ({ default: m.DonateSuccess })))
 const AdminSponsorships = lazy(() => import('./pages/AdminSponsorships').then(m => ({ default: m.AdminSponsorships })))
-const AdminDonations = lazy(() => import('./pages/AdminDonations').then(m => ({ default: m.AdminDonations })))
 const Career = lazy(() => import('./pages/Career').then(m => ({ default: m.Career })))
 const CareerListing = lazy(() => import('./pages/CareerListing').then(m => ({ default: m.CareerListing })))
 const AdminCareers = lazy(() => import('./pages/AdminCareers').then(m => ({ default: m.AdminCareers })))
-const AdminPartnerAgencies = lazy(() => import('./pages/AdminPartnerAgencies').then(m => ({ default: m.AdminPartnerAgencies })))
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const AdminEmails = lazy(() => import('./pages/AdminEmails').then(m => ({ default: m.AdminEmails })))
 const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics').then(m => ({ default: m.AdminAnalytics })))
@@ -93,7 +91,6 @@ const NclexResults = lazy(() => import('./pages/nclex/NclexResults').then(m => (
 const NclexReviewPage = lazy(() => import('./pages/nclex/NclexReview').then(m => ({ default: m.NclexReview })))
 const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })))
 const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ default: m.AdminSocial })))
-const AdminAds = lazy(() => import('./pages/AdminAds').then(m => ({ default: m.AdminAds })))
 const Sso = lazy(() => import('./pages/Sso').then(m => ({ default: m.Sso })))
 
 // Loading fallback component
@@ -449,9 +446,9 @@ function AppRoutes() {
         </Route>
         <Route path="/admin/notifications" element={<AdminRoute><NotificationManagement /></AdminRoute>} />
         <Route path="/admin/sponsorships" element={<AdminRoute><AdminSponsorships /></AdminRoute>} />
-        <Route path="/admin/donations" element={<AdminRoute><AdminDonations /></AdminRoute>} />
+        <Route path="/admin/donations" element={<Navigate to="/admin/sponsorships?tab=donations" replace />} />
         <Route path="/admin/careers" element={<AdminRoute><AdminCareers /></AdminRoute>} />
-        <Route path="/admin/partner-agencies" element={<AdminRoute><AdminPartnerAgencies /></AdminRoute>} />
+        <Route path="/admin/partner-agencies" element={<Navigate to="/admin/careers?tab=agencies" replace />} />
         <Route path="/admin/nclex" element={<AdminRoute><AdminNclex /></AdminRoute>} />
         <Route path="/admin/emails" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/emails/inbox" element={<AdminRoute><AdminEmails /></AdminRoute>} />
@@ -470,7 +467,7 @@ function AppRoutes() {
         <Route path="/admin/emails/email-setup/client" element={<AdminRoute><AdminEmails /></AdminRoute>} />
         <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
         <Route path="/admin/social" element={<AdminRoute><AdminSocial /></AdminRoute>} />
-        <Route path="/admin/ads" element={<AdminRoute><AdminAds /></AdminRoute>} />
+        <Route path="/admin/ads" element={<Navigate to="/admin/social?tab=ads" replace />} />
 
         {/* Admin messages route — same unified Messages experience as clients & partners */}
         <Route path="/admin/messages" element={<AdminRoute><Messages /></AdminRoute>} />

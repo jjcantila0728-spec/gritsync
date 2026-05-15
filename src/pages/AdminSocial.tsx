@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -33,6 +33,7 @@ import {
   Film,
   Loader2,
 } from 'lucide-react'
+import { AdsGenerator, type AdVariant } from './AdminAds'
 
 type Platform = 'facebook' | 'instagram' | 'linkedin' | 'youtube' | 'tiktok'
 
@@ -154,8 +155,26 @@ export function AdminSocial() {
   const { showToast } = useToast()
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [tab, setTab] = useState<'compose' | 'bank' | 'scheduled' | 'history' | 'accounts'>('compose')
+  const initialTab = (() => {
+    const t = searchParams.get('tab')
+    return (['compose', 'bank', 'scheduled', 'history', 'accounts', 'ads'] as const).includes(t as any)
+      ? (t as 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads')
+      : 'compose'
+  })()
+  const [tab, setTab] = useState<'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads'>(initialTab)
+
+  // Keep ?tab= in sync so the URL is deep-linkable and the /admin/ads redirect
+  // lands on the right tab.
+  useEffect(() => {
+    if (searchParams.get('tab') !== tab) {
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', tab)
+      setSearchParams(next, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [posts, setPosts] = useState<SocialPost[]>([])
   const [bank, setBank] = useState<BankItem[]>([])
@@ -401,6 +420,7 @@ export function AdminSocial() {
                 { id: 'bank', label: 'Content Bank', count: bank.length },
                 { id: 'scheduled', label: 'Scheduled', count: scheduledPosts.length },
                 { id: 'history', label: 'History', count: historyPosts.length },
+                { id: 'ads', label: 'Ads', count: null },
                 { id: 'accounts', label: 'Accounts', count: accounts.length },
               ] as const).map((t) => (
                 <button
@@ -466,6 +486,23 @@ export function AdminSocial() {
               onDelete={deletePost}
               onPublish={publishNow}
               showResults
+            />
+          ) : tab === 'ads' ? (
+            <AdsGenerator
+              onPushToSocial={(ad: AdVariant) => {
+                // Re-use the existing "prefill into schedule modal" pathway
+                // the standalone /admin/ads page used to trigger via router state.
+                const text = [ad.headline, ad.primary_text, ad.description && !ad.primary_text?.includes(ad.description) ? ad.description : null]
+                  .filter(Boolean)
+                  .join('\n\n')
+                setScheduleModal({
+                  caption: text,
+                  media_urls: ad.image_url ? [ad.image_url] : [],
+                  bank_id: null,
+                  editing_post: null,
+                })
+                setTab('compose')
+              }}
             />
           ) : (
             <AccountsView

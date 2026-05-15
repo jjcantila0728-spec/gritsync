@@ -56,7 +56,11 @@ const statusIcons: Record<string, any> = {
   refunded: DollarSign,
 }
 
-export function AdminDonations() {
+/**
+ * Body-only component — no Header/Sidebar/page shell. Used as the "Donations"
+ * tab inside AdminSponsorships, which provides the surrounding chrome.
+ */
+export function DonationsBody() {
   const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const [donations, setDonations] = useState<Donation[]>([])
@@ -154,28 +158,14 @@ export function AdminDonations() {
 
   if (!isAdmin()) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Header />
-        <div className="flex">
-          <Sidebar />
-          <main className="flex-1 p-4 md:p-8">
-            <div className="text-center py-12">
-              <p className="text-gray-600 dark:text-gray-400">
-                Access denied. Admin privileges required.
-              </p>
-            </div>
-          </main>
-        </div>
+      <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+        Access denied. Admin privileges required.
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
-      <Header />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
+    <div>
           <div className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
               Donations
@@ -460,6 +450,23 @@ export function AdminDonations() {
               </div>
             </Modal>
           )}
+    </div>
+  )
+}
+
+/**
+ * Back-compat shim. The standalone /admin/donations route now redirects to
+ * /admin/sponsorships?tab=donations; this wrapper keeps any direct imports
+ * working and provides a basic page shell when DonationsBody is rendered alone.
+ */
+export function AdminDonations() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      <Header />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
+          <DonationsBody />
         </main>
       </div>
     </div>
