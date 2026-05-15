@@ -605,7 +605,7 @@ function ExplanationPanel({ question, feedback }: { question: Question; feedback
               {bullets.map((b, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed">
                   <span className="text-[#17a2b8] flex-shrink-0 mt-0.5">✓</span>
-                  <span>{b.replace(/^[•·\-]\s*/, '')}</span>
+                  <span>{b.replace(/^[•·-]\s*/, '')}</span>
                 </li>
               ))}
             </ul>

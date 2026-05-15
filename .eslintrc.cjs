@@ -46,7 +46,7 @@ module.exports = {
     // Empty `catch {}` is an intentional "swallow this error" idiom in plenty of places.
     'no-empty': ['error', { allowEmptyCatch: true }],
   },
-  ignorePatterns: ['dist/', 'dist-server/', 'build/', 'public/', 'node_modules/', '*.cjs', '*.config.js'],
+  ignorePatterns: ['dist/', 'dist-server/', 'build/', 'public/', 'node_modules/', 'review/', '*.cjs', '*.config.js'],
 };
 
 

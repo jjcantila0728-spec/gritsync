@@ -3,16 +3,15 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   BookOpen, Brain, Target, Trophy, Lock, Play, CheckCircle,
   BarChart3, ArrowLeft, Calendar, Users, Star,
-  CreditCard, FileText, Video, Mic, GraduationCap, Clock, Timer,
-  TrendingUp, Printer, X, Send, ExternalLink, Zap,
-  AlertCircle, Award, Menu, Home, ChevronRight, Flame,
-  Sparkles, Lightbulb, ChevronDown, ChevronUp, PenLine,
+  CreditCard, FileText, Video, Mic, GraduationCap, Clock, Timer, Printer, X, Send, ExternalLink, Zap,
+  AlertCircle, Award, Menu, ChevronRight, Flame,
+  Sparkles, Lightbulb, PenLine,
   ChevronLeft, Edit3, MapPin, ThumbsUp, PlayCircle,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import { nclexApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';

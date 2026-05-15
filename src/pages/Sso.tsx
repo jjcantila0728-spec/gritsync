@@ -33,7 +33,7 @@ export function Sso() {
       return
     }
 
-    ;(async () => {
+    (async () => {
       try {
         const res = await fetch('/api/auth/sso/exchange', {
           method: 'POST',

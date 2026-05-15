@@ -883,7 +883,7 @@ router.post('/sessions/:id/answer', async (req: AuthenticatedRequest, res) => {
         if (r.is_correct) breakdown[r.topic].correct++
       }
       if (result) {
-        ;(result as any).categoryBreakdown = Object.entries(breakdown).map(([topic, data]) => ({
+        (result as any).categoryBreakdown = Object.entries(breakdown).map(([topic, data]) => ({
           topic,
           correct: data.correct,
           total: data.total,
