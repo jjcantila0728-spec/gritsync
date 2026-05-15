@@ -1,70 +1,103 @@
-import { Pool, types } from 'pg'
+/**
+ * Database access layer.
+ *
+ * Uses one-shot pg.Client (never pg.Pool) so there are no persistent
+ * connections to manage in Vercel's serverless environment.
+ * Each query opens a client, runs, and closes — Supabase's Supavisor
+ * pooler (POSTGRES_PRISMA_URL) handles actual connection pooling
+ * server-side, so this is cheap.
+ *
+ * The supabaseAdmin export is used by routes that prefer the HTTP
+ * PostgREST API (e.g. server/routes/query.ts).
+ */
 
-// Return DATE columns (OID 1082) as the raw 'YYYY-MM-DD' string instead of a JS
-// Date. The default parser produces a Date at midnight local time, which then
-// serializes to an ISO timestamp like '2026-05-01T07:00:00.000Z' over JSON and
-// shifts by the server's timezone offset — flipping the day for users in
-// different TZs. Keeping DATE as a string sidesteps the whole conversion.
+import { Client, types } from 'pg'
+
+// Return DATE columns as raw 'YYYY-MM-DD' string, not a JS Date.
 types.setTypeParser(1082, (v: string) => v)
 
-// Support both DATABASE_URL (manual) and POSTGRES_URL (Vercel Supabase integration).
-// POSTGRES_PRISMA_URL is the pooler variant Vercel sets; prefer it over the direct host.
+export { supabaseAdmin } from './lib/supabase'
+
 const connectionString =
   process.env.DATABASE_URL ||
   process.env.POSTGRES_PRISMA_URL ||
   process.env.POSTGRES_URL ||
-  process.env.POSTGRES_URL_NON_POOLING   // Vercel Supabase direct connection
+  process.env.POSTGRES_URL_NON_POOLING
 
 if (!connectionString) {
-  console.error('[db] FATAL: No database connection string found. Set DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL in your environment variables.')
+  console.error('[db] FATAL: No database connection string found.')
 }
 
-// SSL: enable for Supabase/any cloud host; auto-detect from the connection string.
-// Never reject self-signed certs (Supabase uses a CA that Node trusts, but
-// reject:false is needed for the Supavisor pooler's TLS termination).
-const needsSsl =
-  !!connectionString && (
+function needsSsl(): boolean {
+  if (!connectionString) return false
+  return (
     connectionString.includes('supabase') ||
     connectionString.includes('amazonaws') ||
     connectionString.includes('neon.tech') ||
     process.env.NODE_ENV === 'production'
   )
+}
 
-const pool = new Pool({
-  connectionString,
-  ssl: needsSsl ? { rejectUnauthorized: false } : false,
-  // Serverless-optimised pool settings:
-  // Keep max low — each cold-start creates a new Pool and Supabase free tier
-  // allows ~20 simultaneous connections across ALL deployments.
-  max: process.env.VERCEL ? 3 : 10,
-  // Release idle connections quickly (Vercel functions are short-lived).
-  idleTimeoutMillis: 10_000,
-  // Give up on connecting after 8 s so we surface errors fast.
-  connectionTimeoutMillis: 8_000,
-})
-
-export default pool
-
+/** Run a single SQL statement, opening and closing a fresh client each time. */
 export async function query(text: string, params?: any[]) {
-  const client = await pool.connect()
+  const client = new Client({
+    connectionString,
+    ssl: needsSsl() ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 8_000,
+    statement_timeout: 25_000,
+  })
+  await client.connect()
   try {
     return await client.query(text, params)
   } finally {
-    client.release()
+    await client.end().catch(() => {})
   }
 }
 
-export async function withTransaction<T>(fn: (q: (text: string, params?: any[]) => Promise<any>) => Promise<T>): Promise<T> {
-  const client = await pool.connect()
+/** Run multiple statements inside a single transaction. */
+export async function withTransaction<T>(
+  fn: (q: (text: string, params?: any[]) => Promise<any>) => Promise<T>
+): Promise<T> {
+  const client = new Client({
+    connectionString,
+    ssl: needsSsl() ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 8_000,
+    statement_timeout: 25_000,
+  })
+  await client.connect()
   try {
     await client.query('BEGIN')
-    const result = await fn((text: string, params?: any[]) => client.query(text, params))
+    const result = await fn((text: string, params?: any[]) =>
+      client.query(text, params)
+    )
     await client.query('COMMIT')
     return result
   } catch (err) {
-    await client.query('ROLLBACK')
+    await client.query('ROLLBACK').catch(() => {})
     throw err
   } finally {
-    client.release()
+    await client.end().catch(() => {})
   }
 }
+
+/**
+ * Compatibility shim for routes that imported the old `pool` default export.
+ * (storage.ts uses `pool` for file streaming.)
+ */
+const pool = {
+  async connect() {
+    const client = new Client({
+      connectionString,
+      ssl: needsSsl() ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 8_000,
+    })
+    await client.connect()
+    return {
+      query: (text: string, params?: any[]) => client.query(text, params),
+      release: () => client.end().catch(() => {}),
+    }
+  },
+  query: (text: string, params?: any[]) => query(text, params),
+}
+
+export default pool

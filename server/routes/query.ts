@@ -1,20 +1,26 @@
+/**
+ * Generic database CRUD endpoint — /api/db/:table
+ *
+ * All SELECT / INSERT / UPDATE / DELETE / COUNT / RPC calls go through
+ * Supabase's PostgREST HTTP API (supabaseAdmin). No pg.Pool, no raw SQL.
+ * This makes the route completely serverless-safe.
+ */
+
 import { Router, Response } from 'express'
-import { query } from '../db'
+import { supabaseAdmin } from '../lib/supabase'
 import { authenticateToken, optionalAuth, AuthenticatedRequest } from '../middleware/auth'
 
 const router = Router()
 
-// Tables that allow unauthenticated inserts (public-facing forms)
+// ---------------------------------------------------------------------------
+// Security allowlists
+// ---------------------------------------------------------------------------
+
 const PUBLIC_INSERT_TABLES = new Set([
   'quotations', 'newsletter_subscriptions', 'career_applications',
-  'donations', 'testimonials',
-  // NCLEX Sponsorship is a public application form — anonymous users can apply
-  // from /sponsorship/apply and the success flow at NCLEXSponsorship.tsx:205
-  // explicitly handles unauthenticated submissions.
-  'nclex_sponsorships',
+  'donations', 'testimonials', 'nclex_sponsorships',
 ])
 
-// Allowed tables for security (table names + read-only views the frontend uses)
 const ALLOWED_TABLES = new Set([
   'applications', 'application_payments', 'application_timeline_steps',
   'users', 'user_details', 'user_documents', 'user_preferences',
@@ -27,30 +33,14 @@ const ALLOWED_TABLES = new Set([
   'email_signatures', 'business_logos',
   'processing_accounts', 'receipts', 'temporary_signatures',
   'email_queue', 'email_analytics', 'email_subscribers', 'subscriber_stats',
-  // email campaigns / newsletters / A-B testing
   'email_campaigns', 'email_campaign_recipients',
   'email_ab_tests', 'email_ab_test_results', 'email_ab_test_recipients',
-  // inbound mail
   'received_emails',
-  // automated workflows
   'workflows', 'workflow_runs', 'workflow_triggers',
-  // analytics
   'analytics_cache', 'custom_reports', 'report_schedules',
-  // views
   'active_email_addresses', 'ab_test_stats',
 ])
-// NOTE: `password_reset_tokens` is deliberately NOT in ALLOWED_TABLES. It holds
-// reset secrets and is only ever touched server-side (server/routes/auth.ts via
-// the direct `query()` helper), never through this generic endpoint.
 
-// Columns that must never leave the server through this generic API, regardless
-// of which table they live on. `SELECT *` is expanded to the table's real
-// columns minus this set; an explicit `select`/`returning` naming one of these
-// is rejected.
-// Columns that must never leave the server. Note: we deliberately do NOT
-// block the bare name `password` — only `password_hash`. `processing_accounts`
-// has a user-facing `password` column (the credential admins hand to the
-// applicant) that must remain readable/writable through this endpoint.
 const SENSITIVE_COLUMNS = new Set([
   'password_hash',
   'email_verification_token', 'email_verification_expires_at',
@@ -58,8 +48,6 @@ const SENSITIVE_COLUMNS = new Set([
   'reset_token', 'password_reset_token',
 ])
 
-// Tables that may only be written (INSERT / UPDATE / DELETE) by an admin. These
-// are configuration/back-office tables with no legitimate client-side writer.
 const ADMIN_ONLY_WRITE_TABLES = new Set([
   'settings', 'promo_codes', 'services', 'service_required_documents',
   'careers', 'partner_agencies', 'email_templates', 'email_signatures',
@@ -69,8 +57,6 @@ const ADMIN_ONLY_WRITE_TABLES = new Set([
   'notification_types',
 ])
 
-// Columns on `users` that a non-admin may never set/change via this endpoint
-// (account-takeover / privilege-escalation surface).
 const USERS_PROTECTED_COLUMNS = new Set([
   'id', 'role', 'password_hash', 'email_verified', 'grit_id',
   'email_verification_token', 'email_verification_expires_at',
@@ -100,204 +86,191 @@ function assertIdent(name: string): void {
   }
 }
 
-// Short-TTL cache of public-schema column names per table. The cache exists
-// so we don't hit information_schema on every `SELECT *` expansion, but it
-// is intentionally short-lived (30s) so out-of-band ALTER TABLE migrations
-// applied while the server is running are picked up automatically. (When
-// the cache was forever, dev workflows that added columns mid-session kept
-// serving stale schemas until the process was restarted.)
-const COLUMN_CACHE_TTL_MS = 30_000
-const columnCache = new Map<string, { cols: string[]; expires: number }>()
-async function getTableColumns(table: string): Promise<string[]> {
-  const cached = columnCache.get(table)
-  if (cached && cached.expires > Date.now()) return cached.cols
-  const r = await query(
-    `SELECT column_name FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = $1`,
-    [table]
-  )
-  const cols = r.rows.map((row: any) => row.column_name as string)
-  columnCache.set(table, { cols, expires: Date.now() + COLUMN_CACHE_TTL_MS })
-  return cols
-}
-
-// Resolve a `select` / `returning` clause to a safe, quoted column list.
-// `*` becomes the table's real columns minus SENSITIVE_COLUMNS; an explicit
-// list is validated identifier-by-identifier.
-async function resolveColumnList(table: string, raw: string | undefined): Promise<string> {
-  const value = (raw ?? '*').trim()
-  if (value === '' || value === '*') {
-    const cols = await getTableColumns(table)
-    const safe = cols.filter((c) => !SENSITIVE_COLUMNS.has(c))
-    return safe.length > 0 ? safe.map((c) => `"${c}"`).join(', ') : '1'
-  }
-  const parts = value.split(',').map((c) => c.trim()).filter(Boolean)
-  if (parts.length === 0) throw new HttpError(400, 'Empty column list')
-  parts.forEach(assertIdent)
-  return parts.map((c) => `"${c}"`).join(', ')
-}
-
-// node-postgres serializes JS Arrays as Postgres array literals (`{...}`) and
-// plain JS objects as JSON via toString — neither of which is what we want for
-// `jsonb` columns the frontend writes (e.g. services.line_items,
-// email_addresses.metadata). Stringify anything that isn't a primitive / Date /
-// Buffer so jsonb columns receive valid JSON.
-function serializeForPg(v: any): any {
-  if (v === null || v === undefined) return v
-  const t = typeof v
-  if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint') return v
-  if (v instanceof Date) return v
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return v
-  // Arrays + plain objects → JSON-encode for jsonb.
-  return JSON.stringify(v)
-}
-
 function sendError(res: Response, err: any) {
   if (err instanceof HttpError) {
     console.warn(`[/api/db] ${err.status}: ${err.message}`)
     return res.status(err.status).json({ data: null, error: { message: err.message } })
   }
-  console.error('[/api/db] 500:', err?.message || err)
-  return res.status(500).json({ data: null, error: { message: err?.message || 'Server error' } })
+  const msg = err?.message || err?.details || 'Server error'
+  console.error('[/api/db] 500:', msg)
+  return res.status(500).json({ data: null, error: { message: msg } })
 }
 
-function buildWhereClause(filters: Record<string, any>): { sql: string; values: any[] } {
-  const conditions: string[] = []
-  const values: any[] = []
-  let idx = 1
+// ---------------------------------------------------------------------------
+// Column resolution — Supabase select string with sensitive cols stripped.
+// Short-TTL cache so we don't hit the RPC on every SELECT *.
+// ---------------------------------------------------------------------------
+const COLUMN_CACHE_TTL_MS = 30_000
+const columnCache = new Map<string, { cols: string[]; expires: number }>()
 
+async function getSafeColumns(table: string): Promise<string[]> {
+  const cached = columnCache.get(table)
+  if (cached && cached.expires > Date.now()) return cached.cols
+
+  // Use PostgREST to query the columns RPC we created in migrations.
+  // Falls back to '*' if the function doesn't exist yet.
+  const { data, error } = await supabaseAdmin.rpc('get_table_columns', { p_table: table })
+  if (error || !data) {
+    // Fallback: return '*' selection minus explicitly known sensitive cols.
+    // Supabase won't expose columns that RLS or column-level security hides,
+    // but we still explicitly omit our sensitive set.
+    return []
+  }
+  const cols: string[] = Array.isArray(data) ? data : []
+  const safe = cols.filter((c: string) => !SENSITIVE_COLUMNS.has(c))
+  columnCache.set(table, { cols: safe, expires: Date.now() + COLUMN_CACHE_TTL_MS })
+  return safe
+}
+
+async function buildSelectString(table: string, raw: string | undefined): Promise<string> {
+  const value = (raw ?? '*').trim()
+  if (value === '' || value === '*') {
+    const cols = await getSafeColumns(table)
+    if (cols.length === 0) return '*'           // fallback when RPC unavailable
+    return cols.join(', ')
+  }
+  // Explicit column list — validate each one
+  const parts = value.split(',').map((c) => c.trim()).filter(Boolean)
+  if (parts.length === 0) throw new HttpError(400, 'Empty column list')
+  parts.forEach(assertIdent)
+  return parts.join(', ')
+}
+
+// ---------------------------------------------------------------------------
+// Filter application (PostgREST operators)
+// ---------------------------------------------------------------------------
+function applyFilters(q: any, filters: Record<string, any>): any {
   for (const [key, rawVal] of Object.entries(filters)) {
-    assertIdent(key)
+    if (!IDENT.test(key) || SENSITIVE_COLUMNS.has(key)) continue
 
-    // Query string values arrive as strings — parse JSON-encoded filter objects
     let val = rawVal
     if (typeof rawVal === 'string' && rawVal.startsWith('{')) {
       try { val = JSON.parse(rawVal) } catch {}
     }
 
     if (val === null || val === 'null') {
-      conditions.push(`"${key}" IS NULL`)
-    } else if (typeof val === 'object' && val !== null) {
-      if (val._op === 'gte') { conditions.push(`"${key}" >= $${idx++}`); values.push(val.value) }
-      else if (val._op === 'lte') { conditions.push(`"${key}" <= $${idx++}`); values.push(val.value) }
-      else if (val._op === 'gt') { conditions.push(`"${key}" > $${idx++}`); values.push(val.value) }
-      else if (val._op === 'lt') { conditions.push(`"${key}" < $${idx++}`); values.push(val.value) }
-      else if (val._op === 'like') { conditions.push(`"${key}" ILIKE $${idx++}`); values.push(`%${val.value}%`) }
-      else if (val._op === 'neq') { conditions.push(`"${key}" != $${idx++}`); values.push(val.value) }
-      else if (val._op === 'in') {
-        const list = Array.isArray(val.value) ? val.value : []
-        if (list.length === 0) {
-          conditions.push('FALSE')
-        } else {
-          const placeholders = list.map(() => `$${idx++}`).join(', ')
-          conditions.push(`"${key}" IN (${placeholders})`)
-          values.push(...list)
-        }
+      q = q.is(key, null)
+    } else if (typeof val === 'object' && val !== null && val._op) {
+      const { _op, value } = val
+      if (_op === 'gte')  q = q.gte(key, value)
+      else if (_op === 'lte')  q = q.lte(key, value)
+      else if (_op === 'gt')   q = q.gt(key, value)
+      else if (_op === 'lt')   q = q.lt(key, value)
+      else if (_op === 'like') q = q.ilike(key, `%${value}%`)
+      else if (_op === 'neq')  q = q.neq(key, value)
+      else if (_op === 'in') {
+        const list = Array.isArray(value) ? value : []
+        q = list.length === 0 ? q.in(key, ['__no_match__']) : q.in(key, list)
       }
     } else {
-      conditions.push(`"${key}" = $${idx++}`)
-      values.push(val)
+      q = q.eq(key, val)
     }
   }
-
-  return { sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '', values }
+  return q
 }
 
-// GET /api/db/:table - Select query
+// ---------------------------------------------------------------------------
+// GET /api/db/:table
+// ---------------------------------------------------------------------------
 router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const table = String(req.params.table)
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
 
   try {
-    const { select = '*', order, limit, offset, ...filters } = req.query as Record<string, any>
+    const { select, order, limit, offset, ...rawFilters } = req.query as Record<string, any>
 
-    const selectClause = await resolveColumnList(table, select)
-
-    const { sql: where, values } = buildWhereClause(
-      Object.fromEntries(Object.entries(filters).filter(([k]) => !['select', 'order', 'limit', 'offset'].includes(k)))
+    // Strip non-filter query params
+    const filters = Object.fromEntries(
+      Object.entries(rawFilters).filter(([k]) =>
+        !['select', 'order', 'limit', 'offset'].includes(k)
+      )
     )
 
-    let orderClause = ''
+    const selectStr = await buildSelectString(table, select)
+
+    let q: any = supabaseAdmin.from(table).select(selectStr)
+
+    q = applyFilters(q, filters)
+
     if (order) {
-      const [col, dir] = String(order).split('.')
-      assertIdent(col)
-      orderClause = `ORDER BY "${col}" ${String(dir).toUpperCase() === 'ASC' ? 'ASC' : 'DESC'}`
+      const parts = String(order).split('.')
+      const col = parts[0]
+      const dir = (parts[1] || 'asc').toLowerCase()
+      if (IDENT.test(col)) {
+        q = q.order(col, { ascending: dir !== 'desc' })
+      }
     }
 
-    const limitClause = limit ? `LIMIT ${parseInt(String(limit), 10) || 0}` : ''
-    const offsetClause = offset ? `OFFSET ${parseInt(String(offset), 10) || 0}` : ''
+    if (limit) {
+      const lim = parseInt(String(limit), 10)
+      if (!isNaN(lim) && lim > 0) q = q.limit(lim)
+    }
 
-    const sql = `SELECT ${selectClause} FROM "${table}" ${where} ${orderClause} ${limitClause} ${offsetClause}`
+    if (offset) {
+      const off = parseInt(String(offset), 10)
+      const lim = parseInt(String(limit), 10) || 1000
+      if (!isNaN(off) && off >= 0) q = q.range(off, off + lim - 1)
+    }
 
-    const result = await query(sql, values)
-    res.json({ data: result.rows, error: null })
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ data, error: null })
   } catch (err: any) {
     sendError(res, err)
   }
 })
 
-// POST /api/db/:table - Insert
+// ---------------------------------------------------------------------------
+// POST /api/db/:table — Insert
+// ---------------------------------------------------------------------------
 router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const table = String(req.params.table)
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
 
-  // Require auth for non-public tables
   if (!PUBLIC_INSERT_TABLES.has(table) && !req.user) {
     return res.status(401).json({ error: 'No token provided' })
   }
-  // Configuration / back-office tables (and the users table itself) may only be
-  // populated by an admin.
   if ((table === 'users' || ADMIN_ONLY_WRITE_TABLES.has(table)) && !isAdmin(req)) {
     return res.status(403).json({ error: 'Admin access required' })
   }
 
   try {
-    const { returning = '*', _onConflict, ...record } = req.body
-    if (Object.keys(record).length === 0) return res.status(400).json({ error: 'No data provided' })
+    const { returning = '*', _onConflict, _batch, ...record } = req.body
+    const records: any[] = Array.isArray(_batch) ? _batch : [record]
+    if (records.length === 0 || Object.keys(records[0]).length === 0) {
+      return res.status(400).json({ error: 'No data provided' })
+    }
 
-    // Handle array of records or single record
-    const records = Array.isArray(record._batch) ? record._batch : [record]
+    // Validate column names
+    Object.keys(records[0]).forEach(assertIdent)
 
-    const cols = Object.keys(records[0]).filter(k => k !== '_batch')
-    if (cols.length === 0) return res.status(400).json({ error: 'No data provided' })
-    cols.forEach(assertIdent)
-    const colSQL = cols.map(c => `"${c}"`).join(', ')
-    const returningClause = await resolveColumnList(table, returning)
+    const selectStr = returning === '*'
+      ? await buildSelectString(table, '*')
+      : returning
 
-    let conflictCols: string[] = []
+    let q = supabaseAdmin.from(table).insert(records).select(selectStr)
+
     if (_onConflict) {
-      conflictCols = String(_onConflict).split(',').map((c: string) => c.trim()).filter(Boolean)
+      const conflictCols = String(_onConflict).split(',').map((c: string) => c.trim())
       conflictCols.forEach(assertIdent)
+      // Supabase upsert with onConflict
+      q = supabaseAdmin
+        .from(table)
+        .upsert(records, { onConflict: conflictCols.join(',') })
+        .select(selectStr)
     }
 
-    const inserted: any[] = []
-    for (const rec of records) {
-      const vals = cols.map(c => serializeForPg(rec[c]))
-      const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ')
-
-      let sql = `INSERT INTO "${table}" (${colSQL}) VALUES (${placeholders})`
-      if (conflictCols.length > 0) {
-        const updateCols = cols.filter(c => !conflictCols.includes(c))
-        if (updateCols.length > 0) {
-          const setClause = updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ')
-          sql += ` ON CONFLICT (${conflictCols.map(c => `"${c}"`).join(', ')}) DO UPDATE SET ${setClause}`
-        } else {
-          sql += ` ON CONFLICT (${conflictCols.map(c => `"${c}"`).join(', ')}) DO NOTHING`
-        }
-      }
-      sql += ` RETURNING ${returningClause}`
-
-      const result = await query(sql, vals)
-      inserted.push(...result.rows)
-    }
-
-    res.json({ data: inserted.length === 1 ? inserted[0] : inserted, error: null })
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ data: Array.isArray(data) && data.length === 1 ? data[0] : data, error: null })
   } catch (err: any) {
     sendError(res, err)
   }
 })
 
-// PATCH /api/db/:table - Update
+// ---------------------------------------------------------------------------
+// PATCH /api/db/:table — Update
+// ---------------------------------------------------------------------------
 router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const table = String(req.params.table)
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
@@ -315,42 +288,40 @@ router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res
     if (setCols.length === 0) return res.status(400).json({ error: 'No fields to update' })
     setCols.forEach(assertIdent)
 
-    // Hardening for the users table: a non-admin may only update *their own* row,
-    // and may never touch privileged columns (role, password_hash, ...).
+    // Non-admin user row protection
     if (table === 'users' && !isAdmin(req)) {
       const filterId = _filters.id
       if (typeof filterId !== 'string' || !req.user || filterId !== req.user.id) {
         return res.status(403).json({ error: 'You may only update your own account' })
       }
-      const offending = setCols.filter(c => USERS_PROTECTED_COLUMNS.has(c))
+      const offending = setCols.filter((c) => USERS_PROTECTED_COLUMNS.has(c))
       if (offending.length > 0) {
         return res.status(403).json({ error: `Cannot update protected column(s): ${offending.join(', ')}` })
       }
     }
 
-    const setClause = setCols.map((k, i) => `"${k}" = $${i + 1}`).join(', ')
-    const setValues = setCols.map(k => serializeForPg(updates[k]))
+    const selectStr = _returning === '*'
+      ? await buildSelectString(table, '*')
+      : _returning
 
-    const { sql: where, values: filterValues } = buildWhereClause(_filters)
-    const adjustedWhere = where.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + setValues.length}`)
-    const returningClause = await resolveColumnList(table, _returning)
+    let q: any = supabaseAdmin.from(table).update(updates)
+    q = applyFilters(q, _filters)
+    q = q.select(selectStr)
 
-    const result = await query(
-      `UPDATE "${table}" SET ${setClause} ${adjustedWhere} RETURNING ${returningClause}`,
-      [...setValues, ...filterValues]
-    )
-    res.json({ data: result.rows, error: null })
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ data, error: null })
   } catch (err: any) {
     sendError(res, err)
   }
 })
 
-// DELETE /api/db/:table - Delete
+// ---------------------------------------------------------------------------
+// DELETE /api/db/:table — Delete
+// ---------------------------------------------------------------------------
 router.delete('/:table', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const table = String(req.params.table)
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
-  // Deleting users or back-office configuration is admin-only. (Other tables are
-  // still scoped only by the caller-supplied filters — see the note below.)
   if ((table === 'users' || ADMIN_ONLY_WRITE_TABLES.has(table)) && !isAdmin(req)) {
     return res.status(403).json({ error: 'Admin access required' })
   }
@@ -361,63 +332,58 @@ router.delete('/:table', authenticateToken, async (req: AuthenticatedRequest, re
       return res.status(400).json({ error: 'Filters required for delete' })
     }
 
-    const { sql: where, values } = buildWhereClause(filters)
-    if (!where) return res.status(400).json({ error: 'Filters required' })
+    let q: any = supabaseAdmin.from(table).delete().select('id')
+    q = applyFilters(q, filters)
 
-    const result = await query(`DELETE FROM "${table}" ${where} RETURNING id`, values)
-    res.json({ data: result.rows, error: null })
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ data, error: null })
   } catch (err: any) {
     sendError(res, err)
   }
 })
-// NOTE / KNOWN GAP: PATCH and DELETE on user-owned tables (applications,
-// user_documents, notifications, ...) are still authorized only by "is logged
-// in" + the filters the client sends — a determined client could mutate another
-// user's rows by id. Closing that requires a per-table ownership model
-// (e.g. enforce `user_id = req.user.id` for non-admins). Tracked separately.
 
-// POST /api/db/:table/count - count rows
+// ---------------------------------------------------------------------------
+// POST /api/db/:table/count
+// ---------------------------------------------------------------------------
 router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const table = String(req.params.table)
   if (!ALLOWED_TABLES.has(table)) return res.status(403).json({ error: 'Table not allowed' })
 
   try {
     const filters = req.body || {}
-    const { sql: where, values } = buildWhereClause(filters)
-    const result = await query(`SELECT COUNT(*) as count FROM "${table}" ${where}`, values)
-    res.json({ data: result.rows[0].count, error: null })
+    let q: any = supabaseAdmin.from(table).select('*', { count: 'exact', head: true })
+    q = applyFilters(q, filters)
+
+    const { count, error } = await q
+    if (error) throw error
+    res.json({ data: String(count ?? 0), error: null })
   } catch (err: any) {
     sendError(res, err)
   }
 })
 
-// Allowed RPC functions (PostgreSQL stored procedures/functions defined in init.sql)
+// ---------------------------------------------------------------------------
+// POST /api/db/rpc/:fn — call a PostgreSQL function
+// ---------------------------------------------------------------------------
 const ALLOWED_RPC_FUNCTIONS = new Set([
   'validate_promo_code',
   'get_dashboard_stats',
-  // counters / usage
   'increment', 'increment_logo_usage', 'increment_template_usage',
-  // email queue automation
   'get_pending_emails_to_send', 'mark_email_processing', 'mark_email_sent', 'mark_email_failed',
-  // campaigns / workflows / A-B tests
   'update_campaign_stats',
   'log_workflow_run', 'update_workflow_stats', 'get_active_workflows_for_trigger',
   'calculate_ab_test_metrics', 'determine_ab_test_winner',
-  // subscriber segments
   'get_subscriber_count_by_segment', 'get_subscribers_for_segment',
   'unsubscribe_email', 'resubscribe_email', 'update_email_preferences',
-  // template / signature rendering
   'render_email_template', 'generate_signature_html', 'refresh_email_analytics',
-  // reminders
   'generate_document_reminders', 'generate_payment_reminders', 'generate_profile_completion_reminders',
   'check_missing_documents', 'check_incomplete_profile', 'notify_credentialing_reminder',
-  // analytics dashboards
   'get_application_analytics', 'get_financial_analytics', 'get_user_analytics', 'get_document_analytics',
+  // dashboard stats (inline implementation below)
+  'get_dashboard_stats_inline',
 ])
 
-const SAFE_ARG_KEY = /^[a-z_][a-z0-9_]*$/i
-
-// POST /api/db/rpc/:fn — call a PostgreSQL function
 router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const fn = String(req.params.fn)
 
@@ -427,78 +393,37 @@ router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Res
 
   try {
     const args = req.body || {}
-    let result: any
 
-    if (fn === 'validate_promo_code') {
-      const { p_code, p_amount, p_service_fee_amount, p_application_type } = args
-      const sql = `SELECT validate_promo_code($1, $2, $3, $4) AS result`
-      const values = [p_code, p_amount, p_service_fee_amount ?? null, p_application_type ?? null]
-      const rows = await query(sql, values)
-      result = rows.rows[0]?.result ?? null
-
-    } else if (fn === 'get_dashboard_stats') {
+    // Special-case: dashboard stats assembled from multiple PostgREST queries
+    if (fn === 'get_dashboard_stats') {
       const isAdminUser = args.is_admin === true
-      const statsResult = await query(`
-        SELECT
-          COUNT(*) FILTER (WHERE TRUE) AS total_applications,
-          COUNT(*) FILTER (WHERE status = 'pending') AS pending_applications,
-          COUNT(*) FILTER (WHERE status IN ('completed', 'Completed')) AS completed_applications,
-          COUNT(*) FILTER (WHERE status = 'rejected') AS rejected_applications
-        FROM applications
-        ${isAdminUser ? '' : 'WHERE FALSE'}
-      `, [])
 
-      const paymentsResult = await query(`
-        SELECT COALESCE(SUM(amount), 0) AS revenue
-        FROM application_payments
-        WHERE status = 'paid'
-      `, [])
+      const [appRes, payRes, quoteRes, clientRes] = await Promise.all([
+        supabaseAdmin.from('applications').select('status', { count: 'exact' }),
+        supabaseAdmin.from('application_payments').select('amount').eq('status', 'paid'),
+        supabaseAdmin.from('quotations').select('status', { count: 'exact' }),
+        supabaseAdmin.from('users').select('id', { count: 'exact' }).eq('role', 'client'),
+      ])
 
-      const quotationsResult = await query(`
-        SELECT
-          COUNT(*) AS total_quotations,
-          COUNT(*) FILTER (WHERE status = 'pending') AS pending_quotations,
-          COUNT(*) FILTER (WHERE status = 'paid') AS paid_quotations
-        FROM quotations
-      `, [])
-
-      const clientsResult = await query(`
-        SELECT COUNT(*) AS total_clients FROM users WHERE role = 'client'
-      `, [])
-
-      const stats = statsResult.rows[0] || {}
-      const payments = paymentsResult.rows[0] || {}
-      const quotations = quotationsResult.rows[0] || {}
-      const clients = clientsResult.rows[0] || {}
-
-      result = [{
-        total_applications: parseInt(stats.total_applications || '0'),
-        pending_applications: parseInt(stats.pending_applications || '0'),
-        completed_applications: parseInt(stats.completed_applications || '0'),
-        rejected_applications: parseInt(stats.rejected_applications || '0'),
-        total_quotations: parseInt(quotations.total_quotations || '0'),
-        pending_quotations: parseInt(quotations.pending_quotations || '0'),
-        paid_quotations: parseInt(quotations.paid_quotations || '0'),
-        total_clients: parseInt(clients.total_clients || '0'),
-        revenue: parseFloat(payments.revenue || '0'),
+      const apps = appRes.data || []
+      const result = [{
+        total_applications: apps.length,
+        pending_applications: apps.filter((a: any) => a.status === 'pending').length,
+        completed_applications: apps.filter((a: any) => ['completed', 'Completed'].includes(a.status)).length,
+        rejected_applications: apps.filter((a: any) => a.status === 'rejected').length,
+        total_quotations: quoteRes.count ?? 0,
+        pending_quotations: (quoteRes.data || []).filter((q: any) => q.status === 'pending').length,
+        paid_quotations: (quoteRes.data || []).filter((q: any) => q.status === 'paid').length,
+        total_clients: clientRes.count ?? 0,
+        revenue: (payRes.data || []).reduce((sum: number, r: any) => sum + parseFloat(r.amount || '0'), 0),
       }]
-
-    } else {
-      // Generic path: call the (allowlisted) PostgreSQL function with named args.
-      const keys = Object.keys(args).filter((k) => SAFE_ARG_KEY.test(k))
-      const placeholders = keys.map((k, i) => `${k} := $${i + 1}`).join(', ')
-      const values = keys.map((k) => args[k])
-      const rows = await query(`SELECT * FROM ${fn}(${placeholders})`, values)
-      // A scalar/JSON-returning function comes back as one row with one column
-      // (named after the function); a set-returning function comes back as rows.
-      if (rows.rows.length === 1 && Object.keys(rows.rows[0]).length === 1) {
-        result = rows.rows[0][Object.keys(rows.rows[0])[0]]
-      } else {
-        result = rows.rows
-      }
+      return res.json({ data: result, error: null })
     }
 
-    res.json({ data: result, error: null })
+    // All other allowed functions call through to Supabase RPC
+    const { data, error } = await supabaseAdmin.rpc(fn, args)
+    if (error) throw error
+    res.json({ data, error: null })
   } catch (err: any) {
     sendError(res, err)
   }

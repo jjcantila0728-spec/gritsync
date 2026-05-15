@@ -1,77 +1,45 @@
-import { Pool } from 'pg'
-
-// Minimal one-shot pool — health checks should not share the main app pool
-// so a stuck main pool doesn't mask the real connectivity error.
-function makePool() {
-  const connectionString =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_URL_NON_POOLING
-
-  if (!connectionString) return null
-
-  const needsSsl =
-    connectionString.includes('supabase') ||
-    connectionString.includes('amazonaws') ||
-    connectionString.includes('neon.tech') ||
-    process.env.NODE_ENV === 'production'
-
-  return new Pool({
-    connectionString,
-    ssl: needsSsl ? { rejectUnauthorized: false } : false,
-    max: 1,
-    idleTimeoutMillis: 5_000,
-    connectionTimeoutMillis: 6_000,
-  })
-}
+import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req: any, res: any) {
   const start = Date.now()
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
   const checks: Record<string, any> = {
     env: process.env.NODE_ENV,
     ts: new Date().toISOString(),
-    hasDbUrl: !!(
-      process.env.DATABASE_URL ||
-      process.env.POSTGRES_PRISMA_URL ||
-      process.env.POSTGRES_URL ||
-      process.env.POSTGRES_URL_NON_POOLING
-    ),
+    hasSupabaseUrl: !!supabaseUrl,
+    hasServiceKey: !!serviceKey,
   }
 
   let dbOk = false
   let dbError: string | null = null
-  const pool = makePool()
 
-  if (!pool) {
-    dbError = 'No database connection string configured'
+  if (!supabaseUrl || !serviceKey) {
+    dbError = 'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'
   } else {
-    const client = await pool.connect().catch((err: Error) => {
-      dbError = `connect: ${err.message}`
-      return null
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    if (client) {
-      try {
-        const { rows } = await client.query('SELECT 1 AS ping')
-        dbOk = rows[0]?.ping === 1
-      } catch (err: any) {
-        dbError = `query: ${err?.message}`
-      } finally {
-        client.release()
-      }
-    }
+    const { data, error } = await supabase
+      .from('settings')
+      .select('key')
+      .limit(1)
 
-    await pool.end().catch(() => {})
+    if (error) {
+      dbError = error.message
+    } else {
+      dbOk = true
+    }
   }
 
   checks.db = dbOk ? 'ok' : 'error'
   if (dbError) checks.dbError = dbError
   checks.latencyMs = Date.now() - start
 
-  const ok = dbOk
-
   res.setHeader('Content-Type', 'application/json')
-  res.statusCode = ok ? 200 : 503
-  res.end(JSON.stringify({ ok, ...checks }))
+  res.statusCode = dbOk ? 200 : 503
+  res.end(JSON.stringify({ ok: dbOk, ...checks }))
 }
