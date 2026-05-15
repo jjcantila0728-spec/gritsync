@@ -274,8 +274,9 @@ router.post('/register', async (req: Request, res: Response) => {
     const user = result.rows[0]
 
     if (!emailVerified) {
-      // Send verification email asynchronously (don't await, don't block registration)
-      sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token, otp)
+      // Must await on Vercel serverless — the lambda terminates as soon as
+      // we return, which kills any in-flight Resend fetch.
+      await sendVerificationEmail(personal_email_normalized, first_name.trim(), verification_token, otp)
       return res.status(201).json({
         requiresVerification: true,
         message: 'Account created! Please check your email to verify your account.',
@@ -373,13 +374,13 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       ).catch(() => {}) // non-fatal
     }
 
-    // Send welcome email if not already sent (fire-and-forget)
+    // Send welcome email if not already sent. Must await on Vercel serverless.
     if (!user.welcome_email_sent_at && user.personal_email) {
-      query(
+      await query(
         `UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`,
         [user.id]
       ).catch(() => {})
-      sendWelcomeEmail(
+      await sendWelcomeEmail(
         user.personal_email,
         user.first_name || '',
         user.last_name || '',
@@ -812,7 +813,7 @@ router.post('/reset-password-request', async (req: Request, res: Response) => {
       [user.id, token, tokenExpires, otp, otpExpires]
     )
 
-    sendPasswordResetEmail(user.personal_email, user.first_name || '', token, otp)
+    await sendPasswordResetEmail(user.personal_email, user.first_name || '', token, otp)
 
     res.json({ message: 'If that email is registered, a reset link will be sent.' })
   } catch (err: any) {
@@ -959,10 +960,10 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
       [user.id]
     )
 
-    // Send welcome email (fire-and-forget) — same as the link-based verification path
+    // Send welcome email. Must await on Vercel serverless.
     if (user.personal_email) {
-      query(`UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`, [user.id]).catch(() => {})
-      sendWelcomeEmail(
+      await query(`UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`, [user.id]).catch(() => {})
+      await sendWelcomeEmail(
         user.personal_email,
         user.first_name || '',
         user.last_name || '',
@@ -1037,7 +1038,7 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
 
     // Send to the email the user provided (handles accounts where personal_email is null)
     const sendTo = user.personal_email || emailInput
-    sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
+    await sendVerificationEmail(sendTo, user.first_name || '', verification_token, otp)
 
     res.json({ message: 'Verification email resent. Please check your inbox.' })
   } catch (err: any) {
@@ -1300,7 +1301,7 @@ router.post('/backfill-welcome-emails', authenticateToken, async (req: Request, 
     for (const u of users) {
       try {
         await query(`UPDATE users SET welcome_email_sent_at = NOW() WHERE id = $1`, [u.id])
-        sendWelcomeEmail(u.personal_email, u.first_name || '', u.last_name || '', u.grit_id || '', u.gritsync_email || '')
+        await sendWelcomeEmail(u.personal_email, u.first_name || '', u.last_name || '', u.grit_id || '', u.gritsync_email || '')
         sent++
       } catch (e) {
         console.error('Backfill welcome email error for user', u.id, e)
