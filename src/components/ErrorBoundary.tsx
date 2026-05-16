@@ -58,6 +58,16 @@ export class ErrorBoundary extends Component<Props, State> {
       errorBoundary: true,
       errorId: this.state.errorId,
     })
+
+    // Report to Sentry (silent no-op if VITE_SENTRY_DSN isn't set).
+    // Dynamic import so the SDK stays out of the critical path in dev / on
+    // any build where the DSN isn't configured.
+    import('@/lib/sentry').then(({ captureException }) => {
+      captureException(error, {
+        errorId: this.state.errorId,
+        componentStack: errorInfo.componentStack,
+      })
+    }).catch(() => { /* ignore */ })
     
     // Store error in state for display
     this.setState({

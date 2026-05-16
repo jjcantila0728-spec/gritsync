@@ -5,6 +5,7 @@ import { usePermissions } from '@/contexts/PermissionsContext'
 import { roleUrl, type AppRole, type RolePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { quotationsAPI, userDocumentsAPI, applicationsAPI, applicationPaymentsAPI } from '@/lib/api'
+import { cachedRequest, invalidate } from '@/lib/cache'
 import { reviewUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
 
@@ -186,7 +187,11 @@ export function Sidebar() {
 
     const fetchUnopenedCount = async () => {
       try {
-        const quotations = await quotationsAPI.getAll()
+        const quotations = await cachedRequest(
+          'sidebar:quotations',
+          () => quotationsAPI.getAll(),
+          { ttl: 60_000 },
+        )
         const opened = getOpenedQuotes()
         const unopened = quotations.filter((q: any) => !opened.has(q.id)).length
         setUnopenedQuotesCount(unopened)
@@ -197,14 +202,17 @@ export function Sidebar() {
 
     fetchUnopenedCount()
 
-    // Listen for quotes updates
+    // Listen for quotes updates — drop the cached entry first so the next
+    // call hits the network and we see the new state instead of the stale one.
     const handleQuotesUpdate = () => {
+      invalidate('sidebar:quotations')
       fetchUnopenedCount()
     }
     window.addEventListener('quotesUpdated', handleQuotesUpdate)
-    
-    // Also listen for storage changes (in case opened in another tab)
+
+    // Also listen for storage changes (in case opened in another tab).
     const handleStorageChange = () => {
+      invalidate('sidebar:quotations')
       fetchUnopenedCount()
     }
     window.addEventListener('storage', handleStorageChange)
@@ -223,7 +231,11 @@ export function Sidebar() {
     const cached = getCachedDocumentsStatus()
     setDocumentsStatus(cached)
 
-    userDocumentsAPI.getAll()
+    cachedRequest(
+      `sidebar:documents:${user.id}`,
+      () => userDocumentsAPI.getAll(),
+      { ttl: 60_000 },
+    )
       .then((docs) => {
         const docsMap = new Map((docs || []).map((doc: any) => [doc.document_type, doc]))
         const status = {
@@ -232,8 +244,7 @@ export function Sidebar() {
           passport: !!docsMap.get('passport'),
         }
         setDocumentsStatus(status)
-        
-        // Cache the status
+
         try {
           localStorage.setItem(`documentsStatus_${user.id}`, JSON.stringify({
             status,
@@ -253,13 +264,14 @@ export function Sidebar() {
     if (isAdmin() || !user) return
 
     const handleDocumentsUpdate = () => {
-      // Invalidate cache and refetch
+      // Invalidate caches and refetch.
       try {
         localStorage.removeItem(`documentsStatus_${user.id}`)
       } catch {
         // Ignore errors
       }
-      
+      invalidate(`sidebar:documents:${user.id}`)
+
       userDocumentsAPI.getAll()
         .then((docs) => {
           const docsMap = new Map((docs || []).map((doc: any) => [doc.document_type, doc]))
@@ -308,45 +320,34 @@ export function Sidebar() {
 
     const checkApplicationsNeedingPayment = async () => {
       try {
-        const applications = await applicationsAPI.getAll()
-        if (applications && applications.length > 0) {
-          // Check each application for pending payments
-          const needsPaymentPromises = applications.map(async (app: any) => {
-            try {
-              const payments = await applicationPaymentsAPI.getByApplication(app.id)
-              return payments.some(
-                (p: any) => p.status === 'pending' || p.status === 'pending_approval'
-              )
-            } catch {
-              return false
-            }
-          })
-          
-          const results = await Promise.all(needsPaymentPromises)
-          const hasPayment = results.some(Boolean)
-          setHasApplicationsNeedingPayment(hasPayment)
-          
-          // Cache the status
-          try {
-            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
-              hasPayment,
-              timestamp: Date.now(),
-            }))
-          } catch {
-            // Ignore errors
-          }
-        } else {
-          setHasApplicationsNeedingPayment(false)
-          
-          // Cache the status
-          try {
-            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
-              hasPayment: false,
-              timestamp: Date.now(),
-            }))
-          } catch {
-            // Ignore errors
-          }
+        const hasPayment = await cachedRequest(
+          `sidebar:hasPaymentsPending:${user.id}`,
+          async () => {
+            const applications = await applicationsAPI.getAll()
+            if (!applications || applications.length === 0) return false
+            const needsPaymentPromises = applications.map(async (app: any) => {
+              try {
+                const payments = await applicationPaymentsAPI.getByApplication(app.id)
+                return payments.some(
+                  (p: any) => p.status === 'pending' || p.status === 'pending_approval',
+                )
+              } catch {
+                return false
+              }
+            })
+            const results = await Promise.all(needsPaymentPromises)
+            return results.some(Boolean)
+          },
+          { ttl: 60_000 },
+        )
+        setHasApplicationsNeedingPayment(hasPayment)
+        try {
+          localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+            hasPayment,
+            timestamp: Date.now(),
+          }))
+        } catch {
+          // Ignore errors
         }
       } catch (error) {
         console.error('Error checking applications needing payment:', error)
@@ -356,8 +357,10 @@ export function Sidebar() {
 
     checkApplicationsNeedingPayment()
 
-    // Listen for application updates
+    // Listen for application updates — bust the cache so the badge reflects
+    // the new state on the very next render instead of waiting 60 s.
     const handleApplicationsUpdate = () => {
+      invalidate(`sidebar:hasPaymentsPending:${user.id}`)
       checkApplicationsNeedingPayment()
     }
 
@@ -658,7 +661,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
     const fetchUnopenedCount = async () => {
       try {
-        const quotations = await quotationsAPI.getAll()
+        const quotations = await cachedRequest(
+          'sidebar:quotations',
+          () => quotationsAPI.getAll(),
+          { ttl: 60_000 },
+        )
         const opened = getOpenedQuotes()
         const unopened = quotations.filter((q: any) => !opened.has(q.id)).length
         setUnopenedQuotesCount(unopened)
@@ -669,14 +676,17 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
     fetchUnopenedCount()
 
-    // Listen for quotes updates
+    // Listen for quotes updates — drop the cached entry first so the next
+    // call hits the network and we see the new state instead of the stale one.
     const handleQuotesUpdate = () => {
+      invalidate('sidebar:quotations')
       fetchUnopenedCount()
     }
     window.addEventListener('quotesUpdated', handleQuotesUpdate)
-    
-    // Also listen for storage changes (in case opened in another tab)
+
+    // Also listen for storage changes (in case opened in another tab).
     const handleStorageChange = () => {
+      invalidate('sidebar:quotations')
       fetchUnopenedCount()
     }
     window.addEventListener('storage', handleStorageChange)
@@ -695,7 +705,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
     const cached = getCachedDocumentsStatus()
     setDocumentsStatus(cached)
 
-    userDocumentsAPI.getAll()
+    cachedRequest(
+      `sidebar:documents:${user.id}`,
+      () => userDocumentsAPI.getAll(),
+      { ttl: 60_000 },
+    )
       .then((docs) => {
         const docsMap = new Map((docs || []).map((doc: any) => [doc.document_type, doc]))
         const status = {
@@ -704,8 +718,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           passport: !!docsMap.get('passport'),
         }
         setDocumentsStatus(status)
-        
-        // Cache the status
+
         try {
           localStorage.setItem(`documentsStatus_${user.id}`, JSON.stringify({
             status,
@@ -725,13 +738,14 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
     if (isAdmin() || !user) return
 
     const handleDocumentsUpdate = () => {
-      // Invalidate cache and refetch
+      // Invalidate caches and refetch.
       try {
         localStorage.removeItem(`documentsStatus_${user.id}`)
       } catch {
         // Ignore errors
       }
-      
+      invalidate(`sidebar:documents:${user.id}`)
+
       userDocumentsAPI.getAll()
         .then((docs) => {
           const docsMap = new Map((docs || []).map((doc: any) => [doc.document_type, doc]))
@@ -780,45 +794,34 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
     const checkApplicationsNeedingPayment = async () => {
       try {
-        const applications = await applicationsAPI.getAll()
-        if (applications && applications.length > 0) {
-          // Check each application for pending payments
-          const needsPaymentPromises = applications.map(async (app: any) => {
-            try {
-              const payments = await applicationPaymentsAPI.getByApplication(app.id)
-              return payments.some(
-                (p: any) => p.status === 'pending' || p.status === 'pending_approval'
-              )
-            } catch {
-              return false
-            }
-          })
-          
-          const results = await Promise.all(needsPaymentPromises)
-          const hasPayment = results.some(Boolean)
-          setHasApplicationsNeedingPayment(hasPayment)
-          
-          // Cache the status
-          try {
-            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
-              hasPayment,
-              timestamp: Date.now(),
-            }))
-          } catch {
-            // Ignore errors
-          }
-        } else {
-          setHasApplicationsNeedingPayment(false)
-          
-          // Cache the status
-          try {
-            localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
-              hasPayment: false,
-              timestamp: Date.now(),
-            }))
-          } catch {
-            // Ignore errors
-          }
+        const hasPayment = await cachedRequest(
+          `sidebar:hasPaymentsPending:${user.id}`,
+          async () => {
+            const applications = await applicationsAPI.getAll()
+            if (!applications || applications.length === 0) return false
+            const needsPaymentPromises = applications.map(async (app: any) => {
+              try {
+                const payments = await applicationPaymentsAPI.getByApplication(app.id)
+                return payments.some(
+                  (p: any) => p.status === 'pending' || p.status === 'pending_approval',
+                )
+              } catch {
+                return false
+              }
+            })
+            const results = await Promise.all(needsPaymentPromises)
+            return results.some(Boolean)
+          },
+          { ttl: 60_000 },
+        )
+        setHasApplicationsNeedingPayment(hasPayment)
+        try {
+          localStorage.setItem(`applicationsPaymentStatus_${user.id}`, JSON.stringify({
+            hasPayment,
+            timestamp: Date.now(),
+          }))
+        } catch {
+          // Ignore errors
         }
       } catch (error) {
         console.error('Error checking applications needing payment:', error)
@@ -828,8 +831,10 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
     checkApplicationsNeedingPayment()
 
-    // Listen for application updates
+    // Listen for application updates — bust the cache so the badge reflects
+    // the new state on the very next render instead of waiting 60 s.
     const handleApplicationsUpdate = () => {
+      invalidate(`sidebar:hasPaymentsPending:${user.id}`)
       checkApplicationsNeedingPayment()
     }
 

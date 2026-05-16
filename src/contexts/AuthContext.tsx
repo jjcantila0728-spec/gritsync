@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authUser) {
         // Extract role from auth metadata
         const role = (authUser.user_metadata?.role || authUser.app_metadata?.role || 'client') as UserRole
-        
+
         // Use auth metadata and direct fields from /auth/me response
         setUser({
           id: authUser.id,
@@ -79,8 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           grit_id: (authUser as any).grit_id || authUser.user_metadata?.grit_id || undefined,
           created_at: authUser.created_at,
         })
+
+        // Tag subsequent Sentry events with the current user so error reports
+        // can be traced back to a specific account. Dynamic import keeps the
+        // SDK out of the critical path when no DSN is configured.
+        import('@/lib/sentry').then(({ setSentryUser }) => {
+          setSentryUser({ id: authUser.id, email: authUser.email || undefined, role })
+        }).catch(() => { /* ignore */ })
       } else {
         setUser(null)
+        import('@/lib/sentry').then(({ setSentryUser }) => setSentryUser(null)).catch(() => { /* ignore */ })
       }
     } catch (error: any) {
       console.error('Error loading user profile:', error?.message)

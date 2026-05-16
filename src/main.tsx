@@ -1,7 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import { initSentry } from './lib/sentry'
 import './index.css'
+
+// Initialize error tracking before anything else so we catch errors that
+// happen during boot. Silent no-op if VITE_SENTRY_DSN isn't set.
+initSentry()
 
 // Register the self-unregistering service worker. Production serves
 // /sw.js from public/; dev does not, so skip there to keep the console
