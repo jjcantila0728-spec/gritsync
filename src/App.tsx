@@ -87,6 +87,8 @@ const NclexReviewPage = lazy(() => import('./pages/nclex/NclexReview').then(m =>
 const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })))
 const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ default: m.AdminSocial })))
 const Sso = lazy(() => import('./pages/Sso').then(m => ({ default: m.Sso })))
+const PearsonVueExam = lazy(() => import('./pages/pearsonvue/PearsonVueExam').then(m => ({ default: m.PearsonVueExam })))
+const PearsonVueHome = lazy(() => import('./pages/pearsonvue/PearsonVueHome').then(m => ({ default: m.PearsonVueHome })))
 
 // Loading fallback component
 function PageLoader() {
@@ -524,6 +526,29 @@ function ReviewRoutes() {
 }
 
 // ---------------------------------------------------------------------------
+// PearsonVUE subdomain — mimics the real Pearson VUE NCLEX testing UI so
+// learners practice in the exact environment they'll see on test day.
+// pearsonvue.gritsync.com/        → PearsonVueHome (proctor-style start screen)
+// pearsonvue.gritsync.com/exam/:id → PearsonVueExam (the test surface)
+// Reuses the same /api/nclex/sessions endpoints as review.gritsync.com.
+// ---------------------------------------------------------------------------
+
+function PearsonVueRoutes() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/sso" element={<Sso />} />
+        <Route path="/" element={<ProtectedRoute><PearsonVueHome /></ProtectedRoute>} />
+        <Route path="/exam/:sessionId" element={<ProtectedRoute><PearsonVueExam /></ProtectedRoute>} />
+        {/* Auth fallback */}
+        <Route path="/login" element={<LandingPublicRoute><Login /></LandingPublicRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Root router — picks the right route tree based on subdomain context
 // ---------------------------------------------------------------------------
 
@@ -532,6 +557,7 @@ function RootRoutes() {
 
   if (context === 'app') return <AppRoutes />
   if (context === 'review') return <ReviewRoutes />
+  if (context === 'pearsonvue') return <PearsonVueRoutes />
   return <LandingRoutes />
 }
 

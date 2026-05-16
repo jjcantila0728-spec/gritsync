@@ -667,9 +667,17 @@ router.post('/sessions', async (req: AuthenticatedRequest, res) => {
 
     const firstQuestion = await fetchQuestionWithCaseStudy(firstQId)
     created(res, { session, currentQuestion: firstQuestion, currentIndex: 0 }, 'Session started')
-  } catch (err) {
+  } catch (err: any) {
+    // Surface the real reason — the previous generic "Internal server error"
+    // made test-creation failures undebuggable from the client. Postgres
+    // error codes and message live in err.code / err.message.
+    const detail = err?.message || String(err)
     console.error('[nclex/sessions POST]', err)
-    serverError(res)
+    res.status(500).json({
+      success: false,
+      message: `Failed to create session: ${detail}`,
+      code: err?.code,
+    })
   }
 })
 

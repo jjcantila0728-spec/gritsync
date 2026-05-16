@@ -15,8 +15,9 @@
 const PROD_DOMAIN = 'gritsync.com'
 const APP_SUBDOMAIN = 'app'
 const REVIEW_SUBDOMAIN = 'review'
+const PEARSONVUE_SUBDOMAIN = 'pearsonvue'
 
-export type SubdomainContext = 'landing' | 'app' | 'review'
+export type SubdomainContext = 'landing' | 'app' | 'review' | 'pearsonvue'
 
 function getHostname(): string {
   if (typeof window === 'undefined') return ''
@@ -44,6 +45,7 @@ export function getSubdomainContext(): SubdomainContext {
     const hostname = getHostname()
     if (hostname === `${APP_SUBDOMAIN}.${PROD_DOMAIN}`) return 'app'
     if (hostname === `${REVIEW_SUBDOMAIN}.${PROD_DOMAIN}`) return 'review'
+    if (hostname === `${PEARSONVUE_SUBDOMAIN}.${PROD_DOMAIN}`) return 'pearsonvue'
     return 'landing'
   }
 
@@ -51,6 +53,7 @@ export function getSubdomainContext(): SubdomainContext {
   const pathname = getPathname()
   if (pathname.startsWith('/app')) return 'app'
   if (pathname.startsWith('/review')) return 'review'
+  if (pathname.startsWith('/pearsonvue')) return 'pearsonvue'
   return 'landing'
 }
 
@@ -64,6 +67,7 @@ export function getBasename(): string {
   const context = getSubdomainContext()
   if (context === 'app') return '/app'
   if (context === 'review') return '/review'
+  if (context === 'pearsonvue') return '/pearsonvue'
   return ''
 }
 
@@ -107,6 +111,17 @@ export function reviewUrl(path: string = '/'): string {
   }
   const clean = path.startsWith('/') ? path : `/${path}`
   return `${window.location.origin}/review${clean}`
+}
+
+/** Full URL for a path on the PearsonVUE-style official test simulator
+ * (pearsonvue.gritsync.com) — mimics the real Pearson VUE NCLEX testing UI
+ * so learners can practice in the exact environment they'll see on test day. */
+export function pearsonVueUrl(path: string = '/'): string {
+  if (isProduction()) {
+    return `${buildOrigin(PEARSONVUE_SUBDOMAIN)}${path}`
+  }
+  const clean = path.startsWith('/') ? path : `/${path}`
+  return `${window.location.origin}/pearsonvue${clean}`
 }
 
 /**
