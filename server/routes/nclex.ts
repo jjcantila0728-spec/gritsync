@@ -1176,6 +1176,10 @@ router.get('/testimonials/approved', async (_req: AuthenticatedRequest, res) => 
         ORDER BY is_featured DESC, created_at DESC LIMIT 50`,
       []
     )
+    // Edge-cache for 60 s; serve stale up to 5 min while revalidating. Every
+    // reviewer / landing visitor hits the same payload — Vercel's CDN avoids
+    // touching Postgres at all for the common case.
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     ok(res, r.rows.map(camelTestimonial))
   } catch {
     serverError(res)
@@ -1215,6 +1219,9 @@ router.get('/live-sessions', async (_req: AuthenticatedRequest, res) => {
         ORDER BY scheduled_at DESC`,
       []
     )
+    // Edge-cache 30 s, stale up to 5 min. Live Lectures changes infrequently
+    // and dozens of learners hit this list per minute when sessions go live.
+    res.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=300')
     ok(res, r.rows.map(camelLiveSession))
   } catch (err) {
     console.error('[nclex/live-sessions]', err)
@@ -1368,6 +1375,9 @@ router.get('/site-settings', async (_req: AuthenticatedRequest, res) => {
     )
     const map: Record<string, string> = {}
     for (const row of r.rows) map[row.key] = row.value
+    // Site settings change only when an admin edits them. 2 min edge cache
+    // means most pageloads skip Postgres entirely.
+    res.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600')
     ok(res, map)
   } catch {
     serverError(res)
@@ -2135,6 +2145,8 @@ async function getSubscriptionPlansHandler(_req: AuthenticatedRequest, res: Resp
     }
     const paymentMap: Record<string, string> = {}
     for (const r of paymentRows.rows) paymentMap[r.key] = r.value
+    // Plans rarely change; every learner who opens the upgrade modal hits this.
+    res.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600')
     ok(res, { ...planConfig, ...paymentMap })
   } catch {
     serverError(res)
@@ -2194,6 +2206,7 @@ const DEFAULT_VIDEOS = {
 async function getVideoConfigHandler(_req: AuthenticatedRequest, res: Response) {
   try {
     const r = await query(`SELECT value FROM nclex_site_settings WHERE key = 'nclex_videos' LIMIT 1`, [])
+    res.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600')
     if (!r.rowCount) return ok(res, DEFAULT_VIDEOS)
     let config: any = DEFAULT_VIDEOS
     try { config = JSON.parse(r.rows[0].value) } catch { /* keep default */ }

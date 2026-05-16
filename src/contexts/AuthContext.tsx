@@ -135,14 +135,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    // Clear auth cache before signing out
+    // Clear all client-side caches before signing out so the next user
+    // doesn't see stale data from the previous session.
     try {
       const { clearAuthCache } = await import('@/lib/api-service')
       clearAuthCache()
     } catch {
       // Ignore if import fails
     }
-    
+    try {
+      const { clearAllCache } = await import('@/lib/cache')
+      clearAllCache()
+    } catch {
+      // Ignore if import fails
+    }
+
     const { error } = await db.auth.signOut()
     if (error) {
       throw new Error((error as { message?: string }).message ?? 'Sign out failed')

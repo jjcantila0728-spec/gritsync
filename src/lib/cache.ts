@@ -191,7 +191,7 @@ export async function cachedFetch<T = any>(
  */
 export function clearCacheForUrl(urlPattern: string | RegExp): number {
   let cleared = 0
-  const pattern = typeof urlPattern === 'string' 
+  const pattern = typeof urlPattern === 'string'
     ? new RegExp(urlPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     : urlPattern
 
@@ -203,4 +203,167 @@ export function clearCacheForUrl(urlPattern: string | RegExp): number {
   }
 
   return cleared
+}
+
+// ─── Generic request cache + React hook ──────────────────────────────────────
+// `cachedFetch` above is bolted to the raw `fetch` API, which means it can't
+// wrap our axios-based `nclexApi.foo()` / `applicationsAPI.bar()` calls. The
+// helpers below take an arbitrary fetcher function instead so any async API
+// (axios, supabase-style db client, future SDKs) can opt in with one line.
+//
+// API:
+//   cachedRequest<T>(key, fetcher, opts)               — Promise<T>
+//   useCachedQuery<T>(key, fetcher, opts)              — React hook
+//   invalidate(pattern: string | RegExp)               — drop matching entries
+//   clearAllCache()                                    — wipe everything (sign-out)
+//
+// Cache hits return synchronously on mount, so navigating back to a recently
+// visited page paints instantly. Concurrent calls for the same key share one
+// in-flight promise — three components mounting at the same time issue one
+// network request, not three.
+
+import { useEffect, useRef, useState } from 'react'
+
+interface RequestEntry<T> {
+  value: T
+  expiresAt: number
+}
+
+const requestCache = new Map<string, RequestEntry<unknown>>()
+const inflight = new Map<string, Promise<unknown>>()
+
+const DEFAULT_REQUEST_TTL_MS = 30_000 // 30 s — "feels fresh" baseline
+
+export interface CachedRequestOpts {
+  /** Override the TTL in milliseconds (default 30 s). */
+  ttl?: number
+  /** Force re-fetch even if a cached entry exists. */
+  force?: boolean
+}
+
+export async function cachedRequest<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  opts: CachedRequestOpts = {},
+): Promise<T> {
+  const ttl = opts.ttl ?? DEFAULT_REQUEST_TTL_MS
+  const now = Date.now()
+
+  if (!opts.force) {
+    const hit = requestCache.get(key) as RequestEntry<T> | undefined
+    if (hit && hit.expiresAt > now) return hit.value
+  }
+
+  const existing = inflight.get(key) as Promise<T> | undefined
+  if (existing && !opts.force) return existing
+
+  const promise = (async () => {
+    try {
+      const value = await fetcher()
+      requestCache.set(key, { value, expiresAt: Date.now() + ttl })
+      return value
+    } finally {
+      inflight.delete(key)
+    }
+  })()
+
+  inflight.set(key, promise)
+  return promise
+}
+
+/**
+ * Drop request-cache entries whose key matches `pattern`. Strings match by
+ * prefix; regex matches by `.test()`. Call after a mutation so the next
+ * read fetches fresh data.
+ */
+export function invalidate(pattern: string | RegExp): number {
+  let removed = 0
+  for (const key of [...requestCache.keys()]) {
+    if (typeof pattern === 'string' ? key.startsWith(pattern) : pattern.test(key)) {
+      requestCache.delete(key)
+      removed++
+    }
+  }
+  for (const key of [...inflight.keys()]) {
+    if (typeof pattern === 'string' ? key.startsWith(pattern) : pattern.test(key)) {
+      inflight.delete(key)
+    }
+  }
+  return removed
+}
+
+/** Wipe everything. Use on sign-out so the next session starts cold. */
+export function clearAllCache(): void {
+  requestCache.clear()
+  inflight.clear()
+  apiCache.clear()
+}
+
+/** Fire-and-forget prefetch (e.g. on hover or route-prefetch). */
+export function prefetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  opts?: CachedRequestOpts,
+): void {
+  cachedRequest(key, fetcher, opts).catch(() => { /* swallow */ })
+}
+
+interface UseCachedQueryOpts<T> {
+  ttl?: number
+  /** Extra deps that should retrigger the fetch when they change. */
+  deps?: ReadonlyArray<unknown>
+  /** Skip the fetch entirely while this is false (e.g. waiting for auth). */
+  enabled?: boolean
+  /** Initial value rendered before the first fetch resolves. */
+  initialData?: T
+}
+
+interface UseCachedQueryResult<T> {
+  data: T | undefined
+  loading: boolean
+  error: Error | null
+  refetch: () => Promise<void>
+}
+
+/**
+ * React hook variant of `cachedRequest`. The first render returns cached
+ * data synchronously if it exists, so revisiting a recently-loaded page
+ * paints instantly while a background re-fetch (if the TTL has expired)
+ * runs in parallel.
+ */
+export function useCachedQuery<T>(
+  key: string | null,
+  fetcher: () => Promise<T>,
+  opts: UseCachedQueryOpts<T> = {},
+): UseCachedQueryResult<T> {
+  const { ttl, deps = [], enabled = true, initialData } = opts
+
+  const initialFromCache = key
+    ? ((requestCache.get(key) as RequestEntry<T> | undefined)?.value ?? undefined)
+    : undefined
+
+  const [data, setData] = useState<T | undefined>(initialFromCache ?? initialData)
+  const [loading, setLoading] = useState<boolean>(enabled && initialFromCache === undefined)
+  const [error, setError] = useState<Error | null>(null)
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher
+
+  const run = async (force = false) => {
+    if (!key || !enabled) return
+    setError(null)
+    if (initialFromCache === undefined && !force) setLoading(true)
+    try {
+      const value = await cachedRequest(key, () => fetcherRef.current(), { ttl, force })
+      setData(value)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void run() }, [key, enabled, ...deps])
+
+  return { data, loading, error, refetch: () => run(true) }
 }
