@@ -18,11 +18,24 @@ if (!fs.existsSync(file)) {
 const sql = fs.readFileSync(file, 'utf8')
 
 ;(async () => {
-  if (!process.env.DATABASE_URL) {
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL
+  if (!url) {
     console.error('DATABASE_URL is not set. Check your .env file.')
     process.exit(2)
   }
-  const c = new Client({ connectionString: process.env.DATABASE_URL })
+  // Parse the URL into discrete params instead of passing `connectionString`,
+  // because pg-connection-string maps Supabase's `sslmode=require` to
+  // `verify-full`, which rejects Supabase's self-signed leaf cert. Same fix
+  // as server/db.ts.
+  const u = new URL(url)
+  const c = new Client({
+    host: u.hostname,
+    port: u.port ? parseInt(u.port, 10) : 5432,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: u.pathname.replace(/^\//, ''),
+    ssl: { rejectUnauthorized: false },
+  })
   await c.connect()
   console.log(`Running migration: ${path.relative(process.cwd(), file)}`)
   try {

@@ -693,6 +693,18 @@ export function Header() {
     return () => window.removeEventListener('storage', refresh)
   }, [])
 
+  // Publish the total sticky-header height (header + optional impersonation
+  // banner) as a CSS variable so Sidebar (and any other fixed-position layer
+  // that lives below the header) can position itself below the full stack
+  // instead of clashing with the banner. 64px = h-16 header; banner adds
+  // ~36px (text-sm + py-2).
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--app-header-h',
+      adminBackup ? '100px' : '64px',
+    )
+  }, [adminBackup])
+
   const handleBackToAdmin = () => {
     try {
       const frame = popImpersonation()
@@ -1215,7 +1227,7 @@ export function Header() {
             className="md:hidden fixed inset-0 z-30 bg-black/50"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="md:hidden fixed top-16 bottom-0 left-0 z-40 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 w-64 overflow-y-auto">
+          <div className="md:hidden fixed top-[var(--app-header-h,4rem)] bottom-0 left-0 z-40 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 w-64 overflow-y-auto">
             <MobileSidebar onNavigate={() => setMobileMenuOpen(false)} />
           </div>
         </>

@@ -491,7 +491,15 @@ export function Sidebar() {
           doesn't overlap the main content. Hidden on mobile (MobileSidebar
           handles small screens). */}
       <div className="hidden md:block w-64 flex-shrink-0" aria-hidden />
-    <aside className="hidden md:flex md:flex-col w-64 h-[calc(100vh-4rem)] fixed top-16 left-0 z-30 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4">
+    <aside
+      className="hidden md:flex md:flex-col w-64 fixed left-0 z-30 overflow-hidden border-r bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-4"
+      style={{
+        // Sit directly below the sticky Header stack (header + optional
+        // impersonation banner). Header.tsx publishes --app-header-h.
+        top: 'var(--app-header-h, 4rem)',
+        height: 'calc(100vh - var(--app-header-h, 4rem))',
+      }}
+    >
       <nav className="space-y-2 overflow-y-auto flex-1">
         {navItems.map((item) => {
           const Icon = item.icon

@@ -443,7 +443,7 @@ export function AccountSettings() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-16 z-10">
+          <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-[var(--app-header-h,4rem)] z-10">
             <div className="max-w-4xl mx-auto px-4 sm:px-8">
               <nav className="flex gap-0 overflow-x-auto scrollbar-none">
                 {TABS.map(({ id, label, icon: Icon }) => (
