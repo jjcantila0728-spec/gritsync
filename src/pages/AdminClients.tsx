@@ -909,7 +909,121 @@ export function AdminClients() {
             </Card>
           ) : (
             <>
-              <Card>
+              {/* Mobile card list — replaces the table below md. Same data, but
+                  laid out vertically so the role dropdown and the three action
+                  buttons stop colliding with each other on narrow phones. */}
+              <div className="md:hidden space-y-3 mb-4">
+                {paginatedClients.data.map((client, index) => {
+                  const fullName = getFullName(client.first_name, client.last_name, 'No name')
+                  const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  const rowNumber = (currentPage - 1) * pageSize + index + 1
+                  return (
+                    <Card key={client.id} className="p-4">
+                      <button
+                        onClick={() => handleViewClient(client)}
+                        className="flex items-center gap-3 w-full text-left mb-3"
+                      >
+                        <div className="relative flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-semibold text-sm">
+                            {initials}
+                          </div>
+                          {unreadCounts[client.id] > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-900">
+                              {unreadCounts[client.id] > 99 ? '99+' : unreadCounts[client.id]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{fullName}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{client.gmail_account || client.email}</p>
+                          <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                            <span>#{rowNumber}</span>
+                            {client.grit_id && <span className="font-mono">{client.grit_id}</span>}
+                            <span>{formatDate(client.created_at)}</span>
+                          </div>
+                        </div>
+                      </button>
+
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <RoleBadge role={client.role} />
+                        {(client.role === 'affiliate' || client.role === 'advisor') && (
+                          <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate" title="Referral code">
+                            {client.referral_code || 'no code'}
+                          </span>
+                        )}
+                        <select
+                          value={client.role}
+                          disabled={actioningClientId === client.id}
+                          onChange={(e) => handleChangeRole(client, e.target.value as RoleTab)}
+                          className="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          title="Change role"
+                        >
+                          <option value="client">Client</option>
+                          <option value="affiliate">Affiliate</option>
+                          <option value="advisor">Advisor</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          size="sm"
+                          title="Login as this user"
+                          className="text-xs whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0 w-full"
+                          disabled={actioningClientId === client.id}
+                          onClick={async () => {
+                            try {
+                              showToast('Logging in as user...', 'info')
+                              const adminToken = localStorage.getItem('gritsync_token')
+                              if (!adminToken) throw new Error('No active session. Please log in again.')
+                              const res = await fetch('/api/auth/admin-login-as', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+                                body: JSON.stringify({ userId: client.id }),
+                              })
+                              const data = await res.json()
+                              if (!res.ok || !data.access_token) throw new Error(data.error || 'Failed to generate login token')
+                              pushCurrentSession()
+                              localStorage.setItem('gritsync_token', data.access_token)
+                              localStorage.setItem('gritsync_refresh_token', data.refresh_token || '')
+                              localStorage.setItem('gritsync_user', JSON.stringify(data.user))
+                              showToast(`Logged in as ${data.user?.first_name || 'user'}`, 'success')
+                              window.location.href = appUrl('/dashboard')
+                            } catch (error: any) {
+                              showToast(error.message || 'Failed to login as user', 'error')
+                            }
+                          }}
+                        >
+                          Login
+                        </Button>
+                        <Button
+                          size="sm"
+                          title={client.is_active !== false ? 'Deactivate account' : 'Reactivate account'}
+                          disabled={actioningClientId === client.id}
+                          className={`text-xs whitespace-nowrap border-0 w-full ${client.is_active !== false ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400' : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400'}`}
+                          onClick={() => handleDeactivateClient(client)}
+                        >
+                          <UserX className="h-3.5 w-3.5 mr-1" />
+                          {client.is_active !== false ? 'Deact.' : 'Activate'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          title="Delete account permanently"
+                          disabled={actioningClientId === client.id}
+                          className="text-xs whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 border-0 w-full"
+                          onClick={() => handleDeleteClient(client)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+
+              {/* Desktop table — hidden on mobile (use the card list above). */}
+              <Card className="hidden md:block">
                 <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
                   <div className="min-w-full inline-block align-middle">
                     <table className="w-full">
@@ -1081,14 +1195,15 @@ export function AdminClients() {
                 </div>
               </Card>
 
-              {/* Pagination */}
+              {/* Pagination — stacks on mobile so the "Showing X to Y" line
+                  doesn't crowd the prev/next buttons on a 360 px screen. */}
               {paginatedClients.totalPages > 1 && (
                 <Card className="mt-6">
-                  <div className="flex items-center justify-between p-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4">
+                    <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
                       Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, paginatedClients.totalItems)} of {paginatedClients.totalItems} clients
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center sm:justify-end gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1098,7 +1213,7 @@ export function AdminClients() {
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 px-3">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 px-3 whitespace-nowrap">
                         Page {currentPage} of {paginatedClients.totalPages}
                       </div>
                       <Button
