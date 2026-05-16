@@ -586,6 +586,17 @@ router.post('/sessions', async (req: AuthenticatedRequest, res) => {
     const profileRes = await query(`SELECT tier FROM nclex_profiles WHERE user_id = $1 LIMIT 1`, [userId])
     const tier = profileRes.rows[0]?.tier ?? 'FREE'
     if (tier === 'FREE') {
+      // FREE users may only run the Tutorial. CAT, the readiness
+      // assessment, and the exit exam are paywalled.
+      if (examType !== 'TUTORIAL') {
+        forbidden(
+          res,
+          'Free plan can only access Tutorial mode. Upgrade to Premium to unlock CAT, Readiness Assessment, and Exit Exam.',
+        )
+        return
+      }
+      // Daily question quota for the tutorial — keeps the free tier capped
+      // at 25 items per day so heavy users have a reason to upgrade.
       const todayRes = await query(
         `SELECT COUNT(*)::int AS c FROM nclex_session_items si
            JOIN nclex_sessions s ON s.id = si.session_id
@@ -593,8 +604,8 @@ router.post('/sessions', async (req: AuthenticatedRequest, res) => {
         [userId]
       )
       const todayCount = todayRes.rows[0]?.c ?? 0
-      if (todayCount >= 10) {
-        forbidden(res, 'Daily limit reached (10 questions). Upgrade to Premium for unlimited access.')
+      if (todayCount >= 25) {
+        forbidden(res, 'Daily limit reached (25 questions). Upgrade to Premium for unlimited access.')
         return
       }
     }

@@ -831,7 +831,7 @@ export const NclexHome = () => {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-amber-800">{questionsToday}/10 free questions used today</p>
+                  <p className="text-sm font-semibold text-amber-800">{questionsToday}/25 free questions used today</p>
                   <p className="text-xs text-amber-700">Upgrade to Premium for unlimited access to all exam types.</p>
                 </div>
                 <button onClick={() => { setActiveSection('subscription'); setUpgradeModal(true); }}
@@ -1520,11 +1520,18 @@ export const NclexHome = () => {
             <div>
               <h2 className="text-xl font-black text-gray-900 dark:text-white">Question Banks</h2>
               <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">
-                {isPremium ? 'Unlimited access · all exam types.' : `Free tier: ${questionsToday}/10 questions used today.`}
+                {isPremium ? 'Unlimited access · all exam types.' : `Free tier: ${questionsToday}/25 questions used today.`}
               </p>
             </div>
             <button
-              onClick={() => { setCtExamType('CAT'); setCtBank(''); setCreateTestModal(true); }}
+              onClick={() => {
+                // Default selection depends on tier — FREE users can only run
+                // the Tutorial, so we pre-select it. PREMIUM/VIP get RA as the
+                // default per product spec.
+                setCtExamType(isPremium ? 'READINESS_ASSESSMENT' : 'TUTORIAL')
+                setCtBank('')
+                setCreateTestModal(true)
+              }}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#0c1e3c] text-white rounded-xl text-sm font-bold hover:bg-[#1a3058] transition-all shadow-md flex-shrink-0"
             >
               <Play className="h-4 w-4" /> Create Test
@@ -1536,7 +1543,7 @@ export const NclexHome = () => {
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3 mb-3">
               <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-amber-800">Free Plan: {questionsToday}/10 questions today</p>
+                <p className="text-sm font-semibold text-amber-800">Free Plan: {questionsToday}/25 questions today</p>
                 <p className="text-xs text-amber-700">Upgrade to Premium for unlimited access to all exam types.</p>
               </div>
               <button onClick={() => setUpgradeModal(true)} className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex-shrink-0">
@@ -2164,7 +2171,14 @@ export const NclexHome = () => {
                                     </div>
                                   </div>
                                   <button
-                                    onClick={() => { setCtExamType('CAT'); setCtBank(''); setCreateTestModal(true); }}
+                                    onClick={() => {
+                // Default selection depends on tier — FREE users can only run
+                // the Tutorial, so we pre-select it. PREMIUM/VIP get RA as the
+                // default per product spec.
+                setCtExamType(isPremium ? 'READINESS_ASSESSMENT' : 'TUTORIAL')
+                setCtBank('')
+                setCreateTestModal(true)
+              }}
                                     className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 ${isUntouched ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-orange-500 text-white hover:bg-orange-600'}`}>
                                     <Play className="h-3 w-3" /> Practice
                                   </button>
@@ -3200,7 +3214,7 @@ export const NclexHome = () => {
             </span>
             {!isPremium && activeSection === 'qbanks' && (
               <span className="text-xs text-blue-300 hidden sm:inline flex-shrink-0">
-                {questionsToday}/10 Qs today
+                {questionsToday}/25 Qs today
               </span>
             )}
           </div>
