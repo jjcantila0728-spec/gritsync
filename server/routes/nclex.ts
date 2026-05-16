@@ -523,6 +523,14 @@ router.get('/home', async (req: AuthenticatedRequest, res) => {
     )
     const qByTopic = qByTopicRes.rows.map((r: any) => ({ topic: r.topic, _count: r.count }))
 
+    const qBySubtopicRes = await query(
+      `SELECT subtopic, COUNT(*)::int AS count FROM nclex_questions
+         WHERE is_active = TRUE AND subtopic IS NOT NULL AND subtopic <> ''
+         GROUP BY subtopic ORDER BY count DESC`,
+      []
+    )
+    const qBySubtopic = qBySubtopicRes.rows.map((r: any) => ({ subtopic: r.subtopic, _count: r.count }))
+
     const qByFormatRes = await query(
       `SELECT format, COUNT(*)::int AS count FROM nclex_questions
          WHERE is_active = TRUE GROUP BY format ORDER BY count DESC`,
@@ -608,6 +616,7 @@ router.get('/home', async (req: AuthenticatedRequest, res) => {
         usedByBank,
         usedByTopic,
         byTopic: qByTopic.map((r) => ({ topic: r.topic ?? 'General', count: r._count })),
+        bySubtopic: qBySubtopic.map((r) => ({ subtopic: r.subtopic ?? 'General', count: r._count })),
         byFormat: qByFormat.map((r) => ({ format: r.format, count: r._count })),
       },
     })

@@ -99,6 +99,7 @@ interface HomeData {
     usedByBank: Record<string, number>;
     usedByTopic: Record<string, number>;
     byTopic: Array<{ topic: string; count: number }>;
+    bySubtopic?: Array<{ subtopic: string; count: number }>;
     byFormat: Array<{ format: string; count: number }>;
   };
 }
@@ -3279,33 +3280,42 @@ export const NclexHome = () => {
           EXIT_EXAM: 'Comprehensive 150-question timed exit examination.',
         };
 
-        const SUBJECT_GROUPS = [
-          { name: 'Adult Health',           topics: ['Cardiovascular Nursing', 'Respiratory Nursing', 'Neurological Nursing', 'Gastrointestinal Nursing', 'Genitourinary/Renal Nursing', 'Endocrine Nursing'] },
-          { name: 'Pharmacology',           topics: ['Pharmacology Fundamentals'] },
-          { name: 'Fundamentals',           topics: ['Safety & Infection Control', 'Musculoskeletal & Integumentary', 'NCLEX Strategies & Test-Taking'] },
-          { name: 'Leadership & Management',topics: ['Leadership & Management', 'Community & Transcultural'] },
-          { name: 'Child Health',           topics: ['Pediatric Nursing'] },
-          { name: 'Maternal & Newborn Health', topics: ['Maternal-Newborn Nursing'] },
-          { name: 'Mental Health',          topics: ['Mental Health Nursing'] },
-          { name: 'Critical Care',          topics: ['Critical Care & Emergency', 'Hematological & Immunological', 'Oncology & Palliative Care'] },
-          { name: 'Nutrition',              topics: ['Nutrition & Metabolism', 'Comprehensive Review & Mock Exams'] },
-        ];
+        // Build groups dynamically from what's actually in the question bank
+        // rather than the hardcoded body-system / test-plan lists that used
+        // to live here. Those lists were authored for a different topic
+        // taxonomy (e.g. "Cardiovascular Nursing", "Pediatric Nursing") and
+        // produced zero counts against the seed taxonomy ("Physiological
+        // Integrity", "Psychosocial Integrity", etc.). Now the Subject/System
+        // tab shows the four NCLEX content areas (DB column `topic`) and the
+        // Client Need Areas tab shows the granular subtopics (DB column
+        // `subtopic`) — both with real counts straight from the server.
 
-        const CLIENT_NEED_GROUPS = [
-          { name: 'Physiological Adaptation',           topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'physio')!.topics },
-          { name: 'Reduction of Risk Potential',        topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'risk')!.topics },
-          { name: 'Health Promotion and Maintenance',   topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'health')!.topics },
-          { name: 'Basic Care and Comfort',             topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'basic')!.topics },
-          { name: 'Safety & Infection Control',         topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'safety')!.topics },
-          { name: 'Psychosocial Integrity',             topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'psycho')!.topics },
-          { name: 'Pharmacological and Parenteral Therapies', topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'pharma')!.topics },
-          { name: 'Management of Care',                 topics: TEST_PLAN_CATEGORIES.find(c => c.id === 'mgmt')!.topics },
-        ];
+        const byTopicData = data?.stats.byTopic ?? [];
+        const bySubtopicData = data?.stats.bySubtopic ?? [];
+
+        const SUBJECT_GROUPS = byTopicData
+          .filter(b => b.count > 0)
+          .map(b => ({ name: b.topic, topics: [b.topic] }));
+
+        const CLIENT_NEED_GROUPS = bySubtopicData
+          .filter(b => b.count > 0)
+          .map(b => ({ name: b.subtopic, topics: [b.subtopic] }));
 
         const activeGroups = ctOrganization === 'clientNeed' ? CLIENT_NEED_GROUPS : SUBJECT_GROUPS;
 
-        const getGroupCount = (topics: string[]) =>
-          topics.reduce((sum, t) => sum + ((data?.stats.byTopic ?? []).find(b => b.topic === t)?.count ?? 0), 0);
+        const getGroupCount = (topics: string[]) => {
+          // For Subject groups topics are matched against `byTopic`; for
+          // Client Need groups they're matched against `bySubtopic`. The
+          // server query uses the same source table so the same `topics`
+          // array values are valid keys in both maps.
+          const source = ctOrganization === 'clientNeed' ? bySubtopicData : byTopicData;
+          return topics.reduce((sum, t) => {
+            const hit = ctOrganization === 'clientNeed'
+              ? source.find((b: any) => b.subtopic === t)
+              : source.find((b: any) => b.topic === t);
+            return sum + ((hit as any)?.count ?? 0);
+          }, 0);
+        };
 
         const isGroupSelected = (topics: string[]) => topics.every(t => ctTopics.includes(t));
         const isGroupPartial  = (topics: string[]) => !isGroupSelected(topics) && topics.some(t => ctTopics.includes(t));
