@@ -1042,6 +1042,41 @@ export function AdminEmails() {
     }
   }
 
+  // Default admin / system mailboxes seeded the first time an admin opens
+  // Email Setup. Keeps the Admin tab from being empty on a fresh install and
+  // matches the actual SMTP infrastructure the server sends from.
+  const DEFAULT_ADMIN_EMAILS: Array<Partial<{
+    email_address: string
+    display_name: string
+    address_type: 'admin' | 'support' | 'noreply' | 'department'
+    is_active: boolean
+    is_verified: boolean
+    is_primary: boolean
+    is_system_address: boolean
+    can_send: boolean
+    can_receive: boolean
+    notes: string
+  }>> = [
+    {
+      email_address: 'admin@gritsync.com', display_name: 'Admin', address_type: 'admin',
+      is_active: true, is_verified: true, is_primary: true, is_system_address: true,
+      can_send: true, can_receive: true,
+      notes: 'Primary admin mailbox — handles general inbound + sends.',
+    },
+    {
+      email_address: 'support@gritsync.com', display_name: 'GritSync Support', address_type: 'support',
+      is_active: true, is_verified: true, is_primary: false, is_system_address: true,
+      can_send: true, can_receive: true,
+      notes: 'Customer support inbox — replies to inquiries from /quote, /tracking, contact form.',
+    },
+    {
+      email_address: 'noreply@gritsync.com', display_name: 'GritSync', address_type: 'noreply',
+      is_active: true, is_verified: true, is_primary: false, is_system_address: true,
+      can_send: true, can_receive: false,
+      notes: 'Outbound-only — transactional emails (receipts, verifications, password resets).',
+    },
+  ]
+
   // Email Setup functions
   const loadEmailSetupData = async () => {
     try {
@@ -1077,6 +1112,35 @@ export function AdminEmails() {
           return data || []
         })(),
       ])
+
+      // Seed the default admin / system mailboxes on first load so the Admin
+      // tab isn't blank for a fresh install. Idempotent — we skip any address
+      // that already exists by email_address.
+      const existingByEmail = new Set(
+        (addresses || []).map((a: any) => String(a.email_address || '').toLowerCase()),
+      )
+      const toSeed = DEFAULT_ADMIN_EMAILS.filter(
+        (d) => d.email_address && !existingByEmail.has(d.email_address.toLowerCase()),
+      )
+      if (toSeed.length) {
+        try {
+          const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
+          for (const def of toSeed) {
+            try {
+              await emailAddressesAPI.create(def as any)
+            } catch (seedErr) {
+              // RLS, duplicate, or schema mismatch — don't block the rest.
+              console.warn('Could not seed default admin email', def.email_address, seedErr)
+            }
+          }
+          // Re-fetch so the rest of this function sees the seeded rows.
+          const refetched = await emailAddressesAPI.getAll()
+          ;(addresses as any).length = 0
+          ;(addresses as any).push(...refetched)
+        } catch (importErr) {
+          console.warn('Could not seed default admin emails', importErr)
+        }
+      }
 
       // Merge: real email_addresses rows + a virtual entry per client user.
       const realEmails = new Set(
@@ -1534,8 +1598,41 @@ export function AdminEmails() {
   const handleToggleActive = async (emailId: string, currentStatus: boolean) => {
     try {
       const { emailAddressesAPI } = await import('@/lib/email-addresses-api')
-      await emailAddressesAPI.update(emailId, { is_active: !currentStatus })
-      showToast(`Email address ${!currentStatus ? 'activated' : 'deactivated'} successfully`, 'success')
+
+      // Client mailboxes derived from the users table get a synthetic id like
+      // "user:<uuid>" — there's no email_addresses row to update yet. The
+      // first toggle materializes a real row carrying the new is_active
+      // state; subsequent toggles update it normally.
+      if (emailId.startsWith('user:')) {
+        const userId = emailId.slice('user:'.length)
+        const virtual = adminEmailAddresses.find((e: any) => e.id === emailId)
+        if (!virtual) throw new Error('Could not find email entry to update')
+        await emailAddressesAPI.create({
+          email_address: virtual.email_address,
+          display_name: virtual.display_name,
+          user_id: userId,
+          address_type: 'client',
+          is_active: !currentStatus,
+          is_verified: false,
+          is_primary: false,
+          can_send: !currentStatus,
+          can_receive: !currentStatus,
+          is_system_address: false,
+        })
+      } else {
+        await emailAddressesAPI.update(emailId, {
+          is_active: !currentStatus,
+          // Stop send/receive when admin deactivates — the whole point of
+          // this safety control is to cut off mail flow when a user is
+          // violating usage policy.
+          can_send: !currentStatus,
+          can_receive: !currentStatus,
+        })
+      }
+      showToast(
+        `Email address ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+        'success',
+      )
       loadEmailSetupData()
     } catch (error) {
       console.error('Error toggling active status:', error)

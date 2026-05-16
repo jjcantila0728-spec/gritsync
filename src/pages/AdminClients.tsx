@@ -951,18 +951,6 @@ export function AdminClients() {
                             {client.referral_code || 'no code'}
                           </span>
                         )}
-                        <select
-                          value={client.role}
-                          disabled={actioningClientId === client.id}
-                          onChange={(e) => handleChangeRole(client, e.target.value as RoleTab)}
-                          className="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          title="Change role"
-                        >
-                          <option value="client">Client</option>
-                          <option value="affiliate">Affiliate</option>
-                          <option value="advisor">Advisor</option>
-                          <option value="admin">Admin</option>
-                        </select>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2">
@@ -1115,18 +1103,6 @@ export function AdminClients() {
                                       {client.referral_code || 'no code'}
                                     </span>
                                   )}
-                                  <select
-                                    value={client.role}
-                                    disabled={actioningClientId === client.id}
-                                    onChange={(e) => handleChangeRole(client, e.target.value as RoleTab)}
-                                    className="mt-0.5 text-[11px] rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                                    title="Change role"
-                                  >
-                                    <option value="client">Client</option>
-                                    <option value="affiliate">Affiliate</option>
-                                    <option value="advisor">Advisor</option>
-                                    <option value="admin">Admin</option>
-                                  </select>
                                 </div>
                               </td>
                               <td className="py-3 px-2 sm:px-4 text-right">
@@ -1537,6 +1513,51 @@ export function AdminClients() {
 
               {/* ───────── Body ───────── */}
               <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/40 space-y-4">
+                {/* Account access — change role / manage permissions.
+                    Moved here from the user-list Role column on 2026-05-15 so
+                    the table row stops being so dense and role changes
+                    require an intentional "open profile → change" instead
+                    of a one-click misclick from the list view. */}
+                {c && (
+                  <div className="rounded-xl bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700 p-4 sm:p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+                        <Shield className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Account access</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Change the user's role to grant or revoke permissions.</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:w-24">Current role</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <RoleBadge role={c.role} />
+                        <select
+                          value={c.role}
+                          disabled={actioningClientId === c.id}
+                          onChange={(e) => handleChangeRole(c, e.target.value as RoleTab)}
+                          className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          title="Change role"
+                        >
+                          <option value="client">Client</option>
+                          <option value="affiliate">Affiliate</option>
+                          <option value="advisor">Advisor</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        {actioningClientId === c.id && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Saving…</span>
+                        )}
+                      </div>
+                    </div>
+                    {(c.role === 'affiliate' || c.role === 'advisor') && c.referral_code && (
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Referral code: <span className="font-mono text-gray-700 dark:text-gray-300">{c.referral_code}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Personal Information */}
                 <ProfileSection
                   icon={User}
