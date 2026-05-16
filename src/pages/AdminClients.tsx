@@ -17,7 +17,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, EyeOff, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare, Briefcase, Shield, Link2, UserPlus, X, RefreshCcw } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, EyeOff, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare, Briefcase, Shield, Link2, UserPlus, X, RefreshCcw, AlertTriangle } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
@@ -140,6 +140,11 @@ export function AdminClients() {
   const [clientDocuments, setClientDocuments] = useState<any[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [actioningClientId, setActioningClientId] = useState<string | null>(null)
+  // Validation modal for deactivate/reactivate/delete. Delete requires typing
+  // the user's email to enable the confirm button (account deletion is
+  // irreversible — we want a deliberate keystroke, not just a click).
+  const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'delete'; client: Client } | null>(null)
+  const [confirmInput, setConfirmInput] = useState('')
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [activeTab, setActiveTab] = useState<RoleTab>('client')
   const emptyCreateForm = { role: 'client' as RoleTab, first_name: '', last_name: '', middle_name: '', personal_email: '', mobile: '', password: '' }
@@ -569,11 +574,21 @@ export function AdminClients() {
     return paginate(filteredClients, currentPage, pageSize)
   }, [filteredClients, currentPage, pageSize])
 
-  const handleDeactivateClient = async (client: Client) => {
+  // Stage 1: row buttons just open the validation modal. The actual API call
+  // happens after the admin confirms in performDeactivate / performDelete.
+  const handleDeactivateClient = (client: Client) => {
+    setConfirmInput('')
+    setConfirmAction({ type: 'deactivate', client })
+  }
+
+  const handleDeleteClient = (client: Client) => {
+    setConfirmInput('')
+    setConfirmAction({ type: 'delete', client })
+  }
+
+  const performDeactivate = async (client: Client) => {
     const isActive = client.is_active !== false
     const action = isActive ? 'deactivate' : 'reactivate'
-    if (!confirm(`Are you sure you want to ${action} ${getFullName(client.first_name, client.last_name)}?`)) return
-
     setActioningClientId(client.id)
     try {
       const adminToken = localStorage.getItem('gritsync_token')
@@ -590,6 +605,7 @@ export function AdminClients() {
 
       setClients(prev => prev.map(c => c.id === client.id ? { ...c, is_active: !isActive } : c))
       showToast(`${getFullName(client.first_name, client.last_name)} ${action}d successfully`, 'success')
+      setConfirmAction(null)
     } catch (error: any) {
       showToast(error.message || `Failed to ${action} client`, 'error')
     } finally {
@@ -597,10 +613,8 @@ export function AdminClients() {
     }
   }
 
-  const handleDeleteClient = async (client: Client) => {
+  const performDelete = async (client: Client) => {
     const name = getFullName(client.first_name, client.last_name)
-    if (!confirm(`Permanently delete ${name}?\n\nThis will remove their account and all associated data. This action CANNOT be undone.`)) return
-
     setActioningClientId(client.id)
     try {
       const adminToken = localStorage.getItem('gritsync_token')
@@ -613,6 +627,7 @@ export function AdminClients() {
 
       setClients(prev => prev.filter(c => c.id !== client.id))
       showToast(`${name} deleted successfully`, 'success')
+      setConfirmAction(null)
     } catch (error: any) {
       showToast(error.message || 'Failed to delete client', 'error')
     } finally {
@@ -762,7 +777,7 @@ export function AdminClients() {
                   Manage clients, affiliates, advisors and admins
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <Button
                   size="sm"
                   onClick={() => openCreateModal(activeTab)}
@@ -895,18 +910,18 @@ export function AdminClients() {
           ) : (
             <>
               <Card>
-                <div className="overflow-x-auto -mx-6 px-6">
+                <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
                   <div className="min-w-full inline-block align-middle">
-                    <table className="w-full min-w-[800px]">
+                    <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-200 dark:border-gray-700">
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 w-12">#</th>
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[120px]">Name</th>
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[180px]">Email</th>
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">Joined</th>
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[100px]">GRIT-ID</th>
-                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[170px]">Role</th>
-                          <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-[200px]">Actions</th>
+                          <th className="hidden sm:table-cell text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 w-12">#</th>
+                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Name</th>
+                          <th className="hidden md:table-cell text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Email</th>
+                          <th className="hidden lg:table-cell text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Joined</th>
+                          <th className="hidden lg:table-cell text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">GRIT-ID</th>
+                          <th className="text-left py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Role</th>
+                          <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -925,7 +940,7 @@ export function AdminClients() {
                               key={client.id} 
                               className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                             >
-                              <td className="py-3 px-2 sm:px-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                              <td className="hidden sm:table-cell py-3 px-2 sm:px-4 text-sm text-gray-500 dark:text-gray-400 text-center">
                                 {rowNumber}
                               </td>
                               <td className="py-3 px-2 sm:px-4 text-sm text-gray-900 dark:text-gray-100">
@@ -946,18 +961,28 @@ export function AdminClients() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="truncate max-w-[120px] sm:max-w-none">
-                                    {fullName}
-                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block truncate">{fullName}</span>
+                                    {/* On mobile, surface email + GRIT-ID under the name since
+                                        their dedicated columns are hidden below md. */}
+                                    <span className="md:hidden block text-xs text-gray-500 dark:text-gray-400 truncate">
+                                      {client.gmail_account || client.email}
+                                    </span>
+                                    {client.grit_id && (
+                                      <span className="lg:hidden block text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate">
+                                        {client.grit_id}
+                                      </span>
+                                    )}
+                                  </div>
                                 </button>
                               </td>
-                              <td className="py-3 px-2 sm:px-4 text-sm text-gray-600 dark:text-gray-400">
-                                <div className="truncate max-w-[180px] sm:max-w-none">{client.gmail_account || client.email}</div>
+                              <td className="hidden md:table-cell py-3 px-2 sm:px-4 text-sm text-gray-600 dark:text-gray-400">
+                                <div className="truncate max-w-[180px] xl:max-w-none">{client.gmail_account || client.email}</div>
                               </td>
-                              <td className="py-3 px-2 sm:px-4 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                              <td className="hidden lg:table-cell py-3 px-2 sm:px-4 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                                 {formatDate(client.created_at)}
                               </td>
-                              <td className="py-3 px-2 sm:px-4 text-sm">
+                              <td className="hidden lg:table-cell py-3 px-2 sm:px-4 text-sm">
                                 {client.grit_id ? (
                                   <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-gray-700 dark:text-gray-300 whitespace-nowrap">
                                     {client.grit_id}
@@ -1093,6 +1118,106 @@ export function AdminClients() {
           )}
         </main>
       </div>
+
+      {/* Deactivate / Reactivate / Delete confirmation */}
+      {(() => {
+        if (!confirmAction) return null
+        const { type, client } = confirmAction
+        const name = getFullName(client.first_name, client.last_name) || client.email
+        const isActive = client.is_active !== false
+        const isDelete = type === 'delete'
+        const action = isDelete ? 'Delete' : (isActive ? 'Deactivate' : 'Reactivate')
+        const busy = actioningClientId === client.id
+        const requiredText = client.email || ''
+        const canConfirm = isDelete
+          ? !busy && requiredText.length > 0 && confirmInput.trim().toLowerCase() === requiredText.trim().toLowerCase()
+          : !busy
+        const onConfirm = () => {
+          if (isDelete) performDelete(client)
+          else performDeactivate(client)
+        }
+        return (
+          <Modal
+            isOpen
+            onClose={() => { if (!busy) { setConfirmAction(null); setConfirmInput('') } }}
+            title={`${action} user`}
+            size="sm"
+          >
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${isDelete ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    {isDelete ? (
+                      <>
+                        Permanently delete <span className="font-semibold">{name}</span>?
+                      </>
+                    ) : isActive ? (
+                      <>
+                        Deactivate <span className="font-semibold">{name}</span>?
+                      </>
+                    ) : (
+                      <>
+                        Reactivate <span className="font-semibold">{name}</span>?
+                      </>
+                    )}
+                  </p>
+                  <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
+                    {isDelete
+                      ? 'This removes the account and all associated data. This action cannot be undone.'
+                      : isActive
+                        ? 'The user will be signed out and blocked from logging in until reactivated.'
+                        : 'The user will be able to sign in again.'}
+                  </p>
+                </div>
+              </div>
+
+              {isDelete && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Type <span className="font-mono text-red-600 dark:text-red-400">{requiredText}</span> to confirm.
+                  </label>
+                  <input
+                    type="text"
+                    value={confirmInput}
+                    onChange={(e) => setConfirmInput(e.target.value)}
+                    autoFocus
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder={requiredText}
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setConfirmAction(null); setConfirmInput('') }}
+                  disabled={busy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={onConfirm}
+                  disabled={!canConfirm}
+                  className={isDelete
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : (isActive
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                        : 'bg-green-600 hover:bg-green-700 text-white')}
+                >
+                  {busy ? `${action.replace(/e$/, '')}ing…` : action}
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       {/* Create user modal */}
       <Modal

@@ -291,7 +291,7 @@ export function Register() {
                       onChange={e => handleOtpChange(i, e.target.value)}
                       onKeyDown={e => handleOtpKeyDown(i, e)}
                       disabled={otpLoading || !!otpSuccess}
-                      className={`w-11 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none transition-colors
+                      className={`w-11 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none transition-colors
                         ${otpError
                           ? 'border-red-400 dark:border-red-600'
                           : digit

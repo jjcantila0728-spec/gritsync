@@ -7,7 +7,7 @@
  * activation and caches its state for subsequent visits.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
@@ -34,10 +34,19 @@ function getToken() {
 
 function useNotify() {
   const { showToast } = useToast()
-  return {
-    success: (msg: string) => showToast(msg, 'success'),
-    error: (msg: string) => showToast(msg, 'error'),
-  }
+  // Memoize the returned object so it's a stable reference across renders.
+  // Otherwise every Tab function that does `useCallback(load, [toast])` and
+  // `useEffect(() => { load() }, [load])` ends up in an infinite fetch loop
+  // (load changes every render → effect re-runs → setLoading(true) →
+  // re-render → load changes → ...). Bug surfaced as the Stats tab being
+  // stuck on "Loading…" forever.
+  return useMemo(
+    () => ({
+      success: (msg: string) => showToast(msg, 'success'),
+      error: (msg: string) => showToast(msg, 'error'),
+    }),
+    [showToast],
+  )
 }
 
 async function apiFetch<T = any>(path: string, opts?: RequestInit): Promise<T> {
@@ -347,41 +356,41 @@ function StatsTab() {
   const maxFormatCount = Math.max(1, ...(stats.byFormat || []).map((b: any) => Number(b._count) || 0))
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {cards.map((c) => (
-          <Card key={c.label} className="p-5">
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{c.value}</div>
+          <Card key={c.label} className="p-4 sm:p-5">
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{c.value}</div>
             <div className={`mt-2 inline-block px-2 py-0.5 rounded-md text-xs font-medium ${c.color}`}>{c.label}</div>
           </Card>
         ))}
       </div>
 
-      <Card className="p-5">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Sessions by status</h2>
-        <div className="grid grid-cols-3 gap-3">
+      <Card className="p-4 sm:p-5">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Sessions by status</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           {(stats.sessions || []).map((s: any) => (
             <div key={s.status} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
-              <div className="text-xs text-gray-500 uppercase">{s.status}</div>
+              <div className="text-[11px] sm:text-xs text-gray-500 uppercase truncate">{s.status}</div>
               <div className="text-xl font-bold text-gray-900 dark:text-white">{s._count}</div>
             </div>
           ))}
         </div>
       </Card>
 
-      <Card className="p-5">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Question format breakdown</h2>
+      <Card className="p-4 sm:p-5">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Question format breakdown</h2>
         <div className="space-y-2">
           {(stats.byFormat || []).map((b: any) => (
-            <div key={b.format} className="flex items-center gap-3">
-              <div className="w-40 text-xs text-gray-700 dark:text-gray-300">{FORMAT_LABELS[b.format as Format] || b.format}</div>
+            <div key={b.format} className="flex items-center gap-2 sm:gap-3">
+              <div className="w-24 sm:w-40 text-[11px] sm:text-xs text-gray-700 dark:text-gray-300 truncate">{FORMAT_LABELS[b.format as Format] || b.format}</div>
               <div className="flex-1 h-3 bg-gray-100 dark:bg-gray-800 rounded">
                 <div
                   className="h-3 rounded bg-primary-600"
                   style={{ width: `${(Number(b._count) / maxFormatCount) * 100}%` }}
                 />
               </div>
-              <div className="w-12 text-right text-xs text-gray-700 dark:text-gray-300">{b._count}</div>
+              <div className="w-8 sm:w-12 text-right text-[11px] sm:text-xs text-gray-700 dark:text-gray-300">{b._count}</div>
             </div>
           ))}
         </div>
