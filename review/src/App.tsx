@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './lib/auth'
-import { NclexReview } from './pages/NclexReview'
+import { NclexHome } from './pages/nclex/NclexHome'
+import { NclexExam } from './pages/nclex/NclexExam'
+import { NclexResults } from './pages/nclex/NclexResults'
+import { NclexReview } from './pages/nclex/NclexReview'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Sso } from './pages/Sso'
@@ -10,6 +13,39 @@ export const App = () => (
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
     <Route path="/sso" element={<Sso />} />
+
+    <Route
+      path="/"
+      element={
+        <ProtectedRoute>
+          <NclexHome />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/nclex"
+      element={
+        <ProtectedRoute>
+          <NclexHome />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/nclex/exam/:sessionId"
+      element={
+        <ProtectedRoute>
+          <NclexExam />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/nclex/results/:sessionId"
+      element={
+        <ProtectedRoute>
+          <NclexResults />
+        </ProtectedRoute>
+      }
+    />
     <Route
       path="/nclex/review/:sessionId"
       element={
@@ -18,22 +54,6 @@ export const App = () => (
         </ProtectedRoute>
       }
     />
-    <Route
-      path="/"
-      element={
-        <ProtectedRoute>
-          <Landing />
-        </ProtectedRoute>
-      }
-    />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
-)
-
-const Landing = () => (
-  <div className="min-h-screen flex items-center justify-center text-gray-500 px-6 text-center">
-    <p>
-      Open a session via <code className="font-mono text-gray-700">/nclex/review/&lt;sessionId&gt;</code>
-    </p>
-  </div>
 )

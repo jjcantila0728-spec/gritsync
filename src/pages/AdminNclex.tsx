@@ -23,6 +23,7 @@ import {
   BarChart3, FileText, Sparkles, BookOpen, Trophy, Crown, Settings,
   Video, Star, Plus, Edit2, Trash2, RefreshCw, Check, X,
   GripVertical, ChevronDown, ChevronUp, ExternalLink, Lightbulb,
+  Mic, Calendar, Save,
 } from 'lucide-react'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -231,6 +232,8 @@ const TABS = [
   { id: 'subscriptions', label: 'Subscriptions', Icon: Crown },
   { id: 'plans',         label: 'Plans & Pricing', Icon: Settings },
   { id: 'videos',        label: 'Videos',       Icon: Video },
+  { id: 'live',          label: 'Live Sessions', Icon: Mic },
+  { id: 'site',          label: 'Site Links',   Icon: ExternalLink },
   { id: 'testimonials',  label: 'Testimonials', Icon: Star },
 ] as const
 type TabId = typeof TABS[number]['id']
@@ -267,7 +270,7 @@ export function AdminNclex() {
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 min-w-0">
-          <div className="sticky top-16 z-20 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur px-4 sm:px-6 lg:px-8 pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="sticky top-[var(--app-header-h,4rem)] z-20 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur px-4 sm:px-6 lg:px-8 pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">NCLEX Management</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Manage NCLEX content, sessions, and user access
@@ -302,6 +305,8 @@ export function AdminNclex() {
             {tab === 'subscriptions' && <SubscriptionsTab />}
             {tab === 'plans' && <PlansTab />}
             {tab === 'videos' && <VideosTab />}
+            {tab === 'live' && <LiveSessionsTab />}
+            {tab === 'site' && <SiteLinksTab />}
             {tab === 'testimonials' && <TestimonialsTab />}
           </div>
         </main>
@@ -2001,6 +2006,293 @@ function TestimonialsTab() {
           </Card>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─── Live Sessions tab ───────────────────────────────────────────────────────
+
+interface LiveSession {
+  id: string
+  title: string
+  description?: string | null
+  scheduledAt: string
+  durationMin: number
+  zoomJoinUrl?: string | null
+  zoomMeetingId?: string | null
+  zoomPasscode?: string | null
+  recordingUrl?: string | null
+  instructor?: string | null
+  topic?: string | null
+  status: string
+  isActive: boolean
+}
+
+function blankSession(): Partial<LiveSession> {
+  return {
+    title: '',
+    description: '',
+    scheduledAt: new Date().toISOString().slice(0, 16),
+    durationMin: 60,
+    zoomJoinUrl: '',
+    zoomMeetingId: '',
+    zoomPasscode: '',
+    recordingUrl: '',
+    instructor: '',
+    topic: '',
+    status: 'scheduled',
+    isActive: true,
+  }
+}
+
+function LiveSessionsTab() {
+  const toast = useNotify()
+  const [sessions, setSessions] = useState<LiveSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editor, setEditor] = useState<Partial<LiveSession> | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await apiFetch<LiveSession[]>('/api/nclex/live-sessions')
+      setSessions(data)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load sessions')
+    } finally { setLoading(false) }
+  }, [toast])
+
+  useEffect(() => { load() }, [load])
+
+  const save = async () => {
+    if (!editor?.title || !editor.scheduledAt) {
+      toast.error('Title and scheduled date are required')
+      return
+    }
+    setSaving(true)
+    try {
+      const body = {
+        ...editor,
+        scheduledAt: new Date(editor.scheduledAt as string).toISOString(),
+        durationMin: Number(editor.durationMin) || 60,
+      }
+      if (editor.id) {
+        await apiFetch(`/api/nclex/admin/live-sessions/${editor.id}`, {
+          method: 'PUT', body: JSON.stringify(body),
+        })
+        toast.success('Session updated')
+      } else {
+        await apiFetch('/api/nclex/admin/live-sessions', {
+          method: 'POST', body: JSON.stringify(body),
+        })
+        toast.success('Session created')
+      }
+      setEditor(null)
+      await load()
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  const remove = async (id: string) => {
+    if (!confirm('Delete this session?')) return
+    try {
+      await apiFetch(`/api/nclex/admin/live-sessions/${id}`, { method: 'DELETE' })
+      toast.success('Session deleted')
+      await load()
+    } catch (err: any) {
+      toast.error(err.message || 'Delete failed')
+    }
+  }
+
+  const now = new Date()
+  const upcoming = sessions.filter(s => new Date(s.scheduledAt) >= now && s.status !== 'past' && s.status !== 'cancelled')
+  const past = sessions.filter(s => new Date(s.scheduledAt) < now || s.status === 'past')
+
+  if (loading) return <div className="text-gray-500">Loading…</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Live Lectures (Zoom)</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Create the Zoom meeting in your Zoom account, then paste the join URL here. Clients see upcoming sessions on review.gritsync.com.
+          </p>
+        </div>
+        <Button onClick={() => setEditor(blankSession())} className="bg-primary-600 hover:bg-primary-700 text-white">
+          <Plus className="h-4 w-4 mr-1" /> New session
+        </Button>
+      </div>
+
+      {editor && (
+        <Card className="p-5 space-y-3">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editor.id ? 'Edit' : 'New'} Live Session</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Title *</label>
+              <Input value={editor.title ?? ''} onChange={(e) => setEditor({ ...editor, title: e.target.value })} placeholder="NCLEX Pharm Review" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Topic</label>
+              <Input value={editor.topic ?? ''} onChange={(e) => setEditor({ ...editor, topic: e.target.value })} placeholder="Pharmacology" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Scheduled at *</label>
+              <Input type="datetime-local" value={(editor.scheduledAt ?? '').toString().slice(0, 16)} onChange={(e) => setEditor({ ...editor, scheduledAt: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Duration (min)</label>
+              <Input type="number" min={15} value={editor.durationMin ?? 60} onChange={(e) => setEditor({ ...editor, durationMin: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Instructor</label>
+              <Input value={editor.instructor ?? ''} onChange={(e) => setEditor({ ...editor, instructor: e.target.value })} placeholder="JJ Cantila, RN" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Status</label>
+              <Select value={editor.status ?? 'scheduled'} onChange={(e) => setEditor({ ...editor, status: e.target.value })}>
+                <option value="scheduled">Scheduled</option>
+                <option value="live">Live now</option>
+                <option value="past">Past</option>
+                <option value="cancelled">Cancelled</option>
+              </Select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Zoom join URL</label>
+              <Input value={editor.zoomJoinUrl ?? ''} onChange={(e) => setEditor({ ...editor, zoomJoinUrl: e.target.value })} placeholder="https://zoom.us/j/123456789?pwd=..." />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Zoom meeting ID</label>
+              <Input value={editor.zoomMeetingId ?? ''} onChange={(e) => setEditor({ ...editor, zoomMeetingId: e.target.value })} placeholder="123 456 7890" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Passcode</label>
+              <Input value={editor.zoomPasscode ?? ''} onChange={(e) => setEditor({ ...editor, zoomPasscode: e.target.value })} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Recording URL (for past sessions)</label>
+              <Input value={editor.recordingUrl ?? ''} onChange={(e) => setEditor({ ...editor, recordingUrl: e.target.value })} placeholder="https://zoom.us/rec/share/..." />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Description</label>
+              <Textarea value={editor.description ?? ''} onChange={(e) => setEditor({ ...editor, description: e.target.value })} rows={3} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditor(null)} disabled={saving}>Cancel</Button>
+            <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">
+              {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1" /> Save session</>}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      <SessionList title="Upcoming" sessions={upcoming} onEdit={(s) => setEditor({ ...s, scheduledAt: s.scheduledAt.slice(0, 16) })} onDelete={remove} accent="text-primary-600" emptyMsg="No upcoming sessions. Schedule one above." />
+      <SessionList title="Past" sessions={past} onEdit={(s) => setEditor({ ...s, scheduledAt: s.scheduledAt.slice(0, 16) })} onDelete={remove} accent="text-gray-500" emptyMsg="No past sessions yet." />
+    </div>
+  )
+}
+
+function SessionList({ title, sessions, onEdit, onDelete, accent, emptyMsg }: {
+  title: string; sessions: LiveSession[]; onEdit: (s: LiveSession) => void;
+  onDelete: (id: string) => void; accent: string; emptyMsg: string;
+}) {
+  return (
+    <div>
+      <div className={`flex items-center gap-2 mb-2 ${accent}`}>
+        <Calendar className="h-4 w-4" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide">{title} ({sessions.length})</h3>
+      </div>
+      {sessions.length === 0 ? (
+        <p className="text-sm text-gray-400 italic">{emptyMsg}</p>
+      ) : (
+        <div className="space-y-2">
+          {sessions.map(s => (
+            <Card key={s.id} className="p-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</h4>
+                    {s.status === 'live' && <span className="text-[10px] uppercase font-bold tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full animate-pulse">Live</span>}
+                    {s.status === 'cancelled' && <span className="text-[10px] uppercase font-bold tracking-wider bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Cancelled</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(s.scheduledAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · {s.durationMin}min
+                    {s.instructor && <> · {s.instructor}</>}
+                    {s.topic && <> · {s.topic}</>}
+                  </p>
+                  {s.description && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{s.description}</p>}
+                  {s.zoomJoinUrl && (
+                    <a href={s.zoomJoinUrl} target="_blank" rel="noreferrer" className="text-xs text-primary-600 hover:underline inline-flex items-center gap-1 mt-1">
+                      Join URL <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {s.recordingUrl && (
+                    <a href={s.recordingUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-600 hover:underline inline-flex items-center gap-1 mt-1 ml-3">
+                      Recording <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => onEdit(s)}><Edit2 className="h-3.5 w-3.5" /></Button>
+                  <Button size="sm" variant="outline" onClick={() => onDelete(s.id)} className="text-red-600 hover:text-red-700"><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Site Links tab ──────────────────────────────────────────────────────────
+
+function SiteLinksTab() {
+  const toast = useNotify()
+  const [groupUrl, setGroupUrl] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    apiFetch<Record<string, string>>('/api/nclex/site-settings')
+      .then(s => setGroupUrl(s.group_support_url || ''))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await apiFetch('/api/nclex/admin/site-settings', {
+        method: 'PUT', body: JSON.stringify({ group_support_url: groupUrl.trim() }),
+      })
+      toast.success('Saved')
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="text-gray-500">Loading…</div>
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Site Links</h2>
+        <p className="text-sm text-gray-500 mt-0.5">URLs the review platform reads at runtime — change them here without redeploying.</p>
+      </div>
+
+      <Card className="p-5 space-y-3">
+        <label className="block text-sm font-semibold text-gray-900 dark:text-gray-100">Group Support URL</label>
+        <p className="text-xs text-gray-500">Shown as a "Group Support" link on review.gritsync.com. Typically a Facebook group invite.</p>
+        <Input value={groupUrl} onChange={e => setGroupUrl(e.target.value)} placeholder="https://www.facebook.com/share/g/..." />
+        <div>
+          <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">
+            {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1" /> Save</>}
+          </Button>
+        </div>
+      </Card>
     </div>
   )
 }

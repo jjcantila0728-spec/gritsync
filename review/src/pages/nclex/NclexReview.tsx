@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, XCircle, BookOpen } from 'lucide-react'
-import { NclexLayout } from '../components/NclexLayout'
-import { nclexApi } from '../lib/api'
+import { NclexLayout } from '../../components/layout/NclexLayout'
+import { nclexApi } from '../../services/api'
 
 const MAIN_SITE = import.meta.env.VITE_MAIN_SITE || 'https://gritsync.com'
 

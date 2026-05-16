@@ -23,9 +23,21 @@
 import { Router, Response } from 'express'
 import multer from 'multer'
 import crypto from 'crypto'
+import Stripe from 'stripe'
 import { query, withTransaction } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { generateQuestions as aiGenerateQuestions, generateCaseStudy as aiGenerateCaseStudy } from '../lib/nclex-ai'
+
+// Mirrors server/routes/payments.ts — return null on missing/placeholder keys
+// so the caller can emit a clear 503 instead of forwarding Stripe's opaque 401.
+const STRIPE_KEY_PLACEHOLDERS = new Set(['sk_test_replace_me', 'sk_live_replace_me'])
+function getStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  if (!key) return null
+  if (STRIPE_KEY_PLACEHOLDERS.has(key)) return null
+  if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key)) return null
+  return new Stripe(key, { apiVersion: '2023-10-16' as any })
+}
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
@@ -1170,9 +1182,354 @@ router.get('/testimonials/approved', async (_req: AuthenticatedRequest, res) => 
   }
 })
 
+// ─── Live Sessions (Zoom-powered) ─────────────────────────────────────────────
+// Admin creates rows from /admin/nclex → Live Sessions. Clients on
+// review.gritsync.com see upcoming sessions (with a Join button) and past
+// sessions (with the recording link if uploaded). No Zoom API call here — the
+// admin pastes the join URL they generated in Zoom.
+function camelLiveSession(row: any) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    scheduledAt: row.scheduled_at,
+    durationMin: row.duration_min,
+    zoomJoinUrl: row.zoom_join_url,
+    zoomMeetingId: row.zoom_meeting_id,
+    zoomPasscode: row.zoom_passcode,
+    recordingUrl: row.recording_url,
+    instructor: row.instructor,
+    topic: row.topic,
+    status: row.status,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+router.get('/live-sessions', async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM nclex_live_sessions
+        WHERE is_active = TRUE
+        ORDER BY scheduled_at DESC`,
+      []
+    )
+    ok(res, r.rows.map(camelLiveSession))
+  } catch (err) {
+    console.error('[nclex/live-sessions]', err)
+    serverError(res)
+  }
+})
+
+router.post('/admin/live-sessions', async (req: AuthenticatedRequest, res) => {
+  if (!requireAdminInline(req, res)) return
+  try {
+    const {
+      title, description, scheduledAt, durationMin, zoomJoinUrl, zoomMeetingId,
+      zoomPasscode, recordingUrl, instructor, topic, status,
+    } = req.body || {}
+    if (!title || !scheduledAt) {
+      badRequest(res, 'title and scheduledAt are required')
+      return
+    }
+    const id = newId()
+    const ins = await query(
+      `INSERT INTO nclex_live_sessions
+         (id, title, description, scheduled_at, duration_min, zoom_join_url,
+          zoom_meeting_id, zoom_passcode, recording_url, instructor, topic,
+          status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING *`,
+      [
+        id, title, description ?? null, scheduledAt, Number(durationMin) || 60,
+        zoomJoinUrl ?? null, zoomMeetingId ?? null, zoomPasscode ?? null,
+        recordingUrl ?? null, instructor ?? null, topic ?? null,
+        status ?? 'scheduled', req.user!.id,
+      ]
+    )
+    created(res, camelLiveSession(ins.rows[0]), 'Live session created')
+  } catch (err) {
+    console.error('[nclex/admin/live-sessions POST]', err)
+    serverError(res)
+  }
+})
+
+router.put('/admin/live-sessions/:id', async (req: AuthenticatedRequest, res) => {
+  if (!requireAdminInline(req, res)) return
+  try {
+    const { id } = req.params
+    const fields = [
+      ['title', 'title'], ['description', 'description'],
+      ['scheduledAt', 'scheduled_at'], ['durationMin', 'duration_min'],
+      ['zoomJoinUrl', 'zoom_join_url'], ['zoomMeetingId', 'zoom_meeting_id'],
+      ['zoomPasscode', 'zoom_passcode'], ['recordingUrl', 'recording_url'],
+      ['instructor', 'instructor'], ['topic', 'topic'],
+      ['status', 'status'], ['isActive', 'is_active'],
+    ] as const
+    const sets: string[] = []
+    const vals: any[] = []
+    let i = 1
+    for (const [src, col] of fields) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, src)) {
+        sets.push(`${col} = $${i++}`)
+        vals.push(req.body[src])
+      }
+    }
+    if (!sets.length) { badRequest(res, 'No fields to update'); return }
+    sets.push(`updated_at = NOW()`)
+    vals.push(id)
+    const upd = await query(
+      `UPDATE nclex_live_sessions SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+      vals
+    )
+    if (!upd.rowCount) { notFound(res, 'Session not found'); return }
+    ok(res, camelLiveSession(upd.rows[0]), 'Session updated')
+  } catch (err) {
+    console.error('[nclex/admin/live-sessions PUT]', err)
+    serverError(res)
+  }
+})
+
+router.delete('/admin/live-sessions/:id', async (req: AuthenticatedRequest, res) => {
+  if (!requireAdminInline(req, res)) return
+  try {
+    const del = await query(`DELETE FROM nclex_live_sessions WHERE id = $1`, [req.params.id])
+    if (!del.rowCount) { notFound(res, 'Session not found'); return }
+    ok(res, null, 'Session deleted')
+  } catch (err) {
+    console.error('[nclex/admin/live-sessions DELETE]', err)
+    serverError(res)
+  }
+})
+
+// ─── Order History ────────────────────────────────────────────────────────────
+// User's own plan-upgrade payment history. Sourced from the payment_ref stored
+// on nclex_profiles (current active plan) plus any historical rows we keep in
+// the nclex_orders table if it ever lands. For now we return at most one entry
+// (the current active subscription) — enough for the review subapp's Order
+// History panel to be non-empty when a user is paid up.
+router.get('/order-history', async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' })
+    const r = await query(
+      `SELECT tier, tier_expires_at, payment_ref, upgrade_payment_method,
+              upgrade_payment_ref, upgrade_requested, updated_at, created_at
+         FROM nclex_profiles WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    )
+    if (!r.rowCount) { ok(res, []); return }
+    const p = r.rows[0]
+    const orders: any[] = []
+    if (p.tier === 'PREMIUM' && p.payment_ref) {
+      const ref = String(p.payment_ref)
+      const method = ref.startsWith('stripe:') ? 'stripe' :
+                     (p.upgrade_payment_method || '').includes('gcash') ? 'gcash' :
+                     (p.upgrade_payment_method || '').includes('bdo') ? 'bdo' : 'unknown'
+      orders.push({
+        id: ref,
+        method,
+        reference: ref.replace(/^stripe:/, ''),
+        status: 'completed',
+        tier: p.tier,
+        expiresAt: p.tier_expires_at,
+        date: p.updated_at,
+      })
+    }
+    if (p.upgrade_requested && p.upgrade_payment_ref) {
+      orders.push({
+        id: `pending:${p.upgrade_payment_ref}`,
+        method: p.upgrade_payment_method?.split(':')[0] || 'manual',
+        reference: p.upgrade_payment_ref,
+        status: 'pending_admin_review',
+        tier: 'PREMIUM',
+        expiresAt: null,
+        date: p.updated_at,
+      })
+    }
+    ok(res, orders)
+  } catch (err) {
+    console.error('[nclex/order-history]', err)
+    serverError(res)
+  }
+})
+
+// ─── Site settings (admin-configurable single values) ─────────────────────────
+// Currently exposes:
+//   • group_support_url — Facebook group URL shown on the "Group Support" nav
+//     item in the review subapp.
+router.get('/site-settings', async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT key, value FROM nclex_site_settings
+        WHERE key IN ('group_support_url')`,
+      []
+    )
+    const map: Record<string, string> = {}
+    for (const row of r.rows) map[row.key] = row.value
+    ok(res, map)
+  } catch {
+    serverError(res)
+  }
+})
+
+router.put('/admin/site-settings', async (req: AuthenticatedRequest, res) => {
+  if (!requireAdminInline(req, res)) return
+  try {
+    const allowedKeys = new Set(['group_support_url'])
+    const updates = Object.entries(req.body || {}).filter(([k]) => allowedKeys.has(k))
+    if (!updates.length) { badRequest(res, 'No settings to update'); return }
+    for (const [key, value] of updates) {
+      const existing = await query(`SELECT id FROM nclex_site_settings WHERE key = $1 LIMIT 1`, [key])
+      if (existing.rowCount) {
+        await query(
+          `UPDATE nclex_site_settings SET value = $1, updated_at = NOW() WHERE key = $2`,
+          [String(value ?? ''), key]
+        )
+      } else {
+        await query(
+          `INSERT INTO nclex_site_settings (id, key, value) VALUES ($1, $2, $3)`,
+          [newId(), key, String(value ?? '')]
+        )
+      }
+    }
+    ok(res, null, 'Settings updated')
+  } catch (err) {
+    console.error('[nclex/admin/site-settings PUT]', err)
+    serverError(res)
+  }
+})
+
 // Public plan config + video config (auth-required, but not admin-only)
 router.get('/plans', (req: AuthenticatedRequest, res) => getSubscriptionPlansHandler(req, res))
 router.get('/videos', (req: AuthenticatedRequest, res) => getVideoConfigHandler(req, res))
+
+// ─── Stripe plan-upgrade payment ─────────────────────────────────────────────
+// Stripe is the primary payment method on review.gritsync.com. The flow:
+//   1. Client POST /create-upgrade-intent with { planId }
+//   2. Server resolves the plan price, creates a Stripe PaymentIntent with
+//      metadata.user_id + metadata.plan_id, returns { clientSecret }
+//   3. Client confirms the PaymentIntent with @stripe/react-stripe-js
+//   4. Client POST /confirm-stripe-upgrade with { paymentIntentId }
+//   5. Server fetches the PaymentIntent from Stripe, verifies status='succeeded'
+//      and metadata.user_id matches the caller, then upgrades the profile.
+async function loadPlans(): Promise<any> {
+  const row = await query(
+    `SELECT value FROM nclex_site_settings WHERE key = 'nclex_plans' LIMIT 1`, []
+  )
+  if (!row.rowCount) return DEFAULT_PLANS
+  try { return JSON.parse(row.rows[0].value) } catch { return DEFAULT_PLANS }
+}
+
+router.post('/create-upgrade-intent', async (req: AuthenticatedRequest, res) => {
+  try {
+    const stripe = getStripe()
+    if (!stripe) {
+      return res.status(503).json({
+        success: false,
+        error: 'Payment service is not configured. Set STRIPE_SECRET_KEY in the server env to a real test/live secret key.',
+      })
+    }
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' })
+
+    const { planId } = (req.body || {}) as { planId?: string }
+    if (!planId) return res.status(400).json({ success: false, error: 'planId is required' })
+
+    const planConfig = await loadPlans()
+    const plan = (planConfig.plans || []).find((p: any) => p.id === planId)
+    if (!plan) return res.status(404).json({ success: false, error: `Plan '${planId}' not found` })
+    if (!plan.isActive) return res.status(400).json({ success: false, error: `Plan '${planId}' is not active` })
+    if (typeof plan.price !== 'number' || plan.price <= 0) {
+      return res.status(400).json({ success: false, error: `Plan '${planId}' has no priceable amount` })
+    }
+
+    const currency = (plan.currency || 'usd').toLowerCase()
+    const amountCents = Math.round(Number(plan.price) * 100)
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency,
+      description: `NCLEX ${plan.name} upgrade`,
+      metadata: {
+        purpose: 'nclex_plan_upgrade',
+        user_id: userId,
+        plan_id: planId,
+        duration_days: String(plan.durationDays ?? ''),
+      },
+    })
+
+    return ok(res, { clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
+  } catch (err: any) {
+    console.error('[nclex/create-upgrade-intent]', err)
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to create payment intent' })
+  }
+})
+
+router.post('/confirm-stripe-upgrade', async (req: AuthenticatedRequest, res) => {
+  try {
+    const stripe = getStripe()
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Payment service is not configured.' })
+    }
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' })
+
+    const { paymentIntentId } = (req.body || {}) as { paymentIntentId?: string }
+    if (!paymentIntentId) {
+      return res.status(400).json({ success: false, error: 'paymentIntentId is required' })
+    }
+
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+    if (intent.metadata?.user_id !== userId) {
+      return res.status(403).json({ success: false, error: 'This payment is not associated with the caller.' })
+    }
+    if (intent.status !== 'succeeded') {
+      return res.status(400).json({ success: false, error: `Payment is ${intent.status}, not yet succeeded.` })
+    }
+
+    const planId = intent.metadata?.plan_id || 'premium'
+    const planConfig = await loadPlans()
+    const plan = (planConfig.plans || []).find((p: any) => p.id === planId)
+    const durationDays = Number(plan?.durationDays ?? intent.metadata?.duration_days ?? 60)
+    const isVip = planId === 'vip'
+
+    const existing = await query(`SELECT * FROM nclex_profiles WHERE user_id = $1 LIMIT 1`, [userId])
+    if (!existing.rowCount) {
+      // Create a profile row on the fly if the user has never visited NCLEX
+      // home — keeps the upgrade idempotent.
+      await query(
+        `INSERT INTO nclex_profiles (id, user_id, tier, created_at, updated_at)
+         VALUES ($1, $2, 'FREE', NOW(), NOW())`,
+        [crypto.randomUUID(), userId]
+      )
+    }
+    const previousSpecial = existing.rows[0]?.special_access ?? []
+    const specialAccess = isVip
+      ? Array.from(new Set([...(previousSpecial as string[]), 'live_lectures', 'cheat_sheets', 'week_of_exam']))
+      : previousSpecial
+
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + durationDays)
+
+    const upd = await query(
+      `UPDATE nclex_profiles SET
+          tier = 'PREMIUM',
+          tier_expires_at = $1,
+          upgrade_requested = FALSE,
+          payment_ref = $2,
+          special_access = $3::jsonb,
+          updated_at = NOW()
+        WHERE user_id = $4 RETURNING *`,
+      [expiresAt, `stripe:${paymentIntentId}`, JSON.stringify(specialAccess), userId]
+    )
+    return ok(res, camelProfile(upd.rows[0]), `${isVip ? 'VIP' : 'Premium'} access granted for ${durationDays} days`)
+  } catch (err: any) {
+    console.error('[nclex/confirm-stripe-upgrade]', err)
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to confirm upgrade' })
+  }
+})
 
 // AI suggest test — stubbed; original called Claude
 router.post('/ai/suggest', (_req: AuthenticatedRequest, res) => {
