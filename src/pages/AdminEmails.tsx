@@ -51,7 +51,7 @@ import { emailSignaturesAPI, EmailSignature } from '@/lib/email-signatures-api'
 import { resendInboxAPI, ReceivedEmail } from '@/lib/resend-inbox-api'
 import { businessLogosAPI, BusinessLogo } from '@/lib/email-signatures-api'
 import { db } from '@/lib/api-client'
-import { getSignedFileUrl } from '@/lib/api-service'
+import { getSignedFileUrl } from '@/lib/storage-urls'
 import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 
 // Import types and utilities

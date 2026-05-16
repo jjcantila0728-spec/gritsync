@@ -13,7 +13,7 @@ import { applicationPaymentsAPI, applicationsAPI, adminAPI, servicesAPI } from '
 import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getSignedFileUrl } from '@/lib/api-service'
+import { getSignedFileUrl } from '@/lib/storage-urls'
 import { 
   ArrowLeft, 
   CheckCircle, 
