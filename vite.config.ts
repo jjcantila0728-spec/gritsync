@@ -40,26 +40,18 @@ export default defineConfig({
     cssMinify: true, // Minify CSS
     rollupOptions: {
       output: {
-        // Split heavy third-party deps out of the main entry chunk so they
-        // only download when a page that actually uses them is opened.
-        // Before this the main bundle was 544 kB because anything Header
-        // transitively touched (axios, react-hot-toast, lucide-react,
-        // api-service, etc.) plus eagerly-bundled recharts / jspdf /
-        // html2canvas / pdf-lib all collapsed into one file. Now:
-        //   - charts.* (recharts) only loads on Dashboard/Analytics
-        //   - pdf.*    (jspdf + html2canvas + pdf-lib) only loads on
-        //              Documents / Quote / SignaturePage etc.
-        //   - stripe.* only loads on checkout/upgrade flows
-        //   - vendor.* is the small always-needed react/router/icons core
+        // ONLY split optional heavy deps that aren't part of the React
+        // initialization graph. Splitting react / react-dom / router into
+        // their own chunks causes initialization-order white-screens
+        // (lucide-react and axios transitively import React, and if they
+        // resolve before vendor-react executes, Context.createContext is
+        // undefined). Bundling react with the rest of the vendor code
+        // — Vite's default — sidesteps that entirely.
         manualChunks: (id) => {
           if (!id.includes('node_modules')) return
-          if (/[\\/]node_modules[\\/](recharts|d3-[^\\/]+|victory-vendor)[\\/]/.test(id)) return 'charts'
           if (/[\\/]node_modules[\\/](jspdf|html2canvas|pdf-lib|@pdf-lib)[\\/]/.test(id)) return 'pdf'
           if (/[\\/]node_modules[\\/]@stripe[\\/]/.test(id)) return 'stripe'
-          if (/[\\/]node_modules[\\/]isomorphic-dompurify[\\/]/.test(id)) return 'sanitize'
           if (/[\\/]node_modules[\\/]@anthropic-ai[\\/]/.test(id)) return 'anthropic'
-          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
-          if (/[\\/]node_modules[\\/](lucide-react|react-hook-form|react-hot-toast|axios|date-fns|clsx|tailwind-merge)[\\/]/.test(id)) return 'vendor-ui'
         },
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name.split('.')
