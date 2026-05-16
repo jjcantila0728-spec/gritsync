@@ -3554,19 +3554,54 @@ export const NclexHome = () => {
                   </div>
                 </div>
 
-                {/* TEST LENGTH */}
-                <div>
-                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">TEST LENGTH</p>
-                  <p className="text-xs text-gray-400 mb-3">Number of questions per test (maximum of 150)</p>
-                  <div className="border border-gray-200 rounded-xl p-4">
-                    <input
-                      type="number" min={1} max={150}
-                      value={ctQuestionCount}
-                      onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v > 0) setCtQuestionCount(Math.min(v, 150)); }}
-                      className="w-32 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-900 focus:outline-none focus:border-[#17a2b8] focus:ring-1 focus:ring-[#17a2b8]"
-                    />
-                  </div>
-                </div>
+                {/* TEST LENGTH — Tutorial only. For FREE users the max is
+                    capped at the remaining daily quota (25/day total).
+                    Premium/VIP get the standard 150-item ceiling. */}
+                {(() => {
+                  const dailyCap = 25
+                  const remainingToday = Math.max(0, dailyCap - questionsToday)
+                  const maxLen = isPremium ? 150 : remainingToday
+                  const dailyExhausted = !isPremium && remainingToday === 0
+                  const clamped = Math.min(Math.max(1, ctQuestionCount), Math.max(1, maxLen))
+                  // Clamp the actual state so the request body matches the
+                  // displayed value when the user hits Start.
+                  if (ctQuestionCount !== clamped && !dailyExhausted) {
+                    setTimeout(() => setCtQuestionCount(clamped), 0)
+                  }
+                  return (
+                    <div>
+                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">TEST LENGTH</p>
+                      <p className="text-xs text-gray-400 mb-3">
+                        Number of questions per test (
+                        {isPremium
+                          ? 'maximum of 150'
+                          : dailyExhausted
+                            ? `daily limit reached — ${questionsToday}/${dailyCap} used`
+                            : `Free plan: up to ${remainingToday} left today, ${questionsToday}/${dailyCap} used`}
+                        )
+                      </p>
+                      <div className={`border rounded-xl p-4 ${dailyExhausted ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={maxLen || 1}
+                          value={ctQuestionCount}
+                          disabled={dailyExhausted}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value)
+                            if (!isNaN(v) && v > 0) setCtQuestionCount(Math.min(v, maxLen))
+                          }}
+                          className="w-32 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-900 focus:outline-none focus:border-[#17a2b8] focus:ring-1 focus:ring-[#17a2b8] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        />
+                        {dailyExhausted && (
+                          <p className="mt-2 text-xs text-red-700">
+                            You've answered {dailyCap} questions today on the Free plan. Upgrade to Premium for unlimited access, or come back tomorrow.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
 
               </div>
               )}
