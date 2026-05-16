@@ -16,6 +16,8 @@ import {
 import { nclexApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -446,7 +448,7 @@ const SpeedometerGauge = ({ value }: { value: number | null }) => {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type NavSection = 'qbanks' | 'videos' | 'live' | 'cheatsheets' | 'calendar' | 'testimonial' | 'subscription';
+type NavSection = 'qbanks' | 'videos' | 'live' | 'cheatsheets' | 'calendar' | 'testimonial' | 'subscription' | 'orders' | 'group';
 
 const planIncluded = (f: string | PlanFeature): { name: string; included: boolean } =>
   typeof f === 'string' ? { name: f, included: true } : f;
@@ -462,6 +464,8 @@ const NAV_ITEMS: Array<{ id: NavSection; label: string; icon: React.ElementType;
 const BOTTOM_NAV_ITEMS: Array<{ id: NavSection; label: string; icon: React.ElementType; requiresPremium?: boolean; requiresSpecial?: string }> = [
   { id: 'testimonial', label: 'Testimonial', icon: Star },
   { id: 'subscription', label: 'Subscription', icon: CreditCard },
+  { id: 'orders', label: 'Order History', icon: FileText },
+  { id: 'group', label: 'Group Support', icon: Users },
 ];
 
 export const NclexHome = () => {
@@ -504,9 +508,34 @@ export const NclexHome = () => {
   // Upgrade modal
   const [upgradeModal, setUpgradeModal] = useState(false);
   const [upgradeRef, setUpgradeRef] = useState('');
-  const [upgradeMethod, setUpgradeMethod] = useState<PaymentMethod>('gcash');
+  const [upgradeMethod, setUpgradeMethod] = useState<PaymentMethod>('stripe');
   const [upgradeReceipt, setUpgradeReceipt] = useState<File | null>(null);
   const [upgradeSending, setUpgradeSending] = useState(false);
+
+  // Stripe payment state — only populated when upgradeMethod === 'stripe' and a
+  // PaymentIntent has been created via /api/nclex/create-upgrade-intent.
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const stripePromiseRef = useRef<Promise<Stripe | null> | null>(null);
+
+  // Live sessions, site settings, and order history — all admin-managed via
+  // /admin/nclex. Cached once on mount.
+  interface LiveSessionRow {
+    id: string; title: string; description?: string | null;
+    scheduledAt: string; durationMin: number;
+    zoomJoinUrl?: string | null; zoomMeetingId?: string | null;
+    zoomPasscode?: string | null; recordingUrl?: string | null;
+    instructor?: string | null; topic?: string | null; status: string;
+  }
+  interface OrderRow {
+    id: string; method: string; reference: string; status: string;
+    tier: string; expiresAt: string | null; date: string;
+  }
+  const [liveSessions, setLiveSessions] = useState<LiveSessionRow[]>([]);
+  const [orderHistory, setOrderHistory] = useState<OrderRow[]>([]);
+  const [groupSupportUrl, setGroupSupportUrl] = useState<string>('https://www.facebook.com/share/g/1EfkpWjCvf/?mibextid=wwXIfr');
 
   // Plan config
   const [planConfig, setPlanConfig] = useState<PlanConfig | null>(null);
@@ -533,6 +562,34 @@ export const NclexHome = () => {
 
   // Upgrade target plan
   const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<string>('premium');
+
+  // When user picks Stripe + a plan in the open upgrade modal, create a Stripe
+  // PaymentIntent and stash the client secret so <Elements> can mount.
+  useEffect(() => {
+    if (!upgradeModal || upgradeMethod !== 'stripe' || !upgradeTargetPlan) {
+      setStripeClientSecret(null);
+      setStripePaymentIntentId(null);
+      setStripeError(null);
+      return;
+    }
+    let cancelled = false;
+    setStripeLoading(true);
+    setStripeError(null);
+    nclexApi.createUpgradeIntent(upgradeTargetPlan)
+      .then((res) => {
+        if (cancelled) return;
+        const { clientSecret, paymentIntentId } = res.data?.data ?? res.data ?? {};
+        if (!clientSecret) throw new Error('No client secret returned');
+        setStripeClientSecret(clientSecret);
+        setStripePaymentIntentId(paymentIntentId);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setStripeError(err?.response?.data?.error || err?.message || 'Failed to start payment');
+      })
+      .finally(() => { if (!cancelled) setStripeLoading(false); });
+    return () => { cancelled = true; };
+  }, [upgradeModal, upgradeMethod, upgradeTargetPlan]);
 
   // Create Test modal
   const [createTestModal, setCreateTestModal] = useState(false);
@@ -585,6 +642,18 @@ export const NclexHome = () => {
       .catch(() => {});
     nclexApi.getApprovedTestimonials()
       .then(r => setApprovedTestimonials(r.data.data ?? []))
+      .catch(() => {});
+    nclexApi.getLiveSessions()
+      .then(r => setLiveSessions(r.data.data ?? []))
+      .catch(() => {});
+    nclexApi.getOrderHistory()
+      .then(r => setOrderHistory(r.data.data ?? []))
+      .catch(() => {});
+    nclexApi.getSiteSettings()
+      .then(r => {
+        const url = r.data?.data?.group_support_url;
+        if (url) setGroupSupportUrl(url);
+      })
       .catch(() => {});
   }, []);
 
@@ -864,51 +933,104 @@ export const NclexHome = () => {
     );
   };
 
-  const renderLiveLectures = () => (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <h2 className="text-xl font-black text-gray-900 mb-1">Live Lectures</h2>
-      <p className="text-gray-500 text-sm mb-6">Instructor-led live review sessions</p>
+  const renderLiveLectures = () => {
+    const now = new Date();
+    const upcoming = liveSessions
+      .filter(s => new Date(s.scheduledAt) >= now && s.status !== 'past' && s.status !== 'cancelled')
+      .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+    const past = liveSessions
+      .filter(s => new Date(s.scheduledAt) < now || s.status === 'past')
+      .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
 
-      <div className="bg-gradient-to-r from-[#0c1e3c] to-[#1a4080] rounded-2xl p-5 mb-6 flex items-center gap-4">
-        <div className="h-12 w-12 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-          <Mic className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <p className="text-white font-bold">Live NCLEX Review</p>
-          <p className="text-blue-200 text-sm">Access granted — sessions will appear here when scheduled</p>
-        </div>
-      </div>
+    const fmtWhen = (iso: string) => {
+      const d = new Date(iso);
+      return d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    };
 
-      <div className="space-y-3">
-        {NCLEX_TOPICS.slice(0, 6).map((topic, i) => (
-          <div key={topic.name} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
-            <div className="h-10 w-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-xl flex-shrink-0">
-              {topic.icon}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-gray-900">{topic.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{i === 0 ? 'Recording available' : 'Upcoming — date TBA'}</p>
-            </div>
-            {i === 0 ? (
-              <button className="px-3 py-1.5 bg-[#0c1e3c] text-white text-xs font-semibold rounded-lg hover:bg-[#1a3058] flex items-center gap-1.5">
-                <Play className="h-3 w-3" /> Watch
-              </button>
-            ) : (
-              <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">Soon</span>
-            )}
+    const Row = ({ s, isPast }: { s: LiveSessionRow; isPast: boolean }) => (
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-xl flex-shrink-0">
+          {isPast ? <PlayCircle className="h-5 w-5 text-blue-600" /> : <Mic className="h-5 w-5 text-blue-600" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-sm text-gray-900">{s.title}</p>
+            {s.status === 'live' && <span className="text-[10px] uppercase font-bold tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full animate-pulse">Live now</span>}
           </div>
-        ))}
+          <p className="text-xs text-gray-500 mt-0.5">
+            {fmtWhen(s.scheduledAt)} · {s.durationMin}min
+            {s.instructor && <> · {s.instructor}</>}
+            {s.topic && <> · {s.topic}</>}
+          </p>
+          {s.description && <p className="text-xs text-gray-600 mt-1 line-clamp-2">{s.description}</p>}
+        </div>
+        <div className="flex-shrink-0">
+          {isPast && s.recordingUrl ? (
+            <a href={s.recordingUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg">
+              <PlayCircle className="h-3.5 w-3.5" /> Watch recording
+            </a>
+          ) : isPast ? (
+            <span className="text-xs text-gray-400">Recording not posted</span>
+          ) : s.zoomJoinUrl ? (
+            <a href={s.zoomJoinUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0c1e3c] hover:bg-[#1a3058] text-white text-xs font-semibold rounded-lg">
+              <ExternalLink className="h-3.5 w-3.5" /> Join Zoom
+            </a>
+          ) : (
+            <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">Link soon</span>
+          )}
+        </div>
       </div>
+    );
 
-      <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
-        <p className="text-sm text-blue-700 font-medium">New live sessions are announced in the Study Group.</p>
-        <a href="https://www.facebook.com/groups/gritsync" target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 hover:text-blue-800 font-semibold">
-          Join the Facebook Group <ExternalLink className="h-3.5 w-3.5" />
-        </a>
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <h2 className="text-xl font-black text-gray-900 mb-1">Live Lectures</h2>
+        <p className="text-gray-500 text-sm mb-6">Instructor-led Zoom review sessions</p>
+
+        <div className="bg-gradient-to-r from-[#0c1e3c] to-[#1a4080] rounded-2xl p-5 mb-6 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+            <Mic className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <p className="text-white font-bold">Live NCLEX Review (Zoom)</p>
+            <p className="text-blue-200 text-sm">{upcoming.length} upcoming · {past.length} past</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><Calendar className="h-4 w-4 text-primary-600" /> Upcoming</h3>
+          {upcoming.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center text-sm text-gray-500">
+              No upcoming sessions scheduled. Check back soon.
+            </div>
+          ) : (
+            <div className="space-y-3">{upcoming.map(s => <Row key={s.id} s={s} isPast={false} />)}</div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><PlayCircle className="h-4 w-4 text-purple-600" /> Past sessions</h3>
+          {past.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center text-sm text-gray-500">
+              No past sessions yet.
+            </div>
+          ) : (
+            <div className="space-y-3">{past.map(s => <Row key={s.id} s={s} isPast={true} />)}</div>
+          )}
+        </div>
+
+        <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+          <p className="text-sm text-blue-700 font-medium">New live sessions are announced in the Study Group.</p>
+          <a href={groupSupportUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 hover:text-blue-800 font-semibold">
+            Join the Group <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const getLogoDataUrl = async (): Promise<string> => {
     if (logoDataUrlRef.current) return logoDataUrlRef.current;
@@ -2836,6 +2958,100 @@ export const NclexHome = () => {
   };
 
 
+  const renderOrderHistory = () => {
+    const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString([], { dateStyle: 'medium' }) : '—';
+    const methodLabel: Record<string, string> = {
+      stripe: 'Card (Stripe)', gcash: 'GCash', bdo: 'BDO',
+      manual: 'Manual', unknown: 'Unknown',
+    };
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <h2 className="text-xl font-black text-gray-900 mb-1">Order History</h2>
+        <p className="text-gray-500 text-sm mb-6">Your past plan upgrades and payments</p>
+
+        {orderHistory.length === 0 ? (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+            <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-700">No orders yet</p>
+            <p className="text-xs text-gray-500 mt-1">When you upgrade to Premium or VIP, your payments will appear here.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {orderHistory.map(o => (
+              <div key={o.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary-50 border border-primary-100 flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="h-5 w-5 text-primary-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm text-gray-900">{o.tier} plan</p>
+                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                      o.status === 'completed' ? 'bg-green-100 text-green-700'
+                      : o.status === 'pending_admin_review' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {o.status === 'completed' ? 'Paid' : o.status === 'pending_admin_review' ? 'Awaiting review' : o.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {methodLabel[o.method] ?? o.method} · Ref {o.reference} · {fmt(o.date)}
+                  </p>
+                  {o.expiresAt && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Access through {fmt(o.expiresAt)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderGroupSupport = () => (
+    <div className="p-4 sm:p-6 lg:p-8">
+      <h2 className="text-xl font-black text-gray-900 mb-1">Group Support</h2>
+      <p className="text-gray-500 text-sm mb-6">Connect with fellow NCLEX candidates and the GritSync team</p>
+
+      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-8 text-center text-white shadow-lg">
+        <div className="inline-flex h-16 w-16 rounded-2xl bg-white/15 items-center justify-center mb-4">
+          <Users className="h-8 w-8 text-white" />
+        </div>
+        <h3 className="text-xl font-bold mb-2">Join the Study Group</h3>
+        <p className="text-blue-100 text-sm mb-5 max-w-md mx-auto">
+          Ask questions, share progress, and get real-time announcements about live lectures and new content.
+        </p>
+        <a href={groupSupportUrl} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-700 text-sm font-bold rounded-xl hover:bg-blue-50 transition-colors">
+          Open Facebook Group <ExternalLink className="h-4 w-4" />
+        </a>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-10 w-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+              <Mic className="h-5 w-5 text-amber-600" />
+            </div>
+            <p className="font-semibold text-sm text-gray-900">Live announcements</p>
+          </div>
+          <p className="text-xs text-gray-500">New Zoom sessions and recordings are announced in the group first.</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+              <ThumbsUp className="h-5 w-5 text-purple-600" />
+            </div>
+            <p className="font-semibold text-sm text-gray-900">Peer support</p>
+          </div>
+          <p className="text-xs text-gray-500">Get study tips, exam-day stories, and motivation from past test-takers.</p>
+        </div>
+      </div>
+    </div>
+  );
+
   const sectionContent: Record<NavSection, React.ReactNode> = {
     qbanks: renderQBanks(),
     videos: renderVideos(),
@@ -2848,6 +3064,8 @@ export const NclexHome = () => {
     calendar: renderCalendar(),
     testimonial: renderTestimonial(),
     subscription: renderSubscription(),
+    orders: renderOrderHistory(),
+    group: renderGroupSupport(),
   };
 
   return (
@@ -3562,15 +3780,17 @@ export const NclexHome = () => {
         const gcashAcct = planConfig?.gcashName;
         const bdoNum = planConfig?.bdoNumber;
         const bdoAcct = planConfig?.bdoName;
-        const hasStripe = !!planConfig?.stripePublishableKey;
         const instructions = planConfig?.paymentInstructions ?? '';
 
+        // review.gritsync.com uses Stripe as the primary payment method.
+        // Stripe is always shown (it works as long as the admin has set a
+        // publishable key). GCash/BDO appear only when explicitly configured.
         const ALL_METHODS: Array<{ id: PaymentMethod; label: string; color: string; available: boolean }> = [
+          { id: 'stripe', label: 'Card / Stripe', color: 'bg-purple-600', available: true },
           { id: 'gcash', label: 'GCash', color: 'bg-blue-500', available: !!gcashNum },
           { id: 'bdo', label: 'BDO', color: 'bg-green-600', available: !!bdoNum },
-          { id: 'stripe', label: 'Card / Stripe', color: 'bg-purple-600', available: hasStripe },
         ];
-        const METHODS = ALL_METHODS.filter(m => m.available || m.id === 'gcash');
+        const METHODS = ALL_METHODS.filter(m => m.available);
 
         return (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
@@ -3640,13 +3860,52 @@ export const NclexHome = () => {
                   </div>
                 )}
 
-                {/* Stripe */}
-                {upgradeMethod === 'stripe' && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                    <p className="text-sm font-bold text-purple-800 mb-2">Pay by Card</p>
-                    <p className="text-xs text-purple-600">Stripe card payment will be integrated here. For now, please use GCash or BDO.</p>
-                  </div>
-                )}
+                {/* Stripe — real card payment via Stripe Elements */}
+                {upgradeMethod === 'stripe' && (() => {
+                  const pk = planConfig?.stripePublishableKey || (import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined);
+                  if (!pk) {
+                    return (
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-xs text-purple-700">
+                        Stripe is not configured — ask an admin to set a publishable key in NCLEX → Plans.
+                      </div>
+                    );
+                  }
+                  if (!stripePromiseRef.current) stripePromiseRef.current = loadStripe(pk);
+                  if (stripeError) {
+                    return (
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">{stripeError}</div>
+                    );
+                  }
+                  if (stripeLoading || !stripeClientSecret || !stripePaymentIntentId) {
+                    return (
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-xs text-purple-700 flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full border-2 border-purple-300 border-t-purple-700 animate-spin" />
+                        Preparing secure payment…
+                      </div>
+                    );
+                  }
+                  return (
+                    <Elements stripe={stripePromiseRef.current} options={{ clientSecret: stripeClientSecret, appearance: { theme: 'stripe' } }}>
+                      <StripeUpgradeForm
+                        paymentIntentId={stripePaymentIntentId}
+                        clientSecret={stripeClientSecret}
+                        onSuccess={async () => {
+                          try {
+                            await nclexApi.confirmStripeUpgrade(stripePaymentIntentId);
+                            setUpgradeModal(false);
+                            setStripeClientSecret(null);
+                            setStripePaymentIntentId(null);
+                            toast.success('Payment received — premium access granted.');
+                            window.location.reload();
+                          } catch (err: any) {
+                            toast.error(err?.response?.data?.error || 'Payment confirmed but upgrade could not be finalised. Contact support.');
+                          }
+                        }}
+                        onError={(msg) => setStripeError(msg)}
+                      />
+                    </Elements>
+                  );
+                })()}
 
                 {/* Reference number */}
                 {upgradeMethod !== 'stripe' && (
@@ -3683,16 +3942,18 @@ export const NclexHome = () => {
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions — Stripe has its own inline "Pay now" inside StripeUpgradeForm */}
                 <div className="flex gap-3 pt-1">
                   <button onClick={() => setUpgradeModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                    Cancel
+                    {upgradeMethod === 'stripe' ? 'Close' : 'Cancel'}
                   </button>
-                  <button onClick={submitUpgrade} disabled={upgradeSending}
-                    className="flex-1 px-4 py-2.5 bg-[#0c1e3c] text-white rounded-xl text-sm font-semibold hover:bg-[#1a3058] disabled:opacity-50 flex items-center justify-center gap-2">
-                    {upgradeSending ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Send className="h-4 w-4" />}
-                    Submit Request
-                  </button>
+                  {upgradeMethod !== 'stripe' && (
+                    <button onClick={submitUpgrade} disabled={upgradeSending}
+                      className="flex-1 px-4 py-2.5 bg-[#0c1e3c] text-white rounded-xl text-sm font-semibold hover:bg-[#1a3058] disabled:opacity-50 flex items-center justify-center gap-2">
+                      {upgradeSending ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Send className="h-4 w-4" />}
+                      Submit Request
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3702,3 +3963,71 @@ export const NclexHome = () => {
     </div>
   );
 };
+
+// ── StripeUpgradeForm ──────────────────────────────────────────────────────
+// Confirms the PaymentIntent that NclexHome created. Lives inside the
+// <Elements> provider so `useStripe()` / `useElements()` resolve. On success,
+// the parent's onSuccess() finalises the upgrade by calling
+// /api/nclex/confirm-stripe-upgrade.
+function StripeUpgradeForm({
+  paymentIntentId,
+  clientSecret,
+  onSuccess,
+  onError,
+}: {
+  paymentIntentId: string;
+  clientSecret: string;
+  onSuccess: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    const { error: submitErr } = await elements.submit();
+    if (submitErr) { onError(submitErr.message || 'Card validation failed'); return; }
+
+    setSubmitting(true);
+    try {
+      const { error: confirmErr, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        clientSecret,
+        confirmParams: { return_url: `${window.location.origin}/?upgrade=stripe_return&intent=${paymentIntentId}` },
+        redirect: 'if_required',
+      });
+      if (confirmErr) { onError(confirmErr.message || 'Payment failed'); setSubmitting(false); return; }
+      if (paymentIntent?.status === 'succeeded') {
+        await onSuccess();
+      } else if (paymentIntent?.status === 'requires_action') {
+        onError('Additional authentication required. Please retry.');
+        setSubmitting(false);
+      } else {
+        onError(`Payment ${paymentIntent?.status || 'failed'}. Please try again.`);
+        setSubmitting(false);
+      }
+    } catch (err: any) {
+      onError(err?.message || 'Unexpected payment error');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-purple-50/40 border border-purple-200 rounded-xl p-4 space-y-3">
+      <p className="text-sm font-bold text-purple-800">Pay with card</p>
+      <PaymentElement options={{ layout: 'tabs' }} />
+      <button
+        type="submit"
+        disabled={!stripe || !elements || submitting}
+        className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+      >
+        {submitting && <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+        {submitting ? 'Confirming payment…' : 'Pay now'}
+      </button>
+      <p className="text-[11px] text-purple-600/80 text-center">Secured by Stripe. Your card details never touch our servers.</p>
+    </form>
+  );
+}

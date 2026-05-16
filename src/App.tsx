@@ -496,12 +496,16 @@ function ReviewRoutes() {
       <Routes>
         {/* SSO landing — exchanges a cross-subdomain hop token for a normal session */}
         <Route path="/sso" element={<Sso />} />
-        <Route path="/" element={<NCLEXReview />} />
+        {/* Root now lands on the new NclexHome dashboard (Q-Banks > Statistics).
+            The /exam, /video-library, /cheat-sheets, /live-lectures, /order-history,
+            /checkout legacy paths below are kept as redirects so old bookmarks /
+            emails still resolve to the right section of the new NclexHome. */}
+        <Route path="/" element={<ProtectedRoute><Navigate to="/nclex/qbanks/statistics" replace /></ProtectedRoute>} />
         <Route path="/exam/:id" element={<NCLEXExam />} />
-        <Route path="/video-library" element={<NCLEXVideoLibrary />} />
-        <Route path="/cheat-sheets" element={<NCLEXCheatSheets />} />
-        <Route path="/live-lectures" element={<NCLEXLiveLectures />} />
-        <Route path="/order-history" element={<NCLEXOrderHistory />} />
+        <Route path="/video-library" element={<Navigate to="/nclex/videos" replace />} />
+        <Route path="/cheat-sheets" element={<Navigate to="/nclex/cheatsheets" replace />} />
+        <Route path="/live-lectures" element={<Navigate to="/nclex/live" replace />} />
+        <Route path="/order-history" element={<Navigate to="/nclex/orders" replace />} />
         <Route path="/checkout" element={<NCLEXCheckout />} />
         {/* NCLEX Review (imported from grit) — qbanks dashboard, exam, results, review */}
         <Route path="/nclex" element={<ProtectedRoute><Navigate to="/nclex/qbanks/statistics" replace /></ProtectedRoute>} />

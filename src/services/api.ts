@@ -59,6 +59,14 @@ export const nclexApi = {
   abandonSession: (id: string) => api.post(`/nclex/sessions/${id}/abandon`),
   getSessionReview: (id: string) => api.get(`/nclex/sessions/${id}/review`),
   checkExitAccess: () => api.get('/nclex/exit-access'),
+  // Payments + admin-managed content surfaces consumed by review.gritsync.com
+  createUpgradeIntent: (planId: string) =>
+    api.post('/nclex/create-upgrade-intent', { planId }),
+  confirmStripeUpgrade: (paymentIntentId: string) =>
+    api.post('/nclex/confirm-stripe-upgrade', { paymentIntentId }),
+  getLiveSessions: () => api.get('/nclex/live-sessions'),
+  getOrderHistory: () => api.get('/nclex/order-history'),
+  getSiteSettings: () => api.get('/nclex/site-settings'),
   // Admin
   getAdminStats: () => api.get('/nclex/admin/stats'),
   listQuestions: (params?: Record<string, unknown>) =>
