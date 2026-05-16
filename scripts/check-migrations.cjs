@@ -47,6 +47,10 @@ const checks = [
     file: '2026-05-15_password_reset_tokens_add_otp.sql',
     probe: `SELECT 1 FROM information_schema.columns WHERE table_name='password_reset_tokens' AND column_name='otp'`,
   },
+  {
+    file: '2026-05-15_nclex_live_sessions_and_site_settings.sql',
+    probe: `SELECT 1 FROM information_schema.tables WHERE table_name='nclex_live_sessions'`,
+  },
 ]
 
 ;(async () => {
