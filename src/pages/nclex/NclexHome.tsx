@@ -15,6 +15,8 @@ import {
 } from 'recharts';
 import { nclexApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { appUrl } from '../../lib/routing';
+import { homePathForRole } from '../../lib/permissions';
 import toast from 'react-hot-toast';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -448,7 +450,7 @@ const SpeedometerGauge = ({ value }: { value: number | null }) => {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type NavSection = 'qbanks' | 'videos' | 'live' | 'cheatsheets' | 'calendar' | 'testimonial' | 'subscription' | 'orders' | 'group';
+type NavSection = 'qbanks' | 'videos' | 'live' | 'cheatsheets' | 'calendar' | 'testimonial' | 'subscription';
 
 const planIncluded = (f: string | PlanFeature): { name: string; included: boolean } =>
   typeof f === 'string' ? { name: f, included: true } : f;
@@ -464,8 +466,6 @@ const NAV_ITEMS: Array<{ id: NavSection; label: string; icon: React.ElementType;
 const BOTTOM_NAV_ITEMS: Array<{ id: NavSection; label: string; icon: React.ElementType; requiresPremium?: boolean; requiresSpecial?: string }> = [
   { id: 'testimonial', label: 'Testimonial', icon: Star },
   { id: 'subscription', label: 'Subscription', icon: CreditCard },
-  { id: 'orders', label: 'Order History', icon: FileText },
-  { id: 'group', label: 'Group Support', icon: Users },
 ];
 
 export const NclexHome = () => {
@@ -529,12 +529,10 @@ export const NclexHome = () => {
     zoomPasscode?: string | null; recordingUrl?: string | null;
     instructor?: string | null; topic?: string | null; status: string;
   }
-  interface OrderRow {
-    id: string; method: string; reference: string; status: string;
-    tier: string; expiresAt: string | null; date: string;
-  }
   const [liveSessions, setLiveSessions] = useState<LiveSessionRow[]>([]);
-  const [orderHistory, setOrderHistory] = useState<OrderRow[]>([]);
+  // Group support URL is read from /api/nclex/site-settings (admin-managed),
+  // with a sane FB-group default if the request fails. Still consumed by the
+  // Live Lectures footer CTA below.
   const [groupSupportUrl, setGroupSupportUrl] = useState<string>('https://www.facebook.com/share/g/1EfkpWjCvf/?mibextid=wwXIfr');
 
   // Plan config
@@ -645,9 +643,6 @@ export const NclexHome = () => {
       .catch(() => {});
     nclexApi.getLiveSessions()
       .then(r => setLiveSessions(r.data.data ?? []))
-      .catch(() => {});
-    nclexApi.getOrderHistory()
-      .then(r => setOrderHistory(r.data.data ?? []))
       .catch(() => {});
     nclexApi.getSiteSettings()
       .then(r => {
@@ -2958,100 +2953,6 @@ export const NclexHome = () => {
   };
 
 
-  const renderOrderHistory = () => {
-    const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString([], { dateStyle: 'medium' }) : '—';
-    const methodLabel: Record<string, string> = {
-      stripe: 'Card (Stripe)', gcash: 'GCash', bdo: 'BDO',
-      manual: 'Manual', unknown: 'Unknown',
-    };
-    return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        <h2 className="text-xl font-black text-gray-900 mb-1">Order History</h2>
-        <p className="text-gray-500 text-sm mb-6">Your past plan upgrades and payments</p>
-
-        {orderHistory.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-            <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-700">No orders yet</p>
-            <p className="text-xs text-gray-500 mt-1">When you upgrade to Premium or VIP, your payments will appear here.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {orderHistory.map(o => (
-              <div key={o.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary-50 border border-primary-100 flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="h-5 w-5 text-primary-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-sm text-gray-900">{o.tier} plan</p>
-                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                      o.status === 'completed' ? 'bg-green-100 text-green-700'
-                      : o.status === 'pending_admin_review' ? 'bg-amber-100 text-amber-700'
-                      : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {o.status === 'completed' ? 'Paid' : o.status === 'pending_admin_review' ? 'Awaiting review' : o.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {methodLabel[o.method] ?? o.method} · Ref {o.reference} · {fmt(o.date)}
-                  </p>
-                  {o.expiresAt && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Access through {fmt(o.expiresAt)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderGroupSupport = () => (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <h2 className="text-xl font-black text-gray-900 mb-1">Group Support</h2>
-      <p className="text-gray-500 text-sm mb-6">Connect with fellow NCLEX candidates and the GritSync team</p>
-
-      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-8 text-center text-white shadow-lg">
-        <div className="inline-flex h-16 w-16 rounded-2xl bg-white/15 items-center justify-center mb-4">
-          <Users className="h-8 w-8 text-white" />
-        </div>
-        <h3 className="text-xl font-bold mb-2">Join the Study Group</h3>
-        <p className="text-blue-100 text-sm mb-5 max-w-md mx-auto">
-          Ask questions, share progress, and get real-time announcements about live lectures and new content.
-        </p>
-        <a href={groupSupportUrl} target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-700 text-sm font-bold rounded-xl hover:bg-blue-50 transition-colors">
-          Open Facebook Group <ExternalLink className="h-4 w-4" />
-        </a>
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
-              <Mic className="h-5 w-5 text-amber-600" />
-            </div>
-            <p className="font-semibold text-sm text-gray-900">Live announcements</p>
-          </div>
-          <p className="text-xs text-gray-500">New Zoom sessions and recordings are announced in the group first.</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
-              <ThumbsUp className="h-5 w-5 text-purple-600" />
-            </div>
-            <p className="font-semibold text-sm text-gray-900">Peer support</p>
-          </div>
-          <p className="text-xs text-gray-500">Get study tips, exam-day stories, and motivation from past test-takers.</p>
-        </div>
-      </div>
-    </div>
-  );
-
   const sectionContent: Record<NavSection, React.ReactNode> = {
     qbanks: renderQBanks(),
     videos: renderVideos(),
@@ -3064,8 +2965,6 @@ export const NclexHome = () => {
     calendar: renderCalendar(),
     testimonial: renderTestimonial(),
     subscription: renderSubscription(),
-    orders: renderOrderHistory(),
-    group: renderGroupSupport(),
   };
 
   return (
@@ -3082,9 +2981,11 @@ export const NclexHome = () => {
         {/* Logo */}
         <div className="px-5 py-4 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <BookOpen className="h-4 w-4 text-white" />
-            </div>
+            <img
+              src="/logo-blue.png"
+              alt="GritSync"
+              className="h-8 w-8 rounded-lg object-contain flex-shrink-0 bg-white/5"
+            />
             <div>
               <p className="text-white font-black text-sm leading-tight">GritSync</p>
               <p className="text-blue-300 text-xs">NCLEX-RN Review</p>
@@ -3257,12 +3158,17 @@ export const NclexHome = () => {
           </div>
         </nav>
 
-        {/* Back to Portal */}
+        {/* Back to Portal — cross-subdomain hop from review.gritsync.com back to
+            the user's role-appropriate home on app.gritsync.com. In dev the
+            appUrl helper stays on the same origin and prefixes /app. */}
         <div className="px-4 pb-5 flex-shrink-0 border-t border-white/10 pt-3">
-          <Link to="/portal" className="flex items-center gap-2 text-blue-300 hover:text-white text-sm transition-colors py-1">
+          <a
+            href={appUrl(homePathForRole(user?.role))}
+            className="flex items-center gap-2 text-blue-300 hover:text-white text-sm transition-colors py-1"
+          >
             <ArrowLeft className="h-4 w-4" />
             Back to Portal
-          </Link>
+          </a>
         </div>
       </aside>
 

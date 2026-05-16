@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 interface NclexLayoutProps {
   children: React.ReactNode;
@@ -24,9 +24,7 @@ export const NclexLayout = ({ children, showBack = true, backTo = '/nclex', back
           )}
           {showBack && <div className="h-5 w-px bg-white/20" />}
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 bg-blue-500/30 rounded-lg flex items-center justify-center">
-              <BookOpen className="h-4 w-4 text-blue-300" />
-            </div>
+            <img src="/logo-blue.png" alt="GritSync" className="h-7 w-7 rounded-lg object-contain bg-white/5" />
             <span className="font-bold text-white text-sm">
               GritSync <span className="text-blue-400">NCLEX-RN</span> Review
             </span>
