@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { nclexApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { appUrl } from '../../lib/routing';
+import { appUrl, pearsonVueUrl, getSubdomainContext } from '../../lib/routing';
 import { homePathForRole } from '../../lib/permissions';
 import toast from 'react-hot-toast';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
@@ -697,7 +697,21 @@ export const NclexHome = () => {
         topics: opts?.topics?.length ? opts.topics : undefined,
         formats: opts?.formats?.length ? opts.formats : undefined,
       });
-      navigate(`/nclex/exam/${res.data.data.session.id}`);
+      const sessionId = res.data.data.session.id;
+      // Tutorial mode is practice — keep it in the review surface (which
+      // shows rationale + immediate feedback). Everything else (CAT, the
+      // 85-item readiness assessment, the timed exit exam) is the "real
+      // test" experience and hands off to pearsonvue.gritsync.com where the
+      // UI mimics the actual Pearson VUE testing environment. Direct
+      // access to that subdomain is gated by the session id — the
+      // PearsonVueExam component re-validates ownership + IN_PROGRESS
+      // status and bounces anyone who didn't come through here.
+      const ctx = getSubdomainContext();
+      if (examType !== 'TUTORIAL' && (ctx === 'review' || ctx === 'app')) {
+        window.location.href = pearsonVueUrl(`/exam/${sessionId}`);
+        return;
+      }
+      navigate(`/nclex/exam/${sessionId}`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       toast.error(msg || 'Failed to start exam.');

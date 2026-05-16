@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Loader2, Calculator, Highlighter, StrikethroughIcon, ChevronRight } from 'lucide-react'
 import { nclexApi } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { reviewUrl } from '@/lib/routing'
 
 interface SessionItem {
   id: string
@@ -54,9 +55,17 @@ export function PearsonVueExam() {
     return () => clearInterval(t)
   }, [])
 
-  // Load the session and the current question.
+  // Load the session and the current question. Acts as the per-route
+  // access guard: if the session id doesn't exist, doesn't belong to the
+  // current user, or isn't IN_PROGRESS, we bounce back to review where
+  // the user can legitimately start a new test. The /api/nclex/sessions/:id
+  // endpoint already enforces ownership server-side (it filters by user_id),
+  // so an unauthorized id simply returns 404.
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId) {
+      window.location.replace(reviewUrl('/nclex/qbanks'))
+      return
+    }
     let cancelled = false
     setLoading(true)
     nclexApi
@@ -64,13 +73,21 @@ export function PearsonVueExam() {
       .then((res) => {
         if (cancelled) return
         const payload = res.data?.data as SessionResponse
+        // Only IN_PROGRESS sessions are eligible for the test surface.
+        // Completed / abandoned sessions belong on the results page; an
+        // attacker copying a stale id from another tab gets bounced.
+        if (!payload?.session || payload.session.status !== 'IN_PROGRESS') {
+          window.location.replace(reviewUrl('/nclex/qbanks'))
+          return
+        }
         setData(payload)
         startedAtRef.current = new Date()
         setResponse(null)
       })
-      .catch((err) => {
+      .catch(() => {
         if (cancelled) return
-        setError(err?.response?.data?.message || err?.message || 'Could not load the test.')
+        // 401 / 404 / network — same response: send them home to start over.
+        window.location.replace(reviewUrl('/nclex/qbanks'))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
