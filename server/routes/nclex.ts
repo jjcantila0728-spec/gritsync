@@ -85,6 +85,55 @@ const VALID_FORMATS = new Set([
 const VALID_BANKS = new Set(['CLASSIC', 'NGN'])
 const VALID_EXAM_TYPES = new Set(['READINESS_ASSESSMENT', 'CAT', 'TUTORIAL', 'EXIT_EXAM'])
 
+// ─── Premium bonus on application payment ─────────────────────────────────────
+// When a GritSync NCLEX-processing client pays for their application (step1
+// or full), we grant them N months of free Premium on the review platform.
+// N is admin-configurable via the `nclex_payment_bonus_months` site setting
+// (default 4 months). Exported so server/routes/payments.ts can call it from
+// the existing trigger-followup-tasks handler without depending on the
+// route module's internals.
+export async function grantNclexPremiumOnPayment(userId: string): Promise<{ granted: boolean; months: number; expiresAt: string | null }> {
+  if (!userId) return { granted: false, months: 0, expiresAt: null }
+  try {
+    const settingRes = await query(
+      `SELECT value FROM nclex_site_settings WHERE key = 'nclex_payment_bonus_months' LIMIT 1`,
+      [],
+    )
+    const months = Math.max(0, parseInt(settingRes.rows[0]?.value ?? '4', 10) || 4)
+    if (months === 0) return { granted: false, months: 0, expiresAt: null }
+
+    // Extend tier_expires_at rather than overwriting it — if the user already
+    // had Premium with a later expiry (manual grant, prior payment) we keep
+    // the longer one. Idempotent: re-running on the same payment doesn't
+    // stack months indefinitely because the application's payment row gets
+    // marked notified separately.
+    const upsert = await query(
+      `INSERT INTO nclex_profiles (user_id, tier, tier_expires_at, upgrade_requested, upgrade_payment_ref, upgrade_payment_method, updated_at)
+       VALUES ($1, 'PREMIUM', NOW() + ($2::int || ' months')::interval, FALSE, 'gritsync_application_payment', 'application_payment', NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         tier = 'PREMIUM',
+         tier_expires_at = GREATEST(
+           COALESCE(nclex_profiles.tier_expires_at, NOW()),
+           NOW() + ($2::int || ' months')::interval
+         ),
+         upgrade_requested = FALSE,
+         upgrade_payment_ref = COALESCE(nclex_profiles.upgrade_payment_ref, 'gritsync_application_payment'),
+         upgrade_payment_method = COALESCE(nclex_profiles.upgrade_payment_method, 'application_payment'),
+         updated_at = NOW()
+       RETURNING tier_expires_at`,
+      [userId, months],
+    )
+    return {
+      granted: true,
+      months,
+      expiresAt: upsert.rows[0]?.tier_expires_at ?? null,
+    }
+  } catch (err) {
+    console.error('[grantNclexPremiumOnPayment]', err)
+    return { granted: false, months: 0, expiresAt: null }
+  }
+}
+
 // ─────────────────────── DB row → API shape helpers ───────────────────────────
 
 function camelQuestion(row: any) {
@@ -1389,7 +1438,7 @@ router.get('/site-settings', async (_req: AuthenticatedRequest, res) => {
   try {
     const r = await query(
       `SELECT key, value FROM nclex_site_settings
-        WHERE key IN ('group_support_url')`,
+        WHERE key IN ('group_support_url', 'nclex_payment_bonus_months')`,
       []
     )
     const map: Record<string, string> = {}
@@ -1406,7 +1455,7 @@ router.get('/site-settings', async (_req: AuthenticatedRequest, res) => {
 router.put('/admin/site-settings', async (req: AuthenticatedRequest, res) => {
   if (!requireAdminInline(req, res)) return
   try {
-    const allowedKeys = new Set(['group_support_url'])
+    const allowedKeys = new Set(['group_support_url', 'nclex_payment_bonus_months'])
     const updates = Object.entries(req.body || {}).filter(([k]) => allowedKeys.has(k))
     if (!updates.length) { badRequest(res, 'No settings to update'); return }
     for (const [key, value] of updates) {

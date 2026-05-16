@@ -2261,12 +2261,16 @@ function SessionList({ title, sessions, onEdit, onDelete, accent, emptyMsg }: {
 function SiteLinksTab() {
   const toast = useNotify()
   const [groupUrl, setGroupUrl] = useState('')
+  const [bonusMonths, setBonusMonths] = useState('4')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     apiFetch<Record<string, string>>('/api/nclex/site-settings')
-      .then(s => setGroupUrl(s.group_support_url || ''))
+      .then(s => {
+        setGroupUrl(s.group_support_url || '')
+        setBonusMonths(s.nclex_payment_bonus_months || '4')
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -2274,8 +2278,13 @@ function SiteLinksTab() {
   const save = async () => {
     setSaving(true)
     try {
+      const months = Math.max(0, parseInt(bonusMonths, 10) || 0)
       await apiFetch('/api/nclex/admin/site-settings', {
-        method: 'PUT', body: JSON.stringify({ group_support_url: groupUrl.trim() }),
+        method: 'PUT',
+        body: JSON.stringify({
+          group_support_url: groupUrl.trim(),
+          nclex_payment_bonus_months: String(months),
+        }),
       })
       toast.success('Saved')
     } catch (err: any) {
@@ -2288,20 +2297,40 @@ function SiteLinksTab() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Site Links</h2>
-        <p className="text-sm text-gray-500 mt-0.5">URLs the review platform reads at runtime — change them here without redeploying.</p>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Site Links &amp; Bonuses</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Runtime settings the review platform reads — change them here without redeploying.</p>
       </div>
 
       <Card className="p-5 space-y-3">
         <label className="block text-sm font-semibold text-gray-900 dark:text-gray-100">Group Support URL</label>
         <p className="text-xs text-gray-500">Shown as a "Group Support" link on review.gritsync.com. Typically a Facebook group invite.</p>
         <Input value={groupUrl} onChange={e => setGroupUrl(e.target.value)} placeholder="https://www.facebook.com/share/g/..." />
-        <div>
-          <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">
-            {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1" /> Save</>}
-          </Button>
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <label className="block text-sm font-semibold text-gray-900 dark:text-gray-100">Application-payment Premium bonus</label>
+        <p className="text-xs text-gray-500">
+          When a GritSync NCLEX-processing client pays for their application (step1 or full), they
+          get this many months of free Premium on review.gritsync.com. Set to 0 to disable. The
+          server uses GREATEST() so granting a bonus never shortens an already-longer Premium window.
+        </p>
+        <div className="flex items-center gap-2 max-w-[200px]">
+          <Input
+            type="number"
+            min={0}
+            max={36}
+            value={bonusMonths}
+            onChange={e => setBonusMonths(e.target.value)}
+          />
+          <span className="text-sm text-gray-600 dark:text-gray-400">months</span>
         </div>
       </Card>
+
+      <div>
+        <Button onClick={save} disabled={saving} className="bg-primary-600 hover:bg-primary-700 text-white">
+          {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1" /> Save all settings</>}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import Stripe from 'stripe'
 import { query } from '../db'
 import { optionalAuth, authenticateToken, AuthenticatedRequest } from '../middleware/auth'
+import { grantNclexPremiumOnPayment } from './nclex'
 
 const router = Router()
 
@@ -144,13 +145,24 @@ router.post('/:id/trigger-followup-tasks', authenticateToken, async (req: Authen
     }
     if (!pay.application_id) return res.status(400).json({ error: 'Payment has no application' })
 
-    // Friendly identifier for the application (used in the toast link).
+    // Friendly identifier for the application + the owner's user_id (needed
+    // for the NCLEX premium-bonus grant below).
     const appR = await query(
-      `SELECT id, grit_app_id FROM applications WHERE id = $1 LIMIT 1`,
+      `SELECT id, grit_app_id, user_id FROM applications WHERE id = $1 LIMIT 1`,
       [pay.application_id]
     )
-    const appRow = appR.rows[0] as { id: string; grit_app_id: string | null } | undefined
+    const appRow = appR.rows[0] as { id: string; grit_app_id: string | null; user_id: string | null } | undefined
     const appLabel = appRow?.grit_app_id || pay.application_id.slice(0, 8)
+
+    // Grant N months of free Premium on review.gritsync.com to this
+    // application's owner. N is admin-configurable (nclex_payment_bonus_months
+    // site setting, default 4). GREATEST() ensures stacking earlier expiries
+    // doesn't shorten an already-longer Premium window. Non-fatal: if this
+    // step throws, the rest of the approval flow still completes.
+    let nclexBonus: { granted: boolean; months: number; expiresAt: string | null } = { granted: false, months: 0, expiresAt: null }
+    if (appRow?.user_id) {
+      nclexBonus = await grantNclexPremiumOnPayment(appRow.user_id)
+    }
 
     // Recipients: every active admin + advisor.
     const recipR = await query(
@@ -208,7 +220,7 @@ router.post('/:id/trigger-followup-tasks', authenticateToken, async (req: Authen
       }
     }
 
-    res.json({ data: { recipients: recipients.length, notifications: inserted } })
+    res.json({ data: { recipients: recipients.length, notifications: inserted, nclexBonus } })
   } catch (err: any) {
     console.error('[payments] trigger-followup-tasks:', err)
     res.status(500).json({ error: err?.message || 'Server error' })
