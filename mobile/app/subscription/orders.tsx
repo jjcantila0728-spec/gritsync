@@ -1,21 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Stack } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Card, CardSubtitle, CardTitle } from '@/components/Card'
+import { PageHeader } from '@/components/PageHeader'
+import { ErrorState } from '@/components/ErrorState'
+import { SkeletonCard } from '@/components/Skeleton'
 import { useTheme, palette, radius, spacing } from '@/theme'
 import { nclexAPI, type Order } from '@/lib/nclex'
+import { errorMessage } from '@/lib/api'
 
 export default function OrderHistoryScreen() {
   const { colors } = useTheme()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    setError(null)
     try {
       setOrders(await nclexAPI.orderHistory())
-    } catch {
+    } catch (e) {
+      setError(errorMessage(e, "Couldn't load orders"))
       setOrders([])
     } finally {
       setLoading(false)
@@ -29,30 +35,61 @@ export default function OrderHistoryScreen() {
   return (
     <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: 'Order history', headerShown: true }} />
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} showsVerticalScrollIndicator={false}>
+        <PageHeader
+          title="Order history"
+          subtitle="Every subscription payment, in chronological order."
+          icon="receipt"
+        />
+
         {loading ? (
-          <Card>
-            <View style={{ alignItems: 'center', padding: spacing.xl }}>
-              <ActivityIndicator color={colors.accent} />
-            </View>
-          </Card>
+          <View style={{ gap: spacing.md }}>
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </View>
+        ) : error ? (
+          <ErrorState
+            variant="error"
+            title="Couldn't load orders"
+            body={error}
+            onRetry={() => {
+              setLoading(true)
+              void load()
+            }}
+          />
         ) : orders.length === 0 ? (
-          <Card>
-            <CardTitle>No orders yet</CardTitle>
-            <CardSubtitle>
-              When you upgrade to Premium, the receipt will appear here. Stripe payments record
-              instantly; manual payments show as "Pending review" until your advisor confirms.
-            </CardSubtitle>
-          </Card>
+          <ErrorState
+            variant="empty"
+            icon="receipt-outline"
+            title="No orders yet"
+            body="When you upgrade to Premium, the receipt appears here. Stripe payments record instantly; GCash and BDO show as Pending until your advisor confirms."
+          />
         ) : (
-          orders.map((o) => <OrderRow key={o.id} order={o} />)
+          <View style={{ gap: spacing.md }}>
+            {orders.map((o, idx) => (
+              <OrderRow
+                key={o.id}
+                order={o}
+                isFirst={idx === 0}
+                isLast={idx === orders.length - 1}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
   )
 }
 
-function OrderRow({ order }: { order: Order }) {
+function OrderRow({
+  order,
+  isFirst,
+  isLast,
+}: {
+  order: Order
+  isFirst: boolean
+  isLast: boolean
+}) {
   const { colors } = useTheme()
   const tone = statusTone(order.status)
   const methodLabel =
@@ -62,43 +99,51 @@ function OrderRow({ order }: { order: Order }) {
     order.method.replace(/_/g, ' ').replace(/\b\w/g, (s) => s.toUpperCase())
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <View style={[styles.icon, { backgroundColor: palette.brand.red50 }]}>
-          <Ionicons name={iconForMethod(order.method)} size={22} color={palette.brand.red600} />
+    <View style={{ flexDirection: 'row', gap: spacing.md }}>
+      {/* Timeline rail */}
+      <View style={{ alignItems: 'center', width: 28 }}>
+        <View style={{ width: 2, height: isFirst ? 0 : 12, backgroundColor: colors.border }} />
+        <View style={[styles.dot, { backgroundColor: tone.fg, borderColor: tone.fg }]}>
+          <Ionicons name={iconForMethod(order.method)} size={11} color="#FFFFFF" />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
-            {order.tier === 'PREMIUM' ? 'Premium plan' : String(order.tier)}
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>{methodLabel}</Text>
-        </View>
-        <View style={[styles.statusPill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-          <Text style={{ color: tone.fg, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }}>
-            {prettyStatus(order.status)}
-          </Text>
-        </View>
+        {!isLast ? <View style={{ width: 2, flex: 1, backgroundColor: colors.border }} /> : null}
       </View>
-      <View style={{ marginTop: spacing.md, gap: 4 }}>
-        <DetailRow label="Reference" value={order.reference} mono />
-        {order.date ? (
-          <DetailRow
-            label="Date"
-            value={new Date(order.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-          />
-        ) : null}
-        {order.expiresAt ? (
-          <DetailRow
-            label="Expires"
-            value={new Date(order.expiresAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-          />
-        ) : null}
-        {typeof order.amount === 'number' ? (
-          <DetailRow
-            label="Amount"
-            value={`${(order.currency ?? 'USD').toUpperCase()} ${order.amount.toFixed(2)}`}
-          />
-        ) : null}
+
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, flex: 1 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+              {order.tier === 'PREMIUM' ? 'Premium plan' : String(order.tier)}
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{methodLabel}</Text>
+          </View>
+          <View style={[styles.statusPill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+            <Text style={{ color: tone.fg, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }}>
+              {prettyStatus(order.status)}
+            </Text>
+          </View>
+        </View>
+        <View style={{ marginTop: spacing.md, gap: 4 }}>
+          <DetailRow label="Reference" value={order.reference} mono />
+          {order.date ? (
+            <DetailRow
+              label="Date"
+              value={new Date(order.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+            />
+          ) : null}
+          {order.expiresAt ? (
+            <DetailRow
+              label="Expires"
+              value={new Date(order.expiresAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+            />
+          ) : null}
+          {typeof order.amount === 'number' ? (
+            <DetailRow
+              label="Amount"
+              value={`${(order.currency ?? 'USD').toUpperCase()} ${order.amount.toFixed(2)}`}
+            />
+          ) : null}
+        </View>
       </View>
     </View>
   )
@@ -163,17 +208,19 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
   },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   statusPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
+  },
+  dot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
   },
 })

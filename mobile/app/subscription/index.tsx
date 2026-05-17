@@ -5,10 +5,12 @@ import { Stack, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Card, CardSubtitle, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
+import { SkeletonCard } from '@/components/Skeleton'
 import { useTheme, palette, radius, spacing } from '@/theme'
 import { nclexAPI, type NclexProfile } from '@/lib/nclex'
 import { openUrl } from '@/lib/browser'
 import { API_BASE_URL } from '@/lib/api'
+import { LinearGradient } from 'expo-linear-gradient'
 
 /**
  * Subscription management — accessible from Settings (and from the
@@ -56,53 +58,55 @@ export default function SubscriptionManagement() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
         <Stack.Screen options={{ title: 'Subscription' }} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.accent} />
+        <View style={{ padding: spacing.lg, gap: spacing.lg }}>
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={4} />
         </View>
       </SafeAreaView>
     )
   }
 
+  const isPremium = tier === 'PREMIUM'
+
   return (
     <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ title: 'Subscription', headerShown: true }} />
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
-        <View
-          style={[
-            styles.banner,
-            {
-              backgroundColor: tier === 'PREMIUM' ? '#F0FDF4' : palette.brand.red50,
-              borderColor: tier === 'PREMIUM' ? '#86EFAC' : palette.brand.red200,
-            },
-          ]}
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} showsVerticalScrollIndicator={false}>
+        <LinearGradient
+          colors={
+            isPremium
+              ? ['#15803D', '#16A34A', '#22C55E']
+              : [palette.brand.red700, palette.brand.red600, palette.brand.red500]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.banner}
         >
-          <View
-            style={[
-              styles.bannerIcon,
-              { backgroundColor: tier === 'PREMIUM' ? '#15803D' : palette.brand.red600 },
-            ]}
-          >
-            <Ionicons name="star" size={28} color="#FFFFFF" />
+          <View style={styles.bannerIcon}>
+            <Ionicons name={isPremium ? 'star' : 'rocket-outline'} size={32} color="#FFFFFF" />
           </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ color: colors.text, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>
-              YOUR PLAN
-            </Text>
-            <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800' }}>
-              {tier === 'PREMIUM' ? 'Premium' : 'Free'}
-            </Text>
-            {tier === 'PREMIUM' && expires ? (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+          <Text style={styles.bannerEyebrow}>YOUR PLAN</Text>
+          <Text style={styles.bannerTitle}>{isPremium ? 'Premium' : 'Free'}</Text>
+          {isPremium && expires ? (
+            <View style={styles.bannerInfoCol}>
+              <Text style={styles.bannerSub}>
                 Active until {new Date(expires).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                {daysLeft !== null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}
               </Text>
-            ) : tier === 'FREE' ? (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                Unlimited daily questions, all formats, and live lectures are Premium only.
-              </Text>
-            ) : null}
-          </View>
-        </View>
+              {daysLeft !== null ? (
+                <View style={styles.bannerChip}>
+                  <Ionicons name="time-outline" size={12} color="#FFFFFF" />
+                  <Text style={styles.bannerChipText}>
+                    {daysLeft} day{daysLeft === 1 ? '' : 's'} left
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.bannerSub}>
+              Unlimited daily questions, all NGN formats, and live lectures are Premium-only.
+            </Text>
+          )}
+        </LinearGradient>
 
         <Card>
           <CardTitle>{tier === 'PREMIUM' ? 'What you get' : "What you'll unlock"}</CardTitle>
@@ -160,18 +164,64 @@ function FeatureRow({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; tit
 
 const styles = StyleSheet.create({
   banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
+    padding: spacing.xl,
     borderRadius: radius.lg,
-    borderWidth: 1,
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
   },
   bannerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  bannerEyebrow: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+  },
+  bannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  bannerSub: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+    marginTop: 4,
+  },
+  bannerInfoCol: {
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  bannerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  bannerChipText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
 })

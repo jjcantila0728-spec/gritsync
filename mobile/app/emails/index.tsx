@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Screen } from '@/components/Screen'
-import { Card, CardSubtitle, CardTitle } from '@/components/Card'
-import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
+import { ErrorState } from '@/components/ErrorState'
+import { SkeletonRow } from '@/components/Skeleton'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme, radius, spacing, palette } from '@/theme'
 import { emailsAPI, EmailLogRow } from '@/lib/services'
@@ -54,31 +55,17 @@ export default function EmailsScreen() {
         void load()
       }}
     >
-      <View style={{ gap: spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}>Emails</Text>
-            {businessEmail ? (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={1}>
-                {businessEmail}
-              </Text>
-            ) : (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                Your business email isn't set up yet.
-              </Text>
-            )}
-          </View>
-          <Pressable
-            onPress={() => setComposeOpen(true)}
-            style={({ pressed }) => [
-              styles.composeBtn,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Ionicons name="create-outline" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Compose</Text>
-          </Pressable>
-        </View>
+      <View style={{ gap: spacing.lg }}>
+        <PageHeader
+          title="Emails"
+          subtitle={
+            businessEmail
+              ? `Sending from ${businessEmail}`
+              : "Your GritSync business email isn't set up yet — contact your advisor."
+          }
+          icon="mail"
+          action={{ label: 'Compose', icon: 'create-outline', onPress: () => setComposeOpen(true) }}
+        />
 
         <View style={[styles.tabs, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
           <TabBtn label={`Inbox${inbox.length ? ` (${inbox.length})` : ''}`} active={tab === 'inbox'} onPress={() => setTab('inbox')} />
@@ -86,18 +73,28 @@ export default function EmailsScreen() {
         </View>
 
         {loading ? (
-          <Card><Text style={{ color: colors.textMuted }}>Loading…</Text></Card>
+          <View style={{ gap: spacing.sm }}>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </View>
         ) : items.length === 0 ? (
-          <Card>
-            <CardTitle>{tab === 'inbox' ? 'Inbox empty' : 'No sent emails'}</CardTitle>
-            <CardSubtitle>
-              {tab === 'inbox'
-                ? 'Transactional emails sent to you (receipts, notifications, advisor notes) appear here.'
-                : 'Emails you send from your business address will appear here.'}
-            </CardSubtitle>
-          </Card>
+          <ErrorState
+            variant="empty"
+            icon={tab === 'inbox' ? 'mail-open-outline' : 'paper-plane-outline'}
+            title={tab === 'inbox' ? 'Inbox empty' : 'Nothing sent yet'}
+            body={
+              tab === 'inbox'
+                ? 'Receipts, advisor notes, and system emails will appear here as they arrive.'
+                : "When you send an email from your business address, you'll see it here."
+            }
+            retryLabel="Compose new"
+            onRetry={() => setComposeOpen(true)}
+          />
         ) : (
-          items.map((m) => <EmailListRow key={m.id} m={m} onPress={() => setViewing(m)} />)
+          <View style={{ gap: spacing.sm }}>
+            {items.map((m) => <EmailListRow key={m.id} m={m} onPress={() => setViewing(m)} />)}
+          </View>
         )}
       </View>
 
