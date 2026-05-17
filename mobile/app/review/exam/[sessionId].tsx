@@ -4,6 +4,7 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -11,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useExamTheme as useTheme, palette, radius, spacing } from '@/theme'
 import { errorMessage } from '@/lib/api'
 import { formatExamType, nclexAPI, type Feedback, type Question, type Session } from '@/lib/nclex'
 import { QuestionRenderer, hasAnswer } from '@/components/exam/QuestionRenderer'
@@ -198,6 +199,7 @@ export default function ExamRunner() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <ExamTopBar
         examType={formatExamType(session.examType)}

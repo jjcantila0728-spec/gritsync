@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Card, CardSubtitle, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useExamTheme as useTheme, palette, radius, spacing } from '@/theme'
 import { errorMessage } from '@/lib/api'
 import {
   formatExamType,

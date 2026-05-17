@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useExamTheme as useTheme, palette, radius, spacing } from '@/theme'
 
 export function NotesModal({
   visible,

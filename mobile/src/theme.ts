@@ -101,6 +101,20 @@ export function useTheme(): { mode: 'light' | 'dark'; colors: Palette } {
   return { mode, colors: palette[mode] }
 }
 
+/**
+ * Theme hook for screens that need to look the same regardless of system
+ * appearance — the exam runner, results, and review screens model the real
+ * Pearson Vue testing environment, which is a light, neutral surface in
+ * every NCLEX testing center worldwide. Locking those screens to a fixed
+ * light palette keeps muscle memory consistent for test-takers.
+ *
+ * Note: this returns a hardcoded `light` palette but with `mode` set to
+ * 'light' so the StatusBar and any conditional rendering stays consistent.
+ */
+export function useExamTheme(): { mode: 'light'; colors: Palette } {
+  return { mode: 'light', colors: palette.light }
+}
+
 export const radius = {
   sm: 6,
   md: 10,

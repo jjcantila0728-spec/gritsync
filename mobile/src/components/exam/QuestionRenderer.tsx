@@ -8,7 +8,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useExamTheme as useTheme, palette, radius, spacing } from '@/theme'
 import type { Question, QuestionFormat } from '@/lib/nclex'
 
 // ─────────────────────────────────────────────────────────────────────────────

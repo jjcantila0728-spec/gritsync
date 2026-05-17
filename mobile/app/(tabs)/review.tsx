@@ -31,6 +31,7 @@ import { CalendarSection } from '@/components/review/CalendarSection'
 import { TestimonialsSection } from '@/components/review/TestimonialsSection'
 import { SubscriptionSection } from '@/components/review/SubscriptionSection'
 import { StudySuggestions } from '@/components/review/StudySuggestions'
+import { CreateTestModal } from '@/components/review/CreateTestModal'
 
 type Section = 'qbanks' | 'videos' | 'cheatsheets' | 'live' | 'calendar' | 'testimonials' | 'subscription'
 
@@ -49,6 +50,7 @@ export default function ReviewHub() {
   const { colors } = useTheme()
   const router = useRouter()
   const [section, setSection] = useState<Section>('qbanks')
+  const [createTestOpen, setCreateTestOpen] = useState(false)
   const [home, setHome] = useState<HomeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -185,6 +187,7 @@ export default function ReviewHub() {
             </Card>
           ) : section === 'qbanks' ? (
             <>
+              <CreateTestCta onPress={() => setCreateTestOpen(true)} />
               <StudySuggestions home={home} />
               <QbanksSection home={home} onStart={(bank) => router.push(`/review/qbanks/${bank}` as any)} />
             </>
@@ -203,7 +206,44 @@ export default function ReviewHub() {
           )}
         </View>
       </ScrollView>
+
+      <CreateTestModal
+        visible={createTestOpen}
+        onClose={() => setCreateTestOpen(false)}
+        home={home}
+      />
     </SafeAreaView>
+  )
+}
+
+function CreateTestCta({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        ctaStyles.wrap,
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      <LinearGradient
+        colors={[palette.brand.red700, palette.brand.red600, palette.brand.red500]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={ctaStyles.gradient}
+      >
+        <View style={ctaStyles.iconCircle}>
+          <Ionicons name="add" size={24} color={palette.brand.red700} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={ctaStyles.eyebrow}>CREATE TEST</Text>
+          <Text style={ctaStyles.title}>Custom practice or full exam</Text>
+          <Text style={ctaStyles.sub}>
+            Pick a mode, bank, topics, and length — start a session in seconds.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.85)" />
+      </LinearGradient>
+    </Pressable>
   )
 }
 
@@ -384,6 +424,49 @@ function ComingSoonCard({ icon, title, copy }: { icon: any; title: string; copy:
     </Card>
   )
 }
+
+const ctaStyles = StyleSheet.create({
+  wrap: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  gradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyebrow: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  sub: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+})
 
 const styles = StyleSheet.create({
   hero: {

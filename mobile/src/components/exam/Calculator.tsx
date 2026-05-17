@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useExamTheme as useTheme, palette, radius, spacing } from '@/theme'
 
 /**
  * Custom calculator keypad for the NCLEX exam runner.
@@ -12,7 +12,7 @@ import { useTheme, palette, radius, spacing } from '@/theme'
  * dismiss for a re-read of the stem and come back to it.
  */
 export function Calculator({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { colors, mode } = useTheme()
+  const { colors } = useTheme()
   const [display, setDisplay] = useState('0')
   const [accumulator, setAccumulator] = useState<number | null>(null)
   const [op, setOp] = useState<'+' | '-' | '×' | '÷' | null>(null)
@@ -76,7 +76,7 @@ export function Calculator({ visible, onClose }: { visible: boolean; onClose: ()
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable onPress={onClose} style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
-        <Pressable onPress={(e) => e.stopPropagation()} style={[styles.body, { backgroundColor: mode === 'dark' ? '#111827' : '#FFFFFF', borderColor: colors.border }]}>
+        <Pressable onPress={(e) => e.stopPropagation()} style={[styles.body, { backgroundColor: '#FFFFFF', borderColor: colors.border }]}>
           <View style={styles.header}>
             <Ionicons name="calculator" size={20} color={palette.brand.red600} />
             <Text style={{ color: colors.text, fontWeight: '800', fontSize: 15, flex: 1 }}>Calculator</Text>
@@ -161,9 +161,10 @@ function Key({
   active?: boolean
   wide?: boolean
 }) {
-  const { colors, mode } = useTheme()
-  const base = mode === 'dark' ? '#1F2937' : '#F3F4F6'
-  const utility = mode === 'dark' ? '#374151' : '#E5E7EB'
+  const { colors } = useTheme()
+  // Pearson Vue look — calculator stays light regardless of system theme.
+  const base = '#F3F4F6'
+  const utility = '#E5E7EB'
   const opBg = active ? '#FFFFFF' : palette.brand.red600
   const opFg = active ? palette.brand.red600 : '#FFFFFF'
   let bg: string = base
