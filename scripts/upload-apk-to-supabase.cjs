@@ -54,11 +54,9 @@ const REMOTE_KEY = 'gritsync.apk'
   const { data: buckets } = await supabase.storage.listBuckets()
   if (!buckets?.find((b) => b.name === BUCKET)) {
     console.log(`[apk] creating bucket "${BUCKET}"…`)
-    const { error: bErr } = await supabase.storage.createBucket(BUCKET, {
-      public: true,
-      fileSizeLimit: 200 * 1024 * 1024, // 200 MB cap — APKs run ~60-100 MB
-      allowedMimeTypes: ['application/vnd.android.package-archive', 'application/octet-stream'],
-    })
+    // Project-level file-size cap applies; we don't set our own because the
+    // Supabase admin client rejects per-bucket limits that exceed project max.
+    const { error: bErr } = await supabase.storage.createBucket(BUCKET, { public: true })
     if (bErr) {
       console.error('[apk] bucket create failed:', bErr.message)
       process.exit(1)
