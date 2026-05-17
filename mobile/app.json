@@ -45,12 +45,15 @@
         "backgroundColor": "#DC2626"
       },
       "permissions": [
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "CAMERA",
-        "READ_CALENDAR",
-        "WRITE_CALENDAR",
-        "POST_NOTIFICATIONS"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -109,7 +112,12 @@
       "apiBaseUrl": "https://app.gritsync.com",
       "reviewBaseUrl": "https://review.gritsync.com",
       "stripePublishableKey": "pk_live_51Qt9RuGl6Bh5tV23a4nBagZ9UY7pxgEsw68CaX6QPywl7C613UyZtlYRJwuEtfwodKpVVu1fjHgRPoVLIOYw5UsL00VuJansND",
-      "stripeMerchantId": "merchant.com.gritsync.app"
-    }
+      "stripeMerchantId": "merchant.com.gritsync.app",
+      "router": {},
+      "eas": {
+        "projectId": "c4aff42d-51b1-47c4-9b6c-38d31f9a160d"
+      }
+    },
+    "owner": "cantilaholdings"
   }
 }
