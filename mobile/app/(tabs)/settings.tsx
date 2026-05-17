@@ -13,7 +13,7 @@ import { useTheme, radius, spacing, palette } from '@/theme'
 import { biometric } from '@/lib/biometric'
 import { push } from '@/lib/push'
 import { openUrl } from '@/lib/browser'
-import { API_BASE_URL } from '@/lib/api'
+import { api, API_BASE_URL, errorMessage } from '@/lib/api'
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth()
@@ -61,6 +61,30 @@ export default function SettingsScreen() {
     } else {
       await push.unregister()
       setPushEnabled(false)
+    }
+  }
+
+  /**
+   * Hits POST /api/auth/test-push so the server fires an Expo push back to
+   * this device. Useful for end-to-end smoke-testing without manually
+   * crafting a notification through the Expo dashboard.
+   */
+  async function onTestPush() {
+    try {
+      const res = await api.post<{ ok: boolean; sent?: boolean; reason?: string }>('/auth/test-push', {})
+      if (res.data?.sent) {
+        Alert.alert(
+          'Test sent',
+          'Look out for a banner in a few seconds. If nothing appears, check notifications permission for GritSync in your phone Settings.',
+        )
+      } else {
+        Alert.alert(
+          'No push token yet',
+          res.data?.reason ?? 'Toggle on Push notifications first to register this device.',
+        )
+      }
+    } catch (e) {
+      Alert.alert('Test push failed', errorMessage(e, 'Try again in a moment.'))
     }
   }
 
@@ -178,6 +202,11 @@ export default function SettingsScreen() {
             description="Status updates, new messages, and payment receipts."
             value={pushEnabled}
             onValueChange={togglePush}
+          />
+          <LinkRow
+            icon="paper-plane-outline"
+            label="Send test notification"
+            onPress={onTestPush}
           />
           <LinkRow
             icon="settings-outline"

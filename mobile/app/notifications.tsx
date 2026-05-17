@@ -40,7 +40,7 @@ export default function NotificationsScreen() {
     void load()
   }, [load])
 
-  const unread = items.filter((n) => !n.is_read).length
+  const unread = items.filter((n) => !(n.read ?? n.is_read)).length
 
   const grouped = useMemo(() => groupByDate(items), [items])
 
@@ -53,10 +53,10 @@ export default function NotificationsScreen() {
    *   4. As a last resort, show the message body in an alert.
    */
   async function onItemPress(n: NotificationRow) {
-    if (!n.is_read) {
+    if (!(n.read ?? n.is_read)) {
       try {
         await notificationsAPI.markRead(n.id)
-        setItems((cur) => cur.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)))
+        setItems((cur) => cur.map((x) => (x.id === n.id ? { ...x, read: true, is_read: true } : x)))
       } catch {
         // optimistic ui — server failure is non-fatal
       }
@@ -78,7 +78,7 @@ export default function NotificationsScreen() {
     if (!user?.id || unread === 0) return
     // Optimistic — flip everything to read first, roll back on error.
     const prev = items
-    setItems((cur) => cur.map((x) => ({ ...x, is_read: true })))
+    setItems((cur) => cur.map((x) => ({ ...x, read: true, is_read: true })))
     try {
       await notificationsAPI.markAllRead(user.id)
     } catch (e) {
@@ -156,7 +156,7 @@ export default function NotificationsScreen() {
 
 function NotificationRowView({ row, onPress }: { row: NotificationRow; onPress: () => void }) {
   const { colors } = useTheme()
-  const unread = !row.is_read
+  const unread = !(row.read ?? row.is_read)
   const tone = iconToneFor(row.type)
   return (
     <Pressable

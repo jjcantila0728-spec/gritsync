@@ -44,14 +44,24 @@ export interface NotifyManyInput extends Omit<NotifyInput, 'userId'> {
   userIds: string[]
 }
 
-/** INSERT + push for a single user. */
+/** INSERT + push for a single user.
+ *
+ *  Column names match the live schema (see
+ *  scripts/migrations/2026-05-15_notifications_align_with_app.sql):
+ *    - `read` (renamed from is_read)
+ *    - `message` (renamed from body)
+ *    - `extra` jsonb (NOT `data`)
+ *    - optional `application_id` foreign-key column when the row relates to
+ *      a specific application — payments.ts / questions.ts set this so the
+ *      web header can deep-link from the notifications dropdown.            */
 export async function notifyUser(input: NotifyInput): Promise<{ notificationId: string | null }> {
   const insertRes = await query<{ id: string }>(
-    `INSERT INTO notifications (user_id, title, message, type, link, data, is_read, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, false, NOW())
+    `INSERT INTO notifications (user_id, application_id, title, message, type, link, extra, read, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, false, NOW())
      RETURNING id`,
     [
       input.userId,
+      (input.data as any)?.applicationId ?? (input.data as any)?.application_id ?? null,
       input.title,
       input.message,
       input.type ?? 'system',
@@ -87,16 +97,16 @@ export async function notifyUser(input: NotifyInput): Promise<{ notificationId: 
  *  `notifyMany` and the push fan-out is batched in chunks of 100. */
 export async function notifyMany(input: NotifyManyInput): Promise<void> {
   if (input.userIds.length === 0) return
+  const applicationId =
+    (input.data as any)?.applicationId ?? (input.data as any)?.application_id ?? null
 
-  // Insert one row per recipient. We do this in batches to avoid a giant
-  // INSERT — Postgres can handle thousands of rows in a single statement
-  // but bulk-inserting via UNNEST keeps things tidy.
   await query(
-    `INSERT INTO notifications (user_id, title, message, type, link, data, is_read, created_at)
-     SELECT u, $2, $3, $4, $5, $6::jsonb, false, NOW()
+    `INSERT INTO notifications (user_id, application_id, title, message, type, link, extra, read, created_at)
+     SELECT u, $2, $3, $4, $5, $6, $7::jsonb, false, NOW()
      FROM UNNEST($1::text[]) AS u`,
     [
       input.userIds,
+      applicationId,
       input.title,
       input.message,
       input.type ?? 'system',

@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { query } from '../db'
 import { optionalAuth, authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { grantNclexPremiumOnPayment } from './nclex'
+import { pushNotifyUser } from '../lib/push'
 
 const router = Router()
 
@@ -217,6 +218,19 @@ router.post('/:id/trigger-followup-tasks', authenticateToken, async (req: Authen
           ]
         )
         inserted++
+        // Fan out a mobile push to the staff member assigned this task. Fire
+        // and forget — push failures should never roll back a payment-triggered
+        // notification insert.
+        void pushNotifyUser(r.id, {
+          title: t.title,
+          body: t.message,
+          data: {
+            type: 'task',
+            applicationId: pay.application_id,
+            taskKey: t.key,
+            link,
+          },
+        })
       }
     }
 

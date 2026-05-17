@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { api, errorMessage, setUnauthorizedHandler } from '@/lib/api'
 import { storage, StorageKeys } from '@/lib/storage'
 import { biometric } from '@/lib/biometric'
+import { push } from '@/lib/push'
 import { User } from '@/lib/types'
 
 interface AuthState {
@@ -48,6 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.set(StorageKeys.user, JSON.stringify(u))
     await storage.set(StorageKeys.lastIdentifier, identifier.trim())
     setUser(u)
+    // Silently request push permission + register the token. Fire and forget:
+    // if the user denies the system prompt we don't block sign-in. Subsequent
+    // cold starts also re-register via the boot effect below to refresh the
+    // Expo token if it rotates.
+    void push.register().catch(() => null)
   }, [])
 
   const signOut = useCallback(async () => {

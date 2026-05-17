@@ -35,7 +35,7 @@ export default function HomeScreen() {
       ])
       setApps(rows)
       setUnreadMessages(mUnread)
-      setUnreadNotifs(notifs.filter((n) => !n.is_read).length)
+      setUnreadNotifs(notifs.filter((n) => !(n.read ?? n.is_read)).length)
     } catch {
       // surfaced by interceptor / refresh button
     } finally {

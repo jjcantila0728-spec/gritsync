@@ -73,15 +73,31 @@ export const messagesAPI = {
 export interface NotificationRow {
   id: string
   user_id: string
+  application_id?: string | null
   title?: string | null
   message?: string | null
+  /** Legacy alias kept for forward-compat with older rows that have `body`
+   *  instead of `message`. The migration in 2026-05-15 renamed body→message
+   *  but a few old rows may still surface this. */
   body?: string | null
   type?: string | null
+  /** The live column name in the DB is `read` (renamed from `is_read` by
+   *  scripts/migrations/2026-05-15_notifications_align_with_app.sql). We
+   *  keep `is_read` as an optional alias so older mobile builds still
+   *  parse the row, but writes use `read`. */
+  read?: boolean | null
   is_read?: boolean | null
   read_at?: string | null
   link?: string | null
   url?: string | null
+  extra?: Record<string, unknown> | null
   created_at?: string
+}
+
+/** Normalize is_read|read on the way out so consumers can ignore the rename. */
+function normalizeReadFlag(row: NotificationRow): NotificationRow {
+  if (row.read == null && row.is_read != null) return { ...row, read: row.is_read }
+  return row
 }
 
 export const notificationsAPI = {
@@ -93,19 +109,19 @@ export const notificationsAPI = {
         limit: String(limit),
       },
     })
-    return res.data?.data ?? []
+    return (res.data?.data ?? []).map(normalizeReadFlag)
   },
   async markRead(id: string): Promise<void> {
     await api.patch('/db/notifications', {
       _filters: { id },
-      is_read: true,
+      read: true,
       read_at: new Date().toISOString(),
     })
   },
   async markAllRead(userId: string): Promise<void> {
     await api.patch('/db/notifications', {
-      _filters: { user_id: userId, is_read: false },
-      is_read: true,
+      _filters: { user_id: userId, read: false },
+      read: true,
       read_at: new Date().toISOString(),
     })
   },

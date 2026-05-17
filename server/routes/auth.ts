@@ -6,6 +6,7 @@ import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, signSsoToken, verifySsoToken, AuthenticatedRequest } from '../middleware/auth'
 import { ensureReferralCode } from './referrals'
 import { sendEmail } from '../utils/email'
+import { pushNotifyUser } from '../lib/push'
 
 const router = Router()
 
@@ -637,6 +638,48 @@ router.post('/refresh', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/logout
+/**
+ * POST /api/auth/test-push — Fires a test push notification to the calling
+ * user's registered Expo push token. Used by the mobile Settings screen
+ * ("Send test notification") so the user can verify their device is
+ * receiving pushes end-to-end. Returns:
+ *   { ok: true,  sent: true,  tokenPreview }  → push queued at Expo
+ *   { ok: true,  sent: false, reason }        → no token registered
+ *   { ok: false, error }                      → server-side failure
+ */
+router.post('/test-push', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id
+    // Peek at the stored token without exposing it.
+    const r = await query<{ push_token: string | null }>(
+      `SELECT push_token FROM users WHERE id = $1 LIMIT 1`,
+      [userId],
+    )
+    const tok = r.rows[0]?.push_token
+    if (!tok) {
+      return res.json({
+        ok: true,
+        sent: false,
+        reason: 'No push token registered yet. Open the mobile app, sign in, and accept the notifications prompt.',
+      })
+    }
+    const ticket = await pushNotifyUser(userId, {
+      title: 'GritSync — Test notification',
+      body: "If you're seeing this, push is working end-to-end. 🎉",
+      data: { type: 'system', test: true },
+    })
+    res.json({
+      ok: true,
+      sent: !!ticket,
+      tokenPreview: tok.slice(0, 18) + '…' + tok.slice(-4),
+      ticket: ticket ? { status: ticket.status } : null,
+    })
+  } catch (err: any) {
+    console.error('[auth] test-push error', err)
+    res.status(500).json({ ok: false, error: err?.message || 'Test push failed' })
+  }
+})
+
 router.post('/logout', authenticateToken, async (_req: AuthenticatedRequest, res: Response) => {
   res.json({ message: 'Logged out successfully' })
 })
