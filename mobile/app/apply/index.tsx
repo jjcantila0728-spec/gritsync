@@ -22,6 +22,16 @@ import { useTheme, palette, radius, spacing } from '@/theme'
 import { api, errorMessage } from '@/lib/api'
 import { dbFirst, dbList } from '@/lib/db'
 import { storageAPI } from '@/lib/services'
+import {
+  convertFromDatabaseFormat,
+  convertToDatabaseFormat,
+  convertToMMYYYY,
+  convertMMYYYYToDatabase,
+  formatMMDDYYYY,
+  formatMMYYYY,
+  isValidMMDDYYYY,
+  isValidMMYYYY,
+} from '@/lib/dateFormatters'
 
 interface UserDetailsRow {
   user_id: string
@@ -32,6 +42,7 @@ interface UserDetailsRow {
   email?: string | null
   gender?: string | null
   marital_status?: string | null
+  single_full_name?: string | null
   date_of_birth?: string | null
   birth_place?: string | null
   house_number?: string | null
@@ -44,14 +55,29 @@ interface UserDetailsRow {
   elementary_city?: string | null
   elementary_province?: string | null
   elementary_country?: string | null
+  elementary_years_attended?: string | number | null
+  elementary_start_date?: string | null
+  elementary_end_date?: string | null
   high_school?: string | null
   high_school_city?: string | null
   high_school_province?: string | null
   high_school_country?: string | null
+  high_school_years_attended?: string | number | null
+  high_school_start_date?: string | null
+  high_school_end_date?: string | null
   nursing_school?: string | null
   nursing_school_city?: string | null
   nursing_school_province?: string | null
   nursing_school_country?: string | null
+  nursing_school_years_attended?: string | number | null
+  nursing_school_start_date?: string | null
+  nursing_school_end_date?: string | null
+}
+
+interface EmailAddressRow {
+  email_address: string | null
+  is_primary?: boolean | null
+  address_type?: string | null
 }
 
 interface UserDocRow {
@@ -66,6 +92,10 @@ interface FormState {
   first_name: string
   middle_name: string
   last_name: string
+  /** Maiden / single name — shown only when marital_status != 'Single'. */
+  single_full_name: string
+  mobile_number: string
+  email: string
   gender: string
   marital_status: string
   date_of_birth: string
@@ -82,16 +112,25 @@ interface FormState {
   elementary_city: string
   elementary_province: string
   elementary_country: string
+  elementary_years_attended: string
+  elementary_start_date: string
+  elementary_end_date: string
   // step 4 — high school
   high_school: string
   high_school_city: string
   high_school_province: string
   high_school_country: string
+  high_school_years_attended: string
+  high_school_start_date: string
+  high_school_end_date: string
   // step 5 — nursing
   nursing_school: string
   nursing_school_city: string
   nursing_school_province: string
   nursing_school_country: string
+  nursing_school_years_attended: string
+  nursing_school_start_date: string
+  nursing_school_end_date: string
   // step 6 — documents (file_paths)
   picture_path: string
   diploma_path: string
@@ -123,52 +162,104 @@ export default function ApplyWizard() {
   const [form, setForm] = useState<FormState>(initialForm)
   const [docs, setDocs] = useState<UserDocRow[]>([])
   const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null)
+  /** True once we pre-filled at least one field from saved user_details —
+   *  drives the "Auto-filled from saved details" banner shown to the user. */
+  const [autoFilled, setAutoFilled] = useState(false)
 
   const load = useCallback(async () => {
     if (!user?.id) return
     try {
-      const [details, mine] = await Promise.all([
+      // Three parallel fetches — same shape as the web's loadSavedDetails():
+      //   1. user_details      → the canonical profile row
+      //   2. user_documents    → uploaded pictures/diploma/passport
+      //   3. email_addresses   → user's GritSync business email (when issued)
+      const [details, mine, emailRows] = await Promise.all([
         dbFirst<UserDetailsRow>('user_details', { filter: { user_id: user.id } }),
         dbList<UserDocRow>('user_documents', {
           filter: { user_id: user.id },
           order: 'created_at.desc',
           limit: 200,
         }),
+        dbList<EmailAddressRow>('email_addresses', {
+          filter: { user_id: user.id, address_type: 'client' },
+          limit: 5,
+        }).catch(() => [] as EmailAddressRow[]),
       ])
       setDocs(mine)
+
+      const primaryEmail =
+        emailRows.find((r) => r.is_primary)?.email_address ??
+        emailRows[0]?.email_address ??
+        user.gritsync_email ??
+        user.email ??
+        ''
+
+      const hasSavedData = Boolean(
+        details &&
+          (details.gender ||
+            details.date_of_birth ||
+            details.elementary_school ||
+            details.high_school ||
+            details.nursing_school ||
+            details.city),
+      )
+
       setForm((cur) => ({
         ...cur,
-        first_name: details?.first_name ?? user.first_name ?? '',
+        // Personal — names always pull from users table first (source of truth),
+        // fall back to user_details for the optional middle_name.
+        first_name: user.first_name ?? details?.first_name ?? '',
         middle_name: details?.middle_name ?? user.middle_name ?? '',
-        last_name: details?.last_name ?? user.last_name ?? '',
+        last_name: user.last_name ?? details?.last_name ?? '',
+        single_full_name: details?.single_full_name ?? '',
+        mobile_number: details?.mobile_number ?? user.mobile ?? '',
+        email: primaryEmail,
         gender: details?.gender ?? '',
         marital_status: details?.marital_status ?? '',
-        date_of_birth: details?.date_of_birth ?? '',
+        date_of_birth: convertFromDatabaseFormat(details?.date_of_birth ?? ''),
         birth_place: details?.birth_place ?? '',
+        // Address
         house_number: details?.house_number ?? '',
         street_name: details?.street_name ?? '',
         city: details?.city ?? '',
         province: details?.province ?? '',
         country: details?.country ?? '',
         zipcode: details?.zipcode ?? '',
+        // Elementary
         elementary_school: details?.elementary_school ?? '',
         elementary_city: details?.elementary_city ?? '',
         elementary_province: details?.elementary_province ?? '',
         elementary_country: details?.elementary_country ?? '',
+        elementary_years_attended:
+          details?.elementary_years_attended != null ? String(details.elementary_years_attended) : '',
+        elementary_start_date: convertToMMYYYY(details?.elementary_start_date ?? ''),
+        elementary_end_date: convertToMMYYYY(details?.elementary_end_date ?? ''),
+        // High School
         high_school: details?.high_school ?? '',
         high_school_city: details?.high_school_city ?? '',
         high_school_province: details?.high_school_province ?? '',
         high_school_country: details?.high_school_country ?? '',
+        high_school_years_attended:
+          details?.high_school_years_attended != null ? String(details.high_school_years_attended) : '',
+        high_school_start_date: convertToMMYYYY(details?.high_school_start_date ?? ''),
+        high_school_end_date: convertToMMYYYY(details?.high_school_end_date ?? ''),
+        // Nursing School
         nursing_school: details?.nursing_school ?? '',
         nursing_school_city: details?.nursing_school_city ?? '',
         nursing_school_province: details?.nursing_school_province ?? '',
         nursing_school_country: details?.nursing_school_country ?? '',
+        nursing_school_years_attended:
+          details?.nursing_school_years_attended != null ? String(details.nursing_school_years_attended) : '',
+        nursing_school_start_date: convertToMMYYYY(details?.nursing_school_start_date ?? ''),
+        nursing_school_end_date: convertToMMYYYY(details?.nursing_school_end_date ?? ''),
+        // Documents
         picture_path: findExisting(mine, 'picture'),
         diploma_path: findExisting(mine, 'diploma'),
         passport_path: findExisting(mine, 'passport'),
       }))
+      setAutoFilled(hasSavedData)
     } catch {
-      // ignore
+      // ignore — empty form is the worst case
     } finally {
       setLoading(false)
     }
@@ -193,7 +284,9 @@ export default function ApplyWizard() {
         if (!form.first_name.trim() || !form.last_name.trim()) return 'Enter your first and last name.'
         if (!form.gender) return 'Select a gender.'
         if (!form.marital_status) return 'Select your marital status.'
-        if (!form.date_of_birth.trim()) return 'Enter your date of birth (MM/DD/YYYY).'
+        if (!form.date_of_birth.trim() || !isValidMMDDYYYY(form.date_of_birth)) {
+          return 'Enter your date of birth as MM/DD/YYYY.'
+        }
         if (!form.birth_place.trim()) return 'Enter your place of birth.'
         return null
       case 1:
@@ -201,12 +294,30 @@ export default function ApplyWizard() {
         return null
       case 2:
         if (!form.elementary_school.trim()) return 'Enter your elementary school.'
+        if (form.elementary_start_date && !isValidMMYYYY(form.elementary_start_date)) {
+          return 'Elementary start date must be MM/YYYY.'
+        }
+        if (form.elementary_end_date && !isValidMMYYYY(form.elementary_end_date)) {
+          return 'Elementary end date must be MM/YYYY.'
+        }
         return null
       case 3:
         if (!form.high_school.trim()) return 'Enter your high school.'
+        if (form.high_school_start_date && !isValidMMYYYY(form.high_school_start_date)) {
+          return 'High school start date must be MM/YYYY.'
+        }
+        if (form.high_school_end_date && !isValidMMYYYY(form.high_school_end_date)) {
+          return 'High school end date must be MM/YYYY.'
+        }
         return null
       case 4:
         if (!form.nursing_school.trim()) return 'Enter your nursing school.'
+        if (form.nursing_school_start_date && !isValidMMYYYY(form.nursing_school_start_date)) {
+          return 'Nursing school start date must be MM/YYYY.'
+        }
+        if (form.nursing_school_end_date && !isValidMMYYYY(form.nursing_school_end_date)) {
+          return 'Nursing school end date must be MM/YYYY.'
+        }
         return null
       case 5:
         if (!form.picture_path) return 'Upload your picture (2x2 or selfie).'
@@ -287,35 +398,56 @@ export default function ApplyWizard() {
     if (!user?.id) return
     setSubmitting(true)
     try {
-      // 1. upsert user_details
+      // 1. upsert user_details. Dates round-trip MM/DD/YYYY ↔ YYYY-MM-DD for
+      //    Postgres DATE columns; school start/end use MM/YYYY ↔ YYYY-MM-01.
+      //    Empty strings become null so existing rows aren't overwritten with
+      //    blanks when a returning user submits a follow-up application.
+      const yearsToInt = (s: string): number | null => {
+        const n = parseInt(s, 10)
+        return isFinite(n) && n > 0 ? n : null
+      }
+      const orNull = (s: string) => (s && s.trim() ? s.trim() : null)
+
       await api.post('/db/user_details', {
         _onConflict: 'user_id',
         user_id: user.id,
         first_name: form.first_name,
-        middle_name: form.middle_name,
+        middle_name: orNull(form.middle_name),
         last_name: form.last_name,
+        single_full_name: orNull(form.single_full_name),
+        mobile_number: orNull(form.mobile_number),
+        email: orNull(form.email),
         gender: form.gender,
         marital_status: form.marital_status,
-        date_of_birth: form.date_of_birth,
-        birth_place: form.birth_place,
-        house_number: form.house_number,
-        street_name: form.street_name,
-        city: form.city,
-        province: form.province,
-        country: form.country,
-        zipcode: form.zipcode,
-        elementary_school: form.elementary_school,
-        elementary_city: form.elementary_city,
-        elementary_province: form.elementary_province,
-        elementary_country: form.elementary_country,
-        high_school: form.high_school,
-        high_school_city: form.high_school_city,
-        high_school_province: form.high_school_province,
-        high_school_country: form.high_school_country,
-        nursing_school: form.nursing_school,
-        nursing_school_city: form.nursing_school_city,
-        nursing_school_province: form.nursing_school_province,
-        nursing_school_country: form.nursing_school_country,
+        date_of_birth: convertToDatabaseFormat(form.date_of_birth) || null,
+        birth_place: orNull(form.birth_place),
+        house_number: orNull(form.house_number),
+        street_name: orNull(form.street_name),
+        city: orNull(form.city),
+        province: orNull(form.province),
+        country: orNull(form.country),
+        zipcode: orNull(form.zipcode),
+        elementary_school: orNull(form.elementary_school),
+        elementary_city: orNull(form.elementary_city),
+        elementary_province: orNull(form.elementary_province),
+        elementary_country: orNull(form.elementary_country),
+        elementary_years_attended: yearsToInt(form.elementary_years_attended),
+        elementary_start_date: convertMMYYYYToDatabase(form.elementary_start_date) || null,
+        elementary_end_date: convertMMYYYYToDatabase(form.elementary_end_date) || null,
+        high_school: orNull(form.high_school),
+        high_school_city: orNull(form.high_school_city),
+        high_school_province: orNull(form.high_school_province),
+        high_school_country: orNull(form.high_school_country),
+        high_school_years_attended: yearsToInt(form.high_school_years_attended),
+        high_school_start_date: convertMMYYYYToDatabase(form.high_school_start_date) || null,
+        high_school_end_date: convertMMYYYYToDatabase(form.high_school_end_date) || null,
+        nursing_school: orNull(form.nursing_school),
+        nursing_school_city: orNull(form.nursing_school_city),
+        nursing_school_province: orNull(form.nursing_school_province),
+        nursing_school_country: orNull(form.nursing_school_country),
+        nursing_school_years_attended: yearsToInt(form.nursing_school_years_attended),
+        nursing_school_start_date: convertMMYYYYToDatabase(form.nursing_school_start_date) || null,
+        nursing_school_end_date: convertMMYYYYToDatabase(form.nursing_school_end_date) || null,
       })
 
       // 2. create application
@@ -363,6 +495,15 @@ export default function ApplyWizard() {
           <Stepper current={step} total={STEPS.length} label={STEPS[step]} />
         </View>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
+          {autoFilled ? (
+            <View style={[styles.autoFilledBanner, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
+              <Ionicons name="checkmark-circle" size={18} color="#15803D" />
+              <Text style={{ flex: 1, color: '#15803D', fontWeight: '700', fontSize: 13 }}>
+                Auto-filled from your saved profile. Review and tweak anything below.
+              </Text>
+            </View>
+          ) : null}
+
           {step === 0 ? (
             <Step
               title="Personal information"
@@ -373,6 +514,23 @@ export default function ApplyWizard() {
                 <FieldInput label="Middle name" value={form.middle_name} onChange={(v) => set('middle_name', v)} flex />
               </Row>
               <FieldInput label="Last name" value={form.last_name} onChange={(v) => set('last_name', v)} />
+              <Row>
+                <FieldInput
+                  label="Mobile"
+                  value={form.mobile_number}
+                  onChange={(v) => set('mobile_number', v)}
+                  keyboardType="phone-pad"
+                  flex
+                />
+                <FieldInput
+                  label="Email"
+                  value={form.email}
+                  onChange={(v) => set('email', v)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  flex
+                />
+              </Row>
               <FieldSelect
                 label="Gender"
                 value={form.gender}
@@ -385,7 +543,20 @@ export default function ApplyWizard() {
                 options={['Single', 'Married', 'Divorced', 'Widowed']}
                 onChange={(v) => set('marital_status', v)}
               />
-              <FieldInput label="Date of birth (MM/DD/YYYY)" value={form.date_of_birth} onChange={(v) => set('date_of_birth', v)} />
+              {form.marital_status && form.marital_status !== 'Single' ? (
+                <FieldInput
+                  label="Maiden / single name (for retaker matching)"
+                  value={form.single_full_name}
+                  onChange={(v) => set('single_full_name', v)}
+                />
+              ) : null}
+              <FieldInput
+                label="Date of birth (MM/DD/YYYY)"
+                value={form.date_of_birth}
+                onChange={(v) => set('date_of_birth', formatMMDDYYYY(v))}
+                keyboardType="number-pad"
+                placeholder="MM/DD/YYYY"
+              />
               <FieldInput label="Place of birth" value={form.birth_place} onChange={(v) => set('birth_place', v)} />
             </Step>
           ) : null}
@@ -415,6 +586,34 @@ export default function ApplyWizard() {
                 <FieldInput label="Province" value={form.elementary_province} onChange={(v) => set('elementary_province', v)} flex />
               </Row>
               <FieldInput label="Country" value={form.elementary_country} onChange={(v) => set('elementary_country', v)} />
+              <Row>
+                <FieldInput
+                  label="Years attended"
+                  value={form.elementary_years_attended}
+                  onChange={(v) => set('elementary_years_attended', v.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 6"
+                  flex
+                />
+              </Row>
+              <Row>
+                <FieldInput
+                  label="Started (MM/YYYY)"
+                  value={form.elementary_start_date}
+                  onChange={(v) => set('elementary_start_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+                <FieldInput
+                  label="Finished (MM/YYYY)"
+                  value={form.elementary_end_date}
+                  onChange={(v) => set('elementary_end_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+              </Row>
             </Step>
           ) : null}
 
@@ -426,6 +625,34 @@ export default function ApplyWizard() {
                 <FieldInput label="Province" value={form.high_school_province} onChange={(v) => set('high_school_province', v)} flex />
               </Row>
               <FieldInput label="Country" value={form.high_school_country} onChange={(v) => set('high_school_country', v)} />
+              <Row>
+                <FieldInput
+                  label="Years attended"
+                  value={form.high_school_years_attended}
+                  onChange={(v) => set('high_school_years_attended', v.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 4"
+                  flex
+                />
+              </Row>
+              <Row>
+                <FieldInput
+                  label="Started (MM/YYYY)"
+                  value={form.high_school_start_date}
+                  onChange={(v) => set('high_school_start_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+                <FieldInput
+                  label="Finished (MM/YYYY)"
+                  value={form.high_school_end_date}
+                  onChange={(v) => set('high_school_end_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+              </Row>
             </Step>
           ) : null}
 
@@ -437,6 +664,34 @@ export default function ApplyWizard() {
                 <FieldInput label="Province" value={form.nursing_school_province} onChange={(v) => set('nursing_school_province', v)} flex />
               </Row>
               <FieldInput label="Country" value={form.nursing_school_country} onChange={(v) => set('nursing_school_country', v)} />
+              <Row>
+                <FieldInput
+                  label="Years attended"
+                  value={form.nursing_school_years_attended}
+                  onChange={(v) => set('nursing_school_years_attended', v.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 4"
+                  flex
+                />
+              </Row>
+              <Row>
+                <FieldInput
+                  label="Started (MM/YYYY)"
+                  value={form.nursing_school_start_date}
+                  onChange={(v) => set('nursing_school_start_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+                <FieldInput
+                  label="Finished (MM/YYYY)"
+                  value={form.nursing_school_end_date}
+                  onChange={(v) => set('nursing_school_end_date', formatMMYYYY(v))}
+                  keyboardType="number-pad"
+                  placeholder="MM/YYYY"
+                  flex
+                />
+              </Row>
             </Step>
           ) : null}
 
@@ -542,6 +797,9 @@ const initialForm: FormState = {
   first_name: '',
   middle_name: '',
   last_name: '',
+  single_full_name: '',
+  mobile_number: '',
+  email: '',
   gender: '',
   marital_status: '',
   date_of_birth: '',
@@ -556,14 +814,23 @@ const initialForm: FormState = {
   elementary_city: '',
   elementary_province: '',
   elementary_country: '',
+  elementary_years_attended: '',
+  elementary_start_date: '',
+  elementary_end_date: '',
   high_school: '',
   high_school_city: '',
   high_school_province: '',
   high_school_country: '',
+  high_school_years_attended: '',
+  high_school_start_date: '',
+  high_school_end_date: '',
   nursing_school: '',
   nursing_school_city: '',
   nursing_school_province: '',
   nursing_school_country: '',
+  nursing_school_years_attended: '',
+  nursing_school_start_date: '',
+  nursing_school_end_date: '',
   picture_path: '',
   diploma_path: '',
   passport_path: '',
@@ -618,6 +885,7 @@ function FieldInput({
   placeholder,
   flex,
   autoCapitalize,
+  keyboardType,
 }: {
   label: string
   value: string
@@ -625,6 +893,7 @@ function FieldInput({
   placeholder?: string
   flex?: boolean
   autoCapitalize?: 'none' | 'words' | 'sentences'
+  keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad' | 'numeric'
 }) {
   const { colors } = useTheme()
   return (
@@ -636,6 +905,7 @@ function FieldInput({
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         autoCapitalize={autoCapitalize ?? 'sentences'}
+        keyboardType={keyboardType ?? 'default'}
         style={[
           styles.input,
           { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface },
@@ -772,6 +1042,15 @@ function PaymentOption({
 }
 
 const styles = StyleSheet.create({
+  autoFilledBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
   input: {
     borderWidth: 1,
     borderRadius: radius.md,
