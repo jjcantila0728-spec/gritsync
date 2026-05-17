@@ -149,7 +149,15 @@ async function uploadToSupabase(buf) {
         emit('ERRORED no-artifact-url')
         process.exit(1)
       }
-      emit(`APK_URL ${url}`)
+      emit(`ARTIFACT_URL ${url}`)
+      // AABs go straight to the Play Store — there's nothing useful on the
+      // public website pointing at an AAB. Skip the Supabase mirror.
+      const isAab = /\.aab(\?|$)/i.test(url)
+      if (isAab) {
+        emit('SKIP_MIRROR aab — destined for Play Store')
+        emit('DONE')
+        process.exit(0)
+      }
       try {
         const { buf } = await downloadToTmp(url)
         const publicUrl = await uploadToSupabase(buf)
