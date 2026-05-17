@@ -118,11 +118,27 @@ function sameHost(a: string, b: string): boolean {
 }
 
 /**
- * Open a private GritSync storage file by its `file_path`. The storage URL
- * already carries an auth token in the query string, so SSO isn't needed —
- * skip it.
+ * Open a private user document by its `file_path` from `user_documents`.
+ *
+ * Tries Supabase Storage first (where web + new-mobile uploads land), then
+ * falls back to the legacy `/api/storage/file` endpoint backed by the
+ * Postgres file_storage table. The fallback exists so documents uploaded
+ * by older mobile builds (before the Supabase migration) still open.
  */
 export async function openSignedDoc(filePath: string): Promise<void> {
+  // 1. Try a Supabase signed URL via /api/storage/document-url. This is
+  //    where web's getSignedFileUrl points and where new mobile uploads land.
+  try {
+    const { storageAPI } = await import('./services')
+    const signed = await storageAPI.signedDocumentUrl(filePath)
+    if (signed) {
+      await openUrl(signed, { noSso: true })
+      return
+    }
+  } catch {
+    // fall through to legacy
+  }
+  // 2. Legacy fallback — Postgres file_storage table.
   const token = await storage.get(StorageKeys.accessToken)
   const url = `${API_BASE_URL}/api/storage/file?path=${encodeURIComponent(filePath)}&t=${encodeURIComponent(token ?? '')}`
   await openUrl(url, { noSso: true })

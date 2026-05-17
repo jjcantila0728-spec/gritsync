@@ -170,40 +170,93 @@ export const emailsAPI = {
 // ---------------------------------------------------------------------------
 
 export const storageAPI = {
+  /**
+   * Generic upload → lands in the server's Postgres `file_storage` table.
+   * Use this for app-internal blobs (payment screenshots, attachments).
+   * For user-visible documents that the web app's /client/documents page
+   * should see, call `uploadDocument` instead — that one routes through
+   * Supabase Storage so web + mobile share a single source of truth.
+   */
   async upload(opts: {
     uri: string
     name: string
     mimeType?: string | null
     path: string
   }): Promise<{ path: string }> {
-    const form = new FormData()
-    // React Native FormData accepts { uri, name, type } objects directly
-    // and translates them to a multipart part on the network.
-    form.append('file', {
-      uri: opts.uri,
-      name: opts.name,
-      type: opts.mimeType || 'application/octet-stream',
-    } as unknown as Blob)
-    form.append('path', opts.path)
-
-    const token = await storage.get(StorageKeys.accessToken)
-    const res = await fetch(`${API_BASE_URL}/api/storage/upload`, {
-      method: 'POST',
-      body: form,
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(text || `Upload failed (${res.status})`)
-    }
-    return (await res.json()) as { path: string }
+    return doMultipartUpload('/api/storage/upload', opts)
   },
 
+  /**
+   * Document upload that lands in Supabase Storage `documents` bucket — the
+   * same bucket the web app reads from. Path is normalized server-side to
+   * `<userId>/<filename>` regardless of what we send, so a file uploaded
+   * here shows up on /client/documents in the browser immediately (and
+   * vice versa).
+   */
+  async uploadDocument(opts: {
+    uri: string
+    name: string
+    mimeType?: string | null
+    /** Final filename within the user's storage folder. Convention used by
+     *  the web app: `<doc_type>.<ext>` (e.g. `passport.pdf`) so re-uploads
+     *  overwrite cleanly via Supabase's `upsert: true`. */
+    path: string
+  }): Promise<{ path: string; bucket: string }> {
+    return doMultipartUpload('/api/storage/upload-document', opts)
+  },
+
+  /** Legacy file_storage signed URL (token in query string). */
   signedUrl(path: string): string {
     return `${API_BASE_URL}/api/storage/signed-url?path=${encodeURIComponent(path)}`
   },
+
+  /**
+   * Ask the server for a short-lived Supabase signed URL for a document.
+   * Returns null if the file isn't found (e.g. uploaded long ago and pruned).
+   */
+  async signedDocumentUrl(path: string, expiresIn = 3600): Promise<string | null> {
+    try {
+      const res = await api.get<{ url?: string }>('/storage/document-url', {
+        params: { path, expiresIn },
+      })
+      return res.data?.url ?? null
+    } catch {
+      return null
+    }
+  },
+
+  async deleteDocument(path: string): Promise<void> {
+    await api.delete('/storage/document', { data: { path } })
+  },
+}
+
+async function doMultipartUpload(
+  endpoint: string,
+  opts: { uri: string; name: string; mimeType?: string | null; path: string },
+): Promise<any> {
+  const form = new FormData()
+  // React Native FormData accepts { uri, name, type } objects directly and
+  // translates them to a multipart part on the network.
+  form.append('file', {
+    uri: opts.uri,
+    name: opts.name,
+    type: opts.mimeType || 'application/octet-stream',
+  } as unknown as Blob)
+  form.append('path', opts.path)
+
+  const token = await storage.get(StorageKeys.accessToken)
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    body: form,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `Upload failed (${res.status})`)
+  }
+  return await res.json()
 }
 
 // ---------------------------------------------------------------------------

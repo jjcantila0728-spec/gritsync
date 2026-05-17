@@ -356,19 +356,23 @@ export default function ApplyWizard() {
       const file = await pickFile({ imagesOnly: documentType === 'picture' })
       if (!file) return
       setUploadingDocKey(documentType)
-      const safeName = (file.name || `${documentType}.bin`).replace(/[^a-z0-9._-]+/gi, '_')
-      const path = `${user.id}/${documentType}/${Date.now()}_${safeName}`
-      const uploaded = await storageAPI.upload({
+      // Use the web's canonical "<doc_type>.<ext>" filename so the file
+      // round-trips through Supabase Storage and shows up on the web app's
+      // /client/documents page (and vice versa). Server normalizes the
+      // final path to `<userId>/<filename>` regardless.
+      const ext = extOf(file.name) || (documentType === 'picture' ? 'jpg' : 'pdf')
+      const filename = `${documentType}.${ext}`
+      const uploaded = await storageAPI.uploadDocument({
         uri: file.uri,
-        name: file.name || safeName,
+        name: filename,
         mimeType: file.mimeType,
-        path,
+        path: filename,
       })
       await api.post('/db/user_documents', {
         user_id: user.id,
         document_type: documentType,
-        filename: file.name || safeName,
-        file_name: file.name || safeName,
+        filename: file.name || filename,
+        file_name: file.name || filename,
         file_path: uploaded.path,
         file_size: file.size ?? null,
       })
@@ -836,6 +840,13 @@ const initialForm: FormState = {
   passport_path: '',
   signature: '',
   payment_type: 'full',
+}
+
+function extOf(name?: string | null): string {
+  if (!name) return ''
+  const last = name.split('.').pop()
+  if (!last || last === name) return ''
+  return last.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function findExisting(rows: UserDocRow[], type: string): string {

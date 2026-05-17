@@ -139,21 +139,28 @@ export default function DocsScreen() {
       if (!file) return
 
       setUploadingType(docType)
-      const safeName = (file.name || `${docType}.bin`).replace(/[^a-z0-9._-]+/gi, '_')
-      const storagePath = `${user.id}/${docType}/${Date.now()}_${safeName}`
+      // Pick a stable filename so re-uploads overwrite via Supabase upsert —
+      // matches the web's convention so files round-trip both directions.
+      // For the catch-all "additional" slot we keep a timestamp so a user
+      // can upload multiple ad-hoc files without clobbering each other.
+      const ext = extOf(file.name) || extOf(docType) || 'bin'
+      const filename =
+        docType === 'additional'
+          ? `additional_${Date.now()}.${ext}`
+          : `${docType}.${ext}`
 
-      const uploaded = await storageAPI.upload({
+      const uploaded = await storageAPI.uploadDocument({
         uri: file.uri,
-        name: file.name || safeName,
+        name: filename,
         mimeType: file.mimeType,
-        path: storagePath,
+        path: filename,
       })
 
       await api.post('/db/user_documents', {
         user_id: user.id,
         document_type: docType,
-        filename: file.name || safeName,
-        file_name: file.name || safeName,
+        filename: file.name || filename,
+        file_name: file.name || filename,
         file_path: uploaded.path,
         file_size: file.size ?? null,
       })
@@ -532,6 +539,13 @@ function UploadedRow({ doc, isLast }: { doc: DocumentRow; isLast: boolean }) {
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
   )
+}
+
+function extOf(name?: string | null): string {
+  if (!name) return ''
+  const last = name.split('.').pop()
+  if (!last || last === name) return ''
+  return last.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function humanType(t?: string | null): string {

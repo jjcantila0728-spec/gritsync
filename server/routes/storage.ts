@@ -3,6 +3,15 @@ import multer from 'multer'
 import jwt from 'jsonwebtoken'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import pool from '../db'
+import { supabaseAdmin } from '../lib/supabase'
+
+/**
+ * Name of the Supabase Storage bucket that holds user documents (2x2,
+ * diploma, passport, etc.). The web app at src/lib/storage-urls.ts +
+ * src/lib/api-service.ts both target this bucket, so keeping these in
+ * sync makes web + mobile uploads visible to each other.
+ */
+const DOCUMENTS_BUCKET = 'documents'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
@@ -115,6 +124,120 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req: Aut
   } catch (error: any) {
     console.error('Upload error:', error)
     res.status(500).json({ error: error.message || 'Upload failed' })
+  }
+})
+
+/**
+ * Document-specific upload that lands in the SAME Supabase Storage bucket
+ * the web app reads from, so files uploaded via mobile show up on
+ * /client/documents and vice versa.
+ *
+ * Why a separate route from /upload? The legacy /upload writes to the
+ * Postgres `file_storage` table (which the web app's documents page
+ * never reads — it talks directly to Supabase). Routing user_documents
+ * through Supabase Storage keeps a single source of truth without
+ * breaking other callers of /upload (NCLEXCheckout payment screenshots,
+ * etc).
+ *
+ * Path convention enforced server-side: `<userId>/<filename>`. The
+ * client picks the filename (typically `${docType}.${ext}`), and we
+ * scope every upload to the authenticated user's directory regardless
+ * of what they pass — so a malicious client can't write into someone
+ * else's folder.
+ */
+router.post('/upload-document', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' })
+    const userId = req.user!.id
+
+    // The caller passes either a relative filename (`passport.pdf`) or a
+    // full path that may or may not be prefixed with their own userId.
+    // Normalize so the final key is always `<userId>/<filename>`.
+    const rawPath = String(req.body.path ?? req.file.originalname ?? 'file').trim()
+    const filename = sanitizeKey(rawPath).split('/').filter(Boolean).pop() ?? `file_${Date.now()}`
+    const key = `${userId}/${filename}`
+
+    const contentType = (req.file.mimetype || '').trim() || getMimeType(filename)
+
+    const { error } = await supabaseAdmin.storage
+      .from(DOCUMENTS_BUCKET)
+      .upload(key, req.file.buffer, {
+        contentType,
+        upsert: true,
+        cacheControl: '3600',
+      })
+
+    if (error) {
+      console.error('Supabase upload error:', error)
+      return res.status(500).json({ error: error.message || 'Upload to Supabase failed' })
+    }
+
+    res.json({ path: key, bucket: DOCUMENTS_BUCKET })
+  } catch (error: any) {
+    console.error('upload-document error:', error)
+    res.status(500).json({ error: error.message || 'Upload failed' })
+  }
+})
+
+/**
+ * Generate a short-lived Supabase signed URL for a document. Mobile uses
+ * this to open uploaded files in the in-app browser — matches what
+ * src/lib/storage-urls.ts → getSignedFileUrl() returns on web.
+ */
+router.get('/document-url', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id
+    const raw = (req.query.path as string) || ''
+    if (!raw) return res.status(400).json({ error: 'path required' })
+
+    const key = sanitizeKey(decodeURIComponent(raw))
+    // Block path traversal — caller can only request files in their own folder.
+    // Admin role is allowed to peek at anyone's path (for support flows).
+    if (req.user!.role !== 'admin' && !key.startsWith(`${userId}/`)) {
+      return res.status(403).json({ error: 'Not allowed' })
+    }
+    const expiresIn = Math.min(Number(req.query.expiresIn) || 3600, 24 * 3600)
+
+    const { data, error } = await supabaseAdmin.storage
+      .from(DOCUMENTS_BUCKET)
+      .createSignedUrl(key, expiresIn)
+
+    if (error || !data?.signedUrl) {
+      return res.status(404).json({ error: error?.message || 'File not found' })
+    }
+    res.json({ url: data.signedUrl, expiresIn })
+  } catch (error: any) {
+    console.error('document-url error:', error)
+    res.status(500).json({ error: error.message || 'Failed to sign URL' })
+  }
+})
+
+/**
+ * Delete a user document from Supabase Storage. Same path-scope check as
+ * /document-url so users can only delete their own files.
+ */
+router.delete('/document', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id
+    const raw = (req.body?.path as string) || ''
+    if (!raw) return res.status(400).json({ error: 'path required' })
+
+    const key = sanitizeKey(raw)
+    if (req.user!.role !== 'admin' && !key.startsWith(`${userId}/`)) {
+      return res.status(403).json({ error: 'Not allowed' })
+    }
+
+    const { error } = await supabaseAdmin.storage
+      .from(DOCUMENTS_BUCKET)
+      .remove([key])
+    if (error) {
+      console.error('document delete error:', error)
+      return res.status(500).json({ error: error.message })
+    }
+    res.json({ deleted: key })
+  } catch (error: any) {
+    console.error('delete document error:', error)
+    res.status(500).json({ error: error.message || 'Delete failed' })
   }
 })
 
