@@ -29,10 +29,15 @@ const MOBILE_APP_LINKS = {
   testFlight: '', // 'https://testflight.apple.com/join/xxxxxx'
   // Production Play Store URL once Google approves the listing.
   playStore: '', // 'https://play.google.com/store/apps/details?id=com.gritsync.app'
-  // Direct APK download — hosted on Supabase Storage's public `downloads`
-  // bucket, refreshed each time `scripts/upload-apk-to-supabase.cjs` runs.
-  // The URL is stable across builds; the file behind it updates in-place.
-  apk: 'https://jfgvjbawwvsviiyatnqn.supabase.co/storage/v1/object/public/downloads/gritsync.apk',
+  // Direct APK download. Hosted on EAS artifact CDN (~30-day retention on
+  // free tier) since the project's Supabase plan caps per-object uploads
+  // below the APK size. To swap in a permanent home later:
+  //   • Upgrade Supabase Pro and re-run `scripts/upload-apk-to-supabase.cjs`
+  //     against this URL, then paste the supabase.co URL back in.
+  //   • OR publish a GitHub Release with the APK and link that URL here.
+  // The EAS link is regenerated on every `eas build --profile preview` so
+  // refresh both this constant and the website deploy when you re-build.
+  apk: 'https://expo.dev/artifacts/eas/6gTq2s1SPcXLJxidaAmBsL.apk',
   // Internal preview track (Play Internal) — fallback while review pending.
   playInternal: '', // 'https://play.google.com/apps/internaltest/xxxxxx'
 } as const
