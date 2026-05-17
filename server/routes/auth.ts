@@ -734,7 +734,7 @@ router.post('/sso/exchange', async (req: Request, res: Response) => {
 // PUT /api/auth/update
 router.put('/update', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { first_name, last_name, middle_name, mobile, email, password, avatar_path } = req.body
+    const { first_name, last_name, middle_name, mobile, email, password, avatar_path, push_token, push_platform } = req.body
     const userId = req.user!.id
 
     const updates: string[] = []
@@ -751,6 +751,20 @@ router.put('/update', authenticateToken, async (req: AuthenticatedRequest, res: 
       const hash = await bcrypt.hash(password, 12)
       updates.push(`password_hash = $${idx++}`)
       values.push(hash)
+    }
+    // Mobile-app push notification token. `null` clears it (e.g. user opted out).
+    if (push_token !== undefined) {
+      updates.push(`push_token = $${idx++}`)
+      values.push(push_token === null ? null : String(push_token).slice(0, 256))
+    }
+    if (push_platform !== undefined) {
+      // ios | android | web — anything else gets coerced to null.
+      const allowed = ['ios', 'android', 'web']
+      const val = typeof push_platform === 'string' && allowed.includes(push_platform.toLowerCase())
+        ? push_platform.toLowerCase()
+        : null
+      updates.push(`push_platform = $${idx++}`)
+      values.push(val)
     }
 
     if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' })

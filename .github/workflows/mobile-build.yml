@@ -1,0 +1,115 @@
+name: Mobile build
+
+# Triggered manually OR on push to tags like v1.0.0 / v1.0.0-beta.
+# Builds the GritSync mobile app on EAS and uploads the resulting APK + IPA
+# as workflow artifacts. The APK URL from EAS is also commented onto the
+# release PR (if running on a PR) so QA can install immediately.
+#
+# Required GitHub secrets:
+#   EXPO_TOKEN        — created at https://expo.dev/accounts/[org]/settings/access-tokens
+#
+# Optional:
+#   STRIPE_PUBLISHABLE_KEY — overrides app.json for the build (otherwise the
+#                           value committed to app.json is used)
+#
+# Manual run:
+#   GitHub → Actions → Mobile build → Run workflow → pick profile
+#   (preview = APK + ad-hoc IPA, production = AAB + IPA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - production
+      platform:
+        description: Platform
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - android
+          - ios
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@latest
+
+      - name: Install mobile deps
+        working-directory: mobile
+        run: npm install --legacy-peer-deps
+
+      - name: Type-check
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Resolve build profile
+        id: profile
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "name=production" >> "$GITHUB_OUTPUT"
+            echo "platform=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
+            echo "platform=${{ inputs.platform }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build with EAS
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --non-interactive \
+            --profile ${{ steps.profile.outputs.name }} \
+            --platform ${{ steps.profile.outputs.platform }} \
+            --json > build.json
+
+      - name: Extract download URLs
+        id: urls
+        working-directory: mobile
+        run: |
+          # eas build --json emits one JSON object per build line
+          android_url=$(jq -r '. | select(.platform=="ANDROID") | .artifacts.buildUrl' build.json | head -1)
+          ios_url=$(jq -r '. | select(.platform=="IOS") | .artifacts.buildUrl' build.json | head -1)
+          echo "android_url=$android_url" >> "$GITHUB_OUTPUT"
+          echo "ios_url=$ios_url" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "::notice title=APK URL::$android_url"
+          echo "::notice title=IPA URL::$ios_url"
+
+      - name: Save build manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-manifest-${{ steps.profile.outputs.name }}
+          path: mobile/build.json
+          retention-days: 30
+
+      - name: Publish EAS Update (OTA)
+        if: steps.profile.outputs.name == 'production'
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas update --branch production --message "Release ${{ github.ref_name }}" --non-interactive

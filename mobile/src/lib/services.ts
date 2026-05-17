@@ -1,0 +1,294 @@
+import { api, API_BASE_URL } from './api'
+import { storage, StorageKeys } from './storage'
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+export interface ConversationSummary {
+  user_id: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  role?: string | null
+  avatar_path?: string | null
+  last_subject?: string | null
+  last_message?: string | null
+  last_message_at?: string | null
+  last_sender_id?: string | null
+  unread_count?: number | string
+}
+
+export interface MessageRow {
+  id: string
+  sender_id: string
+  recipient_id: string | null
+  subject?: string | null
+  body?: string | null
+  is_read?: boolean
+  read_at?: string | null
+  created_at?: string
+  edited_at?: string | null
+  attachments?: Array<{ path: string; name: string; type?: string | null; size?: number | null }> | null
+  sender_first_name?: string | null
+  sender_last_name?: string | null
+  sender_role?: string | null
+}
+
+export const messagesAPI = {
+  async conversations(): Promise<ConversationSummary[]> {
+    const res = await api.get<{ data: ConversationSummary[] }>('/messages/conversations')
+    return res.data?.data ?? []
+  },
+  async thread(userId: string): Promise<{ messages: MessageRow[]; user: any }> {
+    const res = await api.get<{ data: MessageRow[]; user: any }>(`/messages/thread/${userId}`)
+    return { messages: res.data?.data ?? [], user: res.data?.user }
+  },
+  async send(opts: { recipientId?: string | null; body: string; subject?: string }): Promise<MessageRow> {
+    const res = await api.post<{ data: MessageRow }>('/messages', {
+      recipientId: opts.recipientId ?? null,
+      body: opts.body,
+      subject: opts.subject,
+    })
+    return res.data.data
+  },
+  async unreadCount(): Promise<number> {
+    try {
+      const res = await api.get<{ count: number }>('/messages/unread-count')
+      return Number(res.data?.count ?? 0)
+    } catch {
+      return 0
+    }
+  },
+  async markRead(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return
+    await api.patch('/messages/read', { messageIds })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (uses generic /api/db/:table)
+// ---------------------------------------------------------------------------
+
+export interface NotificationRow {
+  id: string
+  user_id: string
+  title?: string | null
+  message?: string | null
+  body?: string | null
+  type?: string | null
+  is_read?: boolean | null
+  read_at?: string | null
+  link?: string | null
+  url?: string | null
+  created_at?: string
+}
+
+export const notificationsAPI = {
+  async list(userId: string, limit = 50): Promise<NotificationRow[]> {
+    const res = await api.get<{ data: NotificationRow[] | null }>('/db/notifications', {
+      params: {
+        user_id: `eq.${userId}`,
+        order: 'created_at.desc',
+        limit: String(limit),
+      },
+    })
+    return res.data?.data ?? []
+  },
+  async markRead(id: string): Promise<void> {
+    await api.patch('/db/notifications', {
+      _filters: { id },
+      is_read: true,
+      read_at: new Date().toISOString(),
+    })
+  },
+  async markAllRead(userId: string): Promise<void> {
+    await api.patch('/db/notifications', {
+      _filters: { user_id: userId, is_read: false },
+      is_read: true,
+      read_at: new Date().toISOString(),
+    })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Emails
+// ---------------------------------------------------------------------------
+
+export interface EmailLogRow {
+  id: string
+  subject?: string | null
+  body_html?: string | null
+  body_text?: string | null
+  sender_email?: string | null
+  sender_name?: string | null
+  recipient_email?: string | null
+  recipient_name?: string | null
+  status?: string | null
+  email_type?: string | null
+  email_category?: string | null
+  created_at?: string | null
+  sent_at?: string | null
+  delivered_at?: string | null
+}
+
+export const emailsAPI = {
+  async myReceived(limit = 50, offset = 0): Promise<EmailLogRow[]> {
+    const res = await api.get<{ data: EmailLogRow[] }>('/emails/my-received', {
+      params: { limit, offset },
+    })
+    return res.data?.data ?? []
+  },
+  async sent(senderEmail: string, limit = 50): Promise<EmailLogRow[]> {
+    if (!senderEmail) return []
+    const res = await api.get<{ data: EmailLogRow[] }>('/db/email_logs', {
+      params: {
+        sender_email: `eq.${senderEmail}`,
+        order: 'created_at.desc',
+        limit: String(limit),
+      },
+    })
+    return res.data?.data ?? []
+  },
+  async send(input: {
+    to: string | string[]
+    subject: string
+    html: string
+    text?: string
+    from?: string
+    replyTo?: string
+    cc?: string | string[]
+    bcc?: string | string[]
+  }): Promise<{ id?: string }> {
+    const res = await api.post('/emails/send', input)
+    return res.data
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Storage
+// ---------------------------------------------------------------------------
+
+export const storageAPI = {
+  async upload(opts: {
+    uri: string
+    name: string
+    mimeType?: string | null
+    path: string
+  }): Promise<{ path: string }> {
+    const form = new FormData()
+    // React Native FormData accepts { uri, name, type } objects directly
+    // and translates them to a multipart part on the network.
+    form.append('file', {
+      uri: opts.uri,
+      name: opts.name,
+      type: opts.mimeType || 'application/octet-stream',
+    } as unknown as Blob)
+    form.append('path', opts.path)
+
+    const token = await storage.get(StorageKeys.accessToken)
+    const res = await fetch(`${API_BASE_URL}/api/storage/upload`, {
+      method: 'POST',
+      body: form,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(text || `Upload failed (${res.status})`)
+    }
+    return (await res.json()) as { path: string }
+  },
+
+  signedUrl(path: string): string {
+    return `${API_BASE_URL}/api/storage/signed-url?path=${encodeURIComponent(path)}`
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+export const authAPI = {
+  async updateProfile(updates: {
+    first_name?: string
+    last_name?: string
+    middle_name?: string
+    mobile?: string
+  }): Promise<{ user: any }> {
+    const res = await api.put<{ user: any }>('/auth/update', updates)
+    return res.data
+  },
+  async requestPasswordReset(email: string): Promise<void> {
+    await api.post('/auth/reset-password-request', { email })
+  },
+  async register(input: {
+    firstName: string
+    lastName: string
+    mobile: string
+    personalEmail: string
+    password: string
+    referralCode?: string
+  }): Promise<{ requiresVerification?: boolean; email?: string; personal_email?: string }> {
+    const res = await api.post('/auth/register', {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      mobile: input.mobile,
+      personalEmail: input.personalEmail,
+      password: input.password,
+      userType: 'client',
+      role: 'client',
+      referralCode: input.referralCode,
+    })
+    return res.data
+  },
+  async verifyOtp(personalEmail: string, otp: string): Promise<{
+    session: { access_token: string; refresh_token: string }
+    user: any
+  }> {
+    const res = await api.post('/auth/verify-otp', { personal_email: personalEmail, otp })
+    return res.data
+  },
+  async resendVerification(email: string): Promise<void> {
+    await api.post('/auth/resend-verification', { email })
+  },
+  async verifyResetOtp(personalEmail: string, otp: string): Promise<{ reset_token: string }> {
+    const res = await api.post('/auth/verify-reset-otp', { personal_email: personalEmail, otp })
+    return res.data
+  },
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, newPassword })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Applications & payments helpers
+// ---------------------------------------------------------------------------
+
+export interface ApplicationPayment {
+  id: string
+  application_id: string
+  amount?: number | string | null
+  currency?: string | null
+  status?: string | null
+  description?: string | null
+  paid_at?: string | null
+  created_at?: string | null
+}
+
+export interface TimelineStepRow {
+  id: string
+  application_id: string
+  title?: string
+  name?: string
+  description?: string
+  status?: string
+  step_status?: string
+  is_completed?: boolean
+  completed_at?: string | null
+  due_date?: string | null
+  created_at?: string
+  step_order?: number
+  ordinal?: number
+}

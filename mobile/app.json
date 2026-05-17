@@ -1,0 +1,115 @@
+{
+  "expo": {
+    "name": "GritSync",
+    "slug": "gritsync",
+    "scheme": "gritsync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#DC2626"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gritsync.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "GritSync needs access to your photos so you can upload documents to your application.",
+        "NSPhotoLibraryAddUsageDescription": "GritSync needs permission to save photos you take inside the app.",
+        "NSCameraUsageDescription": "GritSync needs the camera so you can capture documents for your application.",
+        "NSDocumentsFolderUsageDescription": "GritSync needs access to your files so you can attach documents to your application.",
+        "NSFaceIDUsageDescription": "GritSync uses Face ID to sign you in securely without re-entering your password.",
+        "NSCalendarsUsageDescription": "GritSync needs calendar access to save NCLEX exam dates and payment due dates.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "GritSync needs to add NCLEX exam dates and payment due dates to your calendar."
+      }
+    },
+    "android": {
+      "package": "com.gritsync.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#DC2626"
+      },
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "GritSync uses Face ID to sign you in securely without re-entering your password."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GritSync needs access to your photos to upload documents.",
+          "cameraPermission": "GritSync needs the camera to capture documents directly."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "GritSync needs calendar access to save NCLEX exam dates and payment due dates."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#DC2626"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#DC2626",
+          "image": "./assets/splash.png",
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.gritsync.app",
+          "enableGooglePay": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "https://app.gritsync.com",
+      "reviewBaseUrl": "https://review.gritsync.com",
+      "stripePublishableKey": "pk_live_51Qt9RuGl6Bh5tV23a4nBagZ9UY7pxgEsw68CaX6QPywl7C613UyZtlYRJwuEtfwodKpVVu1fjHgRPoVLIOYw5UsL00VuJansND",
+      "stripeMerchantId": "merchant.com.gritsync.app"
+    }
+  }
+}

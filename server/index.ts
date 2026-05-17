@@ -13,6 +13,7 @@ import contactRoutes from './routes/contact'
 import messageRoutes from './routes/messages'
 import referralRoutes from './routes/referrals'
 import socialRoutes, { processDuePosts } from './routes/social'
+import { pollPushReceipts, pruneStalePushTokens } from './lib/push'
 import socialAiRoutes from './routes/social-ai'
 import nclexRoutes from './routes/nclex'
 import processingAccountsRoutes from './routes/processing-accounts'
@@ -91,6 +92,18 @@ if (!process.env.VERCEL) {
     setInterval(() => {
       processDuePosts().catch((err) => console.error('Scheduled post tick failed:', err))
     }, 60_000)
+    // Poll Expo for push delivery receipts every 5 minutes. Drops tokens whose
+    // receipts come back DeviceNotRegistered so the next send isn't wasted.
+    setInterval(() => {
+      pollPushReceipts().catch((err) => console.error('Push receipt poll failed:', err))
+    }, 5 * 60_000)
+    // Once a day, drop push tokens that haven't been refreshed in 90+ days —
+    // those devices have almost certainly uninstalled or stopped using the app.
+    setInterval(() => {
+      pruneStalePushTokens().catch((err) => console.error('Push token prune failed:', err))
+    }, 24 * 60 * 60_000)
+    // Also run once on boot so a fresh deploy clears junk immediately.
+    pruneStalePushTokens().catch((err) => console.error('Push token prune (boot) failed:', err))
   })
 }
 
