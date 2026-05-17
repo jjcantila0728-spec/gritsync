@@ -80,21 +80,36 @@ function authenticateTokenOrQuery(req: AuthenticatedRequest, res: Response, next
 }
 
 async function serveFile(key: string, res: Response) {
+  // 1. Legacy path: file lives in our Postgres `file_storage` table.
   const result = await pool.query(
     'SELECT data, content_type, storage_key FROM file_storage WHERE storage_key = $1',
     [key]
   )
-
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'File not found' })
+  if (result.rows.length > 0) {
+    const row = result.rows[0]
+    const filename = key.split('/').pop() || 'file'
+    res.setHeader('Content-Type', row.content_type)
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    return res.send(row.data)
   }
 
-  const row = result.rows[0]
-  const filename = key.split('/').pop() || 'file'
-  res.setHeader('Content-Type', row.content_type)
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
-  res.setHeader('Cache-Control', 'private, max-age=3600')
-  res.send(row.data)
+  // 2. Fallback: file may have been uploaded via the new
+  //    /api/storage/upload-document path which writes to Supabase Storage.
+  //    Mint a short-lived signed URL and 302 the caller — RN <Image>, the
+  //    in-app browser, and any <a href> all follow redirects, so callers
+  //    don't need to know whether bytes are in Postgres or Supabase.
+  try {
+    const { data, error } = await supabaseAdmin.storage
+      .from(DOCUMENTS_BUCKET)
+      .createSignedUrl(key, 3600)
+    if (!error && data?.signedUrl) {
+      return res.redirect(302, data.signedUrl)
+    }
+  } catch {
+    // fall through to 404
+  }
+  return res.status(404).json({ error: 'File not found' })
 }
 
 router.post('/upload', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
@@ -264,12 +279,26 @@ router.get('/signed-url', authenticateToken, async (req: AuthenticatedRequest, r
       [key]
     )
 
-    if (result.rows.length === 0) return res.status(404).json({ error: 'File not found' })
+    if (result.rows.length > 0) {
+      const token = req.headers.authorization?.split(' ')[1] || ''
+      const url = `/api/storage/file?path=${encodeURIComponent(key)}&t=${token}`
+      return res.json({ url })
+    }
 
-    const token = req.headers.authorization?.split(' ')[1] || ''
-    // Use query param for the path so there are no wildcard routing issues
-    const url = `/api/storage/file?path=${encodeURIComponent(key)}&t=${token}`
-    res.json({ url })
+    // Fallback: file lives in Supabase Storage (uploaded via the web app or
+    // via /api/storage/upload-document). Hand back the direct Supabase URL
+    // so the caller doesn't go through our /file proxy for a redirect.
+    try {
+      const { data, error } = await supabaseAdmin.storage
+        .from(DOCUMENTS_BUCKET)
+        .createSignedUrl(key, 3600)
+      if (!error && data?.signedUrl) {
+        return res.json({ url: data.signedUrl })
+      }
+    } catch {
+      // fall through to 404
+    }
+    return res.status(404).json({ error: 'File not found' })
   } catch (error: any) {
     console.error('Signed URL error:', error)
     res.status(500).json({ error: error.message || 'Failed to create URL' })

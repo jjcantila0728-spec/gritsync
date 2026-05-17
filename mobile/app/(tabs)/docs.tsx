@@ -6,8 +6,7 @@ import { Card, CardSubtitle, CardTitle } from '@/components/Card'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme, radius, spacing, palette } from '@/theme'
 import { dbList } from '@/lib/db'
-import { api, API_BASE_URL, errorMessage } from '@/lib/api'
-import { storage, StorageKeys } from '@/lib/storage'
+import { api, errorMessage } from '@/lib/api'
 import { storageAPI } from '@/lib/services'
 import { pickFile } from '@/lib/pickers'
 import { openSignedDoc } from '@/lib/browser'
@@ -314,7 +313,10 @@ function PrimaryCard({
   const filled = !!doc
   const [thumbUri, setThumbUri] = useState<string | null>(null)
 
-  // For uploaded selfies, build an authenticated <Image> URL once.
+  // For uploaded selfies, fetch a short-lived Supabase signed URL. The old
+  // approach embedded the bearer token in /api/storage/file?t= but that
+  // route only reads the legacy file_storage table — new uploads land in
+  // Supabase Storage so we need the document-url endpoint instead.
   useEffect(() => {
     let cancelled = false
     if (!filled || !slot.isPhoto || !doc?.file_path) {
@@ -322,11 +324,8 @@ function PrimaryCard({
       return
     }
     void (async () => {
-      const token = await storage.get(StorageKeys.accessToken)
-      if (cancelled) return
-      setThumbUri(
-        `${API_BASE_URL}/api/storage/file?path=${encodeURIComponent(doc.file_path!)}&t=${encodeURIComponent(token ?? '')}`,
-      )
+      const signed = await storageAPI.signedDocumentUrl(doc.file_path!)
+      if (!cancelled) setThumbUri(signed)
     })()
     return () => {
       cancelled = true
