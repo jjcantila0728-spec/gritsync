@@ -147,8 +147,8 @@ export function AccountDelete() {
             Questions about this process? Contact{' '}
             <a href={`mailto:${supportEmail}`} className="text-primary-600">{supportEmail}</a>.
             See also our{' '}
-            <a href="/privacy" className="text-primary-600">privacy policy</a> and{' '}
-            <a href="/terms" className="text-primary-600">terms of service</a>.
+            <a href="https://gritsync.com/privacy" className="text-primary-600">privacy policy</a> and{' '}
+            <a href="https://gritsync.com/terms" className="text-primary-600">terms of service</a>.
           </p>
         </div>
       </div>
