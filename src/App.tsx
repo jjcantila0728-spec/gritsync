@@ -88,6 +88,7 @@ const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.M
 const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ default: m.AdminSocial })))
 const Sso = lazy(() => import('./pages/Sso').then(m => ({ default: m.Sso })))
 const Download = lazy(() => import('./pages/Download').then(m => ({ default: m.Download })))
+const AccountDelete = lazy(() => import('./pages/AccountDelete').then(m => ({ default: m.AccountDelete })))
 const PearsonVueExam = lazy(() => import('./pages/pearsonvue/PearsonVueExam').then(m => ({ default: m.PearsonVueExam })))
 const PearsonVueHome = lazy(() => import('./pages/pearsonvue/PearsonVueHome').then(m => ({ default: m.PearsonVueHome })))
 
@@ -284,6 +285,7 @@ function LandingRoutes() {
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/sign" element={<SignaturePage />} />
         <Route path="/download" element={<Download />} />
+        <Route path="/account/delete" element={<AccountDelete />} />
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
