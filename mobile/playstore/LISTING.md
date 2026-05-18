@@ -22,9 +22,9 @@ Becoming a US Registered Nurse from the Philippines isn't just one exam — it's
 
 If you're a Filipino BSN graduate dreaming of practicing in California, Texas, New York, Hawaii, Georgia, Illinois, or anywhere across the US, GritSync is built specifically for you.
 
-BUILT BY A FILIPINO NURSE WHO ALREADY DID THIS
+BUILT BY FILIPINO NURSES WHO ALREADY DID THIS
 
-Our founder, JJ Cantila, is a Filipino RN who navigated the exact same gauntlet. Every confusion he hit — "CGFNS Cert or CES Report?" "Why did Texas reject my TOR?" "Visa Screen before or after NCLEX?" — we built tools for. Every advisor on our team is bilingual and understands the practical reality of apostilling at DFA Pasay or fitting an IELTS retake to your state board's window.
+GritSync was founded by a Filipino RN who navigated the exact same gauntlet. Every confusion we hit on that journey — "CGFNS Cert or CES Report?" "Why did Texas reject my TOR?" "Visa Screen before or after NCLEX?" — we turned into a tool inside this app. Every advisor on our team is bilingual and understands the practical reality of apostilling at DFA Pasay or fitting an IELTS retake to your state board's window.
 
 WHAT YOU GET
 
