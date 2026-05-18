@@ -804,9 +804,7 @@ export function AccountSettings() {
                         </p>
                       </div>
                       <a
-                        href="https://gritsync.com/account/delete"
-                        target="_blank"
-                        rel="noreferrer"
+                        href="/client/account-settings/delete"
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition flex-shrink-0"
                       >
                         <AlertTriangle className="h-4 w-4" /> Delete my account

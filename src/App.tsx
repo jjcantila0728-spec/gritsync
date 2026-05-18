@@ -92,6 +92,22 @@ const AccountDelete = lazy(() => import('./pages/AccountDelete').then(m => ({ de
 const PearsonVueExam = lazy(() => import('./pages/pearsonvue/PearsonVueExam').then(m => ({ default: m.PearsonVueExam })))
 const PearsonVueHome = lazy(() => import('./pages/pearsonvue/PearsonVueHome').then(m => ({ default: m.PearsonVueHome })))
 
+/**
+ * Cross-subdomain navigation helper. <Navigate> only handles in-router
+ * transitions; for hops from gritsync.com → app.gritsync.com we need a
+ * real window.location swap so the new subdomain's routes take over.
+ */
+function CrossDomainRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to)
+  }, [to])
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">
+      <p className="text-gray-600 dark:text-gray-400">Redirecting…</p>
+    </div>
+  )
+}
+
 // Loading fallback component
 function PageLoader() {
   return (
@@ -285,7 +301,10 @@ function LandingRoutes() {
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
         <Route path="/sign" element={<SignaturePage />} />
         <Route path="/download" element={<Download />} />
-        <Route path="/account/delete" element={<AccountDelete />} />
+        {/* Legacy public account-deletion URL — the canonical page now
+            lives at /client/account-settings/delete on the app subdomain.
+            Bounce any old shares (Play Console, email signatures, etc.). */}
+        <Route path="/account/delete" element={<CrossDomainRedirect to={appUrl('/client/account-settings/delete')} />} />
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -340,6 +359,11 @@ function AppRoutes() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/preferences/:token" element={<EmailPreferences />} />
         <Route path="/unsubscribe/:token" element={<Unsubscribe />} />
+        {/* Public account-deletion landing — declared OUTSIDE the
+            ProtectedRoute wrappers below so signed-out users (including
+            Google Play Console reviewers) can reach it. This is the URL
+            published on the Play Console "Data safety" form. */}
+        <Route path="/client/account-settings/delete" element={<AccountDelete />} />
 
         {/* ────────────────────────────────────────────────────────────────
            Panel routes — every authenticated page lives under its role's
