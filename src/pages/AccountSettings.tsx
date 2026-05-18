@@ -53,6 +53,12 @@ export function AccountSettings() {
   const [userDetails, setUserDetails] = useState<{ first_name?: string; middle_name?: string; last_name?: string } | null>(null)
   const [clientEmail, setClientEmail] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<SettingsTab>('security')
+  // Account-deletion confirmation modal state. We require the user to type
+  // the literal word DELETE so the action can't be triggered by a stray
+  // tap or accidental keyboard activation.
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
   
   // Password state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -204,6 +210,65 @@ export function AccountSettings() {
       showToast('Signed out successfully', 'success')
     } catch (error: any) {
       showToast(error.message || 'Failed to sign out', 'error')
+    }
+  }
+
+  /**
+   * Account deletion — submits a request through the existing /api/contact
+   * endpoint (which already mails support@). The actual purge is handled
+   * manually by GritSync staff within 30 days, as documented on
+   * /client/account-settings/delete. After submission we sign the user
+   * out so they can't keep using the app pending purge.
+   */
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== 'DELETE') {
+      showToast('Type DELETE to confirm', 'error')
+      return
+    }
+    setDeleting(true)
+    try {
+      const fullName = getFullNameWithMiddle(
+        userDetails?.first_name ?? user?.first_name,
+        userDetails?.middle_name ?? user?.middle_name,
+        userDetails?.last_name ?? user?.last_name,
+      )
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: fullName || user?.email || 'GritSync user',
+          email: user?.email ?? '',
+          subject: 'Account deletion request',
+          message: [
+            'A signed-in user has requested deletion of their GritSync account.',
+            '',
+            `User ID: ${user?.id ?? '(unknown)'}`,
+            `GRIT ID: ${user?.grit_id ?? '(unknown)'}`,
+            `Email:   ${user?.email ?? '(unknown)'}`,
+            `Name:    ${fullName || '(none)'}`,
+            '',
+            'Per /client/account-settings/delete, please:',
+            '  • Delete profile, documents, exam history, and messages within 30 days',
+            '  • Purge backups within 90 days',
+            '  • Retain payment + audit records per legal hold',
+            '',
+            'Send a confirmation email when each step completes.',
+          ].join('\n'),
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || `Failed (HTTP ${res.status})`)
+      }
+      showToast('Deletion request submitted — you will receive a confirmation email.', 'success')
+      setDeleteOpen(false)
+      setDeleteConfirm('')
+      // Sign out so the user can't keep using the app pending purge.
+      setTimeout(() => { void signOut() }, 1500)
+    } catch (error: any) {
+      showToast(error.message || 'Failed to submit deletion request', 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -803,12 +868,13 @@ export function AccountSettings() {
                           Payment + audit records are retained per our retention policy. Cannot be undone.
                         </p>
                       </div>
-                      <a
-                        href="/client/account-settings/delete"
+                      <button
+                        type="button"
+                        onClick={() => setDeleteOpen(true)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition flex-shrink-0"
                       >
                         <AlertTriangle className="h-4 w-4" /> Delete my account
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -818,6 +884,92 @@ export function AccountSettings() {
           </div>
         </main>
       </div>
+
+      {/* Delete-account confirmation modal */}
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            // Click outside the dialog dismisses (Esc would too if we wired it).
+            if (e.target === e.currentTarget && !deleting) {
+              setDeleteOpen(false)
+              setDeleteConfirm('')
+            }
+          }}
+        >
+          <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-200 dark:border-red-900/50 overflow-hidden">
+            <div className="px-6 py-5 border-b border-red-100 dark:border-red-900/30 bg-red-50/60 dark:bg-red-950/30 flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  Delete your GritSync account?
+                </h3>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                  This action permanently removes your account and personal data.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <p className="font-semibold mb-2">The following will be deleted within 30 days:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-gray-600 dark:text-gray-400 text-xs">
+                  <li>Profile, contact info, and account credentials</li>
+                  <li>Uploaded documents (passport, diploma, photos, etc.)</li>
+                  <li>NCLEX exam history (sessions, answers, scores)</li>
+                  <li>Messages with your GritSync advisor</li>
+                  <li>Notifications and push tokens</li>
+                </ul>
+              </div>
+
+              <div className="text-xs text-gray-500 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                <strong className="text-gray-700 dark:text-gray-300">Retained for legal compliance:</strong>{' '}
+                Payment records (7 years for BIR / IRS) and anonymized audit logs (12 months).
+                Application records already submitted to nursing boards are kept for 3 years with
+                PII stripped.
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Type <span className="font-mono bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded">DELETE</span> to confirm
+                </label>
+                <Input
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  placeholder="DELETE"
+                  className="font-mono"
+                  autoFocus
+                  autoComplete="off"
+                  disabled={deleting}
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row-reverse gap-2">
+              <Button
+                onClick={handleDeleteAccount}
+                disabled={deleting || deleteConfirm.trim().toUpperCase() !== 'DELETE'}
+                className="bg-red-600 hover:bg-red-700 text-white disabled:bg-red-300 dark:disabled:bg-red-900/50 disabled:cursor-not-allowed flex-1 sm:flex-initial"
+              >
+                {deleting ? 'Submitting…' : 'Permanently delete account'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteOpen(false)
+                  setDeleteConfirm('')
+                }}
+                disabled={deleting}
+                className="flex-1 sm:flex-initial"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
