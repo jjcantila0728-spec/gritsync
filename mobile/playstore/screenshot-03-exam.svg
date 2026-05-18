@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E3A8A"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <filter id="shadow"><feGaussianBlur stdDeviation="30"/></filter>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#bg)"/>
+
+  <g font-family="Inter, sans-serif" fill="#FFFFFF" text-anchor="middle">
+    <text x="540" y="140" font-size="64" font-weight="800" letter-spacing="-1">Practice in the</text>
+    <text x="540" y="216" font-size="64" font-weight="800" fill="#BFDBFE" letter-spacing="-1">real Pearson Vue UI</text>
+  </g>
+
+  <g transform="translate(180,300)">
+    <rect x="-10" y="-10" width="740" height="1520" rx="80" fill="#000" filter="url(#shadow)" opacity="0.5"/>
+    <rect width="720" height="1500" rx="68" fill="#0B0B0E"/>
+    <rect x="14" y="14" width="692" height="1472" rx="58" fill="#FFFFFF"/>
+    <rect x="290" y="14" width="140" height="28" rx="14" fill="#0B0B0E"/>
+
+    <!-- Pearson-style header bar -->
+    <rect x="14" y="42" width="692" height="80" fill="#0F172A"/>
+    <text x="40" y="92" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#FFFFFF">NCLEX-RN · Practice Exam</text>
+    <g transform="translate(540,62)" fill="#FFFFFF">
+      <rect x="0" y="0" width="120" height="36" rx="6" stroke="#3B82F6" fill="none"/>
+      <text x="60" y="24" font-family="Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">⏱ 41:22</text>
+    </g>
+
+    <!-- Question number bar -->
+    <rect x="14" y="122" width="692" height="46" fill="#1E293B"/>
+    <text x="40" y="150" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Question 17 of 75</text>
+    <g fill="#94A3B8">
+      <text x="510" y="150" font-family="Arial, sans-serif" font-size="13">Calculator</text>
+      <text x="606" y="150" font-family="Arial, sans-serif" font-size="13">Flag</text>
+      <text x="664" y="150" font-family="Arial, sans-serif" font-size="13">Notes</text>
+    </g>
+
+    <!-- Scenario -->
+    <g transform="translate(40,200)">
+      <text font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">Client Scenario</text>
+      <line x1="0" y1="14" x2="80" y2="14" stroke="#DC2626" stroke-width="3"/>
+      <foreignObject x="0" y="30" width="640" height="320">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, sans-serif; font-size:19px; color:#111827; line-height:1.55;">
+          A 68-year-old client is admitted with shortness of breath, bilateral crackles, and 3+ pitting edema. Vital signs: BP 158/94, HR 112, RR 26, SpO2 88% on room air. The client has a history of heart failure and is currently taking furosemide 40 mg PO daily.<br/><br/>
+          The nurse is reviewing the client's labs and notes a serum potassium of <strong>2.9 mEq/L</strong>.
+        </div>
+      </foreignObject>
+    </g>
+
+    <!-- Question stem -->
+    <g transform="translate(40,580)">
+      <text font-family="Arial, sans-serif" font-size="20" font-weight="800" fill="#111827">Which intervention should the nurse implement first?</text>
+    </g>
+
+    <!-- Options -->
+    <g transform="translate(40,640)" font-family="Arial, sans-serif">
+      <g>
+        <rect width="640" height="74" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+        <circle cx="32" cy="37" r="14" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+        <text x="32" y="42" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">A</text>
+        <text x="60" y="42" font-size="17" fill="#111827">Administer the next dose of furosemide as scheduled.</text>
+      </g>
+      <g transform="translate(0,86)">
+        <rect width="640" height="74" rx="6" fill="#EFF6FF" stroke="#2563EB" stroke-width="2"/>
+        <circle cx="32" cy="37" r="14" fill="#2563EB"/>
+        <text x="32" y="42" font-size="16" font-weight="700" fill="#FFFFFF" text-anchor="middle">B</text>
+        <text x="60" y="42" font-size="17" font-weight="700" fill="#111827">Notify the provider and hold the furosemide.</text>
+      </g>
+      <g transform="translate(0,172)">
+        <rect width="640" height="74" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+        <circle cx="32" cy="37" r="14" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+        <text x="32" y="42" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">C</text>
+        <text x="60" y="42" font-size="17" fill="#111827">Place the client in high-Fowler's position.</text>
+      </g>
+      <g transform="translate(0,258)">
+        <rect width="640" height="74" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+        <circle cx="32" cy="37" r="14" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+        <text x="32" y="42" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">D</text>
+        <text x="60" y="42" font-size="17" fill="#111827">Encourage increased oral fluid intake.</text>
+      </g>
+    </g>
+
+    <!-- Bottom controls -->
+    <rect x="14" y="1370" width="692" height="116" fill="#F1F5F9"/>
+    <g transform="translate(40,1390)" font-family="Arial, sans-serif">
+      <rect width="180" height="68" rx="6" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+      <text x="90" y="44" font-size="20" font-weight="700" fill="#111827" text-anchor="middle">◀ Previous</text>
+      <g transform="translate(220,0)">
+        <rect width="200" height="68" rx="6" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+        <text x="100" y="44" font-size="20" font-weight="700" fill="#111827" text-anchor="middle">Items</text>
+      </g>
+      <g transform="translate(440,0)">
+        <rect width="200" height="68" rx="6" fill="#2563EB"/>
+        <text x="100" y="44" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle">Next ▶</text>
+      </g>
+    </g>
+  </g>
+
+  <text x="540" y="1870" font-family="Inter, sans-serif" font-size="32" font-weight="700" fill="#FFFFFF" text-anchor="middle" opacity="0.95">Same look, same feel, same muscle memory</text>
+</svg>

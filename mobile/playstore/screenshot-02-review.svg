@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B91C1C"/>
+      <stop offset="1" stop-color="#EF4444"/>
+    </linearGradient>
+    <filter id="shadow"><feGaussianBlur stdDeviation="30"/></filter>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#bg)"/>
+
+  <g font-family="Inter, sans-serif" fill="#FFFFFF" text-anchor="middle">
+    <text x="540" y="140" font-size="64" font-weight="800" letter-spacing="-1">Master the NCLEX</text>
+    <text x="540" y="216" font-size="64" font-weight="800" fill="#FCA5A5" letter-spacing="-1">with smart review tools</text>
+  </g>
+
+  <g transform="translate(180,300)">
+    <rect x="-10" y="-10" width="740" height="1520" rx="80" fill="#000" filter="url(#shadow)" opacity="0.5"/>
+    <rect width="720" height="1500" rx="68" fill="#0B0B0E"/>
+    <rect x="14" y="14" width="692" height="1472" rx="58" fill="#F9FAFB"/>
+    <rect x="290" y="14" width="140" height="28" rx="14" fill="#0B0B0E"/>
+
+    <!-- header -->
+    <g transform="translate(14,42)">
+      <rect width="692" height="48" fill="#B91C1C"/>
+      <text x="40" y="32" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#FFFFFF">9:41</text>
+    </g>
+
+    <!-- Page header -->
+    <g transform="translate(40,110)">
+      <text font-family="Inter, sans-serif" font-size="34" font-weight="800" fill="#111827">Review</text>
+      <text y="40" font-family="Inter, sans-serif" font-size="18" fill="#6B7280">Q-banks, videos, live class &amp; more</text>
+    </g>
+
+    <!-- Exam date card -->
+    <g transform="translate(40,220)">
+      <rect width="640" height="160" rx="22" fill="url(#hero)"/>
+      <text x="32" y="50" font-family="Inter, sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" opacity="0.85" letter-spacing="2">NCLEX EXAM DATE</text>
+      <text x="32" y="100" font-family="Inter, sans-serif" font-size="38" font-weight="800" fill="#FFFFFF">June 24, 2026</text>
+      <text x="32" y="138" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF" opacity="0.95">38 days · Pearson Vue Manila</text>
+      <g transform="translate(496,46)">
+        <rect width="112" height="112" rx="20" fill="#FFFFFF" fill-opacity="0.18"/>
+        <text x="56" y="62" font-family="Inter, sans-serif" font-size="48" font-weight="800" fill="#FFFFFF" text-anchor="middle">38</text>
+        <text x="56" y="88" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">DAYS LEFT</text>
+      </g>
+    </g>
+
+    <!-- Section chips -->
+    <g transform="translate(40,406)">
+      <rect width="640" height="56" rx="28" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+      <rect x="10" y="6" width="120" height="44" rx="22" fill="#DC2626"/>
+      <text x="70" y="34" font-family="Inter, sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">Q-Banks</text>
+      <text x="180" y="36" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#6B7280">Videos</text>
+      <text x="280" y="36" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#6B7280">Live</text>
+      <text x="360" y="36" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#6B7280">Cheats</text>
+      <text x="470" y="36" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#6B7280">Stories</text>
+      <text x="570" y="36" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#6B7280">Plans</text>
+    </g>
+
+    <!-- Section heading -->
+    <text x="56" y="510" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#111827" letter-spacing="1">QUESTION BANKS</text>
+
+    <!-- Q-bank cards -->
+    <g transform="translate(40,536)">
+      <rect width="640" height="150" rx="22" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+      <rect width="120" height="150" rx="22" fill="#FEF2F2"/>
+      <text x="60" y="86" font-family="Inter, sans-serif" font-size="40" font-weight="800" fill="#DC2626" text-anchor="middle">RN</text>
+      <text x="140" y="50" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#111827">NCLEX-RN Core</text>
+      <text x="140" y="78" font-family="Inter, sans-serif" font-size="14" fill="#6B7280">3,400 questions · 12 categories</text>
+      <!-- progress -->
+      <rect x="140" y="96" width="380" height="10" rx="5" fill="#F3F4F6"/>
+      <rect x="140" y="96" width="248" height="10" rx="5" fill="#DC2626"/>
+      <text x="140" y="130" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#111827">65% complete · 2,210 answered</text>
+      <circle cx="600" cy="75" r="20" fill="#FEF2F2"/>
+      <path d="M594 67 L608 75 L594 83 Z" fill="#DC2626"/>
+    </g>
+
+    <g transform="translate(40,710)">
+      <rect width="640" height="150" rx="22" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+      <rect width="120" height="150" rx="22" fill="#EFF6FF"/>
+      <text x="60" y="86" font-family="Inter, sans-serif" font-size="40" font-weight="800" fill="#2563EB" text-anchor="middle">PN</text>
+      <text x="140" y="50" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#111827">NCLEX-PN Practice</text>
+      <text x="140" y="78" font-family="Inter, sans-serif" font-size="14" fill="#6B7280">2,100 questions · 9 categories</text>
+      <rect x="140" y="96" width="380" height="10" rx="5" fill="#F3F4F6"/>
+      <rect x="140" y="96" width="120" height="10" rx="5" fill="#2563EB"/>
+      <text x="140" y="130" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#111827">32% complete · 672 answered</text>
+      <circle cx="600" cy="75" r="20" fill="#EFF6FF"/>
+      <path d="M594 67 L608 75 L594 83 Z" fill="#2563EB"/>
+    </g>
+
+    <g transform="translate(40,884)">
+      <rect width="640" height="150" rx="22" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+      <rect width="120" height="150" rx="22" fill="#ECFDF5"/>
+      <text x="60" y="86" font-family="Inter, sans-serif" font-size="40" font-weight="800" fill="#059669" text-anchor="middle">PH</text>
+      <text x="140" y="50" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#111827">Pharmacology Drills</text>
+      <text x="140" y="78" font-family="Inter, sans-serif" font-size="14" fill="#6B7280">980 questions · timed mode</text>
+      <rect x="140" y="96" width="380" height="10" rx="5" fill="#F3F4F6"/>
+      <rect x="140" y="96" width="300" height="10" rx="5" fill="#059669"/>
+      <text x="140" y="130" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#111827">79% complete · ready for exam</text>
+      <circle cx="600" cy="75" r="20" fill="#ECFDF5"/>
+      <path d="M594 67 L608 75 L594 83 Z" fill="#059669"/>
+    </g>
+
+    <!-- Create Test CTA -->
+    <g transform="translate(40,1064)">
+      <rect width="640" height="140" rx="22" fill="#111827"/>
+      <text x="32" y="56" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#FFFFFF">Create a custom test</text>
+      <text x="32" y="86" font-family="Inter, sans-serif" font-size="16" fill="#D1D5DB">Choose categories, length and timer</text>
+      <rect x="430" y="40" width="180" height="60" rx="30" fill="#DC2626"/>
+      <text x="520" y="78" font-family="Inter, sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" text-anchor="middle">Start →</text>
+    </g>
+
+    <!-- Study suggestions -->
+    <g transform="translate(40,1228)">
+      <text font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#111827" letter-spacing="1">SUGGESTED FOR YOU</text>
+      <g transform="translate(0,30)">
+        <rect width="640" height="120" rx="20" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+        <circle cx="60" cy="60" r="32" fill="#FEF3C7"/>
+        <path d="M48 60 L56 68 L72 52" stroke="#B45309" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="110" y="50" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#111827">Weak area: Cardiac</text>
+        <text x="110" y="76" font-family="Inter, sans-serif" font-size="14" fill="#6B7280">25 targeted questions · ~30 min</text>
+        <text x="110" y="100" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="#DC2626">Practice now →</text>
+      </g>
+    </g>
+  </g>
+
+  <text x="540" y="1870" font-family="Inter, sans-serif" font-size="32" font-weight="700" fill="#FFFFFF" text-anchor="middle" opacity="0.95">Q-banks, videos &amp; live class — built for the NCLEX</text>
+</svg>
