@@ -20,6 +20,16 @@ type Platform = (typeof PLATFORMS)[number]
 
 const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')
 
+// Media URLs stored in the bank/posts are RELATIVE (`/api/storage/public/…`)
+// so display survives any deploy environment, but external fetchers (Meta IG
+// container, TikTok PULL_FROM_URL, Facebook link) need absolute URLs. Lift on
+// the way out — leaves already-absolute URLs alone.
+function toAbsoluteMediaUrl(u: string): string {
+  if (/^https?:\/\//i.test(u)) return u
+  const base = PUBLIC_BASE || 'https://app.gritsync.com'
+  return `${base}${u.startsWith('/') ? '' : '/'}${u}`
+}
+
 const PLATFORM_CONFIG: Record<Platform, {
   authUrl: string
   tokenUrl: string
@@ -91,6 +101,27 @@ router.get('/accounts', authenticateToken, requireAdmin, async (_req: Authentica
     console.error('GET /api/social/accounts error:', err)
     res.status(500).json({ error: err.message })
   }
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/social/accounts/oauth-status
+// Tells the UI which platforms have OAuth credentials configured on the
+// server. Platforms missing creds can't use the "Connect" flow — the UI
+// nudges users into Manual entry for those instead of letting the OAuth
+// popup error out after a click.
+// ---------------------------------------------------------------------------
+router.get('/accounts/oauth-status', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  const status: Record<string, { oauth_ready: boolean; missing: string[] }> = {}
+  for (const platform of PLATFORMS) {
+    const cfg = PLATFORM_CONFIG[platform]
+    const idSet = !!process.env[cfg.envIdKey]
+    const secretSet = !!process.env[cfg.envSecretKey]
+    const missing: string[] = []
+    if (!idSet) missing.push(cfg.envIdKey)
+    if (!secretSet) missing.push(cfg.envSecretKey)
+    status[platform] = { oauth_ready: idSet && secretSet, missing }
+  }
+  res.json({ data: status })
 })
 
 // ---------------------------------------------------------------------------
@@ -473,10 +504,13 @@ async function fetchPlatformProfile(
 async function publishToPlatform(
   account: any,
   content: string,
-  mediaUrls: string[]
+  mediaUrlsRaw: string[]
 ): Promise<{ ok: boolean; remote_id?: string; error?: string }> {
   const platform = account.platform as Platform
   const token = account.access_token
+  // Every consumer below talks to a remote network that fetches media from
+  // the public internet — lift relative paths to absolute before forwarding.
+  const mediaUrls = mediaUrlsRaw.map(toAbsoluteMediaUrl)
   try {
     if (platform === 'facebook') {
       // Posts to the page feed. The token must be a page access token; the
