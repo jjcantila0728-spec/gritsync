@@ -2,11 +2,15 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Button } from './Button'
-import { useTheme, palette, radius, spacing } from '@/theme'
+import { useTheme, radius, spacing } from '@/theme'
 
 /**
  * Friendly error / empty state with optional retry. Keeps screens from
  * showing blank cards when a fetch fails or a list is genuinely empty.
+ *
+ * Tone colors come from the active theme's `tones.*` so dark mode renders
+ * the right contrast (the previous hardcoded pastels were unreadable on
+ * the dark surface).
  */
 export interface ErrorStateProps {
   variant?: 'empty' | 'error' | 'offline'
@@ -26,12 +30,12 @@ export function ErrorState({
   onRetry,
 }: ErrorStateProps) {
   const { colors } = useTheme()
-  const tone =
-    variant === 'offline'
-      ? { bg: '#FEF3C7', border: '#FCD34D', fg: '#B45309', defaultIcon: 'cloud-offline-outline' as const }
-      : variant === 'error'
-      ? { bg: '#FEE2E2', border: '#FCA5A5', fg: palette.brand.red700, defaultIcon: 'alert-circle-outline' as const }
-      : { bg: palette.brand.red50, border: palette.brand.red200, fg: palette.brand.red700, defaultIcon: 'leaf-outline' as const }
+  const toneKey = variant === 'offline' ? 'warning' : variant === 'error' ? 'danger' : 'neutral'
+  const tone = colors.tones[toneKey]
+  const defaultIcon: keyof typeof Ionicons.glyphMap =
+    variant === 'offline' ? 'cloud-offline-outline'
+    : variant === 'error' ? 'alert-circle-outline'
+    : 'leaf-outline'
   return (
     <View
       style={[
@@ -40,7 +44,7 @@ export function ErrorState({
       ]}
     >
       <View style={[styles.iconWrap, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-        <Ionicons name={icon ?? tone.defaultIcon} size={26} color={tone.fg} />
+        <Ionicons name={icon ?? defaultIcon} size={26} color={tone.fg} />
       </View>
       <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800', textAlign: 'center' }}>
         {title}

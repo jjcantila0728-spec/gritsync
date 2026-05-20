@@ -11,10 +11,23 @@ export interface Palette {
   accent: string
   danger: string
   success: string
+  /** Informational tint — used by neutral status pills, link chips. */
+  info: string
+  /** Warning tint — used by "pending" status pills, offline banners. */
+  warning: string
   overlay: string
   tabBarActive: string
   tabBarInactive: string
   tabBarBackground: string
+  /** Tonal pairs for status pills + soft callouts. Foreground stays legible
+   *  on the matching background in both modes. */
+  tones: {
+    success: { bg: string; border: string; fg: string }
+    info:    { bg: string; border: string; fg: string }
+    warning: { bg: string; border: string; fg: string }
+    danger:  { bg: string; border: string; fg: string }
+    neutral: { bg: string; border: string; fg: string }
+  }
 }
 
 interface ThemePalettes {
@@ -53,10 +66,19 @@ export const palette: ThemePalettes = {
     accent: '#DC2626',
     danger: '#DC2626',
     success: '#059669',
+    info: '#1D4ED8',
+    warning: '#B45309',
     overlay: 'rgba(17,24,39,0.45)',
     tabBarActive: '#DC2626',
     tabBarInactive: '#6B7280',
     tabBarBackground: '#FFFFFF',
+    tones: {
+      success: { bg: '#DCFCE7', border: '#86EFAC', fg: '#15803D' },
+      info:    { bg: '#DBEAFE', border: '#93C5FD', fg: '#1D4ED8' },
+      warning: { bg: '#FEF3C7', border: '#FCD34D', fg: '#B45309' },
+      danger:  { bg: '#FEE2E2', border: '#FCA5A5', fg: '#B91C1C' },
+      neutral: { bg: '#F3F4F6', border: '#E5E7EB', fg: '#374151' },
+    },
   },
   dark: {
     background: '#0B0B0E',
@@ -68,10 +90,21 @@ export const palette: ThemePalettes = {
     accent: '#F87171',
     danger: '#F87171',
     success: '#34D399',
-    overlay: 'rgba(0,0,0,0.6)',
+    info: '#60A5FA',
+    warning: '#FBBF24',
+    overlay: 'rgba(0,0,0,0.7)',
     tabBarActive: '#F87171',
     tabBarInactive: '#9CA3AF',
     tabBarBackground: '#0B0B0E',
+    // Tonal pairs use higher-alpha overlays so they read on the dark surface
+    // without the pastel "washed out" look of the light palette.
+    tones: {
+      success: { bg: 'rgba(52,211,153,0.16)',  border: 'rgba(52,211,153,0.40)',  fg: '#6EE7B7' },
+      info:    { bg: 'rgba(96,165,250,0.16)',  border: 'rgba(96,165,250,0.40)',  fg: '#93C5FD' },
+      warning: { bg: 'rgba(251,191,36,0.16)',  border: 'rgba(251,191,36,0.40)',  fg: '#FCD34D' },
+      danger:  { bg: 'rgba(248,113,113,0.16)', border: 'rgba(248,113,113,0.40)', fg: '#FCA5A5' },
+      neutral: { bg: 'rgba(156,163,175,0.14)', border: 'rgba(156,163,175,0.30)', fg: '#D1D5DB' },
+    },
   },
 }
 

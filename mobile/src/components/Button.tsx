@@ -6,11 +6,14 @@ import {
   StyleSheet,
   Text,
   TextStyle,
+  View,
   ViewStyle,
 } from 'react-native'
-import { palette, radius, spacing } from '@/theme'
+import { Ionicons } from '@expo/vector-icons'
+import { palette, radius, spacing, useTheme } from '@/theme'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
+type Size = 'sm' | 'md'
 
 interface Props {
   title: string
@@ -18,6 +21,13 @@ interface Props {
   loading?: boolean
   disabled?: boolean
   variant?: Variant
+  size?: Size
+  /** Optional leading icon — keeps icon-label spacing consistent across screens. */
+  icon?: keyof typeof Ionicons.glyphMap
+  /** Override the announced label (defaults to `title`). */
+  accessibilityLabel?: string
+  /** Optional supplementary hint announced by screen readers. */
+  accessibilityHint?: string
   style?: StyleProp<ViewStyle>
   textStyle?: StyleProp<TextStyle>
 }
@@ -28,26 +38,46 @@ export function Button({
   loading = false,
   disabled = false,
   variant = 'primary',
+  size = 'md',
+  icon,
+  accessibilityLabel,
+  accessibilityHint,
   style,
   textStyle,
 }: Props) {
+  const { colors } = useTheme()
   const isDisabled = disabled || loading
+  const v = themedVariant(variant, colors)
+  const sizeStyle = size === 'sm' ? sizeStyles.sm : sizeStyles.md
+  const textSize = size === 'sm' ? 14 : 16
+
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      android_ripple={isDisabled ? undefined : { color: v.ripple, borderless: false }}
       style={({ pressed }) => [
         styles.base,
-        variantStyles[variant].container,
+        sizeStyle,
+        v.container,
         pressed && !isDisabled && { opacity: 0.85 },
         isDisabled && { opacity: 0.5 },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variantStyles[variant].text.color as string} />
+        <ActivityIndicator color={v.text.color as string} />
       ) : (
-        <Text style={[styles.label, variantStyles[variant].text, textStyle]}>{title}</Text>
+        <View style={styles.row}>
+          {icon ? (
+            <Ionicons name={icon} size={textSize + 2} color={v.text.color as string} />
+          ) : null}
+          <Text style={[styles.label, { fontSize: textSize }, v.text, textStyle]}>{title}</Text>
+        </View>
       )}
     </Pressable>
   )
@@ -55,34 +85,78 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  label: { fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+})
+
+const sizeStyles = StyleSheet.create({
+  md: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     minHeight: 48,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+  sm: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    minHeight: 36,
   },
 })
 
-const variantStyles: Record<Variant, { container: ViewStyle; text: TextStyle }> = {
-  primary: {
-    container: { backgroundColor: palette.brand.red600 },
-    text: { color: '#FFFFFF' },
-  },
-  secondary: {
-    container: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-    text: { color: '#111827' },
-  },
-  ghost: {
-    container: { backgroundColor: 'transparent' },
-    text: { color: palette.brand.red600 },
-  },
-  danger: {
-    container: { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FCA5A5' },
-    text: { color: palette.brand.red700 },
-  },
+interface VariantStyle {
+  container: ViewStyle
+  text: TextStyle
+  ripple: string
+}
+
+// Variants are derived from the live palette so dark mode looks right
+// without the previous `#F3F4F6 / #FEE2E2` hardcoded surfaces.
+function themedVariant(variant: Variant, colors: ReturnType<typeof useTheme>['colors']): VariantStyle {
+  switch (variant) {
+    case 'primary':
+      return {
+        container: { backgroundColor: palette.brand.red600 },
+        text: { color: '#FFFFFF' },
+        ripple: 'rgba(255,255,255,0.20)',
+      }
+    case 'secondary':
+      return {
+        container: {
+          backgroundColor: colors.surfaceMuted,
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        text: { color: colors.text },
+        ripple: 'rgba(127,127,127,0.18)',
+      }
+    case 'outline':
+      return {
+        container: {
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        text: { color: colors.text },
+        ripple: 'rgba(127,127,127,0.18)',
+      }
+    case 'ghost':
+      return {
+        container: { backgroundColor: 'transparent' },
+        text: { color: colors.accent },
+        ripple: 'rgba(127,127,127,0.18)',
+      }
+    case 'danger':
+      return {
+        container: {
+          backgroundColor: colors.tones.danger.bg,
+          borderWidth: 1,
+          borderColor: colors.tones.danger.border,
+        },
+        text: { color: colors.tones.danger.fg },
+        ripple: 'rgba(220,38,38,0.20)',
+      }
+  }
 }

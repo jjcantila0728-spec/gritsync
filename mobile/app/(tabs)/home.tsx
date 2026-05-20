@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Card, CardSubtitle, CardTitle } from '@/components/Card'
+import { StatusPill } from '@/components/StatusPill'
+import { Skeleton } from '@/components/Skeleton'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme, spacing, radius, palette } from '@/theme'
 import { dbList } from '@/lib/db'
@@ -209,7 +211,11 @@ export default function HomeScreen() {
             </View>
             <CardSubtitle>Latest activity across your NCLEX journey</CardSubtitle>
             {loading ? (
-              <Text style={{ color: colors.textMuted }}>Loading…</Text>
+              <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                <Skeleton height={18} width="65%" />
+                <Skeleton height={14} width="40%" />
+                <Skeleton height={14} width="80%" style={{ marginTop: 6 }} />
+              </View>
             ) : apps.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.sm }}>
                 <View
@@ -323,33 +329,6 @@ function HeroStat({ label, value }: { label: string; value: string }) {
       <Text style={styles.heroStatLabel}>{label}</Text>
     </View>
   )
-}
-
-function StatusPill({ status }: { status?: string }) {
-  const text = (status ?? 'pending').replace(/_/g, ' ')
-  const tone = pillTone(status)
-  return (
-    <View style={[styles.pill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-      <Text style={{ color: tone.fg, fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-        {text}
-      </Text>
-    </View>
-  )
-}
-
-function pillTone(status?: string) {
-  switch (status) {
-    case 'completed':
-      return { bg: '#DCFCE7', border: '#86EFAC', fg: '#15803D' }
-    case 'in-progress':
-    case 'in_progress':
-      return { bg: '#DBEAFE', border: '#93C5FD', fg: '#1D4ED8' }
-    case 'rejected':
-    case 'cancelled':
-      return { bg: '#FEE2E2', border: '#FCA5A5', fg: palette.brand.red700 }
-    default:
-      return { bg: '#FEF3C7', border: '#FCD34D', fg: '#B45309' }
-  }
 }
 
 function QuickAction({
@@ -521,11 +500,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
     gap: spacing.md,
-  },
-  pill: {
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.full,
   },
 })

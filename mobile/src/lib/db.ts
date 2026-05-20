@@ -16,7 +16,10 @@ function buildParams(opts: DbListOptions = {}) {
   if (typeof opts.offset === 'number') params.offset = String(opts.offset)
   for (const [k, v] of Object.entries(opts.filter ?? {})) {
     if (v === undefined || v === null) continue
-    params[k] = `eq.${String(v)}`
+    // Send the raw value — the server's /api/db/:table applies `eq` itself via
+    // supabase-js. Sending `eq.<v>` here would double-prefix to `eq.eq.<v>`
+    // and silently return zero rows (e.g. uploaded docs not showing).
+    params[k] = String(v)
   }
   return params
 }

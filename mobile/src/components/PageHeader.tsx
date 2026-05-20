@@ -51,6 +51,9 @@ export function PageHeader({ title, subtitle, icon, action, variant = 'flat' }: 
         {action ? (
           <Pressable
             onPress={action.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            hitSlop={6}
             style={({ pressed }) => [
               styles.action,
               {

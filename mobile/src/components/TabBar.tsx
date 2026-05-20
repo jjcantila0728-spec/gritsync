@@ -110,7 +110,14 @@ function TabButton({
   const activeText = focused ? colors.tabBarActive : colors.tabBarInactive
 
   return (
-    <Pressable onPress={onPress} style={styles.tab} hitSlop={6}>
+    <Pressable
+      onPress={onPress}
+      style={styles.tab}
+      hitSlop={6}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: focused }}
+    >
       <View style={styles.iconWrap}>
         <Animated.View style={[styles.pill, { backgroundColor: activeBg }, pillStyle]} />
         <Animated.View style={iconStyle}>
@@ -130,6 +137,7 @@ function TabButton({
           },
         ]}
         numberOfLines={1}
+        allowFontScaling={false}
       >
         {label}
       </Text>
@@ -177,7 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   label: {
-    fontSize: 10.5,
-    letterSpacing: 0.4,
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
 })

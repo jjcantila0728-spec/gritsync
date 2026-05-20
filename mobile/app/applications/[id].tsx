@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams } from 'expo-router'
 import { Screen } from '@/components/Screen'
 import { Card, CardSubtitle, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
+import { StatusPill } from '@/components/StatusPill'
 import { useTheme, radius, spacing, palette } from '@/theme'
 import { dbFirst, dbList } from '@/lib/db'
 import { Application } from '@/lib/types'
@@ -252,30 +253,6 @@ function StepRow({ step, isLast }: { step: TimelineStepRow; isLast: boolean }) {
           </Text>
         ) : null}
       </View>
-    </View>
-  )
-}
-
-function StatusPill({ status }: { status?: string }) {
-  const tone = (() => {
-    switch (status) {
-      case 'completed':
-        return { bg: '#DCFCE7', border: '#86EFAC', fg: '#15803D' }
-      case 'in-progress':
-      case 'in_progress':
-        return { bg: '#DBEAFE', border: '#93C5FD', fg: '#1D4ED8' }
-      case 'rejected':
-      case 'cancelled':
-        return { bg: '#FEE2E2', border: '#FCA5A5', fg: palette.brand.red700 }
-      default:
-        return { bg: '#FEF3C7', border: '#FCD34D', fg: '#B45309' }
-    }
-  })()
-  return (
-    <View style={{ backgroundColor: tone.bg, borderColor: tone.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full }}>
-      <Text style={{ color: tone.fg, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>
-        {(status ?? 'pending').replace(/_/g, ' ')}
-      </Text>
     </View>
   )
 }
