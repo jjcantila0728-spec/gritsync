@@ -110,48 +110,19 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
 // ---------------------------------------------------------------------------
 router.post('/image', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const apiKey = OPENAI_KEY()
-    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
-
-    const { prompt, aspect_ratio = '1:1', style = '', quality = 'medium' } = req.body || {}
+    const { prompt, aspect_ratio = '1:1', style = '' } = req.body || {}
     if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'prompt is required' })
 
-    const size =
-      aspect_ratio === '16:9' ? '1536x1024'
-      : aspect_ratio === '9:16' || aspect_ratio === '4:5' ? '1024x1536'
-      : '1024x1024'
-
     const fullPrompt = style ? `${prompt}. Style: ${style}.` : prompt
-
-    const r = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-image-1',
-        prompt: fullPrompt,
-        size,
-        quality,
-        n: 1,
-      }),
-    })
-    const j: any = await r.json().catch(() => ({}))
-    if (!r.ok) return res.status(502).json({ error: j.error?.message || `OpenAI HTTP ${r.status}` })
-
-    const b64 = j.data?.[0]?.b64_json
-    if (!b64) return res.status(502).json({ error: 'No image returned' })
-    const buf = Buffer.from(b64, 'base64')
-
-    const filename = `social/ai/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
-    await pool.query(
-      `INSERT INTO file_storage (storage_key, data, content_type, file_size)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (storage_key) DO UPDATE
-         SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
-      [filename, buf, 'image/png', buf.length]
-    )
-
-    const url = `${PUBLIC_BASE}/api/storage/public/${filename}`
-    res.json({ data: { url, prompt: fullPrompt, aspect_ratio } })
+    // Funnel through the same cascading provider helper used by the bank
+    // generator so /image also benefits from the gpt-image-1 → dall-e-3 →
+    // dall-e-2 fallback when project access is gated.
+    try {
+      const url = await generateImageOpenAI(fullPrompt, aspect_ratio)
+      res.json({ data: { url, prompt: fullPrompt, aspect_ratio } })
+    } catch (err: any) {
+      return res.status(502).json({ error: err.message || 'OpenAI image generation failed' })
+    }
   } catch (err: any) {
     console.error('AI image error:', err)
     res.status(500).json({ error: err.message || 'AI image failed' })
@@ -246,7 +217,7 @@ router.get('/video/:id', authenticateToken, requireAdmin, async (req: Authentica
          SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
       [filename, buf, contentType, buf.length]
     )
-    const url = `${PUBLIC_BASE}/api/storage/public/${filename}`
+    const url = `/api/storage/public/${filename}`
     cachedVideoUrls.set(id, url)
     res.json({ data: { id, status, video_url: url } })
   } catch (err: any) {
@@ -373,9 +344,11 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
 //   4. DELETE /content-bank/:id — remove an item.
 // ---------------------------------------------------------------------------
 
-// Helper: convert raw user inputs into a single, richer "brief" the downstream
-// caption + media prompts can both consume. This is the "prompt enhancer" the
-// product spec calls for.
+// The agentic enhancer takes a raw operator brief and turns it into a tight
+// strategy document a copywriter + image AI can both consume. The system
+// prompt asks the model to think like a senior social-media strategist —
+// goal → audience → hook → payoff → CTA → per-platform calibration —
+// instead of just rewording the input.
 async function enhanceBrief(input: {
   topic: string
   preselected_idea?: string | null
@@ -384,35 +357,80 @@ async function enhanceBrief(input: {
   language: string
   content_type: 'image' | 'video'
   additional_details?: string
-}): Promise<{ enhanced: string; image_prompt_seed: string; video_prompt_seed: string }> {
+  goal?: string
+  audience_preset?: string
+  platforms?: string[]
+}): Promise<{
+  enhanced: string
+  image_prompt_seed: string
+  video_prompt_seed: string
+  hook: string
+  cta: string
+  hashtags: string[]
+  platform_notes: Record<string, string>
+}> {
   const apiKey = OPENAI_KEY()
-  // Fall back to a trivial pass-through if OpenAI isn't configured — the
-  // generator still works, just without the enhancer pass.
   const fallback = () => {
     const seed = [input.preselected_idea, input.topic, input.additional_details]
       .filter(Boolean).join(' — ')
-    return { enhanced: seed, image_prompt_seed: seed, video_prompt_seed: seed }
+    return {
+      enhanced: seed,
+      image_prompt_seed: seed,
+      video_prompt_seed: seed,
+      hook: '',
+      cta: '',
+      hashtags: [],
+      platform_notes: {},
+    }
   }
   if (!apiKey) return fallback()
 
-  const system = `You refine raw post ideas into a tight brief for a downstream caption + media generator. Output STRICT JSON only.`
-  const user = `Refine this post idea into a brief.
+  const system = `You are a senior social-media strategist at GritSync, a US healthcare and nursing career platform that helps internationally educated (especially Filipino-trained) nurses pass the NCLEX-RN and become US Registered Nurses.
 
-Raw topic: ${input.topic || '(none)'}
-Preselected idea: ${input.preselected_idea || '(none)'}
+Think like a top-tier social-media manager:
+1. GOAL FIRST — every post must drive one specific outcome (book a consult, share a credible story, educate on a step, drive saves/shares, etc.). Read the operator's goal and let it shape the structure.
+2. AUDIENCE — write to ONE specific reader. A Filipino nurse considering migration is not the same as one in active NCLEX prep, which is not the same as a US-based USRN. Pick the right reader.
+3. HOOK — the first 7-12 words must stop a thumb mid-scroll. Specific over abstract. Concrete scene > generic question.
+4. PAYOFF — clear why-to-keep-reading; one insight, story, or actionable detail.
+5. SINGLE CTA — exactly ONE next action. No "follow + comment + share + DM us + visit our site".
+6. PLATFORM CALIBRATION — the same idea is shaped differently on FB (longer-form, line breaks), IG (tight hook + visual-led), LinkedIn (credibility-led), TikTok (3-second hook), YouTube (curiosity-led title).
+
+Brand rules (NON-NEGOTIABLE):
+- Never fabricate stats, scores, salaries, names, or testimonials.
+- No fake urgency, no guaranteed outcomes, no "the only way" claims.
+- Honor the operator's tone, length, and language exactly.
+- Be warm and specific, not corporate.
+
+Output STRICT JSON only. No markdown fences, no commentary.`
+
+  const user = `Plan one post.
+
+Raw topic from operator: ${input.topic || '(none)'}
+Preselected template / angle: ${input.preselected_idea || '(none)'}
+Campaign goal: ${input.goal || 'engagement / brand presence (operator did not specify)'}
+Audience preset: ${input.audience_preset || 'general — Filipino RNs anywhere in their NCLEX/USRN journey'}
+Platforms it will run on: ${(input.platforms || []).length ? (input.platforms || []).join(', ') : 'platform-agnostic'}
 Tone: ${input.tone}
 Length: ${input.length}
 Language: ${input.language}
-Content type: ${input.content_type}
-Additional guidance: ${input.additional_details || '(none)'}
+Content format: ${input.content_type}
+Operator's additional guidance: ${input.additional_details || '(none)'}
 
-Brand context: GritSync is a US healthcare/nursing career platform helping internationally educated nurses immigrate and pass the NCLEX. Stay accurate, warm, and never fabricate stats or testimonials.
-
-Return ONLY this JSON object:
+Return ONLY this JSON object (all fields required):
 {
-  "enhanced": "A 2-4 sentence sharpened brief for a copywriter — what to say, who to say it to, what the post should accomplish.",
-  "image_prompt_seed": "A concrete visual prompt (composition, subject, lighting, mood) for a single still image. No text overlays.",
-  "video_prompt_seed": "A short scene description for a 5-second vertical video (subject, action, camera, mood)."
+  "enhanced": "3-5 sentences. Tell the copywriter: who this is for, the one outcome we want, the hook hypothesis, the payoff, and the single CTA. Concrete, no fluff.",
+  "hook": "The exact 7-12 word opener you'd test first. Specific, scroll-stopping.",
+  "cta": "The single call-to-action in plain language. e.g. 'Book a free 15-min consult with GritSync this week.'",
+  "image_prompt_seed": "Concrete visual prompt for a single on-brand still image. Composition, subject, lighting, mood. Subjects are Filipino healthcare professionals in modern settings. No text overlays, no logos, no readable signage.",
+  "video_prompt_seed": "5-second vertical video scene description. Subject, action, camera move, mood.",
+  "hashtags": ["#GritSync", "#NCLEXPrep", "#USRNJourney", "..."],
+  "platform_notes": {
+    "facebook": "How to shape this post for FB (length, line breaks, vibe).",
+    "instagram": "Same, for IG (caption-first vs visual-led, emoji density, hashtag placement).",
+    "linkedin": "Same, for LinkedIn (credibility framing).",
+    "tiktok": "Same, for TikTok (3-second hook, on-screen text concept).",
+    "youtube": "Same, for YouTube (curiosity-led title direction)."
+  }
 }`
 
   try {
@@ -425,7 +443,7 @@ Return ONLY this JSON object:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
-        max_tokens: 600,
+        max_tokens: 1400,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
@@ -438,47 +456,91 @@ Return ONLY this JSON object:
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return fallback()
     const parsed = JSON.parse(match[0])
+    const fb = fallback()
     return {
-      enhanced: String(parsed.enhanced || '').trim() || fallback().enhanced,
-      image_prompt_seed: String(parsed.image_prompt_seed || '').trim() || fallback().image_prompt_seed,
-      video_prompt_seed: String(parsed.video_prompt_seed || '').trim() || fallback().video_prompt_seed,
+      enhanced: String(parsed.enhanced || '').trim() || fb.enhanced,
+      image_prompt_seed: String(parsed.image_prompt_seed || '').trim() || fb.image_prompt_seed,
+      video_prompt_seed: String(parsed.video_prompt_seed || '').trim() || fb.video_prompt_seed,
+      hook: String(parsed.hook || '').trim(),
+      cta: String(parsed.cta || '').trim(),
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter((h: any) => typeof h === 'string').slice(0, 8) : [],
+      platform_notes: typeof parsed.platform_notes === 'object' && parsed.platform_notes ? parsed.platform_notes : {},
     }
   } catch {
     return fallback()
   }
 }
 
-// Helper: generate N caption variants in the requested language/tone/length.
-async function generateCaptions(brief: string, opts: {
-  tone: string; length: string; language: string; count: number
+// Caption generator. Now consumes the agentic enhancer's full plan (hook,
+// CTA, hashtags, platform notes) so each variant has structure rather than
+// just being a tone/length rewording of the brief.
+async function generateCaptions(plan: {
+  enhanced: string
+  hook: string
+  cta: string
+  hashtags: string[]
+  platform_notes: Record<string, string>
+}, opts: {
+  tone: string; length: string; language: string; count: number; platforms?: string[]
 }): Promise<string[]> {
   const apiKey = OPENAI_KEY()
-  if (!apiKey) return Array.from({ length: opts.count }, (_, i) => `${brief} (variant ${i + 1})`)
+  if (!apiKey) return Array.from({ length: opts.count }, (_, i) => `${plan.enhanced} (variant ${i + 1})`)
 
   const lengthHint =
-    opts.length === 'short' ? 'Under 100 characters.'
-    : opts.length === 'long' ? 'Around 250-400 characters across 2-3 short paragraphs.'
-    : 'Around 120-220 characters.'
+    opts.length === 'short' ? 'Under 100 characters total.'
+    : opts.length === 'long' ? 'Around 250-400 characters across 2-3 short paragraphs separated by blank lines for breath.'
+    : 'Around 120-220 characters with at most one line break.'
 
   const languageNote =
-    opts.language === 'taglish' ? 'Write in natural Taglish (Filipino + English code-switching, the way bilingual Filipino nurses actually talk online).'
-    : opts.language === 'filipino' ? 'Write in conversational Filipino (Tagalog).'
+    opts.language === 'taglish' ? 'Write in natural Taglish — the way bilingual Filipino nurses actually talk online (mix of Filipino + English, no forced code-switching).'
+    : opts.language === 'filipino' ? 'Write in conversational Filipino (Tagalog), keeping medical/credentialing terms in English where Filipinos naturally do.'
     : 'Write in conversational English.'
 
-  const system = `You are a social-media copywriter for GritSync, a US healthcare/nursing platform for internationally educated nurses. Write warm, specific, credible copy. No clichés, no fabricated stats or testimonials.`
-  // JSON-mode requires an object root, so we wrap the array in { "captions": [...] }
-  // and unwrap below. The model is much more reliable in JSON mode.
-  const user = `Write ${opts.count} distinct caption variants for one post.
+  const platformLine = (opts.platforms || []).length
+    ? `Platforms this post must work on: ${(opts.platforms || []).join(', ')}. Shape every variant to read well on all of them — short tight hook, no platform-specific formatting that breaks elsewhere.`
+    : 'Platform-agnostic — keep formatting that works anywhere.'
 
-Brief: ${brief}
-Tone: ${opts.tone}
-Length: ${lengthHint}
-Language: ${languageNote}
-Hashtags: 3-6 relevant ones at the end.
-Emojis: sparing, one or two max.
+  const platformNotesBlock = Object.entries(plan.platform_notes || {})
+    .filter(([p]) => (opts.platforms || []).length === 0 || (opts.platforms || []).includes(p))
+    .map(([p, n]) => `  - ${p}: ${n}`)
+    .join('\n') || '  (none — write generically.)'
+
+  const system = `You are a senior copywriter at GritSync, writing for Filipino-trained nurses who want to become USRNs.
+
+Voice rules:
+- Lead with a SPECIFIC, scroll-stopping hook in the first 7-12 words. Concrete scene, not "Are you a nurse?".
+- One concrete detail per paragraph — a name, a scene, a number you can actually cite, a moment.
+- No clichés. No fake stats. No fabricated testimonials. No "the only way" / "guaranteed pass" claims.
+- ONE call-to-action per caption. No CTA stacking.
+- Match the requested tone, length, and language exactly.
+- If hashtags are listed in the plan, include 3-6 of them (or your own equally-relevant ones) only at the very end, on a separate line.
+- Emojis sparingly: at most 2 per caption, used to anchor meaning, never to decorate.
+
+Output STRICT JSON only.`
+
+  const user = `Write ${opts.count} DISTINCT caption variants for ONE post — each variant a different angle on the same hook + payoff, so the operator can pick the strongest.
+
+Strategist's plan:
+- Brief: ${plan.enhanced}
+- Hook hypothesis: ${plan.hook || '(model: derive from brief)'}
+- Single CTA: ${plan.cta || '(model: derive from brief)'}
+- Suggested hashtags (you may swap for equally-relevant ones): ${plan.hashtags.length ? plan.hashtags.join(' ') : '(none)'}
+- Platform notes:
+${platformNotesBlock}
+
+Operator settings:
+- Tone: ${opts.tone}
+- Length: ${lengthHint}
+- Language: ${languageNote}
+- ${platformLine}
+
+Each variant must:
+1. Open with a different hook (varied phrasing, varied entry point).
+2. Hit the same payoff and end on the SAME single CTA.
+3. End with 3-6 hashtags on a new line.
 
 Return ONLY this JSON object — no surrounding text, no markdown fence:
-{ "captions": ["First caption…", "Second caption…", ... exactly ${opts.count} strings] }`
+{ "captions": ["First caption…", "Second caption…", "..."] }`
 
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -532,26 +594,43 @@ async function persistImage(buf: Buffer, contentType: string): Promise<string> {
        SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
     [filename, buf, contentType, buf.length]
   )
-  return `${PUBLIC_BASE}/api/storage/public/${filename}`
+  // Return a RELATIVE path. Frontend <img src> resolves against current
+  // origin (works on every deploy), and toAbsoluteUrl() lifts to absolute
+  // only at boundaries that need it (Replicate, Meta publishing).
+  return `/api/storage/public/${filename}`
+}
+
+// Lift a stored relative path to an absolute URL when handing off to an
+// external fetcher (Replicate's image-to-video, Meta Graph API publishing).
+// Leaves already-absolute URLs alone.
+function toAbsoluteUrl(maybeRelative: string): string {
+  if (/^https?:\/\//i.test(maybeRelative)) return maybeRelative
+  const base = PUBLIC_BASE || 'https://app.gritsync.com'
+  return `${base}${maybeRelative.startsWith('/') ? '' : '/'}${maybeRelative}`
 }
 
 // Try one OpenAI image model. Returns the persisted URL on success, or a
-// detail object with `modelAccessError: true` when the project key doesn't
-// have access to the requested model — so the caller can fall back.
+// detail object with a structured error so the caller can decide whether
+// to fall back to a different model.
+type OpenAIImageModel = 'gpt-image-1' | 'gpt-image-1-mini' | 'dall-e-3' | 'dall-e-2'
+
 async function tryOpenAIImage(
   apiKey: string,
   prompt: string,
-  model: 'gpt-image-1' | 'dall-e-3'
-): Promise<{ url?: string; error?: string; modelAccessError?: boolean }> {
-  const body: Record<string, any> = { model, prompt, n: 1, size: '1024x1024' }
-  if (model === 'gpt-image-1') {
+  model: OpenAIImageModel,
+  size: string = '1024x1024'
+): Promise<{ url?: string; error?: string; shouldFallback?: boolean }> {
+  // Build the minimal valid body per model. The Images API rejects unknown
+  // parameters, so we send only what each model accepts. Both gpt-image
+  // variants ignore response_format and always return b64_json.
+  const body: Record<string, any> = { model, prompt, n: 1, size }
+  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
     body.quality = 'medium'
-  } else {
-    // dall-e-3 supports 'standard' | 'hd' and defaults to returning a URL.
-    // Ask for b64 so we can persist without a second hop.
+  } else if (model === 'dall-e-3') {
     body.quality = 'standard'
-    body.response_format = 'b64_json'
   }
+  // dall-e-2: just model + prompt + n + size.
+
   const r = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -560,13 +639,15 @@ async function tryOpenAIImage(
   const j: any = await r.json().catch(() => ({}))
   if (!r.ok) {
     const msg = j.error?.message || `OpenAI HTTP ${r.status}`
-    // OpenAI returns "Project ... does not have access to model `gpt-image-1`"
-    // or a 403/404 with a model_not_found code when the model is gated.
-    const accessError =
-      /does not have access to model|model_not_found|model `[^`]+`/i.test(msg) ||
+    // Fall back on access / model-shape / unknown-parameter errors. Any of
+    // these mean "try a different model" rather than "give up" — leaves
+    // real failures (auth, rate limit, content policy) to bubble up.
+    const shouldFallback =
+      /does not have access to model|model_not_found|model `[^`]+`|unknown parameter|invalid request|unsupported|not supported|invalid model/i.test(msg) ||
       j.error?.code === 'model_not_found' ||
-      r.status === 403 || r.status === 404
-    return { error: msg, modelAccessError: accessError }
+      j.error?.code === 'invalid_request_error' ||
+      r.status === 400 || r.status === 403 || r.status === 404
+    return { error: msg, shouldFallback }
   }
   const b64 = j.data?.[0]?.b64_json
   const url = j.data?.[0]?.url
@@ -583,21 +664,38 @@ async function tryOpenAIImage(
   return { error: 'OpenAI returned no image' }
 }
 
-async function generateImageOpenAI(prompt: string): Promise<string> {
+// Sizes each OpenAI image model accepts. We pick the closest match per
+// requested aspect ratio. dall-e-2 only does square sizes; gpt-image-1*
+// accept 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape).
+function sizeFor(model: OpenAIImageModel, aspect: string): string {
+  if (model === 'dall-e-2') return '1024x1024'
+  if (model === 'dall-e-3') {
+    if (aspect === '16:9') return '1792x1024'
+    if (aspect === '9:16' || aspect === '4:5') return '1024x1792'
+    return '1024x1024'
+  }
+  // gpt-image-1 / gpt-image-1-mini
+  if (aspect === '16:9') return '1536x1024'
+  if (aspect === '9:16' || aspect === '4:5') return '1024x1536'
+  return '1024x1024'
+}
+
+async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1'): Promise<string> {
   const apiKey = OPENAI_KEY()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
 
-  // gpt-image-1 is higher quality but requires project access (a one-click
-  // approval inside OpenAI's dashboard). Fall back to dall-e-3, which is
-  // available on every project by default, so generation works out of the box.
-  const first = await tryOpenAIImage(apiKey, prompt, 'gpt-image-1')
-  if (first.url) return first.url
-  if (first.modelAccessError) {
-    const second = await tryOpenAIImage(apiKey, prompt, 'dall-e-3')
-    if (second.url) return second.url
-    throw new Error(second.error || 'OpenAI dall-e-3 fallback failed')
+  // Cascade highest-quality → lowest. Most production OpenAI projects today
+  // expose only one of these (e.g. gpt-image-1-mini), so the chain quietly
+  // probes for the first one this project has access to.
+  const chain: OpenAIImageModel[] = ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2']
+  let lastError = 'OpenAI image generation failed'
+  for (const model of chain) {
+    const r = await tryOpenAIImage(apiKey, prompt, model, sizeFor(model, aspect_ratio))
+    if (r.url) return r.url
+    lastError = `${model}: ${r.error || 'unknown'}`
+    if (!r.shouldFallback) break
   }
-  throw new Error(first.error || 'OpenAI image generation failed')
+  throw new Error(lastError)
 }
 
 // Google Gemini 2.5 Flash Image — codename "nano banana". OpenAI-incompatible
@@ -688,6 +786,9 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       preselected_idea = null,
       template_id = null,
       template_image_prompt = null,
+      goal = '',
+      audience_preset = '',
+      platforms = [],
       tone = 'friendly',
       length = 'medium',
       language = 'taglish',
@@ -700,6 +801,9 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     const cleanTopic = String(topic).trim()
     const cleanIdea = preselected_idea ? String(preselected_idea).trim() : ''
     const cleanTemplateImagePrompt = template_image_prompt ? String(template_image_prompt).trim() : ''
+    const cleanPlatforms = Array.isArray(platforms)
+      ? platforms.map((p: any) => String(p)).filter((p: string) => /^(facebook|instagram|linkedin|youtube|tiktok)$/.test(p))
+      : []
     if (!cleanTopic && !cleanIdea) {
       return res.status(400).json({ error: 'A topic or a preselected idea is required' })
     }
@@ -708,18 +812,21 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     const provider: ImageProvider =
       image_provider === 'nano-banana' || image_provider === 'grok' ? image_provider : 'openai'
 
-    // Step 1: enhance.
+    // Step 1: strategic plan (the "agentic" enhancer).
     const brief = await enhanceBrief({
       topic: cleanTopic,
       preselected_idea: cleanIdea || null,
       tone, length, language,
       content_type: ct,
       additional_details,
+      goal: String(goal || '').trim(),
+      audience_preset: String(audience_preset || '').trim(),
+      platforms: cleanPlatforms,
     })
 
-    // Step 2: captions in one call.
-    const captions = await generateCaptions(brief.enhanced, {
-      tone, length, language, count: n,
+    // Step 2: captions per the plan.
+    const captions = await generateCaptions(brief, {
+      tone, length, language, count: n, platforms: cleanPlatforms,
     })
 
     // When a template was picked, its `image_prompt` defines the visual
@@ -738,6 +845,12 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       preselected_idea: cleanIdea || null,
       template_id: template_id || null,
       image_provider: provider,
+      goal: String(goal || '').trim() || null,
+      audience_preset: String(audience_preset || '').trim() || null,
+      platforms: cleanPlatforms.length ? cleanPlatforms : null,
+      hook: brief.hook || null,
+      cta: brief.cta || null,
+      hashtags: brief.hashtags?.length ? brief.hashtags : null,
     }
 
     const rows: any[] = []
@@ -756,8 +869,13 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
         } else {
           // 3a. Generate the starting frame with the chosen image AI.
           const sourceImageUrl = await generateImage(provider, imagePrompt)
-          // 3b. Kick off image-to-video on Replicate.
-          const predictionId = await startVideoPrediction(brief.video_prompt_seed, sourceImageUrl)
+          // 3b. Kick off image-to-video on Replicate. Replicate fetches the
+          //     start frame from the public internet, so the URL needs to be
+          //     absolute — toAbsoluteUrl() lifts our stored relative path.
+          const predictionId = await startVideoPrediction(
+            brief.video_prompt_seed,
+            toAbsoluteUrl(sourceImageUrl)
+          )
           const ins = await pool.query(
             `INSERT INTO social_content_bank
                (caption, media_url, media_type, prediction_id, source_image_url, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
@@ -852,7 +970,7 @@ router.post('/content-bank/:id/refresh-media', authenticateToken, requireAdmin, 
          SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
       [filename, buf, contentType, buf.length]
     )
-    const url = `${PUBLIC_BASE}/api/storage/public/${filename}`
+    const url = `/api/storage/public/${filename}`
     const upd = await pool.query(
       `UPDATE social_content_bank
          SET media_url = $1, status = 'available', updated_at = NOW()
