@@ -101,8 +101,10 @@ interface ScheduleModalState {
 //      generic image-prompt seed from the enhancer, so every post in a
 //      template family looks like part of the same brand
 //   - `gradient`: tailwind classes for the on-card sample preview tile
-//   - `ad_ready`: surfaces a "Use in Ad" shortcut on the matching Content
-//      Bank item so the caption flows straight into the AI Ads generator
+//   - `ad_ready`: legacy flag — kept on the data so existing bank rows
+//      retain their tag, but the Compose UI no longer surfaces an
+//      "Ad-ready" badge (every saved post can become an ad via the
+//      Bank → Use in Ad shortcut, so the distinction is just noise)
 type TemplateCategory = 'success' | 'education' | 'visa' | 'lifestyle' | 'motivation' | 'cta' | 'bts'
 
 interface PostTemplate {
@@ -1370,7 +1372,8 @@ function GeneratorView({
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Plan like a social-media manager: pick a <strong>goal</strong>, name the <strong>audience</strong>, choose
             the <strong>angle</strong>, and we'll have the strategist agent draft a hook + payoff + CTA before the
-            copywriter writes variants.
+            copywriter writes variants. Everything lands in the <strong>Content Bank</strong> — from there, click{' '}
+            <strong>Use in Ad</strong> on any item to repurpose it as paid creative.
           </p>
         </div>
 
@@ -1481,14 +1484,6 @@ function GeneratorView({
                       <span className="absolute top-2 left-2 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-white/80 dark:bg-black/40 text-gray-700 dark:text-gray-100 backdrop-blur-sm">
                         {TEMPLATE_CATEGORY_LABEL[t.category]}
                       </span>
-                      {t.ad_ready && (
-                        <span
-                          title="Works well as an ad — use directly from Content Bank"
-                          className="absolute top-2 right-2 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-primary-600 text-white"
-                        >
-                          Ad-ready
-                        </span>
-                      )}
                       {selected && (
                         <div className="absolute inset-0 bg-primary-600/10 flex items-center justify-center">
                           <span className="bg-primary-600 text-white text-xs px-3 py-1 rounded-full font-medium shadow">

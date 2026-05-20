@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
 import pool from '../db'
 import { isDriveConnected, uploadToDrive } from '../lib/google-drive'
+import { GRITSYNC_KB } from '../lib/gritsync-knowledge'
 
 const router = Router()
 
@@ -49,7 +50,11 @@ router.post('/caption', authenticateToken, requireAdmin, async (req: Authenticat
       ? `The same caption will be cross-posted to: ${platforms.join(', ')}. Keep it short enough to work on every platform.`
       : 'Platform-agnostic — works for any social network.'
 
-    const system = `You are a social-media copywriter for GritSync, a US healthcare and nursing career platform that helps internationally educated nurses immigrate and pass the NCLEX. Write copy that is warm, credible, and specific. Avoid clichés and corporate-speak. Never fabricate stats or testimonials.`
+    const system = `You are a social-media copywriter for GritSync. Use the ground-truth facts below as the single source of company information — every line of copy you write must be consistent with them.
+
+${GRITSYNC_KB}
+
+Write warm, credible, specific captions. Avoid clichés and corporate-speak. Never fabricate stats or testimonials.`
 
     const user = `Write 3 distinct caption variants for this post.
 
@@ -263,7 +268,11 @@ router.post('/ad', authenticateToken, requireAdmin, async (req: AuthenticatedReq
     }
     const limitText = platformLimits[platform] || ''
 
-    const system = `You are a senior performance-marketing copywriter for GritSync, a US healthcare/nursing career platform helping internationally educated nurses immigrate and pass the NCLEX. Write ads that convert: specific benefit-led hooks, concrete numbers when you have them, no clichés, no fake testimonials, no fake urgency, and never claim guaranteed outcomes. Follow each ad network's policy.`
+    const system = `You are a senior performance-marketing copywriter for GritSync. Every ad you draft must match the ground-truth facts below — never invent services, prices, timelines, or claims that contradict them.
+
+${GRITSYNC_KB}
+
+Ad-craft rules: specific benefit-led hooks, concrete numbers ONLY when grounded in the facts above, no clichés, no fake testimonials, no fake urgency, never claim guaranteed outcomes. Follow each ad network's policy.`
 
     const user = `Write ${variants} distinct ad variants.
 
@@ -378,7 +387,9 @@ async function enhanceBrief(input: {
   }
   if (!apiKey) return fallback()
 
-  const system = `You are a senior social-media strategist at GritSync, a US healthcare and nursing career platform that helps internationally educated (especially Filipino-trained) nurses pass the NCLEX-RN and become US Registered Nurses.
+  const system = `You are a senior social-media strategist at GritSync. The ground-truth facts below are the single source of company information — every plan you produce must be consistent with them.
+
+${GRITSYNC_KB}
 
 Think like a top-tier social-media manager:
 1. GOAL FIRST — every post must drive one specific outcome (book a consult, share a credible story, educate on a step, drive saves/shares, etc.). Read the operator's goal and let it shape the structure.
@@ -498,7 +509,9 @@ async function generateCaptions(plan: {
     .map(([p, n]) => `  - ${p}: ${n}`)
     .join('\n') || '  (none — write generically.)'
 
-  const system = `You are a senior copywriter at GritSync, writing for Filipino-trained nurses who want to become USRNs.
+  const system = `You are a senior copywriter at GritSync, writing for Filipino-trained nurses who want to become USRNs. The ground-truth facts below are the single source of company information — every line of copy you write must be consistent with them.
+
+${GRITSYNC_KB}
 
 Voice rules:
 - Lead with a SPECIFIC, scroll-stopping hook in the first 7-12 words. Concrete scene, not "Are you a nurse?".
