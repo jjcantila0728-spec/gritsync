@@ -535,25 +535,69 @@ async function persistImage(buf: Buffer, contentType: string): Promise<string> {
   return `${PUBLIC_BASE}/api/storage/public/${filename}`
 }
 
-async function generateImageOpenAI(prompt: string): Promise<string> {
-  const apiKey = OPENAI_KEY()
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
+// Try one OpenAI image model. Returns the persisted URL on success, or a
+// detail object with `modelAccessError: true` when the project key doesn't
+// have access to the requested model — so the caller can fall back.
+async function tryOpenAIImage(
+  apiKey: string,
+  prompt: string,
+  model: 'gpt-image-1' | 'dall-e-3'
+): Promise<{ url?: string; error?: string; modelAccessError?: boolean }> {
+  const body: Record<string, any> = { model, prompt, n: 1, size: '1024x1024' }
+  if (model === 'gpt-image-1') {
+    body.quality = 'medium'
+  } else {
+    // dall-e-3 supports 'standard' | 'hd' and defaults to returning a URL.
+    // Ask for b64 so we can persist without a second hop.
+    body.quality = 'standard'
+    body.response_format = 'b64_json'
+  }
   const r = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-image-1',
-      prompt,
-      size: '1024x1024',
-      quality: 'medium',
-      n: 1,
-    }),
+    body: JSON.stringify(body),
   })
   const j: any = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(j.error?.message || `OpenAI HTTP ${r.status}`)
+  if (!r.ok) {
+    const msg = j.error?.message || `OpenAI HTTP ${r.status}`
+    // OpenAI returns "Project ... does not have access to model `gpt-image-1`"
+    // or a 403/404 with a model_not_found code when the model is gated.
+    const accessError =
+      /does not have access to model|model_not_found|model `[^`]+`/i.test(msg) ||
+      j.error?.code === 'model_not_found' ||
+      r.status === 403 || r.status === 404
+    return { error: msg, modelAccessError: accessError }
+  }
   const b64 = j.data?.[0]?.b64_json
-  if (!b64) throw new Error('OpenAI returned no image')
-  return persistImage(Buffer.from(b64, 'base64'), 'image/png')
+  const url = j.data?.[0]?.url
+  if (b64) {
+    return { url: await persistImage(Buffer.from(b64, 'base64'), 'image/png') }
+  }
+  if (url) {
+    const dl = await fetch(url)
+    if (!dl.ok) return { error: `Failed to download OpenAI image (HTTP ${dl.status})` }
+    const buf = Buffer.from(await dl.arrayBuffer())
+    const ct = dl.headers.get('content-type') || 'image/png'
+    return { url: await persistImage(buf, ct) }
+  }
+  return { error: 'OpenAI returned no image' }
+}
+
+async function generateImageOpenAI(prompt: string): Promise<string> {
+  const apiKey = OPENAI_KEY()
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
+
+  // gpt-image-1 is higher quality but requires project access (a one-click
+  // approval inside OpenAI's dashboard). Fall back to dall-e-3, which is
+  // available on every project by default, so generation works out of the box.
+  const first = await tryOpenAIImage(apiKey, prompt, 'gpt-image-1')
+  if (first.url) return first.url
+  if (first.modelAccessError) {
+    const second = await tryOpenAIImage(apiKey, prompt, 'dall-e-3')
+    if (second.url) return second.url
+    throw new Error(second.error || 'OpenAI dall-e-3 fallback failed')
+  }
+  throw new Error(first.error || 'OpenAI image generation failed')
 }
 
 // Google Gemini 2.5 Flash Image — codename "nano banana". OpenAI-incompatible
@@ -642,6 +686,8 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     const {
       topic = '',
       preselected_idea = null,
+      template_id = null,
+      template_image_prompt = null,
       tone = 'friendly',
       length = 'medium',
       language = 'taglish',
@@ -653,6 +699,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
 
     const cleanTopic = String(topic).trim()
     const cleanIdea = preselected_idea ? String(preselected_idea).trim() : ''
+    const cleanTemplateImagePrompt = template_image_prompt ? String(template_image_prompt).trim() : ''
     if (!cleanTopic && !cleanIdea) {
       return res.status(400).json({ error: 'A topic or a preselected idea is required' })
     }
@@ -675,6 +722,11 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       tone, length, language, count: n,
     })
 
+    // When a template was picked, its `image_prompt` defines the visual
+    // family — use it verbatim so every post in that template looks like
+    // part of the same brand. Otherwise fall back to the enhancer's seed.
+    const imagePrompt = cleanTemplateImagePrompt || brief.image_prompt_seed
+
     // Step 3+4: per variant, generate media and persist.
     // For video: we always generate a starting frame with the chosen image AI
     // first, then feed that frame to Replicate as `start_image_url`. That way
@@ -684,6 +736,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       tone, length, language, count: n,
       content_type: ct, additional_details,
       preselected_idea: cleanIdea || null,
+      template_id: template_id || null,
       image_provider: provider,
     }
 
@@ -691,7 +744,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     for (const caption of captions) {
       try {
         if (ct === 'image') {
-          const mediaUrl = await generateImage(provider, brief.image_prompt_seed)
+          const mediaUrl = await generateImage(provider, imagePrompt)
           const ins = await pool.query(
             `INSERT INTO social_content_bank
                (caption, media_url, media_type, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
@@ -702,7 +755,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
           rows.push(ins.rows[0])
         } else {
           // 3a. Generate the starting frame with the chosen image AI.
-          const sourceImageUrl = await generateImage(provider, brief.image_prompt_seed)
+          const sourceImageUrl = await generateImage(provider, imagePrompt)
           // 3b. Kick off image-to-video on Replicate.
           const predictionId = await startVideoPrediction(brief.video_prompt_seed, sourceImageUrl)
           const ins = await pool.query(
