@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -13,15 +13,18 @@ import { CreditCard, Lock, ArrowLeft, Loader2, CheckCircle, Heart, Shield, Zap, 
 import { SEO } from '@/components/SEO'
 
 // Payment Form Component
-function DonationPaymentForm({ 
-  donationId, 
+function DonationPaymentForm({
+  donationId,
   amount,
-  clientSecret
-}: { 
+  clientSecret,
+  donorEmail,
+}: {
   donationId: string
   amount: number
   clientSecret: string
+  donorEmail: string
 }) {
+  const hasDonorEmail = donorEmail.length > 0
   const stripe = useStripe()
   const elements = useElements()
   const navigate = useNavigate()
@@ -46,7 +49,6 @@ function DonationPaymentForm({
     setError('')
 
     try {
-      // Confirm payment using the existing client secret
       const { error: confirmError, paymentIntent: confirmedPayment } = await stripe.confirmPayment({
         elements,
         clientSecret,
@@ -100,11 +102,16 @@ function DonationPaymentForm({
         <PaymentElement
           options={{
             layout: 'tabs',
+            // Let Stripe collect whatever each payment method requires
+            // (Link / Cash App Pay / etc. need an email). Prefill from
+            // what the user typed on the donate form so it's one click.
+            defaultValues: hasDonorEmail
+              ? { billingDetails: { email: donorEmail } }
+              : undefined,
             fields: {
               billingDetails: {
-                email: 'never', // Don't collect email - we already have it
-                phone: 'never', // Don't collect phone
-                address: 'never', // Don't collect address
+                phone: 'never',
+                address: 'never',
               },
             },
           }}
@@ -167,12 +174,14 @@ function DonationPaymentForm({
 // Main Checkout Page Component
 export function DonateCheckout() {
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [donationId, setDonationId] = useState<string | null>(null)
   const [amount, setAmount] = useState<number>(0)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const donorEmail = (location.state as { donorEmail?: string } | null)?.donorEmail ?? ''
 
   useEffect(() => {
     const id = searchParams.get('donation_id')
@@ -357,10 +366,11 @@ export function DonateCheckout() {
                     },
                   }}
                 >
-                  <DonationPaymentForm 
+                  <DonationPaymentForm
                     donationId={donationId}
                     amount={amount}
                     clientSecret={clientSecret}
+                    donorEmail={donorEmail}
                   />
                 </Elements>
               </Card>

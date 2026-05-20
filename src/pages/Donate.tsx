@@ -132,8 +132,13 @@ export function Donate() {
       // sponsorship_id column. Cast to bridge.
       const donation = await donationsAPI.create(donationData as any)
 
-      // Navigate to checkout page
-      navigate(`/donate/checkout?donation_id=${donation.id}&amount=${parseFloat(amount)}`)
+      // Navigate to checkout page. Pass donor_email via state so the checkout
+      // can hand it to Stripe (we opt out of collecting email in PaymentElement
+      // when we already have it, and Stripe then requires us to supply it).
+      navigate(
+        `/donate/checkout?donation_id=${donation.id}&amount=${parseFloat(amount)}`,
+        { state: { donorEmail: isAnonymous ? '' : donorEmail.trim() } },
+      )
     } catch (error: any) {
       console.error('Error creating donation:', error)
       
