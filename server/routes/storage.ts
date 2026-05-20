@@ -319,12 +319,13 @@ router.get('/file', authenticateTokenOrQuery, async (req: AuthenticatedRequest, 
   }
 })
 
-router.get('/public/*filePath', async (req: Request, res: Response) => {
+router.get('/public/*', async (req: Request, res: Response) => {
   try {
-    const raw = (req.params as any).filePath
-    // Express 5 returns wildcard captures as an array of segments; join them
-    // back into a slash-delimited path before sanitizing.
-    const filePath = Array.isArray(raw) ? raw.join('/') : String(raw || '')
+    // Express 4 puts unnamed wildcard captures in req.params[0] as a single
+    // slash-joined string. (We previously used `*filePath` which is Express 5
+    // syntax — that silently fails to match on Express 4 and returns 404.)
+    const raw = (req.params as any)[0]
+    const filePath = String(raw || '')
     const key = sanitizeKey(decodeURIComponent(filePath))
 
     const result = await pool.query(
