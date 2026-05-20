@@ -36,55 +36,30 @@ export default function LoginScreen() {
       const lastIdentifier = await storage.get(StorageKeys.lastIdentifier)
       if (lastIdentifier) setIdentifier(lastIdentifier)
 
+      // Probe biometric capability — we only use it to decide whether to
+      // SHOW the "Sign in with Face ID" button. We never auto-prompt; the
+      // user explicitly opts in by tapping that button or enabling it in
+      // Settings → Security. This keeps Android devices without Face ID
+      // (or any user who'd rather type their password) on the happy path.
       const available = await biometric.isAvailable()
       const enabled = await biometric.isEnabled()
       const kind = await biometric.kind()
       setBiometricKind(kind)
       setBiometricSaved(available && enabled)
-
-      // Auto-prompt biometric on screen open if we have remembered credentials.
-      if (available && enabled) {
-        const remembered = await biometric.getRemembered()
-        if (remembered) {
-          const ok = await biometric.authenticate(
-            kind === 'face' ? 'Sign in with Face ID' : 'Sign in with biometrics',
-          )
-          if (ok) {
-            await doSignIn(remembered.identifier, remembered.password, { silent: true })
-          }
-        }
-      }
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /**
-   * Core sign-in. After a successful PASSWORD sign-in (not biometric replay),
-   * if biometric hardware is available but credentials haven't been saved yet,
-   * offer to enable it. Once saved, the device prompts Face ID automatically
-   * next time and we no longer ask.
+   * Sign-in handler. After success, control flows to the router which
+   * navigates to /home — no biometric prompt, no extra alerts. Users who
+   * want fast subsequent logins can enable biometric from
+   * Settings → Security → Biometric sign-in.
    */
   const doSignIn = useCallback(
-    async (id: string, pw: string, opts: { silent?: boolean } = {}) => {
+    async (id: string, pw: string) => {
       setSubmitting(true)
       try {
         await signIn(id.trim(), pw)
-        if (!opts.silent && (await biometric.isAvailable()) && !(await biometric.isEnabled())) {
-          const label = (await biometric.kind()) === 'face' ? 'Face ID' : 'biometric sign-in'
-          Alert.alert(
-            `Enable ${label}?`,
-            `Use ${label} to sign in to GritSync next time without entering your password.`,
-            [
-              { text: 'Not now', style: 'cancel' },
-              {
-                text: 'Enable',
-                onPress: async () => {
-                  await biometric.rememberCredentials({ identifier: id.trim(), password: pw })
-                },
-              },
-            ],
-          )
-        }
       } catch (e) {
         Alert.alert('Login failed', errorMessage(e, 'Invalid login credentials.'))
       } finally {
@@ -110,11 +85,11 @@ export default function LoginScreen() {
     if (!remembered) {
       Alert.alert(
         `${kind} not set up`,
-        'Sign in once with your password to enable biometric login.',
+        'Open Settings → Security on the next screen to enable biometric sign-in.',
       )
       return
     }
-    await doSignIn(remembered.identifier, remembered.password, { silent: true })
+    await doSignIn(remembered.identifier, remembered.password)
   }
 
   const biometricLabel =

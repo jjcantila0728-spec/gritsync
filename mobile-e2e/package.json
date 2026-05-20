@@ -1,0 +1,20 @@
+{
+  "name": "gritsync-mobile-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E for the GritSync client web flows, run under phone-sized viewports so we mirror the mobile app's user journey.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:android": "playwright test --project=android-pixel-7",
+    "test:ios": "playwright test --project=ios-iphone-15",
+    "test:dark": "playwright test --project=ios-iphone-15-dark",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium webkit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "typescript": "^5.9.2"
+  }
+}

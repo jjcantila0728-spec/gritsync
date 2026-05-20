@@ -65,6 +65,18 @@ api.interceptors.response.use(
       }
       onUnauthorized?.()
     }
+    // Console-log every non-2xx (other than the 401 we just auto-handled) so
+    // Metro shows the URL + body. Without this the only thing we get is
+    // "AxiosError: Request failed with status code 500" with no clue which
+    // endpoint blew up.
+    if (status && status >= 400 && status !== 401) {
+      const url = (original?.baseURL ?? '') + (original?.url ?? '')
+      const method = (original?.method ?? 'GET').toUpperCase()
+      const data = (err.response?.data as any) ?? null
+      const body = typeof data === 'string' ? data.slice(0, 400) : JSON.stringify(data)?.slice(0, 400)
+      // eslint-disable-next-line no-console
+      console.log(`[api] ${method} ${url} → ${status}  body=${body}`)
+    }
     return Promise.reject(err)
   }
 )

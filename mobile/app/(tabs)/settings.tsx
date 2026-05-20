@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Alert, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Alert, Linking, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import { useRouter } from 'expo-router'
 import { Screen } from '@/components/Screen'
 import { Card, CardSubtitle, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
+import { PasswordInput } from '@/components/PasswordInput'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePreferences } from '@/contexts/PreferencesContext'
 import { BrandMark, Wordmark } from '@/components/Brand'
@@ -26,6 +27,10 @@ export default function SettingsScreen() {
   const [biometricKind, setBiometricKind] = useState<'face' | 'fingerprint' | 'iris' | 'none'>('none')
   const [biometricEnabled, setBiometricEnabled] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
+  // State for the password-verify modal that gates biometric enablement.
+  const [bioEnableOpen, setBioEnableOpen] = useState(false)
+  const [bioPassword, setBioPassword] = useState('')
+  const [bioVerifying, setBioVerifying] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -93,17 +98,73 @@ export default function SettingsScreen() {
       if (!biometricAvailable) {
         Alert.alert(
           `${biometricLabel} unavailable`,
-          'Your device does not have biometric authentication enrolled.',
+          biometricKind === 'none'
+            ? 'Your device does not support biometric authentication, or none is enrolled (open phone Settings → Face ID & Passcode, or Fingerprint, to set one up).'
+            : 'Set up a biometric in your phone Settings first, then come back.',
         )
         return
       }
-      Alert.alert(
-        `Enable ${biometricLabel}`,
-        'Sign out first, then enable biometric login from the sign-in screen.',
-      )
+      // Open the verify modal — we need the user's password to save their
+      // credentials in SecureStore so we can replay them on the next launch.
+      // Without this, biometric "sign-in" has nothing to sign in WITH.
+      setBioPassword('')
+      setBioEnableOpen(true)
     } else {
       await biometric.forget()
       setBiometricEnabled(false)
+    }
+  }
+
+  /**
+   * Verify the user's password against the auth/login endpoint, then save
+   * (identifier, password) to SecureStore via biometric.rememberCredentials.
+   * We don't touch the active session — we just confirm the password and
+   * stash credentials for next-launch biometric replay.
+   */
+  async function confirmEnableBiometric() {
+    if (!bioPassword) {
+      Alert.alert('Password required', 'Type your account password to confirm.')
+      return
+    }
+    if (!user?.email) {
+      Alert.alert('Unexpected', 'Could not read your account identifier — sign out and back in, then try again.')
+      return
+    }
+    setBioVerifying(true)
+    try {
+      // POST /auth/login as a verification probe. The server returns a new
+      // session on success; we discard it (we already have a valid session)
+      // and only use the 200 status as proof the password is correct.
+      const res = await api.post<{ user: { id: string } }>('/auth/login', {
+        email: user.email,
+        password: bioPassword,
+      })
+      if (!res.data?.user?.id) throw new Error('Login verification failed')
+      // Also prompt the actual biometric so the OS-level approval lands
+      // BEFORE we write to SecureStore — that way the very next login
+      // already works without a "first prompt feels weird" gap.
+      const promptOk = await biometric.authenticate(
+        `Confirm ${biometricLabel} to enable fast sign-in`,
+      )
+      if (!promptOk) {
+        Alert.alert('Cancelled', `${biometricLabel} confirmation was dismissed.`)
+        return
+      }
+      await biometric.rememberCredentials({
+        identifier: user.email,
+        password: bioPassword,
+      })
+      setBiometricEnabled(true)
+      setBioEnableOpen(false)
+      setBioPassword('')
+      Alert.alert(
+        `${biometricLabel} enabled`,
+        `You can now sign in with ${biometricLabel} from the login screen on your next visit.`,
+      )
+    } catch (e) {
+      Alert.alert('Could not enable', errorMessage(e, 'Wrong password or network error.'))
+    } finally {
+      setBioVerifying(false)
     }
   }
 
@@ -289,6 +350,69 @@ export default function SettingsScreen() {
           <Text style={{ color: colors.textMuted, fontSize: 11 }}>Version {version}</Text>
         </View>
       </View>
+
+      {/* Password verification modal for enabling biometric sign-in. */}
+      <Modal
+        visible={bioEnableOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!bioVerifying) {
+            setBioEnableOpen(false)
+            setBioPassword('')
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ alignItems: 'center', gap: spacing.sm }}>
+              <View style={[styles.modalIcon, { backgroundColor: palette.brand.red50 }]}>
+                <Ionicons
+                  name={biometricKind === 'face' ? 'scan-outline' : 'finger-print-outline'}
+                  size={28}
+                  color={palette.brand.red600}
+                />
+              </View>
+              <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>
+                Enable {biometricLabel}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center' }}>
+                Confirm your account password to enable {biometricLabel} sign-in. Your password is stored encrypted in your phone's secure enclave — never on our servers.
+              </Text>
+            </View>
+
+            <View style={{ gap: 6, marginTop: spacing.lg }}>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Password</Text>
+              <PasswordInput
+                value={bioPassword}
+                onChangeText={setBioPassword}
+                placeholder="Your account password"
+                autoComplete="password"
+                autoFocus
+              />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                onPress={() => {
+                  setBioEnableOpen(false)
+                  setBioPassword('')
+                }}
+                disabled={bioVerifying}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title={bioVerifying ? 'Verifying…' : 'Enable'}
+                onPress={confirmEnableBiometric}
+                loading={bioVerifying}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   )
 }
@@ -366,5 +490,31 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: radius.md,
     borderWidth: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    padding: spacing.xl,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  modalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })
