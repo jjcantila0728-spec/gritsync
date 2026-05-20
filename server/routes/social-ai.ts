@@ -4,7 +4,6 @@ import pool from '../db'
 
 const router = Router()
 
-const ANTHROPIC_KEY = () => process.env.ANTHROPIC_API_KEY
 const OPENAI_KEY = () => process.env.OPENAI_API_KEY
 const GOOGLE_KEY = () => process.env.GOOGLE_API_KEY
 const XAI_KEY = () => process.env.XAI_API_KEY
@@ -22,8 +21,8 @@ const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').rep
 // ---------------------------------------------------------------------------
 router.post('/caption', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const apiKey = ANTHROPIC_KEY()
-    if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY is not set on the server' })
+    const apiKey = OPENAI_KEY()
+    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
 
     const {
       topic,
@@ -62,36 +61,37 @@ Audience hint: ${audience || 'GritSync followers (mostly nurses considering US m
 Language: ${language}
 ${platformLine}
 
-Return ONLY a JSON array of exactly 3 strings — no surrounding text, no markdown fence. Example:
-["First caption…","Second caption…","Third caption…"]`
+Return ONLY this JSON object — no surrounding text, no markdown fence:
+{ "captions": ["First caption…", "Second caption…", "Third caption…"] }`
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
         max_tokens: 1200,
-        system,
-        messages: [{ role: 'user', content: user }],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
       }),
     })
     const j: any = await r.json().catch(() => ({}))
     if (!r.ok) {
-      return res.status(502).json({ error: j.error?.message || `Anthropic HTTP ${r.status}` })
+      return res.status(502).json({ error: j.error?.message || `OpenAI HTTP ${r.status}` })
     }
-    const text = j.content?.[0]?.text || ''
+    const text = j.choices?.[0]?.message?.content || ''
     let captions: string[] = []
     try {
-      // Tolerate accidental code fences.
-      const match = text.match(/\[[\s\S]*\]/)
-      captions = JSON.parse(match ? match[0] : text)
-      if (!Array.isArray(captions)) captions = []
+      const parsed = JSON.parse(text)
+      if (Array.isArray(parsed)) captions = parsed
+      else if (Array.isArray(parsed.captions)) captions = parsed.captions
+      else if (Array.isArray(parsed.variants)) captions = parsed.variants
     } catch {
-      // Fallback: split on blank lines.
       captions = text.split(/\n{2,}/).map((s: string) => s.trim()).filter(Boolean).slice(0, 3)
     }
     captions = captions.filter((c) => typeof c === 'string' && c.trim()).slice(0, 3)
@@ -264,8 +264,8 @@ router.get('/video/:id', authenticateToken, requireAdmin, async (req: Authentica
 // ---------------------------------------------------------------------------
 router.post('/ad', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const apiKey = ANTHROPIC_KEY()
-    if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY is not set on the server' })
+    const apiKey = OPENAI_KEY()
+    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
 
     const {
       product = '',
@@ -318,31 +318,35 @@ For each variant return:
 - image_prompt: a specific text-to-image prompt for the matching ad creative — describe the subject, composition, lighting, mood, and inferred aspect-ratio context. Do NOT include text overlays.
 - audience_hint: one short sentence on who this variant lands best with
 
-Return ONLY a JSON array of ${variants} objects — no surrounding text, no markdown fence.`
+Return ONLY this JSON object — no surrounding text, no markdown fence:
+{ "ads": [ ${variants} objects with the fields above ] }`
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
         max_tokens: 3000,
-        system,
-        messages: [{ role: 'user', content: user }],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
       }),
     })
     const j: any = await r.json().catch(() => ({}))
-    if (!r.ok) return res.status(502).json({ error: j.error?.message || `Anthropic HTTP ${r.status}` })
+    if (!r.ok) return res.status(502).json({ error: j.error?.message || `OpenAI HTTP ${r.status}` })
 
-    const text = j.content?.[0]?.text || ''
+    const text = j.choices?.[0]?.message?.content || ''
     let ads: any[] = []
     try {
-      const match = text.match(/\[[\s\S]*\]/)
-      ads = JSON.parse(match ? match[0] : text)
-      if (!Array.isArray(ads)) ads = []
+      const parsed = JSON.parse(text)
+      if (Array.isArray(parsed)) ads = parsed
+      else if (Array.isArray(parsed.ads)) ads = parsed.ads
+      else if (Array.isArray(parsed.variants)) ads = parsed.variants
     } catch {
       return res.status(502).json({ error: 'Model returned malformed JSON', raw: text.slice(0, 500) })
     }
@@ -381,8 +385,8 @@ async function enhanceBrief(input: {
   content_type: 'image' | 'video'
   additional_details?: string
 }): Promise<{ enhanced: string; image_prompt_seed: string; video_prompt_seed: string }> {
-  const apiKey = ANTHROPIC_KEY()
-  // Fall back to a trivial pass-through if Anthropic isn't configured — the
+  const apiKey = OPENAI_KEY()
+  // Fall back to a trivial pass-through if OpenAI isn't configured — the
   // generator still works, just without the enhancer pass.
   const fallback = () => {
     const seed = [input.preselected_idea, input.topic, input.additional_details]
@@ -412,23 +416,25 @@ Return ONLY this JSON object:
 }`
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
         max_tokens: 600,
-        system,
-        messages: [{ role: 'user', content: user }],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
       }),
     })
     const j: any = await r.json().catch(() => ({}))
     if (!r.ok) return fallback()
-    const text = j.content?.[0]?.text || ''
+    const text = j.choices?.[0]?.message?.content || ''
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return fallback()
     const parsed = JSON.parse(match[0])
@@ -446,7 +452,7 @@ Return ONLY this JSON object:
 async function generateCaptions(brief: string, opts: {
   tone: string; length: string; language: string; count: number
 }): Promise<string[]> {
-  const apiKey = ANTHROPIC_KEY()
+  const apiKey = OPENAI_KEY()
   if (!apiKey) return Array.from({ length: opts.count }, (_, i) => `${brief} (variant ${i + 1})`)
 
   const lengthHint =
@@ -460,6 +466,8 @@ async function generateCaptions(brief: string, opts: {
     : 'Write in conversational English.'
 
   const system = `You are a social-media copywriter for GritSync, a US healthcare/nursing platform for internationally educated nurses. Write warm, specific, credible copy. No clichés, no fabricated stats or testimonials.`
+  // JSON-mode requires an object root, so we wrap the array in { "captions": [...] }
+  // and unwrap below. The model is much more reliable in JSON mode.
   const user = `Write ${opts.count} distinct caption variants for one post.
 
 Brief: ${brief}
@@ -469,30 +477,34 @@ Language: ${languageNote}
 Hashtags: 3-6 relevant ones at the end.
 Emojis: sparing, one or two max.
 
-Return ONLY a JSON array of exactly ${opts.count} strings — no surrounding text, no markdown fence.`
+Return ONLY this JSON object — no surrounding text, no markdown fence:
+{ "captions": ["First caption…", "Second caption…", ... exactly ${opts.count} strings] }`
 
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
       max_tokens: 1800,
-      system,
-      messages: [{ role: 'user', content: user }],
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
     }),
   })
   const j: any = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(j.error?.message || `Anthropic HTTP ${r.status}`)
-  const text = j.content?.[0]?.text || ''
+  if (!r.ok) throw new Error(j.error?.message || `OpenAI HTTP ${r.status}`)
+  const text = j.choices?.[0]?.message?.content || ''
   let captions: string[] = []
   try {
-    const match = text.match(/\[[\s\S]*\]/)
-    captions = JSON.parse(match ? match[0] : text)
-    if (!Array.isArray(captions)) captions = []
+    const parsed = JSON.parse(text)
+    if (Array.isArray(parsed)) captions = parsed
+    else if (Array.isArray(parsed.captions)) captions = parsed.captions
+    else if (Array.isArray(parsed.variants)) captions = parsed.variants
   } catch {
     captions = text.split(/\n{2,}/).map((s: string) => s.trim()).filter(Boolean)
   }
