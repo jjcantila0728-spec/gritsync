@@ -33,6 +33,9 @@ import {
   Film,
   Loader2,
   Megaphone,
+  Eye,
+  Copy,
+  Download,
 } from 'lucide-react'
 import { AdsGenerator, type AdVariant } from './AdminAds'
 
@@ -278,6 +281,92 @@ const POST_TEMPLATES: PostTemplate[] = [
       `${BRAND_IMAGE_BASE} Two Filipino GritSync staff at a clean modern desk reviewing a printed checklist together, warm office light, laptops open with unreadable screens, focused expressions, no client face visible.`,
     gradient: 'bg-gradient-to-br from-slate-200 via-gray-200 to-gray-300',
     ad_ready: false,
+  },
+]
+
+// Campaign goal — the strategist asks "what outcome am I driving?" first.
+// The label is what the operator sees; the `brief` is what the agentic
+// enhancer prompt actually receives.
+type CampaignGoal =
+  | 'book_consult' | 'educate' | 'share_win' | 'build_trust' | 'promote_service' | 'community'
+
+interface GoalOption {
+  id: CampaignGoal
+  label: string
+  emoji: string
+  description: string
+  brief: string
+}
+
+const CAMPAIGN_GOALS: GoalOption[] = [
+  {
+    id: 'book_consult', label: 'Book a consult', emoji: '📞',
+    description: 'Drive Filipino nurses to schedule a free GritSync consultation.',
+    brief: 'Drive bookings of GritSync\'s free 15-minute consult. Make the offer crisp and grounded — clear roadmap, no guesswork. Filipino nurses planning their USRN move.',
+  },
+  {
+    id: 'educate', label: 'Educate', emoji: '🧠',
+    description: 'Demystify one step of the NCLEX / immigration path.',
+    brief: 'Educational post that demystifies ONE concrete step of the NCLEX-RN or US-immigration journey. Reader walks away knowing what to do next.',
+  },
+  {
+    id: 'share_win', label: 'Share a win', emoji: '🎉',
+    description: 'Celebrate a recent NCLEX pass or USRN milestone.',
+    brief: 'Celebrate a real-but-anonymized client win (NCLEX pass, visa interview cleared, first US shift). Inspire without fabricating numbers or names.',
+  },
+  {
+    id: 'build_trust', label: 'Build trust', emoji: '🤝',
+    description: 'Show credibility — process, team, methodology.',
+    brief: 'Build trust by showing GritSync\'s actual process / team / methodology. Specific scene over generic claims.',
+  },
+  {
+    id: 'promote_service', label: 'Promote a service', emoji: '🚀',
+    description: 'Highlight a paid offering (NCLEX prep, credentialing, mentorship).',
+    brief: 'Promote a GritSync service (NCLEX prep, credentialing review, mentorship). Lead with the problem it solves, not the feature list. Honest claims only.',
+  },
+  {
+    id: 'community', label: 'Community', emoji: '💬',
+    description: 'Spark conversation among Filipino-nurse followers.',
+    brief: 'Community-building post: a question, prompt, or relatable moment that makes Filipino nurses want to comment with their own story.',
+  },
+]
+
+// Audience presets — pick the ONE specific reader so the model doesn't
+// hedge by writing to "anyone interested in nursing".
+type AudiencePreset =
+  | 'ph_considering' | 'ph_nclex_prep' | 'ph_visa_stage' | 'ien_already_us' | 'new_grad_ph'
+
+interface AudienceOption {
+  id: AudiencePreset
+  label: string
+  brief: string
+}
+
+const AUDIENCE_PRESETS: AudienceOption[] = [
+  {
+    id: 'ph_considering',
+    label: 'PH nurses considering US move',
+    brief: 'A Philippines-based RN, 1-5 years bedside experience, exploring the US move but not yet committed. Worried about cost, timeline, and getting scammed.',
+  },
+  {
+    id: 'ph_nclex_prep',
+    label: 'In active NCLEX prep',
+    brief: 'A Filipino RN in the middle of NCLEX-RN review — possibly enrolled in a Qbank, balancing duty work and study. Wants tactical advice, not motivation fluff.',
+  },
+  {
+    id: 'ph_visa_stage',
+    label: 'NCLEX passed, on visa journey',
+    brief: 'A Filipino RN who already passed NCLEX and is now navigating VisaScreen / IELTS / employer petition / consular interview. Wants timeline clarity and reassurance.',
+  },
+  {
+    id: 'ien_already_us',
+    label: 'Filipino USRN already in the US',
+    brief: 'A Filipino RN already working in the US (USRN). Possibly thinking about license endorsement to another state, or helping family back home.',
+  },
+  {
+    id: 'new_grad_ph',
+    label: 'New PH nursing graduate',
+    brief: 'A fresh Philippines BSN graduate or board passer (under 1 year experience) starting to think about US opportunities and what they need to do now.',
   },
 ]
 
@@ -903,6 +992,11 @@ function ManualInstructions({ platform }: { platform: Platform }) {
 }
 
 // ─── Accounts view ─────────────────────────────────────────────────────────
+interface OAuthStatus {
+  oauth_ready: boolean
+  missing: string[]
+}
+
 function AccountsView({
   accounts,
   onConnect,
@@ -914,19 +1008,49 @@ function AccountsView({
   onManual: (p: Platform) => void
   onDisconnect: (id: string) => void
 }) {
+  const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
+
+  useEffect(() => {
+    api<Record<string, OAuthStatus>>('/accounts/oauth-status')
+      .then(setOauthStatus)
+      .catch(() => {
+        // If the endpoint isn't deployed yet, fall back to "unknown" — both
+        // buttons stay enabled so the legacy behaviour still works.
+      })
+  }, [])
+
+  const anyOAuthReady = Object.values(oauthStatus).some((s) => s?.oauth_ready)
+  const oauthMissingPlatforms = ALL_PLATFORMS.filter((p) => oauthStatus[p] && !oauthStatus[p].oauth_ready)
+
   return (
     <div className="space-y-6">
+      {Object.keys(oauthStatus).length > 0 && !anyOAuthReady && (
+        <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>OAuth is not configured for any platform.</strong> The "Connect" buttons will only work once
+              Meta / LinkedIn / TikTok / YouTube app credentials are set on the server. In the meantime, use the
+              <strong> Manual</strong> button to paste a long-lived access token you obtained from each platform's
+              developer portal — that's what actually drives publishing.
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Connect a platform</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          OAuth is the preferred path. If credentials aren't configured on the server, the "Manual" button lets you paste a token to
-          finish setup.
+          OAuth is the preferred path. Where it's not yet wired up on the server, paste a long-lived token via the
+          Manual button instead — that's the path the publishing pipeline actually uses.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {ALL_PLATFORMS.map((p) => {
             const meta = PLATFORM_META[p]
             const Icon = meta.icon
             const connectedCount = accounts.filter((a) => a.platform === p).length
+            const status = oauthStatus[p]
+            const oauthReady = status?.oauth_ready ?? true  // unknown → assume ready (legacy behaviour)
             return (
               <div
                 key={p}
@@ -936,21 +1060,51 @@ function AccountsView({
                   <Icon className="h-6 w-6" />
                 </div>
                 <div className="font-medium text-gray-900 dark:text-gray-100">{meta.label}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                   {connectedCount > 0 ? `${connectedCount} connected` : 'Not connected'}
                 </div>
+                {status && (
+                  <div
+                    className={cn(
+                      'text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full mb-2',
+                      oauthReady
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    )}
+                    title={oauthReady ? 'Server has OAuth credentials configured' : `Missing on server: ${status.missing.join(', ')}`}
+                  >
+                    {oauthReady ? 'OAuth ready' : 'Manual only'}
+                  </div>
+                )}
                 <div className="flex flex-col gap-1 w-full">
-                  <Button size="sm" onClick={() => onConnect(p)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Connect
+                  <Button
+                    size="sm"
+                    onClick={() => oauthReady ? onConnect(p) : onManual(p)}
+                    variant={oauthReady ? undefined : 'outline'}
+                    title={oauthReady ? undefined : `OAuth needs ${status?.missing.join(' + ')} on the server — using Manual instead`}
+                  >
+                    {oauthReady ? (
+                      <><Plus className="h-3.5 w-3.5 mr-1" /> Connect</>
+                    ) : (
+                      <>Manual setup</>
+                    )}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => onManual(p)}>
-                    Manual
-                  </Button>
+                  {oauthReady && (
+                    <Button size="sm" variant="outline" onClick={() => onManual(p)}>
+                      Manual
+                    </Button>
+                  )}
                 </div>
               </div>
             )
           })}
         </div>
+        {oauthMissingPlatforms.length > 0 && oauthMissingPlatforms.length < ALL_PLATFORMS.length && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            OAuth missing for: <strong>{oauthMissingPlatforms.map((p) => PLATFORM_META[p].label).join(', ')}</strong>.
+            Use the Manual button on those for now.
+          </p>
+        )}
       </Card>
 
       <Card className="p-6">
@@ -1001,6 +1155,9 @@ function GeneratorView({
   const { showToast } = useToast()
   const [topic, setTopic] = useState('')
   const [templateId, setTemplateId] = useState('')
+  const [goal, setGoal] = useState<CampaignGoal>('build_trust')
+  const [audiencePreset, setAudiencePreset] = useState<AudiencePreset>('ph_considering')
+  const [platforms, setPlatforms] = useState<Platform[]>([])
   const [tone, setTone] = useState('friendly')
   const [length, setLength] = useState<'short' | 'medium' | 'long'>('medium')
   const [language, setLanguage] = useState<'taglish' | 'english' | 'filipino'>('taglish')
@@ -1009,9 +1166,13 @@ function GeneratorView({
   const [imageAi, setImageAi] = useState<'openai' | 'nano-banana' | 'grok'>('openai')
   const [additionalDetails, setAdditionalDetails] = useState('')
   const [generating, setGenerating] = useState(false)
-  const [phase, setPhase] = useState<'idle' | 'enhancing' | 'generating'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'planning' | 'writing' | 'rendering'>('idle')
 
   const template = POST_TEMPLATES.find((t) => t.id === templateId) || null
+
+  function togglePlatform(p: Platform) {
+    setPlatforms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))
+  }
 
   async function generate() {
     if (!topic.trim() && !template) {
@@ -1019,10 +1180,12 @@ function GeneratorView({
       return
     }
     setGenerating(true)
-    setPhase('enhancing')
-    // Brief visual switch so the user sees the enhancer step, even though the
-    // backend call is a single round-trip that orchestrates both stages.
-    const flip = setTimeout(() => setPhase('generating'), 600)
+    setPhase('planning')
+    // Three quick visual phases so the user feels the agentic pipeline:
+    // plan → write → render. The backend is a single round-trip; these
+    // timers just narrate the work that's happening server-side.
+    const t1 = setTimeout(() => setPhase('writing'), 800)
+    const t2 = setTimeout(() => setPhase('rendering'), 2600)
     try {
       const data = await api<{ items: BankItem[]; brief: string }>('/ai/generate-batch', {
         method: 'POST',
@@ -1034,6 +1197,9 @@ function GeneratorView({
           preselected_idea: template?.brief || null,
           template_id: template?.id || null,
           template_image_prompt: template?.image_prompt || null,
+          goal: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || '',
+          audience_preset: AUDIENCE_PRESETS.find((a) => a.id === audiencePreset)?.brief || '',
+          platforms,
           tone,
           length,
           language,
@@ -1047,7 +1213,8 @@ function GeneratorView({
     } catch (err: any) {
       showToast(err.message || 'Generation failed', 'error')
     } finally {
-      clearTimeout(flip)
+      clearTimeout(t1)
+      clearTimeout(t2)
       setGenerating(false)
       setPhase('idle')
     }
@@ -1064,19 +1231,78 @@ function GeneratorView({
         </Card>
       )}
 
-      <Card className="p-6 space-y-5">
+      <Card className="p-6 space-y-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Post generator</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Describe a topic, tune the style, and we'll generate caption + media variants. Everything lands in the Content Bank.
+            Plan like a social-media manager: pick a <strong>goal</strong>, name the <strong>audience</strong>, choose
+            the <strong>angle</strong>, and we'll have the strategist agent draft a hook + payoff + CTA before the
+            copywriter writes variants.
           </p>
         </div>
 
-        {/* 1. Topic / template picker */}
+        {/* 1. Strategy — goal + audience. The agentic enhancer treats these
+            as the most important signals; they shape hook, payoff, and CTA. */}
+        <div className="space-y-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            1. Strategy
+            <span className="text-gray-400 font-normal"> — what outcome, and for whom</span>
+          </label>
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+              Campaign goal
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {CAMPAIGN_GOALS.map((g) => {
+                const selected = goal === g.id
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setGoal(g.id)}
+                    className={cn(
+                      'text-left rounded-lg border-2 p-3 transition-colors',
+                      selected
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 text-gray-700 dark:text-gray-200'
+                    )}
+                  >
+                    <div className="text-sm font-semibold flex items-center gap-1.5">
+                      <span>{g.emoji}</span> {g.label}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug mt-0.5">
+                      {g.description}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+              Audience
+            </div>
+            <select
+              value={audiencePreset}
+              onChange={(e) => setAudiencePreset(e.target.value as AudiencePreset)}
+              className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+            >
+              {AUDIENCE_PRESETS.map((a) => (
+                <option key={a.id} value={a.id}>{a.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 leading-snug">
+              {AUDIENCE_PRESETS.find((a) => a.id === audiencePreset)?.brief}
+            </p>
+          </div>
+        </div>
+
+        {/* 2. Angle (topic + template grid) */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            1. Describe your topic
-            <span className="text-gray-400 font-normal"> — or pick a branded template below</span>
+            2. Angle
+            <span className="text-gray-400 font-normal"> — your topic, or a branded template</span>
           </label>
           <Textarea
             rows={3}
@@ -1158,9 +1384,47 @@ function GeneratorView({
           </div>
         </div>
 
-        {/* 2. Settings */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">2. Settings</label>
+        {/* 3. Channels & format */}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            3. Channels & format
+            <span className="text-gray-400 font-normal"> — where it runs and how it sounds</span>
+          </label>
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+              Target platforms <span className="text-gray-400 normal-case">(pick any — the agent calibrates per channel)</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_PLATFORMS.map((p) => {
+                const meta = PLATFORM_META[p]
+                const Icon = meta.icon
+                const active = platforms.includes(p)
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => togglePlatform(p)}
+                    className={cn(
+                      'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+                      active
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+                    )}
+                  >
+                    <span className={cn('h-4 w-4 rounded-full inline-flex items-center justify-center text-white', meta.color)}>
+                      <Icon className="h-2.5 w-2.5" />
+                    </span>
+                    {meta.label}
+                  </button>
+                )
+              })}
+            </div>
+            {platforms.length === 0 && (
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
+                None selected → platform-agnostic copy (works on every channel).
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tone</label>
@@ -1215,9 +1479,12 @@ function GeneratorView({
           </div>
         </div>
 
-        {/* 3. Content type */}
+        {/* 4. Media */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">3. Content type</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            4. Media
+            <span className="text-gray-400 font-normal"> — still image or short vertical video</span>
+          </label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -1259,7 +1526,7 @@ function GeneratorView({
             </label>
             <div className="grid grid-cols-3 gap-2">
               {([
-                { id: 'openai',      label: 'OpenAI',      sub: 'gpt-image-1' },
+                { id: 'openai',      label: 'OpenAI',      sub: 'gpt-image-1 → dall-e fallback' },
                 { id: 'nano-banana', label: 'Nano Banana', sub: 'Gemini 2.5 Flash Image' },
                 { id: 'grok',        label: 'Grok',        sub: 'grok-2-image' },
               ] as const).map((opt) => (
@@ -1282,15 +1549,15 @@ function GeneratorView({
           </div>
         </div>
 
-        {/* 4. Additional details */}
+        {/* 5. Specifics — extra guidance the strategist agent should respect */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            4. Additional details
-            <span className="text-gray-400 font-normal"> — extra guidance for the AI</span>
+            5. Specifics
+            <span className="text-gray-400 font-normal"> — non-negotiables, names to drop, claims to avoid</span>
           </label>
           <Textarea
             rows={3}
-            placeholder="e.g. Mention free consultations. Avoid medical claims. Tag @nclexsuccess."
+            placeholder="e.g. Mention this week's free consult. Avoid medical claims. Don't promise NCLEX pass rates. Reference our hands-on credentialing review."
             value={additionalDetails}
             onChange={(e) => setAdditionalDetails(e.target.value)}
           />
@@ -1298,12 +1565,14 @@ function GeneratorView({
 
         <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {phase === 'enhancing' ? (
-              <><Loader2 className="inline h-3 w-3 animate-spin mr-1" /> Enhancing prompt…</>
-            ) : phase === 'generating' ? (
-              <><Loader2 className="inline h-3 w-3 animate-spin mr-1" /> Generating {resultCount} {contentType} result{resultCount === 1 ? '' : 's'}…</>
+            {phase === 'planning' ? (
+              <><Loader2 className="inline h-3 w-3 animate-spin mr-1" /> Strategist agent planning hook + payoff + CTA…</>
+            ) : phase === 'writing' ? (
+              <><Loader2 className="inline h-3 w-3 animate-spin mr-1" /> Copywriter drafting {resultCount} variant{resultCount === 1 ? '' : 's'}…</>
+            ) : phase === 'rendering' ? (
+              <><Loader2 className="inline h-3 w-3 animate-spin mr-1" /> Rendering {contentType} on-brand…</>
             ) : (
-              'Prompt enhancer runs before generation to sharpen the brief.'
+              'Strategist agent plans → copywriter writes → image AI renders. One round-trip.'
             )}
           </div>
           <Button onClick={generate} loading={generating} disabled={generating}>
@@ -1335,6 +1604,7 @@ function ContentBankView({
   onUseInAd: (item: BankItem) => void
   hasAccounts: boolean
 }) {
+  const [viewItem, setViewItem] = useState<BankItem | null>(null)
   if (loading && bank.length === 0) {
     return <div className="py-12"><Loading text="Loading content bank…" /></div>
   }
@@ -1361,10 +1631,15 @@ function ContentBankView({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bank.map((item) => (
           <Card key={item.id} className="overflow-hidden flex flex-col">
-            <div className="aspect-square bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => setViewItem(item)}
+              className="aspect-square bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center group cursor-zoom-in text-left"
+              title="View full content"
+            >
               {item.media_url ? (
                 item.media_type === 'video' ? (
-                  <video src={item.media_url} className="w-full h-full object-cover" controls preload="metadata" />
+                  <video src={item.media_url} className="w-full h-full object-cover" preload="metadata" muted />
                 ) : (
                   <img src={item.media_url} alt="" className="w-full h-full object-cover" />
                 )
@@ -1392,10 +1667,23 @@ function ContentBankView({
               <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full bg-black/50 text-white">
                 {item.media_type}
               </span>
-            </div>
+              {item.media_url && (
+                <span className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-0.5 rounded-full bg-black/60 text-white flex items-center gap-1">
+                  <Eye className="h-3 w-3" /> View
+                </span>
+              )}
+            </button>
             <div className="p-4 flex-1 flex flex-col gap-3">
               <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap line-clamp-6">{item.caption}</p>
               <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t border-gray-100 dark:border-gray-800">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setViewItem(item)}
+                  title="View full caption + image"
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" /> View
+                </Button>
                 {item.status === 'pending_media' && (
                   <Button size="sm" variant="outline" onClick={() => onRefreshItem(item.id)}>
                     <RefreshCw className="h-3.5 w-3.5 mr-1" /> Check video
@@ -1432,7 +1720,162 @@ function ContentBankView({
           </Card>
         ))}
       </div>
+      <BankItemModal
+        item={viewItem}
+        onClose={() => setViewItem(null)}
+        onSchedule={(it) => { setViewItem(null); onSchedule(it) }}
+        onUseInAd={(it) => { setViewItem(null); onUseInAd(it) }}
+        hasAccounts={hasAccounts}
+      />
     </div>
+  )
+}
+
+// Full-content viewer modal — shows the caption at full length, the media
+// at full size, and the generation metadata (template, tone, language,
+// timestamps). Doubles as a quick way to copy the caption or grab the
+// public media URL.
+function BankItemModal({
+  item,
+  onClose,
+  onSchedule,
+  onUseInAd,
+  hasAccounts,
+}: {
+  item: BankItem | null
+  onClose: () => void
+  onSchedule: (item: BankItem) => void
+  onUseInAd: (item: BankItem) => void
+  hasAccounts: boolean
+}) {
+  const { showToast } = useToast()
+  if (!item) return null
+  const settings = item.generation_settings || {}
+  const created = new Date(item.created_at)
+  const meta: Array<[string, string]> = []
+  if (settings.template_id) meta.push(['Template', String(settings.template_id)])
+  if (settings.tone) meta.push(['Tone', String(settings.tone)])
+  if (settings.language) meta.push(['Language', String(settings.language)])
+  if (settings.length) meta.push(['Length', String(settings.length)])
+  if (settings.image_provider) meta.push(['Image AI', String(settings.image_provider)])
+  meta.push(['Status', item.status])
+  meta.push(['Created', created.toLocaleString()])
+
+  return (
+    <Modal isOpen={!!item} onClose={onClose} title="Content Bank item" size="xl">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <div className="md:col-span-3">
+          <div className="rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 aspect-square flex items-center justify-center">
+            {item.media_url ? (
+              item.media_type === 'video' ? (
+                <video src={item.media_url} className="w-full h-full object-contain" controls autoPlay />
+              ) : (
+                <img src={item.media_url} alt="" className="w-full h-full object-contain" />
+              )
+            ) : (
+              <div className="text-center text-gray-500 text-sm p-6">
+                <AlertCircle className="h-7 w-7 mx-auto text-amber-500 mb-2" />
+                {item.status === 'media_failed'
+                  ? 'Media generation failed — only the caption was saved.'
+                  : item.status === 'pending_media'
+                    ? 'Video still rendering. Refresh the bank in a few minutes.'
+                    : 'No media attached to this item.'}
+              </div>
+            )}
+          </div>
+          {item.media_url && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const abs = item.media_url!.startsWith('http')
+                    ? item.media_url!
+                    : `${window.location.origin}${item.media_url}`
+                  navigator.clipboard.writeText(abs)
+                  showToast('Media URL copied', 'success')
+                }}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1" /> Copy media URL
+              </Button>
+              <a
+                href={item.media_url}
+                download
+                className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </a>
+              <a
+                href={item.media_url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
+              >
+                Open in new tab
+              </a>
+            </div>
+          )}
+        </div>
+
+        <div className="md:col-span-2 flex flex-col gap-4">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Caption
+              </label>
+              <button
+                onClick={() => { navigator.clipboard.writeText(item.caption); showToast('Caption copied', 'success') }}
+                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 inline-flex items-center gap-1"
+              >
+                <Copy className="h-3 w-3" /> Copy
+              </button>
+            </div>
+            <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 max-h-72 overflow-y-auto">
+              {item.caption}
+            </div>
+          </div>
+
+          {item.enhanced_prompt && (
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 block">
+                Enhanced brief
+              </label>
+              <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 max-h-40 overflow-y-auto">
+                {item.enhanced_prompt}
+              </div>
+            </div>
+          )}
+
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            {meta.map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt className="text-gray-500 dark:text-gray-400">{k}</dt>
+                <dd className="text-gray-800 dark:text-gray-200 truncate" title={v}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="flex flex-wrap gap-2 mt-auto pt-3 border-t border-gray-100 dark:border-gray-800">
+            <Button
+              size="sm"
+              onClick={() => onSchedule(item)}
+              disabled={!hasAccounts || item.status === 'pending_media' || !item.media_url}
+              title={!hasAccounts ? 'Connect a social account first' : 'Schedule this'}
+            >
+              <Clock className="h-3.5 w-3.5 mr-1" /> Schedule
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onUseInAd(item)}
+              disabled={item.status === 'pending_media'}
+            >
+              <Megaphone className="h-3.5 w-3.5 mr-1" /> Use in Ad
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1707,19 +2150,37 @@ function PostList({
                 </div>
               )}
             </div>
-            <div className="flex flex-col gap-1 flex-shrink-0">
+            <div className="flex flex-col gap-1.5 flex-shrink-0 w-32">
               {(p.status === 'draft' || p.status === 'scheduled' || p.status === 'failed') && (
-                <Button size="sm" variant="outline" onClick={() => onPublish(p.id)} title="Publish now">
-                  <Send className="h-3.5 w-3.5" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onEdit(p)}
+                  title="Edit caption, media, accounts, or scheduled time"
+                  className="justify-start"
+                >
+                  <PencilLine className="h-3.5 w-3.5 mr-1.5" /> Edit
                 </Button>
               )}
               {(p.status === 'draft' || p.status === 'scheduled' || p.status === 'failed') && (
-                <Button size="sm" variant="ghost" onClick={() => onEdit(p)} title="Edit">
-                  <PencilLine className="h-3.5 w-3.5" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onPublish(p.id)}
+                  title="Publish now (bypass schedule)"
+                  className="justify-start"
+                >
+                  <Send className="h-3.5 w-3.5 mr-1.5" /> Publish
                 </Button>
               )}
-              <Button size="sm" variant="ghost" onClick={() => onDelete(p.id)} title="Delete">
-                <Trash2 className="h-3.5 w-3.5 text-red-600" />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onDelete(p.id)}
+                title="Delete"
+                className="justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
               </Button>
             </div>
           </div>
