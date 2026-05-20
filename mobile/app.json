@@ -19,6 +19,7 @@
       "policy": "fingerprint"
     },
     "updates": {
+      "url": "https://u.expo.dev/c4aff42d-51b1-47c4-9b6c-38d31f9a160d",
       "fallbackToCacheTimeout": 0,
       "checkAutomatically": "ON_LOAD"
     },

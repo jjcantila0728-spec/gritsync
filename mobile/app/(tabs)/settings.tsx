@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Alert, Linking, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import { useRouter } from 'expo-router'
@@ -15,6 +15,13 @@ import { biometric } from '@/lib/biometric'
 import { push } from '@/lib/push'
 import { openUrl } from '@/lib/browser'
 import { api, API_BASE_URL, errorMessage } from '@/lib/api'
+import {
+  applyUpdate,
+  checkForUpdates,
+  getUpdateMeta,
+  subscribe as subscribeUpdates,
+  type UpdateState,
+} from '@/lib/updates'
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth()
@@ -31,6 +38,9 @@ export default function SettingsScreen() {
   const [bioEnableOpen, setBioEnableOpen] = useState(false)
   const [bioPassword, setBioPassword] = useState('')
   const [bioVerifying, setBioVerifying] = useState(false)
+  // OTA update state for the "Check for updates" row.
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null)
+  useEffect(() => subscribeUpdates(setUpdateState), [])
 
   useEffect(() => {
     void (async () => {
@@ -90,6 +100,40 @@ export default function SettingsScreen() {
       }
     } catch (e) {
       Alert.alert('Test push failed', errorMessage(e, 'Try again in a moment.'))
+    }
+  }
+
+  /**
+   * Manual "Check for updates" handler. Surfaces the four possible outcomes
+   * via Alert so the user gets confirmation that something happened — the
+   * silent cold-start probe has no feedback, which made it feel broken.
+   */
+  async function onCheckForUpdates() {
+    try {
+      const result = await checkForUpdates({ silent: false })
+      if (result.status === 'disabled') {
+        Alert.alert(
+          'Updates unavailable',
+          'You’re running a development build. Over-the-air updates only ship to release builds.',
+        )
+        return
+      }
+      if (result.status === 'up-to-date') {
+        Alert.alert('You’re up to date', `Running GritSync v${version}.`)
+        return
+      }
+      if (result.status === 'available') {
+        Alert.alert(
+          'Update downloaded',
+          'A new version is ready. Restart now to use it, or wait until the next launch.',
+          [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Restart now', onPress: () => { void applyUpdate() } },
+          ],
+        )
+      }
+    } catch (e) {
+      Alert.alert('Update check failed', errorMessage(e, 'Please try again in a moment.'))
     }
   }
 
@@ -319,6 +363,17 @@ export default function SettingsScreen() {
         </Card>
 
         <Card>
+          <CardTitle>App updates</CardTitle>
+          <UpdateRow
+            checking={!!updateState?.checking}
+            ready={!!updateState?.ready}
+            lastCheckedAt={updateState?.lastCheckedAt ?? null}
+            onCheck={onCheckForUpdates}
+            onApply={() => { void applyUpdate() }}
+          />
+        </Card>
+
+        <Card>
           <CardTitle>Support</CardTitle>
           <LinkRow
             icon="chatbubble-ellipses-outline"
@@ -344,11 +399,7 @@ export default function SettingsScreen() {
 
         <Button title="Sign out" variant="danger" onPress={confirmSignOut} />
 
-        <View style={{ alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
-          <BrandMark size={36} />
-          <Wordmark size={16} mode={mode} />
-          <Text style={{ color: colors.textMuted, fontSize: 11 }}>Version {version}</Text>
-        </View>
+        <BuildFooter mode={mode} colors={colors} version={version} />
       </View>
 
       {/* Password verification modal for enabling biometric sign-in. */}
@@ -363,7 +414,7 @@ export default function SettingsScreen() {
           }
         }}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ alignItems: 'center', gap: spacing.sm }}>
               <View style={[styles.modalIcon, { backgroundColor: palette.brand.red50 }]}>
@@ -415,6 +466,105 @@ export default function SettingsScreen() {
       </Modal>
     </Screen>
   )
+}
+
+/**
+ * Manual OTA update row. Three visual states:
+ *   - idle / up-to-date  → label "Check for updates", chevron
+ *   - checking           → spinner, "Checking…"
+ *   - update ready       → highlighted "Restart to install" with refresh icon
+ */
+function UpdateRow({
+  checking,
+  ready,
+  lastCheckedAt,
+  onCheck,
+  onApply,
+}: {
+  checking: boolean
+  ready: boolean
+  lastCheckedAt: number | null
+  onCheck: () => void
+  onApply: () => void
+}) {
+  const { colors } = useTheme()
+  const label = ready ? 'Restart to install update' : checking ? 'Checking…' : 'Check for updates'
+  const helper = ready
+    ? 'A new version is downloaded.'
+    : lastCheckedAt
+    ? `Last checked ${relativeTime(lastCheckedAt)}`
+    : 'Tap to look for a newer version.'
+  const onPress = ready ? onApply : checking ? undefined : onCheck
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={checking}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy: checking }}
+      style={({ pressed }) => [
+        styles.row,
+        { borderTopColor: colors.border, alignItems: 'flex-start' },
+        pressed && !checking && { opacity: 0.7 },
+      ]}
+    >
+      <Ionicons
+        name={ready ? 'sparkles' : 'refresh-outline'}
+        size={20}
+        color={ready ? palette.brand.red600 : colors.text}
+        style={{ marginTop: 2 }}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: ready ? palette.brand.red600 : colors.text, fontSize: 15, fontWeight: ready ? '700' : '400' }}>
+          {label}
+        </Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{helper}</Text>
+      </View>
+      {checking ? (
+        <ActivityIndicator color={colors.textMuted} />
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      )}
+    </Pressable>
+  )
+}
+
+/**
+ * Build footer with version, current EAS channel, and a short bundle id.
+ * Surfaces the info support needs to triage "but it works for me" reports.
+ */
+function BuildFooter({
+  mode,
+  colors,
+  version,
+}: {
+  mode: 'light' | 'dark'
+  colors: ReturnType<typeof useTheme>['colors']
+  version: string
+}) {
+  const meta = getUpdateMeta()
+  const short = meta.updateId ? meta.updateId.slice(0, 8) : meta.isEmbeddedLaunch ? 'embedded' : '—'
+  const channel = meta.channel ?? 'dev'
+  return (
+    <View style={{ alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
+      <BrandMark size={36} />
+      <Wordmark size={16} mode={mode} />
+      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+        v{version} · {channel} · {short}
+      </Text>
+    </View>
+  )
+}
+
+function relativeTime(t: number): string {
+  const diff = Date.now() - t
+  if (diff < 60_000) return 'just now'
+  const m = Math.floor(diff / 60_000)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  return `${d}d ago`
 }
 
 function LinkRow({
@@ -493,7 +643,8 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    // backgroundColor is supplied inline from the theme so dark mode darkens
+    // appropriately. Don't add a fallback here — that would compose two layers.
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,

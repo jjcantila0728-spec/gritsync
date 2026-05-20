@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react'
+import { AppState } from 'react-native'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import * as Notifications from 'expo-notifications'
-import * as Updates from 'expo-updates'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Constants from 'expo-constants'
 import { StripeProvider } from '@stripe/stripe-react-native'
@@ -10,31 +10,31 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { PreferencesProvider } from '@/contexts/PreferencesContext'
 import { Splash } from '@/components/Splash'
 import { OfflineBanner } from '@/components/OfflineBanner'
+import { UpdateBanner } from '@/components/UpdateBanner'
 import { useTheme } from '@/theme'
 import { deepLinkFromPushData } from '@/lib/push'
+import { checkForUpdates } from '@/lib/updates'
 import { hasSeenOnboarding } from './(auth)/onboarding'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
-/**
- * On every cold start, ask EAS Update if there's a newer JS bundle. If so,
- * download it in the background and apply on next launch. We don't force a
- * reload mid-session — that'd be jarring. expo-updates is a no-op in dev /
- * Expo Go, so this is safe in all build profiles.
- */
-async function maybeCheckForUpdate() {
-  try {
-    if (!Updates.isEnabled) return
-    const result = await Updates.checkForUpdateAsync()
-    if (result.isAvailable) {
-      await Updates.fetchUpdateAsync()
-      // Applied on next cold start — silent OTA.
-    }
-  } catch {
-    // ignore — updates are best-effort, never block boot
-  }
-}
-void maybeCheckForUpdate()
+// Cold-start probe — fire and forget. Downloads any newer EAS Update bundle
+// into cache; the UpdateBanner then offers the user a one-tap restart. Safe
+// no-op in dev / Expo Go (handled inside checkForUpdates).
+void checkForUpdates({ silent: true })
+
+// Re-probe whenever the app comes back to the foreground after a long break,
+// so users on multi-day sessions get prompted instead of sitting on a stale
+// bundle indefinitely. Throttled to once per 30 minutes to avoid hammering.
+const FOREGROUND_CHECK_MS = 30 * 60 * 1000
+let lastForegroundCheck = Date.now()
+AppState.addEventListener('change', (next) => {
+  if (next !== 'active') return
+  const now = Date.now()
+  if (now - lastForegroundCheck < FOREGROUND_CHECK_MS) return
+  lastForegroundCheck = now
+  void checkForUpdates({ silent: true })
+})
 
 function AuthGate() {
   const { user, loading } = useAuth()
@@ -234,6 +234,7 @@ export default function RootLayout() {
               <RootStack />
             </BootSplash>
             <OfflineBanner />
+            <UpdateBanner />
           </AuthProvider>
         </PreferencesProvider>
       </StripeProvider>
