@@ -853,8 +853,13 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       hashtags: brief.hashtags?.length ? brief.hashtags : null,
     }
 
-    const rows: any[] = []
-    for (const caption of captions) {
+    // Generate all per-variant media in PARALLEL. Sequential generation
+    // blew through Vercel's function timeout (3 variants × ~15s each = 45s
+    // on a 30s limit). Running in parallel collapses total wall time to
+    // the slowest single call (~15-25s) which fits comfortably in the
+    // bumped maxDuration. Each variant catches its own error and either
+    // returns an 'available'/'pending_media' row or a 'media_failed' row.
+    const rows = await Promise.all(captions.map(async (caption) => {
       try {
         if (ct === 'image') {
           const mediaUrl = await generateImage(provider, imagePrompt)
@@ -865,13 +870,14 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
              RETURNING *`,
             [caption, mediaUrl, cleanTopic || cleanIdea, brief.enhanced, JSON.stringify(settings), req.user!.id]
           )
-          rows.push(ins.rows[0])
+          return ins.rows[0]
         } else {
-          // 3a. Generate the starting frame with the chosen image AI.
+          // Video: generate the starting frame with the chosen image AI,
+          // then kick off image-to-video on Replicate. Replicate fetches
+          // the start frame from the public internet, so the URL needs
+          // to be absolute — toAbsoluteUrl() lifts our stored relative
+          // path.
           const sourceImageUrl = await generateImage(provider, imagePrompt)
-          // 3b. Kick off image-to-video on Replicate. Replicate fetches the
-          //     start frame from the public internet, so the URL needs to be
-          //     absolute — toAbsoluteUrl() lifts our stored relative path.
           const predictionId = await startVideoPrediction(
             brief.video_prompt_seed,
             toAbsoluteUrl(sourceImageUrl)
@@ -883,11 +889,11 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
              RETURNING *`,
             [caption, predictionId, sourceImageUrl, cleanTopic || cleanIdea, brief.enhanced, JSON.stringify(settings), req.user!.id]
           )
-          rows.push(ins.rows[0])
+          return ins.rows[0]
         }
       } catch (perItemErr: any) {
-        // Persist a caption-only row so the user doesn't lose the copy when
-        // media generation hits a provider error.
+        // Persist a caption-only row so the operator doesn't lose the
+        // copy when image/video generation hits a provider error.
         const ins = await pool.query(
           `INSERT INTO social_content_bank
              (caption, media_type, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
@@ -895,9 +901,9 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
            RETURNING *`,
           [caption, ct, cleanTopic || cleanIdea, brief.enhanced + `\n\n[media error: ${perItemErr.message}]`, JSON.stringify(settings), req.user!.id]
         )
-        rows.push(ins.rows[0])
+        return ins.rows[0]
       }
-    }
+    }))
 
     res.json({ data: { items: rows, brief: brief.enhanced } })
   } catch (err: any) {
