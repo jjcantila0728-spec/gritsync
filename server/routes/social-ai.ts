@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
 import pool from '../db'
+import { isDriveConnected, uploadToDrive } from '../lib/google-drive'
 
 const router = Router()
 
@@ -209,15 +210,7 @@ router.get('/video/:id', authenticateToken, requireAdmin, async (req: Authentica
     const buf = Buffer.from(await dl.arrayBuffer())
     const contentType = dl.headers.get('content-type') || 'video/mp4'
     const ext = contentType.includes('webm') ? 'webm' : 'mp4'
-    const filename = `social/ai/${id}.${ext}`
-    await pool.query(
-      `INSERT INTO file_storage (storage_key, data, content_type, file_size)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (storage_key) DO UPDATE
-         SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
-      [filename, buf, contentType, buf.length]
-    )
-    const url = `/api/storage/public/${filename}`
+    const url = await persistVideo(buf, contentType, id, ext)
     cachedVideoUrls.set(id, url)
     res.json({ data: { id, status, video_url: url } })
   } catch (err: any) {
@@ -584,25 +577,69 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
 // and returns our public URL. That gives Replicate (for image-to-video) a
 // stable URL it can fetch later, regardless of which provider made the image.
 
+// Persist a generated image. Prefers Google Drive when the operator has
+// connected it (see /api/integrations/google-drive/status). Falls back to
+// the file_storage Postgres table so generation keeps working even before
+// Drive is wired up.
 async function persistImage(buf: Buffer, contentType: string): Promise<string> {
   const ext = contentType.includes('webp') ? 'webp' : contentType.includes('jpeg') ? 'jpg' : 'png'
-  const filename = `social/ai/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const filename = `gritsync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+  try {
+    if (await isDriveConnected()) {
+      // Drive returns a publicly-readable URL (anyoneWithLink reader) that
+      // both the browser and Meta/IG/TikTok fetchers can hit directly.
+      return await uploadToDrive(buf, contentType, filename)
+    }
+  } catch (err: any) {
+    console.warn('Drive upload failed, falling back to Postgres file_storage:', err.message)
+  }
+
+  const key = `social/ai/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
   await pool.query(
     `INSERT INTO file_storage (storage_key, data, content_type, file_size)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (storage_key) DO UPDATE
        SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
-    [filename, buf, contentType, buf.length]
+    [key, buf, contentType, buf.length]
   )
   // Return a RELATIVE path. Frontend <img src> resolves against current
   // origin (works on every deploy), and toAbsoluteUrl() lifts to absolute
   // only at boundaries that need it (Replicate, Meta publishing).
-  return `/api/storage/public/${filename}`
+  return `/api/storage/public/${key}`
+}
+
+// Persist a rendered video. Same Drive-first / Postgres-fallback dance as
+// persistImage, but keyed by the Replicate prediction id so the same row
+// is reused across retries.
+async function persistVideo(
+  buf: Buffer,
+  contentType: string,
+  predictionId: string,
+  ext: 'mp4' | 'webm'
+): Promise<string> {
+  const filename = `gritsync-${predictionId}.${ext}`
+  try {
+    if (await isDriveConnected()) {
+      return await uploadToDrive(buf, contentType, filename)
+    }
+  } catch (err: any) {
+    console.warn('Drive video upload failed, falling back to Postgres file_storage:', err.message)
+  }
+  const key = `social/ai/${predictionId}.${ext}`
+  await pool.query(
+    `INSERT INTO file_storage (storage_key, data, content_type, file_size)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (storage_key) DO UPDATE
+       SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
+    [key, buf, contentType, buf.length]
+  )
+  return `/api/storage/public/${key}`
 }
 
 // Lift a stored relative path to an absolute URL when handing off to an
 // external fetcher (Replicate's image-to-video, Meta Graph API publishing).
-// Leaves already-absolute URLs alone.
+// Leaves already-absolute URLs alone — Drive URLs are already absolute.
 function toAbsoluteUrl(maybeRelative: string): string {
   if (/^https?:\/\//i.test(maybeRelative)) return maybeRelative
   const base = PUBLIC_BASE || 'https://app.gritsync.com'
@@ -968,15 +1005,7 @@ router.post('/content-bank/:id/refresh-media', authenticateToken, requireAdmin, 
     const buf = Buffer.from(await dl.arrayBuffer())
     const contentType = dl.headers.get('content-type') || 'video/mp4'
     const ext = contentType.includes('webm') ? 'webm' : 'mp4'
-    const filename = `social/ai/${row.prediction_id}.${ext}`
-    await pool.query(
-      `INSERT INTO file_storage (storage_key, data, content_type, file_size)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (storage_key) DO UPDATE
-         SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size, updated_at = NOW()`,
-      [filename, buf, contentType, buf.length]
-    )
-    const url = `/api/storage/public/${filename}`
+    const url = await persistVideo(buf, contentType, row.prediction_id, ext)
     const upd = await pool.query(
       `UPDATE social_content_bank
          SET media_url = $1, status = 'available', updated_at = NOW()

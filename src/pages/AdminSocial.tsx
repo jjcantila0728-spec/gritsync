@@ -997,6 +997,13 @@ interface OAuthStatus {
   missing: string[]
 }
 
+interface DriveStatus {
+  connected: boolean
+  email: string | null
+  folder_id: string | null
+  folder_name: string | null
+}
+
 function AccountsView({
   accounts,
   onConnect,
@@ -1008,7 +1015,10 @@ function AccountsView({
   onManual: (p: Platform) => void
   onDisconnect: (id: string) => void
 }) {
+  const { showToast } = useToast()
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
+  const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
+  const [driveBusy, setDriveBusy] = useState(false)
 
   useEffect(() => {
     api<Record<string, OAuthStatus>>('/accounts/oauth-status')
@@ -1019,11 +1029,134 @@ function AccountsView({
       })
   }, [])
 
+  const refreshDriveStatus = () => {
+    // /api/integrations/google-drive/status lives outside the /social router,
+    // so go through fetch directly instead of api() (which prefixes /api/social).
+    fetch('/api/integrations/google-drive/status', { headers: { ...authHeaders() } })
+      .then((r) => r.json())
+      .then((j) => setDriveStatus(j.data || null))
+      .catch(() => setDriveStatus(null))
+  }
+
+  useEffect(() => {
+    refreshDriveStatus()
+    // Listen for the OAuth popup's postMessage so we can refresh status
+    // immediately after the user finishes the consent flow.
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'google-drive-ok') {
+        showToast(e.data.message || 'Google Drive connected', 'success')
+        refreshDriveStatus()
+      } else if (e.data?.type === 'google-drive-error') {
+        showToast(e.data.message || 'Google Drive connection failed', 'error')
+      }
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function connectDrive() {
+    setDriveBusy(true)
+    try {
+      const r = await fetch('/api/integrations/google-drive/connect-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...authHeaders() },
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      const popup = window.open(j.data.url, 'gritsync-drive-connect', 'width=520,height=620,resizable=yes,scrollbars=yes')
+      if (!popup) showToast('Allow popups to connect Google Drive', 'error')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to start Drive connection', 'error')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
+  async function disconnectDrive() {
+    if (!confirm('Disconnect Google Drive? New generated media will fall back to in-database storage until you reconnect.')) return
+    setDriveBusy(true)
+    try {
+      const r = await fetch('/api/integrations/google-drive', {
+        method: 'DELETE',
+        headers: { ...authHeaders() },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error(j.error || `HTTP ${r.status}`)
+      }
+      showToast('Google Drive disconnected', 'success')
+      refreshDriveStatus()
+    } catch (err: any) {
+      showToast(err.message || 'Disconnect failed', 'error')
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
   const anyOAuthReady = Object.values(oauthStatus).some((s) => s?.oauth_ready)
   const oauthMissingPlatforms = ALL_PLATFORMS.filter((p) => oauthStatus[p] && !oauthStatus[p].oauth_ready)
 
   return (
     <div className="space-y-6">
+      {/* Storage integration — Google Drive. When connected, all AI-generated
+          images + videos are uploaded to a "GritSync Social" folder and the
+          bank stores the Drive public URL. Falls back to in-database storage
+          when not connected, so nothing breaks if Drive isn't set up yet. */}
+      <Card className="p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Media storage</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+              Connect a Google Drive account to host all AI-generated images and videos in a shared{' '}
+              <strong>GritSync Social</strong> folder. Drive URLs are publicly fetchable, so the social
+              platforms can pull them at publish time without going through our server.
+            </p>
+          </div>
+          {driveStatus?.connected ? (
+            <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+              Connected
+            </span>
+          ) : (
+            <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+              Using in-database storage
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          {driveStatus?.connected ? (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-gray-800 dark:text-gray-200">
+                  <strong>{driveStatus.email || 'Connected account'}</strong>
+                  {driveStatus.folder_name && <span className="text-gray-500 dark:text-gray-400"> · folder “{driveStatus.folder_name}”</span>}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  New AI-generated media now flows here. Existing bank items stay where they were created.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>
+                Reconnect
+              </Button>
+              <Button size="sm" variant="ghost" onClick={disconnectDrive} disabled={driveBusy} className="text-red-600 hover:text-red-700">
+                Disconnect
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Connect Google Drive
+              </Button>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Opens a Google consent popup. Requires <code className="text-[11px]">GOOGLE_DRIVE_CLIENT_ID</code> +{' '}
+                <code className="text-[11px]">_SECRET</code> set on the server.
+              </span>
+            </>
+          )}
+        </div>
+      </Card>
+
       {Object.keys(oauthStatus).length > 0 && !anyOAuthReady && (
         <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
           <div className="flex items-start gap-3">
