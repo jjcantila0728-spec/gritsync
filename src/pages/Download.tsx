@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Apple, Smartphone, Download as DownloadIcon, ShieldCheck, Check } from 'lucide-react'
+import { Apple, Smartphone, Download as DownloadIcon, ShieldCheck, Check, Globe } from 'lucide-react'
+import { usePWAInstall } from '@/components/PWAInstallPrompt'
 
 /**
  * Mobile-app download / install page.
@@ -54,6 +55,7 @@ function detectPlatform(): Platform {
 
 export function Download() {
   const [platform, setPlatform] = useState<Platform>('desktop')
+  const { canInstall: canInstallPWA, isInstalled: pwaInstalled, install: installPWA } = usePWAInstall()
 
   useEffect(() => {
     setPlatform(detectPlatform())
@@ -150,6 +152,33 @@ export function Download() {
                 </>
               )}
             </div>
+
+            {(canInstallPWA || pwaInstalled) && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+                  Or install the web app
+                </div>
+                {pwaInstalled ? (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary-50 text-primary-700">
+                    <Check className="h-5 w-5" />
+                    <div className="flex-1 text-sm font-bold">Web app already installed</div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { void installPWA() }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition text-left"
+                  >
+                    <Globe className="h-5 w-5 text-primary-600" />
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-gray-900">Install Web App (PWA)</div>
+                      <div className="text-xs text-gray-500">
+                        Add GritSync to your home screen — no store required.
+                      </div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 pt-6 border-t border-gray-200 flex items-start gap-3 text-xs text-gray-500">
               <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0 text-primary-600" />

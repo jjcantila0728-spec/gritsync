@@ -10,7 +10,6 @@ import { Loading } from './components/ui/Loading'
 import { MaintenanceMode } from './components/MaintenanceMode'
 import { SessionTimeout } from './components/SessionTimeout'
 import { ScrollToTop } from './components/ScrollToTop'
-import { PWAInstallPrompt } from './components/PWAInstallPrompt'
 import { PWAUpdateNotification } from './components/PWAUpdateNotification'
 import { getSubdomainContext, getBasename, appUrl } from './lib/routing'
 import { Toaster } from 'react-hot-toast'
@@ -608,7 +607,6 @@ function App() {
                 >
                   <ScrollToTop />
                   <RootRoutes />
-                  <PWAInstallPrompt />
                   <PWAUpdateNotification />
                   <Toaster position="top-right" />
                 </BrowserRouter>

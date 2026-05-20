@@ -750,6 +750,7 @@ export function Header() {
     { label: 'Career', path: '/career', hash: '' },
     { label: 'Donate', path: '/donate', hash: '' },
     { label: 'FAQs', path: '/faqs', hash: '' },
+    { label: 'Download', path: '/download', hash: '' },
     { label: 'About Us', path: '/about-us', hash: '' },
   ]
 
