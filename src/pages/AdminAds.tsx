@@ -92,16 +92,25 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
   const [generating, setGenerating] = useState(false)
   const [ads, setAds] = useState<AdVariant[]>([])
   const [fromSocial, setFromSocial] = useState(false)
+  // Image URL carried over from the Content Bank "Use in Ad" shortcut — when
+  // set, every generated ad variant inherits this image so the user doesn't
+  // have to re-render a creative they already approved.
+  const [seededImageUrl, setSeededImageUrl] = useState<string | null>(null)
 
-  // Accept a `?brief=` query param when the user clicked "Make ads" from a
-  // Social compose draft — prefills the brief and strips the param.
+  // Accept `?brief=` and `?image_url=` query params when the user clicked
+  // "Make ads" / "Use in Ad" from the Content Bank — prefills the brief,
+  // optionally pins the creative, then strips the params.
   useEffect(() => {
     const brief = searchParams.get('brief')
-    if (brief) {
-      setProduct(brief)
+    const imageUrl = searchParams.get('image_url')
+    if (brief || imageUrl) {
+      if (brief) setProduct(brief)
+      if (imageUrl) setSeededImageUrl(imageUrl)
       setFromSocial(true)
-      searchParams.delete('brief')
-      setSearchParams(searchParams, { replace: true })
+      const next = new URLSearchParams(searchParams)
+      next.delete('brief')
+      next.delete('image_url')
+      setSearchParams(next, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -118,7 +127,10 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
-      setAds(body.data?.ads || [])
+      const fresh: AdVariant[] = body.data?.ads || []
+      // If we arrived from a Content Bank item, pin its image onto each
+      // variant so the user can copy/schedule without regenerating a creative.
+      setAds(seededImageUrl ? fresh.map((a) => ({ ...a, image_url: seededImageUrl })) : fresh)
     } catch (err: any) {
       showToast(err.message || 'Failed to generate ads', 'error')
     } finally {
@@ -187,11 +199,23 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
     <div>
       {fromSocial && (
         <div className="mb-4 flex items-start justify-between gap-3 p-3 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/50">
-          <div className="flex items-center gap-2 text-sm text-primary-700 dark:text-primary-300">
-            <Share2 className="h-4 w-4" />
-            <span>Brief seeded from your <strong>Social</strong> draft. Tune the campaign settings and generate variants.</span>
+          <div className="flex items-start gap-3 text-sm text-primary-700 dark:text-primary-300">
+            {seededImageUrl ? (
+              <img src={seededImageUrl} alt="" className="h-12 w-12 rounded-md object-cover flex-shrink-0" />
+            ) : (
+              <Share2 className="h-4 w-4 mt-0.5" />
+            )}
+            <span>
+              Brief seeded from your <strong>{seededImageUrl ? 'Content Bank' : 'Social draft'}</strong>.
+              {seededImageUrl ? ' The bank image is pinned to every variant — tune the campaign settings and generate ad copy.' : ' Tune the campaign settings and generate variants.'}
+            </span>
           </div>
-          <button onClick={() => setFromSocial(false)} className="text-primary-700 dark:text-primary-300 hover:opacity-70">×</button>
+          <button
+            onClick={() => { setFromSocial(false); setSeededImageUrl(null) }}
+            className="text-primary-700 dark:text-primary-300 hover:opacity-70"
+          >
+            ×
+          </button>
         </div>
       )}
 
