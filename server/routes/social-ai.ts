@@ -121,8 +121,8 @@ router.post('/image', authenticateToken, requireAdmin, async (req: Authenticated
 
     const fullPrompt = style ? `${prompt}. Style: ${style}.` : prompt
     // Funnel through the same cascading provider helper used by the bank
-    // generator so /image also benefits from the gpt-image-1 → dall-e-3 →
-    // dall-e-2 fallback when project access is gated.
+    // generator so /image also benefits from the DALL·E-3 → DALL·E-2
+    // (→ gpt-image-1 last-resort) fallback when project access is gated.
     try {
       const url = await generateImageOpenAI(fullPrompt, aspect_ratio)
       res.json({ data: { url, prompt: fullPrompt, aspect_ratio } })
@@ -158,7 +158,7 @@ router.post('/refine-master-prompt', authenticateToken, requireAdmin, async (req
       return res.status(400).json({ error: 'current_prompt is required' })
     }
 
-    const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. You optimise prompts so models like gpt-image-1, DALL·E 3, and Imagen 3 render advertisement-grade visuals consistently.
+    const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. The renderer is DALL·E 3 (hd + natural style), so your refinements should lean into what DALL·E 3 does best — photorealism, cinematic lighting, layered compositions, accurate fabric and skin textures. Avoid prompt patterns that only gpt-image-1 reliably renders (e.g. long arbitrary text strings, perfect typography).
 
 You're refining a "master image prompt" for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. Use these ground-truth facts so the refined prompt stays brand-aligned:
 
@@ -778,13 +778,20 @@ async function tryOpenAIImage(
   size: string = '1024x1024'
 ): Promise<{ url?: string; error?: string; shouldFallback?: boolean }> {
   // Build the minimal valid body per model. The Images API rejects unknown
-  // parameters, so we send only what each model accepts. Both gpt-image
-  // variants ignore response_format and always return b64_json.
+  // parameters, so we send only what each model accepts.
   const body: Record<string, any> = { model, prompt, n: 1, size }
-  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+  if (model === 'dall-e-3') {
+    // DALL·E-3: HD + natural is the right call for GritSync's master
+    // prompt — photorealistic, cinematic, "premium Facebook/Instagram
+    // ad" composition. `vivid` over-saturates; `natural` matches the
+    // deep-red / white / soft-black palette the brand specifies.
+    body.quality = 'hd'
+    body.style = 'natural'
+  } else if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+    // gpt-image-1 family is the legacy fallback path now — see chain
+    // ordering in generateImageOpenAI. Keep medium to balance latency
+    // when DALL·E access is the rare miss.
     body.quality = 'medium'
-  } else if (model === 'dall-e-3') {
-    body.quality = 'standard'
   }
   // dall-e-2: just model + prompt + n + size.
 
@@ -841,10 +848,14 @@ async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1')
   const apiKey = OPENAI_KEY()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
 
-  // Cascade highest-quality → lowest. Most production OpenAI projects today
-  // expose only one of these (e.g. gpt-image-1-mini), so the chain quietly
-  // probes for the first one this project has access to.
-  const chain: OpenAIImageModel[] = ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2']
+  // DALL·E-style pipeline: DALL·E-3 (hd + natural) is the primary —
+  // photorealistic, cinematic, and respects the deep-red / white /
+  // soft-black palette the master prompt asks for. DALL·E-2 catches
+  // legacy projects that haven't been granted DALL·E-3 access. The
+  // gpt-image-1 variants stay in the chain ONLY as a last-resort
+  // fallback for projects with no DALL·E access at all — the brand
+  // wants the DALL·E look, so we always try it first.
+  const chain: OpenAIImageModel[] = ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini']
   let lastError = 'OpenAI image generation failed'
   for (const model of chain) {
     const r = await tryOpenAIImage(apiKey, prompt, model, sizeFor(model, aspect_ratio))
