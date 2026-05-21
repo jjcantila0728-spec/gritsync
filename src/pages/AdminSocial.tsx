@@ -819,6 +819,11 @@ export function AdminSocial() {
     avatar_url: '',
   })
   const [manualSaving, setManualSaving] = useState(false)
+  // Page picker that opens automatically after a Facebook OAuth completes.
+  // Lets the admin uncheck Pages / IG accounts they don't want connected
+  // — we DELETE the unchecked social_accounts rows on save. `open` doubles
+  // as the modal trigger; null means no picker is showing.
+  const [pagePicker, setPagePicker] = useState<{ open: boolean } | null>(null)
 
   useEffect(() => {
     if (!isAdmin()) {
@@ -830,7 +835,11 @@ export function AdminSocial() {
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === 'social-connected') {
         showToast(`${PLATFORM_META[e.data.platform as Platform]?.label} connected`, 'success')
-        refresh()
+        refresh().then(() => {
+          // Open the page picker after Facebook OAuth — gives the admin
+          // a single screen to keep/drop each authorized Page + linked IG.
+          if (e.data.platform === 'facebook') setPagePicker({ open: true })
+        })
       }
     }
     window.addEventListener('message', onMsg)
@@ -1200,6 +1209,7 @@ export function AdminSocial() {
               onConnect={startOAuth}
               onManual={(p) => { setConnectPlatform(p); setManualForm({ display_name: '', platform_user_id: '', access_token: '', refresh_token: '', profile_url: '', avatar_url: '' }) }}
               onDisconnect={disconnectAccount}
+              onChoosePages={() => setPagePicker({ open: true })}
             />
           )}
         </main>
@@ -1269,6 +1279,18 @@ export function AdminSocial() {
         )}
       </Modal>
 
+      {/* Post-OAuth Page Picker — opens automatically after a Facebook OAuth
+          completes so the admin can choose which Pages and linked Instagram
+          accounts stay connected. Unchecked rows are removed via the same
+          DELETE /accounts/:id used by the per-card disconnect button. */}
+      <PagePickerModal
+        open={!!pagePicker?.open}
+        accounts={accounts}
+        onClose={() => setPagePicker(null)}
+        onSaved={() => { setPagePicker(null); refresh() }}
+        showToast={showToast}
+      />
+
       {/* Shared schedule modal — drives both "Schedule from Content Bank" and
           "Edit scheduled/draft post". */}
       <ScheduleModal
@@ -1285,6 +1307,141 @@ export function AdminSocial() {
         showToast={showToast}
       />
     </div>
+  )
+}
+
+// ─── Page Picker (post-OAuth) ─────────────────────────────────────────────
+// After a Facebook OAuth completes the backend has saved every Page +
+// linked IG Business account the admin authorized. This modal pops up
+// so they can prune the list — uncheck rows they don't want connected
+// and save. Unchecked rows are deleted via DELETE /accounts/:id (the
+// same path the per-card Disconnect uses), so leftover state can never
+// drift from what the admin sees.
+function PagePickerModal({
+  open,
+  accounts,
+  onClose,
+  onSaved,
+  showToast,
+}: {
+  open: boolean
+  accounts: SocialAccount[]
+  onClose: () => void
+  onSaved: () => void
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  // The pickable rows are every FB page + every IG account currently saved.
+  // We filter out the synthetic fbuser:* row (it's not a publishing target).
+  const metaAccounts = useMemo(
+    () => accounts.filter(
+      (a) => (a.platform === 'facebook' || a.platform === 'instagram') && !a.platform_user_id.startsWith('fbuser:')
+    ),
+    [accounts]
+  )
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
+
+  // Reset selection every time the picker opens — default to "keep all".
+  useEffect(() => {
+    if (open) setChecked(new Set(metaAccounts.map((a) => a.id)))
+  }, [open, metaAccounts])
+
+  const toggle = (id: string) => {
+    setChecked((cur) => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function save() {
+    setSaving(true)
+    try {
+      const toDelete = metaAccounts.filter((a) => !checked.has(a.id))
+      for (const a of toDelete) {
+        await api(`/accounts/${a.id}`, { method: 'DELETE' })
+      }
+      if (toDelete.length > 0) {
+        showToast(`Removed ${toDelete.length} unselected page${toDelete.length === 1 ? '' : 's'}`, 'success')
+      } else {
+        showToast('All authorized pages kept', 'success')
+      }
+      onSaved()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update pages', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Choose pages to connect"
+      size="lg"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          You authorized {metaAccounts.length} {metaAccounts.length === 1 ? 'page or account' : 'pages and accounts'}.
+          Untick anything you don't want GritSync to post to — those rows will be removed. You can reconnect anytime
+          to bring them back.
+        </p>
+
+        {metaAccounts.length === 0 ? (
+          <div className="text-sm text-amber-700 dark:text-amber-300 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+            No Facebook Pages or Instagram Business accounts were authorized. Reconnect and tick the Pages you want
+            in the Facebook consent dialog.
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-80 overflow-y-auto">
+            {metaAccounts.map((a) => {
+              const isFb = a.platform === 'facebook'
+              const Icon = isFb ? Facebook : Instagram
+              const colorBg = isFb ? 'bg-blue-600' : 'bg-pink-600'
+              const isChecked = checked.has(a.id)
+              return (
+                <label
+                  key={a.id}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors',
+                    isChecked
+                      ? 'border-primary-300 bg-primary-50/50 dark:bg-primary-900/10 dark:border-primary-700'
+                      : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggle(a.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-white flex-shrink-0', colorBg)}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {a.display_name}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono">
+                      {isFb ? 'Facebook Page' : 'Instagram Business'} · {a.platform_user_id}
+                    </div>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Skip</Button>
+          <Button onClick={save} loading={saving} disabled={saving || metaAccounts.length === 0}>
+            Save {checked.size} of {metaAccounts.length}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1307,12 +1464,16 @@ function FacebookCard({
   oauthReady,
   onConnect,
   onDisconnect,
+  onChoosePages,
 }: {
   status: MetaConnectionStatus | null
   busy: boolean
   oauthReady: boolean | undefined
   onConnect: () => void
   onDisconnect: () => void
+  // Opens the post-OAuth page-picker modal so the admin can prune which
+  // Pages stay connected without re-running OAuth.
+  onChoosePages: () => void
 }) {
   if (status === null) {
     return (
@@ -1372,11 +1533,17 @@ function FacebookCard({
           {connected && (
             <div className="mt-2 flex items-center gap-3 text-xs">
               <button
+                onClick={onChoosePages}
+                className="text-primary-600 dark:text-primary-300 hover:underline"
+              >
+                Choose pages
+              </button>
+              <button
                 onClick={onConnect}
                 disabled={busy}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               >
-                Reconnect to add more pages
+                Reconnect to add more
               </button>
             </div>
           )}
@@ -2431,11 +2598,15 @@ function AccountsView({
   onConnect,
   onManual,
   onDisconnect,
+  onChoosePages,
 }: {
   accounts: SocialAccount[]
   onConnect: (p: Platform) => void
   onManual: (p: Platform) => void
   onDisconnect: (id: string) => void
+  // Opens the post-OAuth Facebook page-picker modal so the admin can
+  // prune which Pages stay connected after they've already logged in.
+  onChoosePages: () => void
 }) {
   const { showToast } = useToast()
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
@@ -2584,6 +2755,7 @@ function AccountsView({
           oauthReady={oauthStatus.facebook?.oauth_ready}
           onConnect={() => onConnect('facebook')}
           onDisconnect={disconnectMeta}
+          onChoosePages={onChoosePages}
         />
         <InstagramCard
           status={metaStatus}
