@@ -929,11 +929,12 @@ ${formatBlock}Voice rules:
     ? 'Follow the master caption format above for every variant. Keep ALL 11 section headings ("1. HOOK", "2. SELF-CHECK / AWARENESS QUESTIONS", etc.) and fill each section with copy that reflects this post\'s specific topic. Variants differ in the HOOK (section 1) and the voice of each section — the structure is identical across variants.'
     : 'ONE call-to-action per caption. No CTA stacking.'}
 - ${opts.caption_format
-    ? 'CTAs live in section 9 of the master format — keep "www.gritsync.com/quote" verbatim and the four bullet CTAs intact.'
+    ? 'CTAs live in section 9 of the master format — keep "https://www.gritsync.com/quote" verbatim and the four bullet CTAs intact.'
     : 'If hashtags are listed in the plan, include 3-6 of them (or your own equally-relevant ones) only at the very end, on a separate line.'}
 - ${opts.caption_format
     ? 'Hashtags live in section 11 of the master format — keep them verbatim, or swap for equally-relevant ones if and only if the topic genuinely warrants different tags.'
     : 'Emojis sparingly: at most 2 per caption, used to anchor meaning, never to decorate.'}
+- HARD REQUIREMENT: every caption MUST include a GritSync website URL on its OWN line, immediately before the hashtags. Use https://www.gritsync.com/quote when the caption pushes toward applying / pricing / getting a quote; otherwise use https://www.gritsync.com/. Do not shorten, paraphrase, or omit the URL.
 
 Output STRICT JSON only.`
 
@@ -993,7 +994,35 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
   if (!captions.length) throw new Error('No captions produced')
   // Pad if the model returned fewer than requested.
   while (captions.length < opts.count) captions.push(captions[captions.length - 1])
-  return captions
+  // Belt-and-braces: enforce the GritSync URL even when the model drops
+  // it. If any gritsync.com link is already present we trust the model's
+  // placement; otherwise we insert the website URL on its own line just
+  // before the trailing hashtags.
+  return captions.map(ensureGritsyncUrl)
+}
+
+// Insert a GritSync URL into a caption when the model forgot to include
+// one. Picks /quote when the caption clearly pushes toward applying or
+// pricing; falls back to the homepage for everything else. Idempotent —
+// returns the caption unchanged when a gritsync.com URL is already present.
+function ensureGritsyncUrl(caption: string): string {
+  if (/gritsync\.com/i.test(caption)) return caption
+  const wantsQuote = /\b(quote|apply|price|pricing|payment|enroll|sign\s*up|start your application)\b/i.test(caption)
+  const url = wantsQuote ? 'https://www.gritsync.com/quote' : 'https://www.gritsync.com/'
+
+  // Split the caption into a body and a trailing hashtag block so we can
+  // slot the URL on its own line BETWEEN them (hashtags stay at the end).
+  const lines = caption.split('\n')
+  let hashtagStart = lines.length
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const t = lines[i].trim()
+    if (!t) continue
+    if (/^#\S/.test(t) || /(\s|^)#\S+/.test(t)) hashtagStart = i
+    else break
+  }
+  const body = lines.slice(0, hashtagStart).join('\n').replace(/\s+$/, '')
+  const tail = lines.slice(hashtagStart).join('\n').trim()
+  return tail ? `${body}\n\n${url}\n\n${tail}` : `${body}\n\n${url}`
 }
 
 // Caption-aware image-prompt derivation. The operator's master image

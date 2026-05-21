@@ -824,6 +824,14 @@ export function AdminSocial() {
   // — we DELETE the unchecked social_accounts rows on save. `open` doubles
   // as the modal trigger; null means no picker is showing.
   const [pagePicker, setPagePicker] = useState<{ open: boolean } | null>(null)
+  // Pending disconnect — replaces native window.confirm() with a proper
+  // modal. `meta` disconnects the whole FB+IG+ads connection; `account`
+  // disconnects a single per-platform row.
+  type DisconnectTarget =
+    | { kind: 'meta' }
+    | { kind: 'account'; id: string; label: string; platform: Platform }
+  const [disconnectTarget, setDisconnectTarget] = useState<DisconnectTarget | null>(null)
+  const [disconnectBusy, setDisconnectBusy] = useState(false)
 
   useEffect(() => {
     if (!isAdmin()) {
@@ -895,14 +903,41 @@ export function AdminSocial() {
     }
   }
 
-  async function disconnectAccount(id: string) {
-    if (!confirm('Disconnect this account? Scheduled posts using it will fail.')) return
+  function disconnectAccount(id: string) {
+    const acc = accounts.find((a) => a.id === id)
+    if (!acc) return
+    setDisconnectTarget({
+      kind: 'account',
+      id,
+      label: acc.display_name || `${PLATFORM_META[acc.platform].label} account`,
+      platform: acc.platform,
+    })
+  }
+
+  async function confirmDisconnect() {
+    if (!disconnectTarget) return
+    setDisconnectBusy(true)
     try {
-      await api(`/accounts/${id}`, { method: 'DELETE' })
-      showToast('Account disconnected', 'success')
+      if (disconnectTarget.kind === 'meta') {
+        const r = await fetch('/api/social/facebook/disconnect', {
+          method: 'DELETE',
+          headers: { ...authHeaders() },
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+        showToast('Facebook & Instagram disconnected', 'success')
+        // Tell child components to reload their derived state.
+        window.dispatchEvent(new CustomEvent('gritsync-accounts-changed'))
+      } else {
+        await api(`/accounts/${disconnectTarget.id}`, { method: 'DELETE' })
+        showToast(`${disconnectTarget.label} disconnected`, 'success')
+      }
+      setDisconnectTarget(null)
       refresh()
     } catch (err: any) {
       showToast(err.message || 'Failed to disconnect', 'error')
+    } finally {
+      setDisconnectBusy(false)
     }
   }
 
@@ -1210,6 +1245,7 @@ export function AdminSocial() {
               onManual={(p) => { setConnectPlatform(p); setManualForm({ display_name: '', platform_user_id: '', access_token: '', refresh_token: '', profile_url: '', avatar_url: '' }) }}
               onDisconnect={disconnectAccount}
               onChoosePages={() => setPagePicker({ open: true })}
+              onMetaDisconnect={() => setDisconnectTarget({ kind: 'meta' })}
             />
           )}
         </main>
@@ -1289,6 +1325,16 @@ export function AdminSocial() {
         onClose={() => setPagePicker(null)}
         onSaved={() => { setPagePicker(null); refresh() }}
         showToast={showToast}
+      />
+
+      {/* Unified disconnect confirm — replaces native window.confirm() so
+          the admin gets a calm modal with context-specific impact copy. */}
+      <DisconnectConfirmModal
+        target={disconnectTarget}
+        accounts={accounts}
+        busy={disconnectBusy}
+        onCancel={() => { if (!disconnectBusy) setDisconnectTarget(null) }}
+        onConfirm={confirmDisconnect}
       />
 
       {/* Shared schedule modal — drives both "Schedule from Content Bank" and
@@ -1441,6 +1487,77 @@ function PagePickerModal({
           </Button>
         </div>
       </div>
+    </Modal>
+  )
+}
+
+// ─── Disconnect confirm modal ─────────────────────────────────────────────
+// One modal for every disconnect surface (single account row OR the whole
+// Meta connection). Shows context-specific impact copy ("X scheduled posts
+// use this account", "Disconnect 3 Pages + 1 IG") so the admin knows
+// what's about to vanish. Replaces native window.confirm() which broke
+// the visual flow and looked like a phishing dialog on some browsers.
+function DisconnectConfirmModal({
+  target,
+  accounts,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  target:
+    | { kind: 'meta' }
+    | { kind: 'account'; id: string; label: string; platform: Platform }
+    | null
+  accounts: SocialAccount[]
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  // Pre-compute impact details so the modal renders the right copy
+  // even on the first paint (no async lookups inside the modal).
+  const meta = useMemo(() => {
+    if (!target) return null
+    if (target.kind === 'meta') {
+      const fb = accounts.filter((a) => a.platform === 'facebook' && !a.platform_user_id.startsWith('fbuser:'))
+      const ig = accounts.filter((a) => a.platform === 'instagram')
+      return {
+        title: 'Disconnect Facebook & Instagram?',
+        body: `This will remove ${fb.length} Facebook Page${fb.length === 1 ? '' : 's'}, ${ig.length} Instagram account${ig.length === 1 ? '' : 's'}, and your ad-account access. You can reconnect anytime.`,
+        confirmLabel: 'Disconnect all',
+      }
+    }
+    return {
+      title: `Disconnect ${target.label}?`,
+      body: `${PLATFORM_META[target.platform].label} posting from this account will stop. Scheduled or draft posts that target this account will fail when they fire. You can reconnect anytime.`,
+      confirmLabel: 'Disconnect',
+    }
+  }, [target, accounts])
+
+  return (
+    <Modal isOpen={!!target} onClose={onCancel} title={meta?.title || ''} size="sm">
+      {meta && (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              {meta.body}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
+            <Button
+              onClick={onConfirm}
+              loading={busy}
+              disabled={busy}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {meta.confirmLabel}
+            </Button>
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }
@@ -2599,6 +2716,7 @@ function AccountsView({
   onManual,
   onDisconnect,
   onChoosePages,
+  onMetaDisconnect,
 }: {
   accounts: SocialAccount[]
   onConnect: (p: Platform) => void
@@ -2607,13 +2725,18 @@ function AccountsView({
   // Opens the post-OAuth Facebook page-picker modal so the admin can
   // prune which Pages stay connected after they've already logged in.
   onChoosePages: () => void
+  // Opens the unified disconnect-confirm modal for the whole Meta
+  // (FB + IG + ads) connection. The actual DELETE runs in the parent.
+  onMetaDisconnect: () => void
 }) {
   const { showToast } = useToast()
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
   const [driveBusy, setDriveBusy] = useState(false)
   const [metaStatus, setMetaStatus] = useState<MetaConnectionStatus | null>(null)
-  const [metaBusy, setMetaBusy] = useState(false)
+  // Meta-side busy state lives at the parent now (one disconnect modal).
+  // Keep this as a literal so the card prop wiring stays unchanged.
+  const metaBusy = false
 
   const refreshMetaStatus = () => {
     api<MetaConnectionStatus>('/facebook/connection-status')
@@ -2678,27 +2801,8 @@ function AccountsView({
     }
   }
 
-  async function disconnectMeta() {
-    if (!confirm('Disconnect Meta? This removes all Facebook Pages, Instagram Business accounts, and ad-account access. You can reconnect anytime.')) return
-    setMetaBusy(true)
-    try {
-      const r = await fetch('/api/social/facebook/disconnect', {
-        method: 'DELETE',
-        headers: { ...authHeaders() },
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
-      showToast(`Meta disconnected (${j.data?.rows_removed || 0} rows)`, 'success')
-      refreshMetaStatus()
-      // Bubble up to parent so the platforms grid + Connected Accounts
-      // list both reload without a manual refresh.
-      window.dispatchEvent(new CustomEvent('gritsync-accounts-changed'))
-    } catch (err: any) {
-      showToast(err.message || 'Disconnect failed', 'error')
-    } finally {
-      setMetaBusy(false)
-    }
-  }
+  // The actual disconnect call lives in the parent (one modal flow for
+  // every disconnect). AccountsView just opens the modal via onMetaDisconnect.
 
   async function connectDrive() {
     setDriveBusy(true)
@@ -2754,7 +2858,7 @@ function AccountsView({
           busy={metaBusy}
           oauthReady={oauthStatus.facebook?.oauth_ready}
           onConnect={() => onConnect('facebook')}
-          onDisconnect={disconnectMeta}
+          onDisconnect={onMetaDisconnect}
           onChoosePages={onChoosePages}
         />
         <InstagramCard

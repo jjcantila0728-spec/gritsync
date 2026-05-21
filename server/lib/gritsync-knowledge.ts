@@ -54,6 +54,14 @@ SUPPORT
 - +1 (509) 270-3437
 - All status updates flow through the in-app dashboard + email notifications.
 
+OFFICIAL URLS (use these verbatim — never paraphrase or shorten)
+- Website (general):    https://www.gritsync.com/
+- Get a personalized quote: https://www.gritsync.com/quote
+- Every caption MUST include the website URL. Default to https://www.gritsync.com/.
+  Switch to https://www.gritsync.com/quote ONLY when the CTA is explicitly about
+  pricing, applying, or getting a custom plan. Place the URL on its OWN line
+  immediately before the hashtags (or at the end if there are none).
+
 WHAT WE DO NOT DO — never claim these as GritSync services:
 - We do NOT file CGFNS reports, VisaScreen, or any US-immigration paperwork. We may educate about these adjacent topics, but they are NOT GritSync services.
 - We do NOT directly place nurses with US jobs (the Sponsorship program above is the only exception, and it's opt-in).
