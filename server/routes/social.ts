@@ -104,11 +104,16 @@ function callbackUrl(platform: Platform) {
 // ---------------------------------------------------------------------------
 router.get('/accounts', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
+    // Exclude the synthetic `fbuser:<id>` row — it carries the long-lived
+    // user token + ad-account list for Marketing-API calls, but it's not a
+    // publishable destination. The Meta connection card shows its state
+    // separately via /facebook/connection-status.
     const result = await query(
       `SELECT id, platform, display_name, profile_url, avatar_url, status,
               platform_user_id, scopes, metadata, connected_at, token_expires_at,
               last_error
        FROM social_accounts
+       WHERE platform_user_id NOT LIKE 'fbuser:%'
        ORDER BY platform ASC, created_at DESC`
     )
     res.json({ data: result.rows })
@@ -510,14 +515,24 @@ async function handleFacebookConnect(args: {
   const me: any = await meRes.json()
   if (!meRes.ok || !me.id) throw new Error(me.error?.message || 'Failed to fetch Facebook user profile')
 
-  // 3. Fetch the user's Pages with their non-expiring page tokens.
+  // 3. Fetch the user's Pages with their non-expiring page tokens. We also
+  //    ask for `instagram_business_account` so we can persist linked IG
+  //    accounts in the same connect flow — IG publishes through the FB
+  //    page token, not its own.
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,category,tasks&limit=100&access_token=${encodeURIComponent(longLived.access_token)}`
+    `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,category,tasks,picture{url},instagram_business_account{id,username,name,profile_picture_url}&limit=100&access_token=${encodeURIComponent(longLived.access_token)}`
   )
   const pagesJson: any = await pagesRes.json()
   if (!pagesRes.ok) throw new Error(pagesJson.error?.message || 'Failed to list Facebook pages')
-  const pages: Array<{ id: string; name: string; access_token: string; category?: string; tasks?: string[] }> =
-    pagesJson.data || []
+  const pages: Array<{
+    id: string
+    name: string
+    access_token: string
+    category?: string
+    tasks?: string[]
+    picture?: { data?: { url?: string } } | { url?: string }
+    instagram_business_account?: { id: string; username?: string; name?: string; profile_picture_url?: string }
+  }> = pagesJson.data || []
 
   // 4. Fetch ad accounts the user can manage.
   const adAccountsRes = await fetch(
@@ -569,26 +584,48 @@ async function handleFacebookConnect(args: {
           currency: a.currency,
           timezone: a.timezone_name,
         })),
-        pages: pages.map((p) => ({ id: p.id, name: p.name })),
+        pages: pages.map((p) => ({
+          id: p.id,
+          name: p.name,
+          instagram_business_account: p.instagram_business_account
+            ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username }
+            : null,
+        })),
+        instagram_accounts: pages
+          .filter((p) => p.instagram_business_account)
+          .map((p) => ({
+            id: p.instagram_business_account!.id,
+            username: p.instagram_business_account!.username,
+            name: p.instagram_business_account!.name,
+            avatar_url: p.instagram_business_account!.profile_picture_url,
+            linked_page_id: p.id,
+            linked_page_name: p.name,
+          })),
+        long_lived_token_expires_at: longTokenExpiresAt,
       }),
       userId,
     ]
   )
 
   // 6. Upsert one row per Page. Each row's access_token is the page token,
-  //    which is what publishToPlatform() already expects.
+  //    which is what publishToPlatform() already expects. We also upsert
+  //    one row per linked Instagram Business account using the SAME page
+  //    token (IG publishes through the FB Page token, not its own).
   for (const page of pages) {
+    const pagePicture = (page as any).picture?.data?.url || (page as any).picture?.url || null
     await query(
       `INSERT INTO social_accounts
          (platform, display_name, platform_user_id, access_token,
-          token_expires_at, scopes, metadata, status, connected_by_user_id, connected_at)
-       VALUES ('facebook', $1, $2, $3, NULL, $4, $5::jsonb, 'connected', $6, NOW())
+          token_expires_at, scopes, metadata, avatar_url,
+          status, connected_by_user_id, connected_at)
+       VALUES ('facebook', $1, $2, $3, NULL, $4, $5::jsonb, $6, 'connected', $7, NOW())
        ON CONFLICT (platform, platform_user_id) DO UPDATE
          SET display_name = EXCLUDED.display_name,
              access_token = EXCLUDED.access_token,
              token_expires_at = EXCLUDED.token_expires_at,
              scopes = EXCLUDED.scopes,
              metadata = EXCLUDED.metadata,
+             avatar_url = EXCLUDED.avatar_url,
              status = 'connected',
              last_error = NULL,
              updated_at = NOW(),
@@ -605,10 +642,55 @@ async function handleFacebookConnect(args: {
           category: page.category,
           tasks: page.tasks,
           fb_user_id: me.id,
+          instagram_business_account_id: page.instagram_business_account?.id || null,
         }),
+        pagePicture,
         userId,
       ]
     )
+
+    // If this Page has a linked IG Business account, persist it as an
+    // Instagram row so the existing publish-to-IG flow (and the Connected
+    // Accounts list) sees it. The access_token is the SAME FB Page token
+    // — IG Graph API requires the page token for /media + /media_publish.
+    if (page.instagram_business_account) {
+      const ig = page.instagram_business_account
+      await query(
+        `INSERT INTO social_accounts
+           (platform, display_name, platform_user_id, access_token,
+            token_expires_at, scopes, metadata, avatar_url,
+            status, connected_by_user_id, connected_at)
+         VALUES ('instagram', $1, $2, $3, NULL, $4, $5::jsonb, $6, 'connected', $7, NOW())
+         ON CONFLICT (platform, platform_user_id) DO UPDATE
+           SET display_name = EXCLUDED.display_name,
+               access_token = EXCLUDED.access_token,
+               token_expires_at = EXCLUDED.token_expires_at,
+               scopes = EXCLUDED.scopes,
+               metadata = EXCLUDED.metadata,
+               avatar_url = EXCLUDED.avatar_url,
+               status = 'connected',
+               last_error = NULL,
+               updated_at = NOW(),
+               connected_at = NOW()`,
+        [
+          ig.username ? `@${ig.username}` : (ig.name || `IG ${ig.id}`),
+          ig.id,
+          page.access_token,
+          'instagram_basic,instagram_content_publish',
+          JSON.stringify({
+            kind: 'ig_business',
+            ig_user_id: ig.id,
+            ig_username: ig.username,
+            ig_name: ig.name,
+            linked_page_id: page.id,
+            linked_page_name: page.name,
+            fb_user_id: me.id,
+          }),
+          ig.profile_picture_url || null,
+          userId,
+        ]
+      )
+    }
   }
 }
 
@@ -630,6 +712,112 @@ async function fbExchangeLongLived(
   }
   return j
 }
+
+// ---------------------------------------------------------------------------
+// GET /api/social/facebook/connection-status
+// Returns the unified Meta connection state — connected FB user, expiry of
+// the long-lived user token, list of Pages (each carrying a non-expiring
+// page token), linked Instagram Business accounts, ad accounts. Used by
+// the Accounts tab to render the Meta connection card without having to
+// stitch together multiple social_accounts rows on the client.
+// ---------------------------------------------------------------------------
+router.get('/facebook/connection-status', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT metadata, token_expires_at, connected_at
+       FROM social_accounts
+       WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
+       ORDER BY connected_at DESC LIMIT 1`
+    )
+    if (r.rows.length === 0) {
+      return res.json({ data: { connected: false } })
+    }
+    const row = r.rows[0]
+    const m = row.metadata || {}
+    const userTokenExpiresAt: Date | null = row.token_expires_at
+    const daysToExpiry = userTokenExpiresAt
+      ? Math.max(0, Math.floor((new Date(userTokenExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+      : null
+    res.json({
+      data: {
+        connected: true,
+        fb_user_id: m.fb_user_id,
+        fb_user_name: m.fb_user_name,
+        connected_at: row.connected_at,
+        // The long-lived USER token expires ~60d; page tokens minted from
+        // it do not. So posting stays permanent while ad management hits
+        // a 60-day reconnect cadence (or token refresh, below).
+        user_token_expires_at: userTokenExpiresAt,
+        user_token_days_to_expiry: daysToExpiry,
+        page_tokens_permanent: true,
+        pages: m.pages || [],
+        instagram_accounts: m.instagram_accounts || [],
+        ad_accounts: m.ad_accounts || [],
+      },
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/social/facebook/refresh-token
+// Re-exchanges the current long-lived user token for a fresh 60-day one.
+// Lets the operator hit a button before the 60-day expiry without going
+// through the full OAuth popup again.
+router.post('/facebook/refresh-token', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const clientId = process.env.FACEBOOK_APP_ID
+    const clientSecret = process.env.FACEBOOK_APP_SECRET
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ error: 'FACEBOOK_APP_ID / FACEBOOK_APP_SECRET not set on the server' })
+    }
+    const r = await query(
+      `SELECT id, access_token, metadata FROM social_accounts
+       WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
+       ORDER BY connected_at DESC LIMIT 1`
+    )
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'No Facebook user connection to refresh' })
+    }
+    const fbUserRow = r.rows[0]
+    const fresh = await fbExchangeLongLived(fbUserRow.access_token, clientId, clientSecret)
+    const expiresAt = fresh.expires_in
+      ? new Date(Date.now() + fresh.expires_in * 1000)
+      : null
+    const newMetadata = {
+      ...(fbUserRow.metadata || {}),
+      long_lived_token_expires_at: expiresAt,
+    }
+    await query(
+      `UPDATE social_accounts
+         SET access_token = $1,
+             token_expires_at = $2,
+             metadata = $3::jsonb,
+             updated_at = NOW()
+       WHERE id = $4`,
+      [fresh.access_token, expiresAt, JSON.stringify(newMetadata), fbUserRow.id]
+    )
+    res.json({ data: { refreshed: true, user_token_expires_at: expiresAt } })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/social/facebook/disconnect
+// Removes the Meta connection completely — every page, IG account, the
+// synthetic fb_user row, and any cached metadata.
+router.delete('/facebook/disconnect', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `DELETE FROM social_accounts
+       WHERE platform = 'facebook' OR (platform = 'instagram' AND metadata->>'fb_user_id' IS NOT NULL)
+       RETURNING id`
+    )
+    res.json({ data: { disconnected: true, rows_removed: r.rowCount || 0 } })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ---------------------------------------------------------------------------
 // GET /api/social/facebook/ad-accounts

@@ -890,6 +890,268 @@ export function AdminSocial() {
   )
 }
 
+// ─── Meta (Facebook + Instagram) connection card ──────────────────────────
+//
+// Single OAuth flow that powers BOTH Facebook page posting and Instagram
+// Business posting via the linked Pages. The card surfaces:
+//   - the connected FB user identity
+//   - long-lived user-token expiry (60-day cadence) + a one-click refresh
+//   - the list of Pages this OAuth granted access to (each carrying a
+//     non-expiring Page token so posting is permanent)
+//   - Instagram Business accounts linked to those Pages
+//   - ad accounts the user can manage (used by the AI Ads launch flow)
+function MetaConnectionCard({
+  status,
+  busy,
+  oauthReady,
+  oauthMissing,
+  onConnect,
+  onRefreshToken,
+  onDisconnect,
+}: {
+  status: MetaConnectionStatus | null
+  busy: boolean
+  oauthReady: boolean | undefined
+  oauthMissing: string[]
+  onConnect: () => void
+  onRefreshToken: () => void
+  onDisconnect: () => void
+}) {
+  const fbColor = PLATFORM_META.facebook.color
+  const igColor = PLATFORM_META.instagram.color
+
+  if (status === null) {
+    return (
+      <Card className="p-6">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading Meta connection…</div>
+      </Card>
+    )
+  }
+
+  if (!status.connected) {
+    const oauthBlocked = oauthReady === false
+    return (
+      <Card className="p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <div className="flex">
+              <div className={cn('h-12 w-12 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', fbColor)}>
+                <Facebook className="h-6 w-6" />
+              </div>
+              <div className={cn('h-12 w-12 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', igColor)}>
+                <Instagram className="h-6 w-6" />
+              </div>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Meta (Facebook + Instagram)</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+                One OAuth grants posting to every Page you manage, every linked Instagram Business account, and
+                Marketing-API access to your ad accounts. Page tokens are <strong>permanent</strong> so posting never
+                lapses; the user token (used for ads) refreshes every 60 days in one click.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            Not connected
+          </span>
+        </div>
+
+        {oauthBlocked && (
+          <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-200">
+            <strong>OAuth is not configured.</strong> Missing on server: {oauthMissing.join(', ') || 'FACEBOOK_APP_ID / FACEBOOK_APP_SECRET'}. Set both in Vercel
+            → Settings → Environment Variables, redeploy, then try Connect.
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <Button onClick={onConnect} loading={busy} disabled={busy || oauthBlocked}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Connect Meta
+          </Button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Scopes requested: pages_manage_posts, instagram_content_publish, ads_management, business_management.
+          </span>
+        </div>
+      </Card>
+    )
+  }
+
+  const expiryDays = status.user_token_days_to_expiry ?? null
+  const expiryTone =
+    expiryDays === null ? 'gray'
+    : expiryDays <= 7 ? 'red'
+    : expiryDays <= 21 ? 'amber'
+    : 'green'
+  const expiryClasses: Record<string, string> = {
+    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    red: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  }
+
+  return (
+    <Card className="p-6 space-y-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <div className="flex">
+            <div className={cn('h-12 w-12 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', fbColor)}>
+              <Facebook className="h-6 w-6" />
+            </div>
+            <div className={cn('h-12 w-12 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', igColor)}>
+              <Instagram className="h-6 w-6" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Meta — {status.fb_user_name || 'connected'}
+              </h2>
+              <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                Connected
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {status.connected_at && <>Connected {new Date(status.connected_at).toLocaleString()}. </>}
+              Posting tokens are permanent.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={onRefreshToken} loading={busy} disabled={busy}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh token
+          </Button>
+          <Button size="sm" variant="outline" onClick={onConnect} disabled={busy}>
+            Reconnect
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDisconnect} disabled={busy} className="text-red-600 hover:text-red-700">
+            Disconnect
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <MetaStat
+          label="Pages (permanent)"
+          value={String(status.pages?.length || 0)}
+          tone="green"
+        />
+        <MetaStat
+          label="Instagram accounts"
+          value={String(status.instagram_accounts?.length || 0)}
+          tone="green"
+        />
+        <MetaStat
+          label="Ad accounts"
+          value={String(status.ad_accounts?.length || 0)}
+          tone={status.ad_accounts && status.ad_accounts.length > 0 ? 'green' : 'gray'}
+        />
+        <MetaStat
+          label="User token"
+          value={expiryDays === null ? 'no expiry' : `${expiryDays}d left`}
+          tone={expiryTone}
+          className={expiryClasses[expiryTone]}
+        />
+      </div>
+
+      {/* Pages list */}
+      {(status.pages?.length || 0) > 0 && (
+        <div>
+          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Pages connected (post permanently)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {status.pages!.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200"
+                title={p.id}
+              >
+                <Facebook className="h-3 w-3" />
+                {p.name}
+                {p.instagram_business_account?.username && (
+                  <span className="text-[10px] text-blue-600 dark:text-blue-300/80 ml-1">↔ @{p.instagram_business_account.username}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Instagram accounts */}
+      {(status.instagram_accounts?.length || 0) > 0 && (
+        <div>
+          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Instagram Business accounts
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {status.instagram_accounts!.map((ig) => (
+              <div
+                key={ig.id}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-pink-200 dark:border-pink-800/60 bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-200"
+              >
+                <Instagram className="h-3 w-3" />
+                @{ig.username || ig.id}
+                <span className="text-[10px] text-pink-600 dark:text-pink-300/80 ml-1">via {ig.linked_page_name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ad accounts */}
+      {(status.ad_accounts?.length || 0) > 0 && (
+        <div>
+          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Ad accounts (Marketing API)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {status.ad_accounts!.map((a) => (
+              <div
+                key={a.id}
+                className="text-xs px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-200"
+                title={a.id}
+              >
+                {a.name}{a.currency ? ` · ${a.currency}` : ''}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(status.pages?.length || 0) === 0 && (
+        <div className="text-xs p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200">
+          The connected user manages no Facebook Pages. To post, they need to be an admin on at least one Page —
+          reconnect with a different account or grant Page access in Meta Business Suite.
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function MetaStat({
+  label,
+  value,
+  tone,
+  className,
+}: {
+  label: string
+  value: string
+  tone: 'green' | 'amber' | 'red' | 'gray'
+  className?: string
+}) {
+  const tones: Record<string, string> = {
+    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/40 text-green-700 dark:text-green-300',
+    amber: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-300',
+    red: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300',
+    gray: 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
+  }
+  return (
+    <div className={cn('px-3 py-2 rounded-lg border', className || tones[tone])}>
+      <div className="text-[10px] uppercase tracking-wider opacity-80 font-medium">{label}</div>
+      <div className="text-sm font-semibold mt-0.5">{value}</div>
+    </div>
+  )
+}
+
 // ─── Manual-connect instructions (platform-specific step-by-step) ─────────
 const MANUAL_INSTRUCTIONS: Record<Platform, {
   intro: string
@@ -1009,6 +1271,39 @@ interface DriveStatus {
   folder_name: string | null
 }
 
+interface MetaConnectionPage {
+  id: string
+  name: string
+  instagram_business_account?: { id: string; username?: string } | null
+}
+interface MetaConnectionIg {
+  id: string
+  username?: string
+  name?: string
+  avatar_url?: string
+  linked_page_id: string
+  linked_page_name: string
+}
+interface MetaConnectionAdAccount {
+  id: string
+  account_id: string
+  name: string
+  status: number
+  currency?: string
+}
+interface MetaConnectionStatus {
+  connected: boolean
+  fb_user_id?: string
+  fb_user_name?: string
+  connected_at?: string
+  user_token_expires_at?: string | null
+  user_token_days_to_expiry?: number | null
+  page_tokens_permanent?: boolean
+  pages?: MetaConnectionPage[]
+  instagram_accounts?: MetaConnectionIg[]
+  ad_accounts?: MetaConnectionAdAccount[]
+}
+
 function AccountsView({
   accounts,
   onConnect,
@@ -1024,6 +1319,14 @@ function AccountsView({
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
   const [driveBusy, setDriveBusy] = useState(false)
+  const [metaStatus, setMetaStatus] = useState<MetaConnectionStatus | null>(null)
+  const [metaBusy, setMetaBusy] = useState(false)
+
+  const refreshMetaStatus = () => {
+    api<MetaConnectionStatus>('/facebook/connection-status')
+      .then(setMetaStatus)
+      .catch(() => setMetaStatus({ connected: false }))
+  }
 
   useEffect(() => {
     api<Record<string, OAuthStatus>>('/accounts/oauth-status')
@@ -1045,20 +1348,65 @@ function AccountsView({
 
   useEffect(() => {
     refreshDriveStatus()
-    // Listen for the OAuth popup's postMessage so we can refresh status
-    // immediately after the user finishes the consent flow.
+    refreshMetaStatus()
+    // Listen for OAuth popup postMessages from Drive + social platform
+    // callbacks so we can refresh status pills immediately after the
+    // operator finishes the consent flow.
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === 'google-drive-ok') {
         showToast(e.data.message || 'Google Drive connected', 'success')
         refreshDriveStatus()
       } else if (e.data?.type === 'google-drive-error') {
         showToast(e.data.message || 'Google Drive connection failed', 'error')
+      } else if (e.data?.type === 'social-connected' && (e.data.platform === 'facebook' || e.data.platform === 'instagram')) {
+        // FB callback also re-emits this. Pull the new Meta state.
+        refreshMetaStatus()
       }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function refreshMetaToken() {
+    setMetaBusy(true)
+    try {
+      const r = await fetch('/api/social/facebook/refresh-token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...authHeaders() },
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      showToast('Meta user token refreshed (+60 days)', 'success')
+      refreshMetaStatus()
+    } catch (err: any) {
+      showToast(err.message || 'Token refresh failed', 'error')
+    } finally {
+      setMetaBusy(false)
+    }
+  }
+
+  async function disconnectMeta() {
+    if (!confirm('Disconnect Meta? This removes all Facebook Pages, Instagram Business accounts, and ad-account access. You can reconnect anytime.')) return
+    setMetaBusy(true)
+    try {
+      const r = await fetch('/api/social/facebook/disconnect', {
+        method: 'DELETE',
+        headers: { ...authHeaders() },
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      showToast(`Meta disconnected (${j.data?.rows_removed || 0} rows)`, 'success')
+      refreshMetaStatus()
+      // Bubble up to parent so the platforms grid + Connected Accounts
+      // list both reload without a manual refresh.
+      window.dispatchEvent(new CustomEvent('gritsync-accounts-changed'))
+    } catch (err: any) {
+      showToast(err.message || 'Disconnect failed', 'error')
+    } finally {
+      setMetaBusy(false)
+    }
+  }
 
   async function connectDrive() {
     setDriveBusy(true)
@@ -1161,6 +1509,21 @@ function AccountsView({
           )}
         </div>
       </Card>
+
+      {/* Meta (Facebook + Instagram) connection — one OAuth grants posting to
+          every Page the user manages, every linked Instagram Business
+          account, and Marketing-API access to every ad account the user
+          can manage. Long-lived user token is 60 days; page tokens are
+          permanent so posting never breaks even if the user token lapses. */}
+      <MetaConnectionCard
+        status={metaStatus}
+        busy={metaBusy}
+        oauthReady={oauthStatus.facebook?.oauth_ready}
+        oauthMissing={oauthStatus.facebook?.missing || []}
+        onConnect={() => onConnect('facebook')}
+        onRefreshToken={refreshMetaToken}
+        onDisconnect={disconnectMeta}
+      />
 
       {Object.keys(oauthStatus).length > 0 && !anyOAuthReady && (
         <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
