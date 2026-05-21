@@ -39,19 +39,25 @@ const PLATFORM_CONFIG: Record<Platform, {
   extraAuthParams?: Record<string, string>
 }> = {
   facebook: {
-    authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
-    // Full Marketing-API scope set: pages_* for posting, ads_* for managing
-    // ad campaigns, business_management so we can look up which businesses
-    // / ad accounts the connecting user has access to. These extra scopes
-    // are gated by Meta's App Review for production — works out of the box
-    // for the app admin while the app is in Development mode.
+    authUrl: 'https://www.facebook.com/v20.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
+    // ONE OAuth covers Facebook Pages + Instagram Business + Marketing API.
+    // The IG card on the Accounts tab delegates to this same flow, so the
+    // scope set has to include the IG content-publishing perms — without
+    // them the page access token cannot POST to /{ig-user-id}/media even
+    // though we can READ the linked IG account from /me/accounts.
+    //   pages_* — Facebook Pages API (posting, engagement, metadata).
+    //   instagram_basic / instagram_content_publish — required for the IG
+    //     Content Publishing API two-step container + media_publish.
+    //   ads_* / business_management — Marketing API + business lookup.
     scopes: [
       'pages_show_list',
       'pages_manage_posts',
       'pages_read_engagement',
       'pages_manage_ads',
       'pages_manage_metadata',
+      'instagram_basic',
+      'instagram_content_publish',
       'ads_management',
       'ads_read',
       'business_management',
@@ -61,8 +67,13 @@ const PLATFORM_CONFIG: Record<Platform, {
     envSecretKey: 'FACEBOOK_APP_SECRET',
   },
   instagram: {
-    authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
+    // Kept as a back-compat entry for the "Log in with Instagram" path on
+    // the SimplePlatformCard manual-token fallback. The Accounts tab's IG
+    // card now delegates to the facebook flow above, but if a caller ever
+    // hits /oauth/instagram/start directly we still surface the full IG
+    // publishing scope set so the resulting token is actually usable.
+    authUrl: 'https://www.facebook.com/v20.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
     scopes: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
     envIdKey: 'FACEBOOK_APP_ID',
     envSecretKey: 'FACEBOOK_APP_SECRET',
@@ -582,7 +593,7 @@ async function handleFacebookConnect(args: {
 
   // 2. Get the user's id + name.
   const meRes = await fetch(
-    `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(longLived.access_token)}`
+    `https://graph.facebook.com/v20.0/me?fields=id,name&access_token=${encodeURIComponent(longLived.access_token)}`
   )
   const me: any = await meRes.json()
   if (!meRes.ok || !me.id) throw new Error(me.error?.message || 'Failed to fetch Facebook user profile')
@@ -592,7 +603,7 @@ async function handleFacebookConnect(args: {
   //    accounts in the same connect flow — IG publishes through the FB
   //    page token, not its own.
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,category,tasks,picture{url},instagram_business_account{id,username,name,profile_picture_url}&limit=100&access_token=${encodeURIComponent(longLived.access_token)}`
+    `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,category,tasks,picture{url},instagram_business_account{id,username,name,profile_picture_url}&limit=100&access_token=${encodeURIComponent(longLived.access_token)}`
   )
   const pagesJson: any = await pagesRes.json()
   if (!pagesRes.ok) throw new Error(pagesJson.error?.message || 'Failed to list Facebook pages')
@@ -608,7 +619,7 @@ async function handleFacebookConnect(args: {
 
   // 4. Fetch ad accounts the user can manage.
   const adAccountsRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/adaccounts?fields=id,account_id,name,account_status,currency,timezone_name&limit=200&access_token=${encodeURIComponent(longLived.access_token)}`
+    `https://graph.facebook.com/v20.0/me/adaccounts?fields=id,account_id,name,account_status,currency,timezone_name&limit=200&access_token=${encodeURIComponent(longLived.access_token)}`
   )
   const adAccountsJson: any = await adAccountsRes.json()
   // ad accounts is allowed to fail (user might not manage any) — log but
@@ -777,7 +788,7 @@ async function fbExchangeLongLived(
     client_secret: clientSecret,
     fb_exchange_token: shortLivedToken,
   })
-  const r = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?${params.toString()}`)
+  const r = await fetch(`https://graph.facebook.com/v20.0/oauth/access_token?${params.toString()}`)
   const j: any = await r.json()
   if (!r.ok || !j.access_token) {
     throw new Error(j.error?.message || j.error_description || 'Facebook long-lived token exchange failed')
@@ -1098,7 +1109,7 @@ router.post('/facebook/create-ad', authenticateToken, requireAdmin, async (req: 
     const userToken: string = tokenRes.rows[0].access_token
 
     const acct = ad_account_id.startsWith('act_') ? ad_account_id : `act_${ad_account_id}`
-    const graph = (path: string) => `https://graph.facebook.com/v19.0/${path}`
+    const graph = (path: string) => `https://graph.facebook.com/v20.0/${path}`
 
     // Helper: POST form-encoded to Graph API. Surfaces error messages.
     const post = async (path: string, body: Record<string, any>): Promise<any> => {
@@ -1196,7 +1207,7 @@ async function fetchPlatformProfile(
 ): Promise<{ display_name: string; platform_user_id: string; profile_url?: string; avatar_url?: string; metadata?: any }> {
   try {
     if (platform === 'facebook' || platform === 'instagram') {
-      const r = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`)
+      const r = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`)
       const j: any = await r.json()
       return {
         display_name: j.name || 'Facebook account',
@@ -1268,7 +1279,7 @@ async function publishToPlatform(
 
       // No media → plain status update via /feed.
       if (!firstMedia) {
-        const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/feed`, {
+        const r = await fetch(`https://graph.facebook.com/v20.0/${pageId}/feed`, {
           method: 'POST',
           body: new URLSearchParams({ message: content, access_token: token }),
         })
@@ -1281,7 +1292,7 @@ async function publishToPlatform(
       // public URL we pass — keep the URL absolute (toAbsoluteMediaUrl
       // already did that) and let Meta handle the encoding.
       if (isVideo) {
-        const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/videos`, {
+        const r = await fetch(`https://graph.facebook.com/v20.0/${pageId}/videos`, {
           method: 'POST',
           body: new URLSearchParams({ file_url: firstMedia, description: content, access_token: token }),
         })
@@ -1294,7 +1305,7 @@ async function publishToPlatform(
       // post, not a link preview (which is what /feed with `link=` did
       // in an earlier version of this code, causing image URLs to show
       // up as plain links in the feed).
-      const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, {
+      const r = await fetch(`https://graph.facebook.com/v20.0/${pageId}/photos`, {
         method: 'POST',
         body: new URLSearchParams({
           url: firstMedia,
@@ -1312,22 +1323,69 @@ async function publishToPlatform(
       return { ok: true, remote_id: j.post_id || j.id }
     }
     if (platform === 'instagram') {
-      // Instagram Graph publishing is a two-step process: create container,
-      // then publish. Requires a business/creator account and a linked FB page.
+      // Instagram Content Publishing API. Two-step container + publish flow.
+      // Requires:
+      //   - An Instagram Business or Creator account linked to a Facebook Page.
+      //   - A Page access token (NOT a user token) — the linked-page token
+      //     is what social_accounts.access_token holds for IG rows (see the
+      //     OAuth flow's handleFacebookConnect, which copies the page token
+      //     onto the IG row).
+      // Docs: developers.facebook.com/docs/instagram-platform/content-publishing
       const igUserId = account.platform_user_id
-      if (!mediaUrls[0]) return { ok: false, error: 'Instagram posts require at least one image' }
-      const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igUserId}/media`, {
+      const firstMedia = mediaUrls[0] || null
+      if (!firstMedia) {
+        return { ok: false, error: 'Instagram posts require an image or video' }
+      }
+      const isVideo = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
+      // IG caps captions at 2200 chars + 30 hashtags. Truncate the body so
+      // a too-long caption doesn't 400 the container.
+      const captionForIg = content.length > 2200 ? content.slice(0, 2197) + '…' : content
+
+      // 1. Create the media container.
+      const containerParams = new URLSearchParams({ access_token: token, caption: captionForIg })
+      if (isVideo) {
+        // REELS is the modern video-publishing path on IG; plain VIDEO
+        // is being phased out. video_url is fetched by IG's CDN, so it
+        // must be publicly reachable and stable for the polling window.
+        containerParams.set('media_type', 'REELS')
+        containerParams.set('video_url', firstMedia)
+      } else {
+        containerParams.set('image_url', firstMedia)
+      }
+      const containerRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media`, {
         method: 'POST',
-        body: new URLSearchParams({ image_url: mediaUrls[0], caption: content, access_token: token }),
+        body: containerParams,
       })
-      const containerJson: any = await containerRes.json()
-      if (!containerRes.ok || !containerJson.id) return { ok: false, error: containerJson.error?.message || 'IG container failed' }
-      const publishRes = await fetch(`https://graph.facebook.com/v19.0/${igUserId}/media_publish`, {
+      const containerJson: any = await containerRes.json().catch(() => ({}))
+      if (!containerRes.ok || !containerJson.id) {
+        return { ok: false, error: containerJson.error?.message || `IG container failed (HTTP ${containerRes.status})` }
+      }
+
+      // 2. Poll the container's status_code until FINISHED. Required for
+      //    video (encoding takes ~5-30s); recommended for images so we
+      //    don't race ahead and publish a container Meta hasn't ingested.
+      const maxPolls = isVideo ? 30 : 5
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const statusRes = await fetch(
+          `https://graph.facebook.com/v20.0/${containerJson.id}?fields=status_code&access_token=${encodeURIComponent(token)}`
+        )
+        const statusJson: any = await statusRes.json().catch(() => ({}))
+        if (statusJson.status_code === 'FINISHED') break
+        if (statusJson.status_code === 'ERROR' || statusJson.status_code === 'EXPIRED') {
+          return { ok: false, error: `IG container ${statusJson.status_code}` }
+        }
+      }
+
+      // 3. Publish.
+      const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
         method: 'POST',
         body: new URLSearchParams({ creation_id: containerJson.id, access_token: token }),
       })
-      const publishJson: any = await publishRes.json()
-      if (!publishRes.ok || publishJson.error) return { ok: false, error: publishJson.error?.message || 'IG publish failed' }
+      const publishJson: any = await publishRes.json().catch(() => ({}))
+      if (!publishRes.ok || publishJson.error) {
+        return { ok: false, error: publishJson.error?.message || `IG publish failed (HTTP ${publishRes.status})` }
+      }
       return { ok: true, remote_id: publishJson.id }
     }
     if (platform === 'linkedin') {
