@@ -463,11 +463,26 @@ router.post('/posts', authenticateToken, requireAdmin, async (req: Authenticated
         req.user!.id,
       ]
     )
-    res.json({ data: result.rows[0] })
-    // Kick the scheduler immediately so "Post now" feels instant.
+    // "Post now" runs the scheduler INLINE and awaits it. On Vercel
+    // serverless, firing it after res.json() is unreliable — the function
+    // instance can be killed the moment the response is sent, leaving
+    // queued rows that never publish. Awaiting keeps the publish work
+    // within the function's lifetime (well under the 300s maxDuration).
     if (initialStatus === 'queued') {
-      processDuePosts().catch((e) => console.error('immediate publish error:', e))
+      try {
+        await processDuePosts()
+      } catch (e: any) {
+        console.error('immediate publish error:', e)
+      }
+      // Re-read the row so the response includes the final status +
+      // per-account results, not the original 'queued' snapshot.
+      const fresh = await query(
+        `SELECT * FROM social_posts WHERE id = $1`,
+        [result.rows[0].id]
+      )
+      return res.json({ data: fresh.rows[0] || result.rows[0] })
     }
+    res.json({ data: result.rows[0] })
   } catch (err: any) {
     console.error('POST /posts error:', err)
     res.status(500).json({ error: err.message })
@@ -518,8 +533,15 @@ router.post('/posts/:id/publish', authenticateToken, requireAdmin, async (req, r
        WHERE id = $1 AND status IN ('draft','scheduled','failed','partial')`,
       [req.params.id]
     )
+    // Await the publisher inline so the function instance stays alive
+    // through the Facebook/IG Graph API calls. Firing after res.json()
+    // is unreliable on Vercel — see POST /posts above for the same fix.
+    try {
+      await processDuePosts()
+    } catch (e: any) {
+      console.error('immediate publish error:', e)
+    }
     res.json({ success: true })
-    processDuePosts().catch((e) => console.error('immediate publish error:', e))
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
