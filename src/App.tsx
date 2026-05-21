@@ -88,6 +88,7 @@ const AdminSocial = lazy(() => import('./pages/AdminSocial').then(m => ({ defaul
 const Sso = lazy(() => import('./pages/Sso').then(m => ({ default: m.Sso })))
 const Download = lazy(() => import('./pages/Download').then(m => ({ default: m.Download })))
 const AccountDelete = lazy(() => import('./pages/AccountDelete').then(m => ({ default: m.AccountDelete })))
+const FacebookDataDeletionStatus = lazy(() => import('./pages/FacebookDataDeletionStatus').then(m => ({ default: m.FacebookDataDeletionStatus })))
 const PearsonVueExam = lazy(() => import('./pages/pearsonvue/PearsonVueExam').then(m => ({ default: m.PearsonVueExam })))
 const PearsonVueHome = lazy(() => import('./pages/pearsonvue/PearsonVueHome').then(m => ({ default: m.PearsonVueHome })))
 
@@ -304,6 +305,10 @@ function LandingRoutes() {
             lives at /client/account-settings/delete on the app subdomain.
             Bounce any old shares (Play Console, email signatures, etc.). */}
         <Route path="/account/delete" element={<CrossDomainRedirect to={appUrl('/client/account-settings/delete')} />} />
+        {/* Public Facebook data-deletion status page — Meta sends users
+            here after they remove the app from facebook.com. Lives on the
+            marketing host so it's unauthenticated and works for anyone. */}
+        <Route path="/facebook-data-deletion-status" element={<FacebookDataDeletionStatus />} />
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -363,6 +368,9 @@ function AppRoutes() {
             Google Play Console reviewers) can reach it. This is the URL
             published on the Play Console "Data safety" form. */}
         <Route path="/client/account-settings/delete" element={<AccountDelete />} />
+        {/* Meta sends users here from their facebook.com "Apps and
+            Websites" page after they remove GritSync. Public + unauthed. */}
+        <Route path="/facebook-data-deletion-status" element={<FacebookDataDeletionStatus />} />
 
         {/* ────────────────────────────────────────────────────────────────
            Panel routes — every authenticated page lives under its role's

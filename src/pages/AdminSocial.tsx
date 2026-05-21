@@ -748,11 +748,14 @@ export function AdminSocial() {
               })}
               onUseInAd={(item) => {
                 // Hand the bank item off to the Ads tab via query params —
-                // AdsGenerator reads them on mount and clears them, and
-                // pins the bank image to every generated variant.
+                // AdsGenerator reads them on mount and clears them, pins
+                // the bank image to every generated variant, and uses
+                // bank_id to source the image when launching a real
+                // Facebook ad via the Marketing API.
                 const next = new URLSearchParams(searchParams)
                 next.set('tab', 'ads')
                 next.set('brief', item.caption)
+                next.set('bank_id', item.id)
                 if (item.media_url) next.set('image_url', item.media_url)
                 setSearchParams(next, { replace: true })
                 setTab('ads')

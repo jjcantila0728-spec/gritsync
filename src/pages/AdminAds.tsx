@@ -22,6 +22,9 @@ import {
   Youtube,
   Search,
   Share2,
+  Rocket,
+  ExternalLink,
+  X,
 } from 'lucide-react'
 
 type Platform = 'facebook' | 'instagram' | 'google' | 'linkedin' | 'tiktok' | 'youtube'
@@ -96,24 +99,68 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
   // set, every generated ad variant inherits this image so the user doesn't
   // have to re-render a creative they already approved.
   const [seededImageUrl, setSeededImageUrl] = useState<string | null>(null)
+  // Bank item id — required by the Marketing API endpoint to source the
+  // image server-side when launching a real Facebook ad.
+  const [seededBankId, setSeededBankId] = useState<string | null>(null)
 
-  // Accept `?brief=` and `?image_url=` query params when the user clicked
-  // "Make ads" / "Use in Ad" from the Content Bank — prefills the brief,
-  // optionally pins the creative, then strips the params.
+  // Accept `?brief=`, `?image_url=`, and `?bank_id=` query params when the
+  // user clicked "Use in Ad" from the Content Bank — prefills the brief,
+  // pins the creative, remembers which bank item to source on launch, and
+  // strips the params.
   useEffect(() => {
     const brief = searchParams.get('brief')
     const imageUrl = searchParams.get('image_url')
-    if (brief || imageUrl) {
+    const bankId = searchParams.get('bank_id')
+    if (brief || imageUrl || bankId) {
       if (brief) setProduct(brief)
       if (imageUrl) setSeededImageUrl(imageUrl)
+      if (bankId) setSeededBankId(bankId)
       setFromSocial(true)
       const next = new URLSearchParams(searchParams)
       next.delete('brief')
       next.delete('image_url')
+      next.delete('bank_id')
       setSearchParams(next, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Facebook launch state — loaded lazily the first time the user opens
+  // the launch modal so the page doesn't make Marketing-API discovery
+  // calls for users who never click Launch.
+  interface FbPage { id: string; name: string }
+  interface FbAdAccount { id: string; account_id: string; name: string; status: number; currency?: string }
+  const [fbPages, setFbPages] = useState<FbPage[] | null>(null)
+  const [fbAdAccounts, setFbAdAccounts] = useState<FbAdAccount[] | null>(null)
+  const [fbDiscovering, setFbDiscovering] = useState(false)
+  const [launchAd, setLaunchAd] = useState<{ index: number; ad: AdVariant } | null>(null)
+
+  async function ensureFbDiscovery() {
+    if (fbPages && fbAdAccounts) return
+    setFbDiscovering(true)
+    try {
+      const r = await fetch('/api/social/facebook/ad-accounts', { headers: { ...authHeaders() } })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      setFbPages(j.data?.pages || [])
+      setFbAdAccounts(j.data?.ad_accounts || [])
+    } catch (err: any) {
+      showToast(err.message || 'Connect Facebook in the Accounts tab first', 'error')
+      setFbPages([])
+      setFbAdAccounts([])
+    } finally {
+      setFbDiscovering(false)
+    }
+  }
+
+  function openLaunchModal(i: number, ad: AdVariant) {
+    if (!seededBankId) {
+      showToast('Launch needs a Content Bank item — open this Ads tab via Bank → Use in Ad.', 'error')
+      return
+    }
+    void ensureFbDiscovery()
+    setLaunchAd({ index: i, ad })
+  }
 
   async function generateAds() {
     if (!product.trim()) { showToast('Describe the product or service', 'error'); return }
@@ -377,6 +424,15 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
                     <Button size="sm" onClick={() => pushToSocial(ad)}>
                       <Share2 className="h-3.5 w-3.5 mr-1" /> Schedule on social
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openLaunchModal(i, ad)}
+                      title={seededBankId ? 'Launch this variant as a PAUSED Facebook ad' : 'Open this tab via Bank → Use in Ad to enable launching'}
+                      disabled={!seededBankId}
+                    >
+                      <Rocket className="h-3.5 w-3.5 mr-1" /> Launch on Facebook
+                    </Button>
                   </div>
                 </div>
                 <div className="md:col-span-2 flex items-start justify-center">
@@ -407,6 +463,197 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
             </Card>
           ))}
         </div>
+      </div>
+
+      {launchAd && (
+        <LaunchFacebookAdModal
+          ad={launchAd.ad}
+          bankId={seededBankId!}
+          pages={fbPages || []}
+          adAccounts={fbAdAccounts || []}
+          discovering={fbDiscovering}
+          onClose={() => setLaunchAd(null)}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  )
+}
+
+interface FbPageOpt { id: string; name: string }
+interface FbAdAccountOpt { id: string; account_id: string; name: string; status: number; currency?: string }
+
+function LaunchFacebookAdModal({
+  ad,
+  bankId,
+  pages,
+  adAccounts,
+  discovering,
+  onClose,
+  showToast,
+}: {
+  ad: AdVariant
+  bankId: string
+  pages: FbPageOpt[]
+  adAccounts: FbAdAccountOpt[]
+  discovering: boolean
+  onClose: () => void
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const [pageId, setPageId] = useState<string>('')
+  const [adAccountId, setAdAccountId] = useState<string>('')
+  const [dailyBudget, setDailyBudget] = useState<number>(5)  // USD
+  const [launching, setLaunching] = useState(false)
+  const [result, setResult] = useState<{ campaign_id: string; ad_id: string; manage_url: string } | null>(null)
+
+  useEffect(() => {
+    if (!pageId && pages.length > 0) setPageId(pages[0].id)
+    if (!adAccountId && adAccounts.length > 0) setAdAccountId(adAccounts[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages, adAccounts])
+
+  async function launch() {
+    if (!pageId) { showToast('Pick a Facebook Page', 'error'); return }
+    if (!adAccountId) { showToast('Pick an ad account', 'error'); return }
+    setLaunching(true)
+    try {
+      const r = await fetch('/api/social/facebook/create-ad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          bank_id: bankId,
+          ad_account_id: adAccountId,
+          page_id: pageId,
+          daily_budget_cents: Math.max(100, Math.round(dailyBudget * 100)),
+          headline: ad.headline,
+          description: ad.description,
+          cta: 'LEARN_MORE',
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      setResult({ campaign_id: j.data.campaign_id, ad_id: j.data.ad_id, manage_url: j.data.manage_url })
+      showToast('Ad created in PAUSED state — review in Ads Manager', 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to launch ad', 'error')
+    } finally {
+      setLaunching(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Launch on Facebook</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Creates a <strong>PAUSED</strong> campaign + ad set + ad. Review in Ads Manager before unpausing.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {result ? (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 p-4">
+              <div className="text-sm font-semibold text-green-800 dark:text-green-200">Ad created (paused)</div>
+              <div className="text-xs text-green-700 dark:text-green-300 mt-0.5 font-mono break-all">
+                campaign {result.campaign_id} · ad {result.ad_id}
+              </div>
+            </div>
+            <a
+              href={result.manage_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 hover:text-primary-700"
+            >
+              <ExternalLink className="h-4 w-4" /> Open in Meta Ads Manager
+            </a>
+            <Button onClick={onClose} variant="outline" className="w-full">Close</Button>
+          </div>
+        ) : (
+          <>
+            {discovering && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Discovering your Pages + ad accounts…
+              </div>
+            )}
+
+            {!discovering && pages.length === 0 && (
+              <div className="text-sm text-amber-700 dark:text-amber-300 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                No Facebook Pages found on the connected account. Connect a Facebook user who manages at least one
+                Page (Accounts tab → Connect Facebook).
+              </div>
+            )}
+
+            {!discovering && adAccounts.length === 0 && pages.length > 0 && (
+              <div className="text-sm text-amber-700 dark:text-amber-300 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                No ad accounts found. Create one via Meta Business Suite → Settings → Ad accounts, then reconnect.
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Page</label>
+              <select
+                value={pageId}
+                onChange={(e) => setPageId(e.target.value)}
+                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+                disabled={pages.length === 0}
+              >
+                {pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ad account</label>
+              <select
+                value={adAccountId}
+                onChange={(e) => setAdAccountId(e.target.value)}
+                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+                disabled={adAccounts.length === 0}
+              >
+                {adAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}{a.currency ? ` · ${a.currency}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Daily budget (USD)
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(Math.max(1, Number(e.target.value) || 1))}
+                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                Minimum $1/day. Ad is created PAUSED — nothing spends until you unpause in Ads Manager.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" onClick={onClose} className="flex-1" disabled={launching}>Cancel</Button>
+              <Button
+                onClick={launch}
+                loading={launching}
+                disabled={launching || pages.length === 0 || adAccounts.length === 0}
+                className="flex-1"
+              >
+                <Rocket className="h-3.5 w-3.5 mr-1" /> Launch paused
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

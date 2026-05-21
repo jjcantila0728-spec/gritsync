@@ -1,5 +1,7 @@
 import { Router } from 'express'
+import crypto from 'crypto'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
+import pool from '../db'
 import {
   driveAuthUrl,
   exchangeCodeAndStore,
@@ -102,6 +104,139 @@ router.delete('/google-drive', authenticateToken, requireAdmin, async (_req: Aut
   try {
     await disconnectDrive()
     res.json({ data: { disconnected: true } })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Facebook Data Deletion Callback — Meta requirement for any app that uses
+// Facebook Login.
+//
+// Two URLs Meta cares about (paste both into the Meta App Dashboard →
+// Settings → Basic):
+//
+//   Data Deletion Callback URL:
+//     https://app.gritsync.com/api/integrations/facebook/data-deletion-callback
+//
+//   Data Deletion Instructions URL (shown to the user):
+//     https://app.gritsync.com/client/account-settings/delete
+//
+// When a user revokes the app from facebook.com → Settings → Apps and
+// Websites → GritSync → Remove, Meta POSTs a signed_request here. We
+// verify the HMAC, delete every social_accounts row tied to that fb
+// user_id, and respond with a `{ url, confirmation_code }` JSON envelope
+// that Meta then shows the user. The url they get points at our public
+// status page (mounted as a React route on the SPA, so the SPA fallback
+// rewrite already serves it).
+// ---------------------------------------------------------------------------
+
+interface DecodedSignedRequest {
+  algorithm: string
+  expires?: number
+  issued_at?: number
+  user_id: string
+}
+
+function parseSignedRequest(signed: string, appSecret: string): DecodedSignedRequest | null {
+  // Format is `<base64url(signature)>.<base64url(payload)>`. Per Meta's
+  // spec we verify with HMAC-SHA256 over the RAW payload string (NOT the
+  // decoded JSON) keyed by the app secret.
+  const [encodedSig, encodedPayload] = signed.split('.')
+  if (!encodedSig || !encodedPayload) return null
+  let payload: DecodedSignedRequest
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+  } catch {
+    return null
+  }
+  if (!payload.algorithm || payload.algorithm.toUpperCase() !== 'HMAC-SHA256') return null
+
+  const expected = crypto
+    .createHmac('sha256', appSecret)
+    .update(encodedPayload)
+    .digest('base64url')
+  // base64url is unpadded; Meta also sends unpadded — direct comparison
+  // would still leak length. Use timingSafeEqual on equal-length buffers.
+  const a = Buffer.from(encodedSig)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return null
+  if (!crypto.timingSafeEqual(a, b)) return null
+  if (!payload.user_id) return null
+  return payload
+}
+
+router.post('/facebook/data-deletion-callback', async (req, res) => {
+  try {
+    const appSecret = process.env.FACEBOOK_APP_SECRET
+    if (!appSecret) {
+      console.error('FACEBOOK_APP_SECRET not set — cannot verify deletion callback')
+      return res.status(500).json({ error: 'server_misconfigured' })
+    }
+
+    // Express's urlencoded() middleware turns the body into an object.
+    // Meta posts the signed payload either as the form field `signed_request`
+    // or in a JSON body — handle both.
+    const signed = (req.body?.signed_request as string) || (req.query.signed_request as string)
+    if (!signed) return res.status(400).json({ error: 'missing signed_request' })
+
+    const decoded = parseSignedRequest(signed, appSecret)
+    if (!decoded) return res.status(400).json({ error: 'invalid signed_request' })
+
+    const fbUserId = String(decoded.user_id)
+
+    // Generate the confirmation_code Meta will show the user. We give them
+    // the row id so the status page can look it up directly.
+    const confirmationCode = crypto.randomUUID()
+
+    // Delete every connected account that traces back to this fb user.
+    // Two row shapes own that user_id:
+    //   1. the fb_user row with platform_user_id = 'fbuser:<user_id>'
+    //   2. the page rows with metadata.fb_user_id matching
+    const deleteRes = await pool.query(
+      `DELETE FROM social_accounts
+       WHERE (platform = 'facebook'
+              AND (platform_user_id = $1 OR metadata->>'fb_user_id' = $2))
+          OR (platform = 'instagram'
+              AND metadata->>'fb_user_id' = $2)
+       RETURNING id`,
+      [`fbuser:${fbUserId}`, fbUserId]
+    )
+
+    const log = await pool.query(
+      `INSERT INTO facebook_data_deletions
+         (fb_user_id, confirmation_code, rows_deleted, completed_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING id`,
+      [fbUserId, confirmationCode, deleteRes.rowCount || 0]
+    )
+    const id = log.rows[0].id
+
+    const base = (process.env.PUBLIC_BASE_URL || 'https://app.gritsync.com').replace(/\/$/, '')
+    res.json({
+      url: `${base}/facebook-data-deletion-status?id=${id}`,
+      confirmation_code: confirmationCode,
+    })
+  } catch (err: any) {
+    console.error('facebook data deletion callback error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Public lookup for the deletion status page — no auth, just confirms a
+// previously-completed deletion. Returns minimal info to avoid leaking
+// fb_user_ids to anyone who guesses an id.
+router.get('/facebook/data-deletion-status', async (req, res) => {
+  try {
+    const id = String(req.query.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const r = await pool.query(
+      `SELECT id, confirmation_code, rows_deleted, requested_at, completed_at
+       FROM facebook_data_deletions WHERE id = $1`,
+      [id]
+    )
+    if (r.rows.length === 0) return res.status(404).json({ error: 'not found' })
+    res.json({ data: r.rows[0] })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

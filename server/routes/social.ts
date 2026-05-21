@@ -41,7 +41,22 @@ const PLATFORM_CONFIG: Record<Platform, {
   facebook: {
     authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
-    scopes: 'pages_show_list,pages_manage_posts,pages_read_engagement',
+    // Full Marketing-API scope set: pages_* for posting, ads_* for managing
+    // ad campaigns, business_management so we can look up which businesses
+    // / ad accounts the connecting user has access to. These extra scopes
+    // are gated by Meta's App Review for production — works out of the box
+    // for the app admin while the app is in Development mode.
+    scopes: [
+      'pages_show_list',
+      'pages_manage_posts',
+      'pages_read_engagement',
+      'pages_manage_ads',
+      'pages_manage_metadata',
+      'ads_management',
+      'ads_read',
+      'business_management',
+      'public_profile',
+    ].join(','),
     envIdKey: 'FACEBOOK_APP_ID',
     envSecretKey: 'FACEBOOK_APP_SECRET',
   },
@@ -213,42 +228,57 @@ router.get('/oauth/:platform/callback', async (req, res) => {
       ? new Date(Date.now() + Number(tokenJson.expires_in) * 1000)
       : null
 
-    // Fetch a display name + platform id so the UI has something to show.
-    const profile = await fetchPlatformProfile(platform, accessToken)
-
-    await query(
-      `INSERT INTO social_accounts
-         (platform, display_name, platform_user_id, access_token, refresh_token,
-          token_expires_at, profile_url, avatar_url, scopes, metadata,
-          status, connected_by_user_id, connected_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'connected',$11,NOW())
-       ON CONFLICT (platform, platform_user_id) DO UPDATE
-         SET display_name = EXCLUDED.display_name,
-             access_token = EXCLUDED.access_token,
-             refresh_token = COALESCE(EXCLUDED.refresh_token, social_accounts.refresh_token),
-             token_expires_at = EXCLUDED.token_expires_at,
-             profile_url = EXCLUDED.profile_url,
-             avatar_url = EXCLUDED.avatar_url,
-             scopes = EXCLUDED.scopes,
-             metadata = EXCLUDED.metadata,
-             status = 'connected',
-             last_error = NULL,
-             updated_at = NOW(),
-             connected_at = NOW()`,
-      [
-        platform,
-        profile.display_name,
-        profile.platform_user_id || `${platform}:${Date.now()}`,
-        accessToken,
-        refreshToken,
-        expiresAt,
-        profile.profile_url,
-        profile.avatar_url,
-        cfg.scopes,
-        JSON.stringify(profile.metadata || {}),
+    // Facebook gets a special path: we exchange the short-lived token for a
+    // long-lived one (60d), then call /me/accounts to enumerate Pages (page
+    // tokens are non-expiring while the user keeps the app installed) and
+    // /me/adaccounts to list ad accounts the user can manage. We persist
+    // one row per Page + a fb_user row that carries the long-lived user
+    // token + the ad-account list for the Marketing API endpoints.
+    if (platform === 'facebook') {
+      await handleFacebookConnect({
         userId,
-      ]
-    )
+        shortLivedUserToken: accessToken,
+        clientId,
+        clientSecret,
+        scopesCsv: cfg.scopes,
+      })
+    } else {
+      // All other platforms — original single-row upsert.
+      const profile = await fetchPlatformProfile(platform, accessToken)
+      await query(
+        `INSERT INTO social_accounts
+           (platform, display_name, platform_user_id, access_token, refresh_token,
+            token_expires_at, profile_url, avatar_url, scopes, metadata,
+            status, connected_by_user_id, connected_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'connected',$11,NOW())
+         ON CONFLICT (platform, platform_user_id) DO UPDATE
+           SET display_name = EXCLUDED.display_name,
+               access_token = EXCLUDED.access_token,
+               refresh_token = COALESCE(EXCLUDED.refresh_token, social_accounts.refresh_token),
+               token_expires_at = EXCLUDED.token_expires_at,
+               profile_url = EXCLUDED.profile_url,
+               avatar_url = EXCLUDED.avatar_url,
+               scopes = EXCLUDED.scopes,
+               metadata = EXCLUDED.metadata,
+               status = 'connected',
+               last_error = NULL,
+               updated_at = NOW(),
+               connected_at = NOW()`,
+        [
+          platform,
+          profile.display_name,
+          profile.platform_user_id || `${platform}:${Date.now()}`,
+          accessToken,
+          refreshToken,
+          expiresAt,
+          profile.profile_url,
+          profile.avatar_url,
+          cfg.scopes,
+          JSON.stringify(profile.metadata || {}),
+          userId,
+        ]
+      )
+    }
 
     // Close the popup if opened that way, otherwise show a success page.
     res.send(`
@@ -437,6 +467,340 @@ router.post('/posts/:id/publish', authenticateToken, requireAdmin, async (req, r
     processDuePosts().catch((e) => console.error('immediate publish error:', e))
   } catch (err: any) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Facebook OAuth — long-lived token + page enumeration + ad accounts.
+//
+// The short-lived token Meta returns from the authorization-code exchange
+// is only valid for ~1 hour and CAN'T be refreshed. To keep the connection
+// "permanent" we have to:
+//   1. Exchange it for a long-lived user token (60-day TTL).
+//   2. Call /me/accounts — page tokens minted from a long-lived user token
+//      do NOT expire (per Meta's docs), so storing them gives us a
+//      forever-token for posting to each Page.
+//   3. Call /me/adaccounts to learn which ad accounts the user can manage,
+//      stashed in metadata for the Marketing API endpoints below.
+//
+// We persist one row per Page (so the existing publish flow keeps working
+// page-by-page) PLUS one synthetic "fb_user" row that holds the long-lived
+// user token + the ad-account list — that token is what the Marketing API
+// calls need (ads_management is granted at user level, not page level).
+// ---------------------------------------------------------------------------
+async function handleFacebookConnect(args: {
+  userId: string
+  shortLivedUserToken: string
+  clientId: string
+  clientSecret: string
+  scopesCsv: string
+}): Promise<void> {
+  const { userId, shortLivedUserToken, clientId, clientSecret, scopesCsv } = args
+
+  // 1. Exchange for long-lived user token.
+  const longLived = await fbExchangeLongLived(shortLivedUserToken, clientId, clientSecret)
+  const longTokenExpiresAt = longLived.expires_in
+    ? new Date(Date.now() + longLived.expires_in * 1000)
+    : null
+
+  // 2. Get the user's id + name.
+  const meRes = await fetch(
+    `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(longLived.access_token)}`
+  )
+  const me: any = await meRes.json()
+  if (!meRes.ok || !me.id) throw new Error(me.error?.message || 'Failed to fetch Facebook user profile')
+
+  // 3. Fetch the user's Pages with their non-expiring page tokens.
+  const pagesRes = await fetch(
+    `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,category,tasks&limit=100&access_token=${encodeURIComponent(longLived.access_token)}`
+  )
+  const pagesJson: any = await pagesRes.json()
+  if (!pagesRes.ok) throw new Error(pagesJson.error?.message || 'Failed to list Facebook pages')
+  const pages: Array<{ id: string; name: string; access_token: string; category?: string; tasks?: string[] }> =
+    pagesJson.data || []
+
+  // 4. Fetch ad accounts the user can manage.
+  const adAccountsRes = await fetch(
+    `https://graph.facebook.com/v19.0/me/adaccounts?fields=id,account_id,name,account_status,currency,timezone_name&limit=200&access_token=${encodeURIComponent(longLived.access_token)}`
+  )
+  const adAccountsJson: any = await adAccountsRes.json()
+  // ad accounts is allowed to fail (user might not manage any) — log but
+  // don't reject the connection.
+  if (!adAccountsRes.ok) {
+    console.warn('Facebook ad-account fetch failed:', adAccountsJson.error?.message)
+  }
+  const adAccounts: Array<{ id: string; account_id: string; name: string; account_status: number; currency?: string; timezone_name?: string }> =
+    adAccountsJson.data || []
+
+  // 5. Upsert the synthetic fb_user row that owns the long-lived user
+  //    token + ad-account list. platform_user_id is prefixed with `fbuser:`
+  //    so the publish flow's filter (which looks for normal page ids) skips
+  //    it and only treats Pages as publish targets.
+  await query(
+    `INSERT INTO social_accounts
+       (platform, display_name, platform_user_id, access_token, refresh_token,
+        token_expires_at, scopes, metadata, status, connected_by_user_id, connected_at)
+     VALUES ('facebook', $1, $2, $3, NULL, $4, $5, $6::jsonb, 'connected', $7, NOW())
+     ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           access_token = EXCLUDED.access_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           scopes = EXCLUDED.scopes,
+           metadata = EXCLUDED.metadata,
+           status = 'connected',
+           last_error = NULL,
+           updated_at = NOW(),
+           connected_at = NOW()`,
+    [
+      `${me.name} (Facebook user)`,
+      `fbuser:${me.id}`,
+      longLived.access_token,
+      longTokenExpiresAt,
+      scopesCsv,
+      JSON.stringify({
+        kind: 'fb_user',
+        fb_user_id: me.id,
+        fb_user_name: me.name,
+        ad_accounts: adAccounts.map((a) => ({
+          id: a.id,                  // e.g. "act_123"
+          account_id: a.account_id,  // numeric id without the act_ prefix
+          name: a.name,
+          status: a.account_status,
+          currency: a.currency,
+          timezone: a.timezone_name,
+        })),
+        pages: pages.map((p) => ({ id: p.id, name: p.name })),
+      }),
+      userId,
+    ]
+  )
+
+  // 6. Upsert one row per Page. Each row's access_token is the page token,
+  //    which is what publishToPlatform() already expects.
+  for (const page of pages) {
+    await query(
+      `INSERT INTO social_accounts
+         (platform, display_name, platform_user_id, access_token,
+          token_expires_at, scopes, metadata, status, connected_by_user_id, connected_at)
+       VALUES ('facebook', $1, $2, $3, NULL, $4, $5::jsonb, 'connected', $6, NOW())
+       ON CONFLICT (platform, platform_user_id) DO UPDATE
+         SET display_name = EXCLUDED.display_name,
+             access_token = EXCLUDED.access_token,
+             token_expires_at = EXCLUDED.token_expires_at,
+             scopes = EXCLUDED.scopes,
+             metadata = EXCLUDED.metadata,
+             status = 'connected',
+             last_error = NULL,
+             updated_at = NOW(),
+             connected_at = NOW()`,
+      [
+        page.name,
+        page.id,
+        page.access_token,
+        scopesCsv,
+        JSON.stringify({
+          kind: 'fb_page',
+          page_id: page.id,
+          page_name: page.name,
+          category: page.category,
+          tasks: page.tasks,
+          fb_user_id: me.id,
+        }),
+        userId,
+      ]
+    )
+  }
+}
+
+async function fbExchangeLongLived(
+  shortLivedToken: string,
+  clientId: string,
+  clientSecret: string
+): Promise<{ access_token: string; expires_in: number; token_type?: string }> {
+  const params = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: clientId,
+    client_secret: clientSecret,
+    fb_exchange_token: shortLivedToken,
+  })
+  const r = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?${params.toString()}`)
+  const j: any = await r.json()
+  if (!r.ok || !j.access_token) {
+    throw new Error(j.error?.message || j.error_description || 'Facebook long-lived token exchange failed')
+  }
+  return j
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/social/facebook/ad-accounts
+// Returns the connected user's ad accounts + pages so the Ads UI can pick
+// which combination to launch a campaign under.
+// ---------------------------------------------------------------------------
+router.get('/facebook/ad-accounts', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT metadata FROM social_accounts
+       WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
+       ORDER BY connected_at DESC LIMIT 1`
+    )
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'No Facebook user connected yet' })
+    }
+    const m = r.rows[0].metadata || {}
+    res.json({
+      data: {
+        ad_accounts: m.ad_accounts || [],
+        pages: m.pages || [],
+      },
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/social/facebook/create-ad
+// Launches a PAUSED Facebook ad from a Content Bank item. Creates the full
+// campaign → ad set → ad creative → ad chain via the Marketing API.
+//
+// Body: {
+//   bank_id: string,             // pulls caption + media_url
+//   ad_account_id: string,       // e.g. "act_123"
+//   page_id: string,             // owning Page
+//   daily_budget_cents?: number, // defaults to 200 ($2.00)
+//   objective?: string,          // defaults to 'OUTCOME_AWARENESS'
+//   link_url?: string,           // defaults to https://gritsync.com/quote
+//   headline?: string,
+//   description?: string,
+//   cta?: string,                // e.g. 'LEARN_MORE', defaults to 'LEARN_MORE'
+// }
+// Returns: { campaign_id, adset_id, creative_id, ad_id, status }
+//
+// All resources are created in PAUSED status so the operator can review in
+// Meta Ads Manager before going live. They're deliberately NOT published —
+// this is a draft-on-the-platform flow, not "spend money instantly".
+// ---------------------------------------------------------------------------
+router.post('/facebook/create-ad', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const {
+      bank_id,
+      ad_account_id,
+      page_id,
+      daily_budget_cents = 200,
+      objective = 'OUTCOME_AWARENESS',
+      link_url = 'https://gritsync.com/quote',
+      headline,
+      description,
+      cta = 'LEARN_MORE',
+    } = req.body || {}
+
+    if (!bank_id) return res.status(400).json({ error: 'bank_id is required' })
+    if (!ad_account_id) return res.status(400).json({ error: 'ad_account_id is required' })
+    if (!page_id) return res.status(400).json({ error: 'page_id is required' })
+
+    // 1. Pull the bank item — we need its caption + media_url.
+    const bankRes = await query(`SELECT id, caption, media_url FROM social_content_bank WHERE id = $1`, [bank_id])
+    if (bankRes.rows.length === 0) return res.status(404).json({ error: 'Bank item not found' })
+    const item = bankRes.rows[0]
+    if (!item.media_url) return res.status(400).json({ error: 'Bank item has no image — generate one before launching an ad' })
+
+    // 2. Pull the long-lived user token (ads_management is user-level).
+    const tokenRes = await query(
+      `SELECT access_token FROM social_accounts
+       WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
+       ORDER BY connected_at DESC LIMIT 1`
+    )
+    if (tokenRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Connect Facebook first (Accounts tab)' })
+    }
+    const userToken: string = tokenRes.rows[0].access_token
+
+    const acct = ad_account_id.startsWith('act_') ? ad_account_id : `act_${ad_account_id}`
+    const graph = (path: string) => `https://graph.facebook.com/v19.0/${path}`
+
+    // Helper: POST form-encoded to Graph API. Surfaces error messages.
+    const post = async (path: string, body: Record<string, any>): Promise<any> => {
+      const formBody = new URLSearchParams()
+      for (const [k, v] of Object.entries(body)) {
+        formBody.set(k, typeof v === 'string' ? v : JSON.stringify(v))
+      }
+      formBody.set('access_token', userToken)
+      const r = await fetch(graph(path), { method: 'POST', body: formBody })
+      const j: any = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(`Meta ${path}: ${j.error?.message || `HTTP ${r.status}`}`)
+      return j
+    }
+
+    // 3. Campaign — top-level container.
+    const campaign = await post(`${acct}/campaigns`, {
+      name: `GritSync · ${new Date().toISOString().slice(0, 10)} · ${(item.caption || '').slice(0, 40)}`,
+      objective,
+      status: 'PAUSED',
+      special_ad_categories: [],
+    })
+
+    // 4. Ad set — targeting, budget, schedule. Defaults to broad PH + US,
+    //    age 22-55, all genders. Operator can tune in Ads Manager.
+    const startTime = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const adset = await post(`${acct}/adsets`, {
+      name: `${campaign.id} default adset`,
+      campaign_id: campaign.id,
+      daily_budget: daily_budget_cents,
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: objective === 'OUTCOME_AWARENESS' ? 'REACH' : 'LINK_CLICKS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      start_time: startTime,
+      targeting: {
+        geo_locations: { countries: ['PH', 'US'] },
+        age_min: 22,
+        age_max: 55,
+        publisher_platforms: ['facebook', 'instagram'],
+        facebook_positions: ['feed'],
+        instagram_positions: ['stream', 'story', 'reels'],
+      },
+      status: 'PAUSED',
+    })
+
+    // 5. Ad creative — links the Page + image (Drive URL or our /api/storage URL).
+    const mediaUrl = item.media_url.startsWith('http')
+      ? item.media_url
+      : `${PUBLIC_BASE || 'https://app.gritsync.com'}${item.media_url}`
+    const creative = await post(`${acct}/adcreatives`, {
+      name: `${campaign.id} creative`,
+      object_story_spec: {
+        page_id,
+        link_data: {
+          message: item.caption || '',
+          link: link_url,
+          name: headline || 'Start your NCLEX journey with GritSync',
+          description: description || 'NCLEX application processing for Filipino nurses → USRN.',
+          picture: mediaUrl,
+          call_to_action: { type: cta, value: { link: link_url } },
+        },
+      },
+    })
+
+    // 6. Ad — binds the ad set to the creative.
+    const ad = await post(`${acct}/ads`, {
+      name: `${campaign.id} ad`,
+      adset_id: adset.id,
+      creative: { creative_id: creative.id },
+      status: 'PAUSED',
+    })
+
+    res.json({
+      data: {
+        campaign_id: campaign.id,
+        adset_id: adset.id,
+        creative_id: creative.id,
+        ad_id: ad.id,
+        status: 'PAUSED',
+        manage_url: `https://www.facebook.com/adsmanager/manage/campaigns?act=${acct.replace(/^act_/, '')}&selected_campaign_ids=${campaign.id}`,
+      },
+    })
+  } catch (err: any) {
+    console.error('create-ad error:', err)
+    res.status(500).json({ error: err.message || 'Failed to create Facebook ad' })
   }
 })
 
