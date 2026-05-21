@@ -65,6 +65,11 @@ const PLATFORM_CONFIG: Record<Platform, {
     ].join(','),
     envIdKey: 'FACEBOOK_APP_ID',
     envSecretKey: 'FACEBOOK_APP_SECRET',
+    // Force Meta to re-show the consent dialog when scopes change. Without
+    // this, a returning user with an older token may get auto-redirected
+    // back without ever seeing the new permissions, leaving the token
+    // stuck on the old scope set.
+    extraAuthParams: { auth_type: 'rerequest' },
   },
   instagram: {
     // Kept as a back-compat entry for the "Log in with Instagram" path on
@@ -1337,6 +1342,31 @@ async function publishToPlatform(
         return { ok: false, error: 'Instagram posts require an image or video' }
       }
       const isVideo = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
+
+      // Preflight: verify the page token actually carries
+      // instagram_content_publish. The most common cause of "Application
+      // does not have permission for this action" is a token that was
+      // minted before the IG scopes were added to the OAuth config —
+      // surfacing that explicitly saves operators from staring at Meta's
+      // generic error string.
+      const scopeCheck = await fetch(
+        `https://graph.facebook.com/v20.0/me/permissions?access_token=${encodeURIComponent(token)}`
+      )
+      const scopeJson: any = await scopeCheck.json().catch(() => ({}))
+      const grantedPerms = new Set<string>(
+        (scopeJson.data || [])
+          .filter((p: any) => p.status === 'granted')
+          .map((p: any) => p.permission)
+      )
+      const missingScopes = ['instagram_basic', 'instagram_content_publish'].filter(
+        (s) => !grantedPerms.has(s)
+      )
+      if (missingScopes.length) {
+        return {
+          ok: false,
+          error: `Instagram publishing scope missing: ${missingScopes.join(', ')}. Disconnect Facebook on the Accounts tab and Log in again — the consent dialog will ask for Instagram posting permission. The existing token was minted before this app required it.`,
+        }
+      }
       // IG caps captions at 2200 chars + 30 hashtags. Truncate the body so
       // a too-long caption doesn't 400 the container.
       const captionForIg = content.length > 2200 ? content.slice(0, 2197) + '…' : content
