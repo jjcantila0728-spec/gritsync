@@ -397,12 +397,21 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
                       {ad.cta}
                     </span>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-                    {ad.headline}
-                  </h3>
-                  <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{ad.primary_text}</p>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 leading-snug">
+                      {ad.headline}
+                    </h3>
+                    <FieldBudget value={ad.headline} sweet={40} hard={255} label="Headline" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{ad.primary_text}</p>
+                    <FieldBudget value={ad.primary_text} sweet={125} hard={2200} label="Primary text" />
+                  </div>
                   {ad.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{ad.description}</p>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{ad.description}</p>
+                      <FieldBudget value={ad.description} sweet={30} hard={255} label="Description" />
+                    </div>
                   )}
                   {ad.audience_hint && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 italic mt-2">
@@ -655,6 +664,27 @@ function LaunchFacebookAdModal({
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// Live character-count meter for ad fields. Shows current length against
+// Meta's recommended "sweet spot" (where the placement won't truncate) and
+// the hard cap before the Marketing API rejects the payload. Amber when
+// over the sweet spot, red when over the hard cap.
+function FieldBudget({ value, sweet, hard, label }: { value: string; sweet: number; hard: number; label: string }) {
+  const len = (value || '').length
+  const tone = len > hard ? 'red' : len > sweet ? 'amber' : 'gray'
+  const cls = tone === 'red'
+    ? 'text-red-600 dark:text-red-400'
+    : tone === 'amber'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-gray-400 dark:text-gray-500'
+  return (
+    <div className={cn('text-[10px] mt-0.5 flex items-center gap-1', cls)}>
+      <span>{label}: {len} / sweet {sweet} · hard {hard}</span>
+      {len > hard && <span className="font-semibold">over cap — Meta will reject</span>}
+      {len > sweet && len <= hard && <span>may truncate in feed</span>}
     </div>
   )
 }

@@ -38,6 +38,14 @@ import {
   Download,
   AtSign,
   Zap,
+  Search,
+  ExternalLink,
+  Filter,
+  TrendingUp,
+  Calendar,
+  Activity,
+  ArrowRight,
+  Brain,
 } from 'lucide-react'
 import { AdsGenerator, type AdVariant } from './AdminAds'
 
@@ -98,6 +106,10 @@ interface ScheduleModalState {
   // single "Publish to selected accounts" CTA — the one-click "Post
   // Now" path triggered from Content Bank cards.
   quick_post?: boolean
+  // Pre-select account checkboxes for *new* posts (not editing). Used
+  // by Repost so the original platform mix is kept by default but the
+  // operator can still tweak before submit.
+  initial_account_ids?: string[]
 }
 
 // Post templates — branded around GritSync's core mission of helping
@@ -290,6 +302,159 @@ const POST_TEMPLATES: PostTemplate[] = [
     gradient: 'bg-gradient-to-br from-slate-200 via-gray-200 to-gray-300',
     ad_ready: false,
   },
+  // ── Added topics — bringing the library to 30 GritSync-aligned templates ──
+  {
+    id: 'first-month-in-us', label: 'First Month in the US', emoji: '🇺🇸',
+    category: 'success',
+    description: 'Reflection on the first month as a USRN.',
+    brief: 'A Filipino RN reflects on their first month working as a USRN — the homesickness, the wins (first solo shift, first US paycheck), the small culture-shock moments. Keep it grounded and non-boastful. End by noting that GritSync helps Filipino nurses prepare for this transition, not just the paperwork.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN in navy scrubs in front of a modest US apartment window at dawn, coffee in hand, contemplative smile, soft warm morning light, lived-in but tidy interior behind.`,
+    gradient: 'bg-gradient-to-br from-blue-200 via-red-200 to-red-300', ad_ready: false,
+  },
+  {
+    id: 'new-state-license', label: 'New State License', emoji: '🗽',
+    category: 'success',
+    description: 'Endorsed your license to a new US state.',
+    brief: 'A Filipino USRN just endorsed their license to a new US state (e.g. California → Texas, or NY → Florida). Note the paperwork involved, the timeline range (no fabricated specifics), and why the move made sense (job offer, family, pay). End with GritSync as a guide for endorsements too — it\'s not just about the first license.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN holding a fresh state RN license document with subtle US-state seal visible, navy scrubs sleeve in frame, warm desk light, faint US-state map or skyline silhouette softly blurred in background.`,
+    gradient: 'bg-gradient-to-br from-purple-200 via-violet-200 to-indigo-300', ad_ready: false,
+  },
+  {
+    id: 'consular-interview-passed', label: 'Consular Interview Passed', emoji: '🛂',
+    category: 'success',
+    description: 'Cleared the US visa interview.',
+    brief: 'Celebrate (anonymously) a Filipino nurse who just cleared their US consular interview. Acknowledge the nerves, the document prep, the calm-but-fast Q&A. One concrete tip future interviewees can apply. No fabricated questions or quotes. End by reminding readers that GritSync helps clients rehearse the interview, not just file the paperwork.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse smiling outside a US embassy-style building at golden hour, holding a folder of documents, soft confident relief on the face, no readable signage on the building.`,
+    gradient: 'bg-gradient-to-br from-emerald-200 via-green-200 to-teal-300', ad_ready: true,
+  },
+  {
+    id: 'cgfns-vs-eric', label: 'CGFNS vs ERIC', emoji: '🆚',
+    category: 'education',
+    description: 'Difference between CGFNS and ERIC evaluations.',
+    brief: 'Explain in plain language the difference between CGFNS Credentials Evaluation Service and ERES/ERIC reports. Which one your destination state accepts, and the practical timeline difference. No fabricated stats. End with a soft CTA to GritSync for help picking the right evaluator.',
+    image_prompt: `${BRAND_IMAGE_BASE} Side-by-side flatlay on a wood desk: two folders labeled (unreadably) with credentialing report stacks, Filipino nurse\'s hand holding a pen above one of them, soft warm desk lamp.`,
+    gradient: 'bg-gradient-to-br from-sky-200 via-cyan-200 to-blue-300', ad_ready: false,
+  },
+  {
+    id: 'ielts-prep-tips', label: 'IELTS Prep Tips', emoji: '🗣️',
+    category: 'education',
+    description: 'IELTS-Academic prep tactics for nurses.',
+    brief: 'Give 2-3 specific, actionable IELTS-Academic prep tips for Filipino nurses — focus on writing task 1 (visual description) and speaking part 3 (extended answers). Plain language, no clichés. End with a soft invite to GritSync\'s English-prep support.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse practicing IELTS speaking on a video call, light headset, notebook of cue cards beside laptop, modern home setting, warm window light.`,
+    gradient: 'bg-gradient-to-br from-amber-200 via-yellow-200 to-orange-300', ad_ready: false,
+  },
+  {
+    id: 'license-endorsement-101', label: 'License Endorsement 101', emoji: '🔁',
+    category: 'education',
+    description: 'How US interstate license endorsement works.',
+    brief: 'Walk a Filipino USRN through the basics of endorsing a US RN license from one state to another (e.g. CA → TX, NV → IL). Cover the typical documents, fees range, and what "verification of licensure" means. Avoid fabricated state-specific timelines. End with GritSync as ongoing-pathway support.',
+    image_prompt: `${BRAND_IMAGE_BASE} Top-down flatlay: two US state-seal-style icons on either side of a Filipino nurse\'s hands organising endorsement paperwork, neutral wood desk, warm daylight.`,
+    gradient: 'bg-gradient-to-br from-indigo-200 via-blue-200 to-sky-300', ad_ready: false,
+  },
+  {
+    id: 'choosing-your-state', label: 'Choosing Your State', emoji: '🗺️',
+    category: 'education',
+    description: 'How to pick the right first US state.',
+    brief: 'Help a Filipino nurse think through how to pick their first US state: BON friendliness toward foreign-educated nurses (in general terms), demand for RNs, cost of living, Filipino-community size, climate. No fabricated rankings. End with GritSync as the partner for matching person → state.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking at a US map on a tablet at a modern desk, mug of coffee, notepad with pros/cons partially visible, warm desk lamp, contemplative expression.`,
+    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-200 to-blue-400', ad_ready: false,
+  },
+  {
+    id: 'red-flag-recruiters', label: 'Red-Flag Recruiters', emoji: '🚩',
+    category: 'education',
+    description: 'How to spot scammy US recruiters.',
+    brief: 'Walk Filipino nurses through 3-4 red flags when evaluating a US nursing recruiter (asking for upfront fees, vague employer info, "guaranteed visa" claims, pressure tactics). Plain language. End by positioning GritSync as the transparent, no-hidden-fee alternative — without trashing competitors by name.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking thoughtfully at a laptop screen with a vague email open (unreadable), eyebrows slightly raised, warm home desk light, modern interior.`,
+    gradient: 'bg-gradient-to-br from-red-200 via-orange-200 to-rose-300', ad_ready: false,
+  },
+  {
+    id: 'schedule-a-explained', label: 'Schedule A Explained', emoji: '📜',
+    category: 'visa',
+    description: 'What Schedule A nurse classification means.',
+    brief: 'Explain Schedule A for nurses (EB-3 Schedule A pre-certified occupations) in plain language: why nurses are classified this way, how it affects PERM, and what it doesn\'t guarantee. No fabricated dates. End by reminding readers GritSync tracks visa-bulletin movement on their behalf.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse reading a US visa-classification document on a tablet beside an open passport and notepad, warm window light, navy scrubs sleeve, modern home setting.`,
+    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-cyan-300', ad_ready: false,
+  },
+  {
+    id: 'visa-screen-walkthrough', label: 'VisaScreen Walkthrough', emoji: '🧾',
+    category: 'visa',
+    description: 'Step-by-step VisaScreen overview.',
+    brief: 'Walk Filipino-trained nurses through the VisaScreen certificate process (CGFNS): purpose, the four parts (education review, license verification, English proficiency, exam), and a common mistake (e.g. ordering transcripts to the wrong address). No fabricated timelines. End with GritSync as a guide for filing.',
+    image_prompt: `${BRAND_IMAGE_BASE} Close-up of a Filipino nurse organising VisaScreen application materials — transcripts envelope, license copy, ID — on a clean wood desk, warm afternoon light.`,
+    gradient: 'bg-gradient-to-br from-green-200 via-emerald-200 to-teal-300', ad_ready: false,
+  },
+  {
+    id: 'prc-good-standing', label: 'PRC Good Standing for the US', emoji: '🇵🇭',
+    category: 'visa',
+    description: 'Getting a PRC certification of good standing.',
+    brief: 'Explain how a Filipino RN requests a PRC Certification of Good Standing for US credentialing purposes (where to file, what fields the receiving state BON needs, common reasons it gets rejected). Avoid fabricated fees. End with GritSync as the partner for chasing PH-side documents.',
+    image_prompt: `${BRAND_IMAGE_BASE} Top-down photo of a PRC license folder and certification request form arranged neatly on a Filipino-coded wood desk, small Filipino flag pin, warm soft daylight.`,
+    gradient: 'bg-gradient-to-br from-yellow-200 via-amber-200 to-orange-300', ad_ready: false,
+  },
+  {
+    id: 'first-shift-tips', label: 'First US Shift', emoji: '🩹',
+    category: 'lifestyle',
+    description: 'What to expect on your first US shift.',
+    brief: 'Give Filipino nurses 3 grounded tips for their very first US hospital shift: charting (EHR system unfamiliarity), patient-care ratios, asking for help from charge nurses. Keep it warm and tactical. End by noting that GritSync\'s onboarding guidance covers the soft side of the move, not just papers.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN at a hospital nurses\' station looking at an EHR screen with a senior colleague gesturing to help, soft clinical lighting, both in scrubs, faces partially turned away, calm and collaborative scene.`,
+    gradient: 'bg-gradient-to-br from-rose-200 via-pink-200 to-fuchsia-300', ad_ready: false,
+  },
+  {
+    id: 'finding-filipino-community', label: 'Filipino Community Abroad', emoji: '🏘️',
+    category: 'lifestyle',
+    description: 'Finding Filipino community in your US city.',
+    brief: 'Help newly-arrived Filipino USRNs find their community in their new US city — Filipino churches, Fil-Am nursing associations, grocery stores with Pinoy staples. Warm in tone. End with GritSync\'s Pinoy-USRN alumni network as a soft mention.',
+    image_prompt: `${BRAND_IMAGE_BASE} Group of Filipino USRNs gathered at a small dinner table with familiar Filipino dishes (pancit, lumpia visible in soft focus), laughter, warm modern apartment light.`,
+    gradient: 'bg-gradient-to-br from-orange-200 via-amber-200 to-yellow-300', ad_ready: false,
+  },
+  {
+    id: 'support-family-back-home', label: 'Supporting Family Back Home', emoji: '💌',
+    category: 'lifestyle',
+    description: 'Sending support to family in PH.',
+    brief: 'A grounded reflection on the reality of being the family\'s breadwinner from the US: remittance rhythm, helping siblings finish school, the guilt of being away. No melodrama. End softly — GritSync is built BY Filipino nurses who know this weight.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN on a video call with family in the Philippines, laptop on a small kitchen table, soft warm light, faint expression of love and longing, modern US apartment interior.`,
+    gradient: 'bg-gradient-to-br from-pink-200 via-rose-200 to-red-300', ad_ready: false,
+  },
+  {
+    id: 'imposter-syndrome', label: 'Imposter Syndrome', emoji: '🪞',
+    category: 'motivation',
+    description: 'Handling imposter syndrome as a new USRN.',
+    brief: 'Speak directly to Filipino USRNs feeling like they don\'t belong on their first US unit (despite years of PH experience). Validate, then offer one reframe and one tactical thing they can do this week (e.g. ask one peer one question per shift). End with quiet GritSync solidarity.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN looking at their reflection in a hospital window during a quiet moment, soft introspective expression, navy scrubs, late-afternoon golden light.`,
+    gradient: 'bg-gradient-to-br from-violet-200 via-purple-200 to-fuchsia-300', ad_ready: false,
+  },
+  {
+    id: 'one-step-at-a-time', label: 'One Step at a Time', emoji: '🪜',
+    category: 'motivation',
+    description: 'Break the long USRN road into doable steps.',
+    brief: 'Encourage Filipino nurses overwhelmed by the USRN process by reframing it as a sequence of small, doable steps — not one giant leap. Give a quick example of the typical month-by-month rhythm in general terms. End with GritSync as the partner that breaks it down for you.',
+    image_prompt: `${BRAND_IMAGE_BASE} Wide shot of a Filipino nurse walking up a softly lit modern stairwell, calm and steady, navy scrubs, warm late-afternoon light from a tall window.`,
+    gradient: 'bg-gradient-to-br from-teal-200 via-emerald-200 to-green-300', ad_ready: false,
+  },
+  {
+    id: 'credentialing-review-cta', label: 'Credentialing Review CTA', emoji: '✅',
+    category: 'cta',
+    description: 'Direct CTA to book a credentialing review.',
+    brief: 'Direct invite for Filipino-trained nurses to book a GritSync credentialing review — a one-hour read of their current documents to catch missing items before they pay any application fee. Lead with the outcome (catch gaps before $$ goes out). Honest claims only.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino GritSync advisor (back-of-shoulder framing) walking through a printed credentialing checklist with a client, both at a clean modern desk, warm office lighting, no readable documents.`,
+    gradient: 'bg-gradient-to-br from-primary-200 via-primary-300 to-primary-500', ad_ready: true,
+  },
+  {
+    id: 'mentorship-cta', label: 'Mentorship CTA', emoji: '🧭',
+    category: 'cta',
+    description: 'Pair with a USRN mentor.',
+    brief: 'Invite Filipino nurses still in PH to pair with a GritSync USRN mentor — someone who has already made the move. Lead with the human cost of doing this alone. Honest claims only — no guarantees of outcomes. End with a single clear next step.',
+    image_prompt: `${BRAND_IMAGE_BASE} Two Filipino nurses on a side-by-side video call screen (laptop frame visible), one in PH scrubs and one in US scrubs, warm encouraging conversation, modern home setting.`,
+    gradient: 'bg-gradient-to-br from-sky-200 via-blue-300 to-indigo-400', ad_ready: false,
+  },
+  {
+    id: 'team-spotlight', label: 'Team Spotlight', emoji: '⭐',
+    category: 'bts',
+    description: 'Meet a GritSync team member (anonymous OK).',
+    brief: 'A warm spotlight on a GritSync team member (role + what they do day-to-day for clients) without revealing private details or attaching real names if not approved. Highlight the human at the other end of the email. End by reminding readers a real Filipino-nurse-friendly team is behind every reply.',
+    image_prompt: `${BRAND_IMAGE_BASE} Editorial-style portrait of a Filipino professional at a clean modern desk (face partially turned or slightly out of focus to protect identity), warm office light, laptop open with unreadable screen.`,
+    gradient: 'bg-gradient-to-br from-slate-200 via-gray-300 to-zinc-400', ad_ready: false,
+  },
 ]
 
 // Campaign goal — the strategist asks "what outcome am I driving?" first.
@@ -378,6 +543,161 @@ const AUDIENCE_PRESETS: AudienceOption[] = [
   },
 ]
 
+// Image-style library — 15 GritSync-branded visual templates that operators
+// can pick instead of letting the AI choose freely. The chosen template's
+// `image_prompt` overrides the post-template's `image_prompt` (if any) when
+// the generator request goes to the backend. Pair any image template with
+// any caption: the brand look stays consistent across the feed.
+//
+// `preview_url` is what the picker tiles display. Until the team renders a
+// proper brand sample per template (one AI generation per id, saved to
+// /public/images/templates/<id>.jpg), each entry falls back to a
+// deterministic picsum placeholder so the UI shows real photos instead of
+// flat gradients. Swap `preview_url` to the real asset path when ready.
+interface ImageTemplate {
+  id: string
+  label: string
+  emoji: string
+  description: string
+  gradient: string
+  image_prompt: string
+  preview_url?: string
+}
+
+// Resolve the preview URL for an image-template tile.
+//   1. Prefer an explicit `preview_url` on the template — set this to a
+//      local /images/templates/<id>.jpg path AFTER you've rendered the
+//      branded sample (see scripts/generate-image-template-previews.cjs).
+//   2. Otherwise fall back to a curated Unsplash CDN photo themed to the
+//      template, so every tile shows a real photo immediately with zero
+//      404 flicker.
+function imageTemplatePreview(t: ImageTemplate): string {
+  return t.preview_url || IMAGE_TEMPLATE_STOCK_URLS[t.id] || `https://picsum.photos/seed/gritsync-${t.id}/600/600`
+}
+
+// Curated stock photos — one Unsplash CDN URL per template id, picked so
+// the picker shows a real on-theme photo immediately even when no
+// branded sample has been rendered yet. Unsplash explicitly permits this
+// hotlinking pattern for production apps.
+const IMAGE_TEMPLATE_STOCK_URLS: Record<string, string> = {
+  'editorial-portrait':  'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&h=600&fit=crop&auto=format&q=80',
+  'hospital-corridor':   'https://images.unsplash.com/photo-1538108149393-fbbd81895907?w=600&h=600&fit=crop&auto=format&q=80',
+  'study-desk-overhead': 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&h=600&fit=crop&auto=format&q=80',
+  'golden-hour-outdoor': 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?w=600&h=600&fit=crop&auto=format&q=80',
+  'bright-apartment':    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&h=600&fit=crop&auto=format&q=80',
+  'document-flatlay':    'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=600&h=600&fit=crop&auto=format&q=80',
+  'group-consult':       'https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&h=600&fit=crop&auto=format&q=80',
+  'quiet-reflection':    'https://images.unsplash.com/photo-1499728603263-13726abce5fd?w=600&h=600&fit=crop&auto=format&q=80',
+  'diploma-closeup':     'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=600&fit=crop&auto=format&q=80',
+  'us-cityscape':        'https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=600&h=600&fit=crop&auto=format&q=80',
+  'filipino-home-scene': 'https://images.unsplash.com/photo-1567016432779-094069958ea5?w=600&h=600&fit=crop&auto=format&q=80',
+  'workspace-detail':    'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=600&h=600&fit=crop&auto=format&q=80',
+  'celebration-moment':  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=600&fit=crop&auto=format&q=80',
+  'night-study-lamp':    'https://images.unsplash.com/photo-1456735185569-4e2c1efcb96f?w=600&h=600&fit=crop&auto=format&q=80',
+  'formal-interview':    'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=600&h=600&fit=crop&auto=format&q=80',
+}
+
+// Last-resort fallback fired by the `<img>` onError handler when even the
+// curated stock URL fails (rare — usually only if Unsplash retires a
+// photo). Goes straight to picsum so we don't bounce between two failing
+// CDNs on the same tile.
+function imageTemplateFallback(id: string): string {
+  return `https://picsum.photos/seed/gritsync-${id}/600/600`
+}
+
+const IMAGE_TEMPLATES: ImageTemplate[] = [
+  {
+    id: 'editorial-portrait', label: 'Editorial Portrait', emoji: '📸',
+    description: 'Soft-light editorial headshot.',
+    gradient: 'bg-gradient-to-br from-amber-200 via-orange-200 to-rose-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Editorial-grade portrait of a Filipino healthcare professional, soft window light, navy or light-blue scrubs, neutral background, eyes warm and confident, shallow depth of field.`,
+  },
+  {
+    id: 'hospital-corridor', label: 'Hospital Corridor', emoji: '🏥',
+    description: 'Walking through a modern US hospital.',
+    gradient: 'bg-gradient-to-br from-sky-200 via-blue-200 to-indigo-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse walking through a modern US hospital corridor at golden-hour sunrise, ID badge visible but unreadable, gentle motion blur of a colleague in the background, warm clinical lighting.`,
+  },
+  {
+    id: 'study-desk-overhead', label: 'Study Desk Overhead', emoji: '📚',
+    description: 'Overhead flatlay of NCLEX prep desk.',
+    gradient: 'bg-gradient-to-br from-yellow-200 via-amber-200 to-orange-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Overhead view of a Filipino nurse's study desk: open NCLEX review book, laminated credentialing documents, passport, pen, steaming mug, neutral wood surface. Warm afternoon light, soft shadows.`,
+  },
+  {
+    id: 'golden-hour-outdoor', label: 'Golden Hour Outdoor', emoji: '🌅',
+    description: 'Aspirational sunset scene outdoors.',
+    gradient: 'bg-gradient-to-br from-orange-200 via-amber-300 to-rose-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN standing outside a modern US hospital entrance at golden hour, soft warm light, US flag softly blurred in background, hopeful expression, cinematic framing.`,
+  },
+  {
+    id: 'bright-apartment', label: 'Bright Apartment', emoji: '🛋️',
+    description: 'Sunlit Filipino-American home interior.',
+    gradient: 'bg-gradient-to-br from-rose-100 via-pink-200 to-rose-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Bright modern apartment interior: Filipino nurse on a tablet/laptop on the sofa, large windows, hints of warm Filipino touches (rattan, potted plants), natural daylight, lived-in but tidy.`,
+  },
+  {
+    id: 'document-flatlay', label: 'Document Flatlay', emoji: '📋',
+    description: 'Credentialing papers arranged neatly.',
+    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-cyan-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Top-down flatlay on a clean wood desk: PRC license folder, passport, transcripts, credentialing forms, US-state seal partially visible, small Filipino flag pin, coffee mug, pen. Warm daylight.`,
+  },
+  {
+    id: 'group-consult', label: 'Group Consult', emoji: '👥',
+    description: 'Small group around a laptop.',
+    gradient: 'bg-gradient-to-br from-violet-200 via-purple-200 to-fuchsia-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Two or three Filipino healthcare professionals around a laptop in a modern office: focused, collaborative, no client face visible. Warm office light, clean modern desk, faint background blur.`,
+  },
+  {
+    id: 'quiet-reflection', label: 'Quiet Reflection', emoji: '🪟',
+    description: 'Solo nurse, soft window light.',
+    gradient: 'bg-gradient-to-br from-slate-200 via-blue-200 to-indigo-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Quiet, intimate framing: Filipino nurse leaning against a window in scrubs during a break, soft late-afternoon light, tired-but-determined faint smile, coffee cup in hand. Cinematic depth of field.`,
+  },
+  {
+    id: 'diploma-closeup', label: 'Diploma Close-up', emoji: '🎓',
+    description: 'License or diploma macro.',
+    gradient: 'bg-gradient-to-br from-yellow-200 via-yellow-300 to-amber-400',
+    image_prompt: `${BRAND_IMAGE_BASE} Macro close-up of a US RN license / NCLEX pass document / nursing diploma corner with subtle gold seal, navy-scrub sleeve in frame holding it, soft natural light. No readable names.`,
+  },
+  {
+    id: 'us-cityscape', label: 'US Cityscape', emoji: '🏙️',
+    description: 'US skyline aspiration shot.',
+    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-300 to-blue-400',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse silhouette or back-of-shoulder framing looking at a US city skyline at dawn or dusk (generic — no specific landmark), navy scrubs, hopeful contemplative mood, soft warm/cool color contrast.`,
+  },
+  {
+    id: 'filipino-home-scene', label: 'Filipino Home Scene', emoji: '🏠',
+    description: 'Warm Filipino family moment.',
+    gradient: 'bg-gradient-to-br from-amber-100 via-orange-200 to-rose-300',
+    image_prompt: `${BRAND_IMAGE_BASE} Warm Filipino home interior — sala/kitchen scene: nurse on a video call or studying at a wooden dining table, family member subtly in background (not the focus), warm yellow tungsten light, hints of rattan and family photos softly blurred.`,
+  },
+  {
+    id: 'workspace-detail', label: 'Workspace Detail', emoji: '💻',
+    description: 'Laptop + checklist desk flatlay.',
+    gradient: 'bg-gradient-to-br from-gray-200 via-slate-300 to-zinc-400',
+    image_prompt: `${BRAND_IMAGE_BASE} Side-angle shot of a clean modern desk: open laptop with unreadable screen, printed checklist, highlighter, stethoscope draped on a chair back, warm afternoon light through a window. Filipino nurse's hand frame on the keyboard.`,
+  },
+  {
+    id: 'celebration-moment', label: 'Celebration Moment', emoji: '🎉',
+    description: 'Confetti / hug / win scene.',
+    gradient: 'bg-gradient-to-br from-pink-200 via-fuchsia-300 to-rose-400',
+    image_prompt: `${BRAND_IMAGE_BASE} Joyful celebration scene: Filipino nurse looking at a phone or tablet with a green "PASS" indicator, hands raised, soft window light, modern apartment or hospital break room. Subtle confetti or balloon hint optional, never overdone.`,
+  },
+  {
+    id: 'night-study-lamp', label: 'Night Study Lamp', emoji: '🌙',
+    description: 'Warm lamp, late-night study.',
+    gradient: 'bg-gradient-to-br from-indigo-300 via-purple-400 to-violet-500',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse studying at a cozy desk lamp at night, NCLEX review book open, highlighters scattered, focused expression, warm yellow lamp light, hint of Filipino home interior softly blurred in background.`,
+  },
+  {
+    id: 'formal-interview', label: 'Formal Interview', emoji: '🤝',
+    description: 'Professional handshake / smile.',
+    gradient: 'bg-gradient-to-br from-teal-200 via-emerald-300 to-green-400',
+    image_prompt: `${BRAND_IMAGE_BASE} Professional setting: Filipino nurse in a clean blazer or smart-casual top shaking hands with a US-coded recruiter or HR person at a modern office desk. Warm soft light, US flag pin subtle in background, confident calm expression.`,
+  },
+]
+
 const TEMPLATE_CATEGORY_LABEL: Record<TemplateCategory, string> = {
   success: 'Success story',
   education: 'Educational',
@@ -397,11 +717,42 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; icon: Reac
   tiktok: { label: 'TikTok', color: 'bg-black', icon: Music2 },
 }
 
+// Build a "View on platform" URL from the publish-result remote id when
+// the format is recognisable. Returns null for platforms where the id
+// alone isn't enough (IG/Threads/TikTok need usernames or shortcodes
+// that we don't store).
+function platformPostUrl(platform: Platform, remoteId: string | undefined): string | null {
+  if (!remoteId) return null
+  if (platform === 'facebook') return `https://www.facebook.com/${remoteId}`
+  if (platform === 'linkedin') {
+    const urn = remoteId.startsWith('urn:li:') ? remoteId : `urn:li:share:${remoteId}`
+    return `https://www.linkedin.com/feed/update/${encodeURIComponent(urn)}/`
+  }
+  if (platform === 'youtube') return `https://www.youtube.com/watch?v=${encodeURIComponent(remoteId)}`
+  return null
+}
+
 const ALL_PLATFORMS: Platform[] = ['facebook', 'instagram', 'threads', 'linkedin', 'youtube', 'tiktok']
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('gritsync_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+// Short, glance-able "5m ago / 3d ago" formatting for the Accounts tab's
+// last-published heartbeat. Falls back to a date when older than ~30 days.
+function relativeTimeFromNow(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const diff = Date.now() - then
+  const m = Math.floor(diff / 60_000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d}d ago`
+  return new Date(iso).toLocaleDateString()
 }
 
 async function api<T = any>(path: string, init: RequestInit = {}): Promise<T> {
@@ -442,13 +793,17 @@ export function AdminSocial() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const initialTab = (() => {
+  type SocialTab = 'manager' | 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads'
+  const initialTab: SocialTab = (() => {
     const t = searchParams.get('tab')
-    return (['compose', 'bank', 'scheduled', 'history', 'accounts', 'ads'] as const).includes(t as any)
-      ? (t as 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads')
-      : 'compose'
+    return (['manager', 'compose', 'bank', 'scheduled', 'history', 'accounts', 'ads'] as const).includes(t as any)
+      ? (t as SocialTab)
+      : 'manager'
   })()
-  const [tab, setTab] = useState<'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads'>(initialTab)
+  const [tab, setTab] = useState<SocialTab>(initialTab)
+  // Compose-tab prefill triggered by Manager → "Generate a post about this".
+  // GeneratorView consumes the topic + optional template once and clears it.
+  const [composePrefill, setComposePrefill] = useState<{ topic?: string; templateId?: string } | null>(null)
 
   // Keep ?tab= in sync so the URL is deep-linkable and the /admin/ads redirect
   // lands on the right tab.
@@ -612,6 +967,20 @@ export function AdminSocial() {
     })
   }
 
+  function repostPost(p: SocialPost) {
+    // Repost opens the schedule modal pre-filled with the original
+    // caption + media + accounts, but as a NEW post (editing_post stays
+    // null) so the operator can tweak the timing or remove platforms
+    // before publishing the second run.
+    setScheduleModal({
+      caption: p.content,
+      media_urls: Array.isArray(p.media_urls) ? p.media_urls : [],
+      bank_id: null,
+      editing_post: null,
+      initial_account_ids: Array.isArray(p.account_ids) ? p.account_ids : [],
+    })
+  }
+
   // Content Bank actions
   async function loadBank() {
     setBankLoading(true)
@@ -645,10 +1014,11 @@ export function AdminSocial() {
     }
   }
 
-  // Load the bank the first time the Content Bank tab is opened, plus on full
-  // refresh so the count badge stays accurate.
+  // Load the bank the first time the Content Bank tab is opened — and also
+  // when the Manager tab is opened, since Manager surfaces a "bank ready"
+  // count and gap-detection that depends on knowing the current bank state.
   useEffect(() => {
-    if (tab === 'bank' && bank.length === 0 && !bankLoading) {
+    if ((tab === 'bank' || tab === 'manager') && bank.length === 0 && !bankLoading) {
       loadBank()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -701,6 +1071,7 @@ export function AdminSocial() {
           <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
             <nav className="flex flex-wrap gap-1">
               {([
+                { id: 'manager', label: 'Manager', count: null },
                 { id: 'compose', label: 'Compose', count: null },
                 { id: 'bank', label: 'Content Bank', count: bank.length },
                 { id: 'scheduled', label: 'Scheduled', count: scheduledPosts.length },
@@ -731,9 +1102,35 @@ export function AdminSocial() {
 
           {loading ? (
             <div className="py-12"><Loading text="Loading social..." /></div>
+          ) : tab === 'manager' ? (
+            <ManagerView
+              accounts={accounts}
+              posts={posts}
+              bank={bank}
+              onGoTo={(next) => setTab(next)}
+              onComposeWith={(topic, templateId) => {
+                setComposePrefill({ topic, templateId })
+                setTab('compose')
+              }}
+              onUseInAd={(brief) => {
+                const next = new URLSearchParams(searchParams)
+                next.set('tab', 'ads')
+                next.set('brief', brief)
+                setSearchParams(next, { replace: true })
+                setTab('ads')
+              }}
+              onBatchGenerated={(items) => {
+                setBank((cur) => [...items, ...cur])
+                showToast(`Auto-generated ${items.length} item${items.length === 1 ? '' : 's'} — saved to Content Bank`, 'success')
+                setTab('bank')
+              }}
+              showToast={showToast}
+            />
           ) : tab === 'compose' ? (
             <GeneratorView
               hasAccounts={accounts.length > 0}
+              prefill={composePrefill}
+              onPrefillConsumed={() => setComposePrefill(null)}
               onGenerated={(items) => {
                 setBank((cur) => [...items, ...cur])
                 showToast(`Generated ${items.length} item${items.length === 1 ? '' : 's'} — saved to Content Bank`, 'success')
@@ -783,6 +1180,7 @@ export function AdminSocial() {
               onEdit={editPost}
               onDelete={deletePost}
               onPublish={publishNow}
+              enableCalendarView
             />
           ) : tab === 'history' ? (
             <PostList
@@ -791,6 +1189,7 @@ export function AdminSocial() {
               onEdit={editPost}
               onDelete={deletePost}
               onPublish={publishNow}
+              onRepost={repostPost}
               showResults
             />
           ) : tab === 'ads' ? (
@@ -813,6 +1212,7 @@ export function AdminSocial() {
           ) : (
             <AccountsView
               accounts={accounts}
+              posts={posts}
               onConnect={startOAuth}
               onManual={(p) => { setConnectPlatform(p); setManualForm({ display_name: '', platform_user_id: '', access_token: '', refresh_token: '', profile_url: '', avatar_url: '' }) }}
               onDisconnect={disconnectAccount}
@@ -1141,6 +1541,187 @@ function MetaConnectionCard({
   )
 }
 
+// Login-first OAuth card used for every non-Meta platform (Threads,
+// LinkedIn, YouTube, TikTok). One big "Sign in with X" CTA is the primary
+// affordance — manual token entry is a fallback exposed only when OAuth
+// credentials aren't configured on the server yet, OR via the global
+// "Advanced" disclosure at the bottom of the Accounts tab.
+function PlatformCard({
+  platform,
+  account,
+  oauthStatus,
+  lastPublishedAt,
+  onConnect,
+  onManual,
+  onDisconnect,
+  onRefreshThreads,
+  busy,
+}: {
+  platform: Platform
+  account: SocialAccount | null
+  oauthStatus: OAuthStatus | undefined
+  lastPublishedAt: string | null
+  onConnect: () => void
+  onManual: () => void
+  onDisconnect: (id: string) => void
+  // Optional — only Threads has a server-side refresh endpoint exposed
+  // separately. Other platforms refresh automatically at publish time.
+  onRefreshThreads?: () => void
+  busy?: boolean
+}) {
+  const meta = PLATFORM_META[platform]
+  const Icon = meta.icon
+  const info = PLATFORM_CONNECTION_INFO[platform]
+  const oauthReady = oauthStatus?.oauth_ready ?? true
+  const oauthMissing = oauthStatus?.missing || []
+  const connected = !!account
+
+  const expiryDays = (() => {
+    if (!account?.token_expires_at) return null
+    const ms = new Date(account.token_expires_at).getTime() - Date.now()
+    if (!Number.isFinite(ms)) return null
+    return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+  })()
+  const expiryTone =
+    expiryDays === null ? 'gray'
+    : expiryDays <= 3 ? 'red'
+    : expiryDays <= 14 ? 'amber'
+    : 'green'
+  const expiryClasses: Record<string, string> = {
+    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    gray:  'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  }
+
+  return (
+    <Card className="p-5 flex flex-col h-full">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className={cn('h-11 w-11 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              {meta.label}{connected && account?.display_name ? <span className="text-gray-500 dark:text-gray-400 font-normal"> — {account.display_name}</span> : null}
+            </h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-snug">
+              {info?.description || 'Connect to publish.'}
+            </p>
+          </div>
+        </div>
+        <span className={cn(
+          'text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
+          connected
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+            : !oauthReady
+              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        )}>
+          {connected ? 'Connected' : !oauthReady ? 'Setup needed' : 'Not connected'}
+        </span>
+      </div>
+
+      {connected && account ? (
+        <div className="mt-4 flex-1 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Account ID</div>
+              <div className="font-mono text-[11px] text-gray-700 dark:text-gray-200 truncate" title={account.platform_user_id}>{account.platform_user_id}</div>
+            </div>
+            <div className={cn('px-2.5 py-1.5 rounded-md border', expiryClasses[expiryTone].replace('bg-', 'border-').replace('text-', ''), expiryClasses[expiryTone])}>
+              <div className="text-[10px] uppercase tracking-wider opacity-80">Token</div>
+              <div className="text-[11px] font-medium">{expiryDays === null ? 'no expiry' : `${expiryDays}d left`}</div>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {account.connected_at && <>Connected {new Date(account.connected_at).toLocaleDateString()}. </>}
+            {lastPublishedAt
+              ? <>Last published <span title={new Date(lastPublishedAt).toLocaleString()}>{relativeTimeFromNow(lastPublishedAt)}</span>.</>
+              : <span className="italic">No publishes yet.</span>}
+          </div>
+
+          {account.last_error && (
+            <div className="text-xs p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300">
+              <AlertCircle className="inline h-3 w-3 mr-1" />
+              Last publish error: {account.last_error}
+            </div>
+          )}
+
+          <div className="mt-auto flex flex-wrap items-center gap-2">
+            {account.profile_url && (
+              <a
+                href={account.profile_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 hover:text-primary-700 dark:hover:text-primary-300"
+              >
+                <ExternalLink className="h-3 w-3" /> Open profile
+              </a>
+            )}
+            {onRefreshThreads && (
+              <Button size="sm" variant="outline" onClick={onRefreshThreads} loading={busy} disabled={busy}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh token
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={onConnect} disabled={busy}>
+              Reconnect
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDisconnect(account.id)}
+              disabled={busy}
+              className="text-red-600 hover:text-red-700 ml-auto"
+            >
+              Disconnect
+            </Button>
+          </div>
+        </div>
+      ) : !oauthReady ? (
+        // OAuth credentials missing on server — surface what's missing and
+        // offer the manual fallback so the operator isn't stranded.
+        <div className="mt-4 flex-1 flex flex-col gap-3">
+          <div className="text-xs p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200">
+            <strong>One-time setup needed.</strong> Add{' '}
+            <code className="font-mono text-[11px]">{oauthMissing.join(' + ') || 'app credentials'}</code> to your
+            Vercel env vars, then redeploy. Until then, you can paste a long-lived access token manually.
+          </div>
+          <div className="mt-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={onManual}>
+              Use a manual token instead
+            </Button>
+          </div>
+        </div>
+      ) : (
+        // The happy path — OAuth is wired up, no account yet. One big CTA.
+        <div className="mt-4 flex-1 flex flex-col gap-3">
+          {info && (
+            <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
+              <li>{info.whatYouCanDo}</li>
+              <li>Scopes requested: <span className="font-mono text-[11px]">{info.scopes}</span></li>
+              <li>Sign in opens a {meta.label} consent popup — no credentials touch GritSync.</li>
+            </ul>
+          )}
+          <div className="mt-auto flex flex-wrap items-center gap-2">
+            <Button onClick={onConnect} loading={busy} disabled={busy} className="flex-1 sm:flex-none">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Sign in with {meta.label}
+            </Button>
+            <button
+              onClick={onManual}
+              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
+              title="Paste a long-lived access token instead"
+            >
+              Advanced: use a token
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function MetaStat({
   label,
   value,
@@ -1290,6 +1871,36 @@ interface OAuthStatus {
   missing: string[]
 }
 
+// Per-platform copy used by PlatformCard. Meta has its own dedicated card
+// (different shape — multiple Pages/IG accounts/ad accounts under one
+// OAuth), so it's intentionally absent from this map.
+const PLATFORM_CONNECTION_INFO: Partial<Record<Platform, {
+  description: string
+  scopes: string
+  whatYouCanDo: string
+}>> = {
+  threads: {
+    description: 'Post directly to your Threads handle. We refresh the long-lived token automatically before it expires.',
+    scopes: 'threads_basic, threads_content_publish',
+    whatYouCanDo: 'Publish text + image + carousel posts to your @handle.',
+  },
+  linkedin: {
+    description: 'Post as your LinkedIn member profile. Reach professional connections without leaving GritSync.',
+    scopes: 'openid, profile, email, w_member_social',
+    whatYouCanDo: 'Publish text + image posts to your personal feed.',
+  },
+  youtube: {
+    description: 'Upload videos to your YouTube channel. Feed-style posts aren\'t supported by the API — videos only.',
+    scopes: 'youtube.upload, youtube.readonly',
+    whatYouCanDo: 'Upload short-form vertical and long-form video.',
+  },
+  tiktok: {
+    description: 'Post videos to your TikTok account via the Content Posting API.',
+    scopes: 'user.info.basic, video.publish, video.upload',
+    whatYouCanDo: 'Upload mobile-first vertical videos to your feed.',
+  },
+}
+
 interface DriveStatus {
   connected: boolean
   email: string | null
@@ -1330,17 +1941,616 @@ interface MetaConnectionStatus {
   ad_accounts?: MetaConnectionAdAccount[]
 }
 
+// ─── Manager view ─────────────────────────────────────────────────────────
+// Strategic command center — surfaces cadence health, best-time-to-post
+// guidance, topic recommendations, and an action queue with CTAs that
+// route into every other sub-tab. Every recommendation here is opinionated
+// rather than statistical (we don't yet ingest per-post engagement); when
+// that data lands the cadence/best-time helpers below can swap their
+// heuristics for measured numbers without touching the UI shape.
+
+// Best posting windows per platform, tuned for GritSync's audience —
+// Filipino healthcare professionals primarily in Asia/Manila (PHT). All
+// times shown are PHT. Reasoning is surfaced inline so the operator
+// understands *why* a window is recommended, not just what.
+const BEST_TIMES: Record<Platform, { weekday: string; weekend: string; reason: string }> = {
+  facebook:  { weekday: '8–10 AM · 7–10 PM',     weekend: '12–3 PM',     reason: 'Audience checks FB on the commute and after dinner. Weekends shift to early afternoon.' },
+  instagram: { weekday: '12 PM · 7–9 PM',         weekend: '11 AM–2 PM',  reason: 'Lunch + post-shift scroll. Stories peak 8–10 PM PHT.' },
+  threads:   { weekday: '12–1 PM · 10 PM–12 AM',  weekend: '10–11 PM',    reason: 'Threads skews late-night and conversational — short hooks win.' },
+  linkedin:  { weekday: '8–10 AM (Tue/Wed/Thu)',  weekend: 'avoid',       reason: 'Professional audience reads in the workday lull. Weekends die for B2B.' },
+  youtube:   { weekday: '7–10 PM',                weekend: 'Sat 6–8 PM',  reason: 'Watch-time peaks evenings; Saturday night is the longer-form sweet spot.' },
+  tiktok:    { weekday: '6–10 PM',                weekend: '8–10 PM',     reason: 'Mobile-first audience — peak FYP time after dinner, every day of the week.' },
+}
+
+// Curated "what's hot for our audience right now" topic seeds. These run
+// alongside random picks from POST_TEMPLATES so the suggestion list always
+// mixes a quartet of evergreen brand-aligned topics with current-events
+// hooks. Update this list as the visa bulletin / NCLEX format / state-BON
+// landscape moves.
+const TRENDING_TOPIC_IDEAS: Array<{ title: string; brief: string; tag: string }> = [
+  { title: 'Visa Bulletin retrogression — what it means for nurses right now',     brief: 'Plain-language breakdown of the current EB-3 Schedule A movement for Filipino nurses, what "retrogression" means, and how GritSync helps clients stay application-ready while they wait.',                 tag: 'Visa' },
+  { title: 'NCLEX Next-Gen question types — what changed and how to study',       brief: 'Walk Filipino nurses through the Next-Gen NCLEX-RN format: case-study items, bowtie, matrix, and how Qbank prep needs to shift. Honest, no fabricated pass-rate stats.',                                         tag: 'NCLEX' },
+  { title: 'USRN salary by US state — what is competitive in 2026',                brief: 'A grounded overview of where new USRNs tend to earn well (in general ranges) — Cali, Texas, NY metros — vs cost-of-living trade-offs. No fabricated numbers; cite "general ranges" only.',                              tag: 'Career' },
+  { title: 'The first 30 days as a USRN — what no one tells you',                  brief: 'Reflective post: charting in a new EHR, US patient-care ratios, the surreal first paycheck, homesickness. Warm, non-boastful, grounded.',                                                                       tag: 'Lifestyle' },
+  { title: 'How to spot a scammy US nursing recruiter (4 red flags)',              brief: 'Upfront fees, vague employer info, "guaranteed visa" claims, and high-pressure tactics. Help nurses self-protect. End with GritSync as the transparent, no-hidden-fee alternative — without naming competitors.', tag: 'Education' },
+  { title: 'Schedule A pre-certification explained for Filipino RNs',              brief: 'What Schedule A is, why nurses get it, and what it does NOT guarantee. Honest framing, no fabricated dates. GritSync as the partner that tracks the bulletin on their behalf.',                                   tag: 'Visa' },
+  { title: 'Endorsing your US RN license to a second state — full walk-through',   brief: 'Cover the typical documents, verification-of-licensure step, fees range, and one common mistake. Avoid state-specific fabricated timelines.',                                                                      tag: 'Education' },
+  { title: 'IELTS Academic for nurses — a 2-week prep plan',                       brief: 'A realistic 14-day study plan focused on the bands nurses tend to lose (writing task 1 visual descriptions, speaking part 3 extended answers). Actionable, no fluff.',                                                tag: 'Education' },
+]
+
+function ManagerView({
+  accounts,
+  posts,
+  bank,
+  onGoTo,
+  onComposeWith,
+  onUseInAd,
+  onBatchGenerated,
+  showToast,
+}: {
+  accounts: SocialAccount[]
+  posts: SocialPost[]
+  bank: BankItem[]
+  onGoTo: (tab: 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads') => void
+  onComposeWith: (topic: string, templateId?: string) => void
+  onUseInAd: (brief: string) => void
+  // Called after the agent auto-generates a batch via /ai/generate-batch.
+  // The parent merges the items into its `bank` state, shows a toast, and
+  // routes to the Content Bank tab so the operator sees the new posts.
+  onBatchGenerated: (items: BankItem[]) => void
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  // Autopilot persists across sessions so the operator's intent is sticky.
+  // Today the flag only drives a "the agent recommends, you click to apply"
+  // workflow; flipping it ON is the user opt-in needed before we add the
+  // real 24/7 cron that auto-refills the bank + auto-schedules to best
+  // times. UI calls it "Beta" so expectations stay honest.
+  const [autopilot, setAutopilot] = useState(() => localStorage.getItem('gritsync_socmed_autopilot') === 'on')
+  function toggleAutopilot() {
+    const next = !autopilot
+    setAutopilot(next)
+    localStorage.setItem('gritsync_socmed_autopilot', next ? 'on' : 'off')
+    showToast(next
+      ? 'Autopilot enabled — agent will surface daily plans and gap nudges'
+      : 'Autopilot paused', 'success')
+  }
+
+  // Stats — all computed client-side from data already in scope. No
+  // separate API call; this card stays in lock-step with the other tabs.
+  const stats = useMemo(() => {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000
+    const published7d = posts.filter((p) =>
+      p.published_at && new Date(p.published_at).getTime() >= sevenDaysAgo
+    ).length
+    const scheduledCount = posts.filter((p) =>
+      p.status === 'draft' || p.status === 'scheduled' || p.status === 'queued'
+    ).length
+    const bankReady = bank.filter((b) => b.status === 'available').length
+    const failedOrPartial = posts.filter((p) => p.status === 'failed' || p.status === 'partial').length
+    const connectedPlatforms = Array.from(new Set(accounts.map((a) => a.platform)))
+    return { published7d, scheduledCount, bankReady, failedOrPartial, connectedPlatforms, avgPerDay: published7d / 7 }
+  }, [posts, bank, accounts])
+
+  // The operator's chosen posts/day target — drives both the cadence bar
+  // and the Auto-generate button's batch size. Persists across sessions
+  // and seeds from a heuristic (0.7/day per connected platform, capped at
+  // 3) for fresh installs.
+  const heuristicTarget = Math.min(3, Math.max(1, Math.round(accounts.length * 0.7) || 1))
+  const [postsPerDay, setPostsPerDayState] = useState<number>(() => {
+    const stored = Number(localStorage.getItem('gritsync_socmed_posts_per_day'))
+    return stored >= 1 && stored <= 6 ? stored : heuristicTarget
+  })
+  function setPostsPerDay(n: number) {
+    const clamped = Math.max(1, Math.min(6, n))
+    setPostsPerDayState(clamped)
+    localStorage.setItem('gritsync_socmed_posts_per_day', String(clamped))
+  }
+  const cadence = useMemo(() => {
+    const target = postsPerDay
+    const current = Number(stats.avgPerDay.toFixed(2))
+    const ratio = target > 0 ? Math.min(1.5, current / target) : 0
+    return { target, current, ratio }
+  }, [postsPerDay, stats.avgPerDay])
+
+  // Auto-generate `postsPerDay` items into the Content Bank in a single
+  // API call. Picks a random trending topic so consecutive clicks produce
+  // varied output rather than 6 copies of the same idea. Uses GeneratorView's
+  // current defaults (Taglish, friendly, medium, openai image) — the user
+  // can always tune individual items via the Bank → Use in Ad flow.
+  const [autogenerating, setAutogenerating] = useState(false)
+  async function autoGenerateBatch() {
+    setAutogenerating(true)
+    try {
+      const idx = Math.floor(Math.random() * TRENDING_TOPIC_IDEAS.length)
+      const seed = TRENDING_TOPIC_IDEAS[idx]
+      const data = await api<{ items: BankItem[]; brief: string }>('/ai/generate-batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          topic: seed.title,
+          preselected_idea: seed.brief,
+          template_id: null,
+          template_image_prompt: null,
+          image_template_id: null,
+          goal: CAMPAIGN_GOALS.find((g) => g.id === 'build_trust')?.brief || '',
+          audience_preset: AUDIENCE_PRESETS.find((a) => a.id === 'ph_considering')?.brief || '',
+          platforms: [],
+          tone: 'friendly',
+          length: 'medium',
+          language: 'taglish',
+          count: postsPerDay,
+          content_type: 'image',
+          additional_details: 'Posting cadence: GritSync social manager auto-batch — keep claims grounded, no guarantees.',
+          image_provider: 'openai',
+        }),
+      })
+      onBatchGenerated(data.items || [])
+    } catch (err: any) {
+      showToast(err.message || 'Auto-generate failed', 'error')
+    } finally {
+      setAutogenerating(false)
+    }
+  }
+
+  // Per-platform last-published heartbeat. Drives the gap warnings — if
+  // a connected platform hasn't seen a publish in N days, the action
+  // queue surfaces a "Schedule from bank" CTA.
+  const gapsByPlatform = useMemo(() => {
+    const last: Record<string, number> = {}
+    for (const p of posts) {
+      if (!p.published_at) continue
+      const t = new Date(p.published_at).getTime()
+      for (const a of (p.accounts || [])) {
+        if (!last[a.platform] || t > last[a.platform]) last[a.platform] = t
+      }
+    }
+    const connectedPlatforms = Array.from(new Set(accounts.map((a) => a.platform))) as Platform[]
+    return connectedPlatforms
+      .map((pl) => ({
+        platform: pl,
+        daysSince: last[pl] ? Math.floor((Date.now() - last[pl]) / (1000 * 3600 * 24)) : null,
+      }))
+      .sort((a, b) => (b.daysSince ?? 999) - (a.daysSince ?? 999))
+  }, [posts, accounts])
+
+  // Recommended template mix — pick four POST_TEMPLATES across categories
+  // so the operator gets variety without scrolling the dropdown. Memoised
+  // so it doesn't reshuffle on every render.
+  const recommendedTemplates = useMemo(() => {
+    const byCategory: Record<string, typeof POST_TEMPLATES> = {}
+    for (const t of POST_TEMPLATES) {
+      byCategory[t.category] = byCategory[t.category] || []
+      byCategory[t.category].push(t)
+    }
+    const cats = Object.keys(byCategory)
+    const picks: typeof POST_TEMPLATES = []
+    for (const cat of cats.slice(0, 4)) {
+      const list = byCategory[cat]
+      picks.push(list[Math.floor(Math.random() * list.length)])
+    }
+    return picks
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Action queue — each item is "thing that's off, here's the one-click
+  // fix". Ordered by severity; the most actionable item is first.
+  const actions = useMemo(() => {
+    const out: Array<{ id: string; severity: 'amber' | 'red' | 'blue'; title: string; cta: string; onClick: () => void }> = []
+    if (accounts.length === 0) {
+      out.push({ id: 'no-accounts', severity: 'red', title: "You haven't connected any social accounts yet.", cta: 'Connect Meta', onClick: () => onGoTo('accounts') })
+    }
+    if (stats.failedOrPartial > 0) {
+      out.push({ id: 'failed', severity: 'red', title: `${stats.failedOrPartial} post${stats.failedOrPartial === 1 ? '' : 's'} failed or partial — review and retry.`, cta: 'Open History', onClick: () => onGoTo('history') })
+    }
+    if (stats.bankReady < 3 && accounts.length > 0) {
+      out.push({ id: 'bank-low', severity: 'amber', title: `Content bank is low (${stats.bankReady} ready). Refill so the schedule never goes dark.`, cta: 'Generate batch', onClick: () => onGoTo('compose') })
+    }
+    const worstGap = gapsByPlatform[0]
+    if (worstGap) {
+      if (worstGap.daysSince === null) {
+        out.push({ id: 'never-posted', severity: 'amber', title: `You haven't published anything on ${PLATFORM_META[worstGap.platform as Platform].label} yet.`, cta: 'Schedule from bank', onClick: () => onGoTo('bank') })
+      } else if (worstGap.daysSince > 5) {
+        out.push({ id: 'gap-' + worstGap.platform, severity: 'amber', title: `${PLATFORM_META[worstGap.platform as Platform].label} hasn't been posted to in ${worstGap.daysSince} days.`, cta: 'Schedule from bank', onClick: () => onGoTo('bank') })
+      }
+    }
+    if (stats.scheduledCount === 0 && stats.bankReady > 0) {
+      out.push({ id: 'queue-empty', severity: 'blue', title: 'No posts scheduled. Queue up a few from the bank to keep momentum.', cta: 'Open bank', onClick: () => onGoTo('bank') })
+    }
+    return out
+  }, [accounts.length, stats, gapsByPlatform, onGoTo])
+
+  return (
+    <div className="space-y-6">
+      {/* Header — agent identity + autopilot toggle. */}
+      <Card className="p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center flex-shrink-0">
+              <Brain className="h-6 w-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Social-media manager agent</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+                Your always-on planner. Answers <em>how many posts/day</em>, <em>when to post</em>, and <em>what
+                topics will land</em> with the Filipino-nurse audience. Every recommendation below has a one-click
+                CTA into the right sub-tab.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              onClick={toggleAutopilot}
+              className={cn(
+                'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                autopilot
+                  ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-800/50'
+                  : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+              )}
+              title="Toggles the agent's daily-planning nudges. (Background-cron auto-publish is on the roadmap.)"
+            >
+              <span className={cn('h-2 w-2 rounded-full', autopilot ? 'bg-green-500 animate-pulse' : 'bg-gray-400')} />
+              Autopilot {autopilot ? 'ON' : 'OFF'}
+              <span className="text-[9px] uppercase tracking-wider opacity-70">Beta</span>
+            </button>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              {autopilot ? 'Agent will nudge you daily.' : 'Agent only recommends when you open this tab.'}
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Stats — 4-up snapshot. Every card is a deep link into the matching
+          sub-tab so the operator never has to context-switch through nav. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <ManagerStatCard
+          label="Published · 7d"
+          value={String(stats.published7d)}
+          sub={`${stats.avgPerDay.toFixed(1)}/day avg`}
+          icon={Activity}
+          tone={stats.published7d > 0 ? 'green' : 'gray'}
+          onClick={() => onGoTo('history')}
+        />
+        <ManagerStatCard
+          label="Scheduled queue"
+          value={String(stats.scheduledCount)}
+          sub={stats.scheduledCount === 0 ? 'empty — fill from bank' : 'click to manage'}
+          icon={Calendar}
+          tone={stats.scheduledCount > 0 ? 'green' : 'amber'}
+          onClick={() => onGoTo('scheduled')}
+        />
+        <ManagerStatCard
+          label="Bank ready"
+          value={String(stats.bankReady)}
+          sub={stats.bankReady < 3 ? 'low — refill' : 'ready to schedule'}
+          icon={Sparkles}
+          tone={stats.bankReady >= 3 ? 'green' : stats.bankReady > 0 ? 'amber' : 'red'}
+          onClick={() => onGoTo('bank')}
+        />
+        <ManagerStatCard
+          label="Connected"
+          value={String(stats.connectedPlatforms.length)}
+          sub={stats.connectedPlatforms.length === 0 ? 'connect a platform' : `${accounts.length} account${accounts.length === 1 ? '' : 's'}`}
+          icon={Zap}
+          tone={stats.connectedPlatforms.length > 0 ? 'green' : 'red'}
+          onClick={() => onGoTo('accounts')}
+        />
+      </div>
+
+      {/* Action queue — gaps, low bank, failed posts. Each row CTA jumps
+          into the sub-tab that fixes it. */}
+      {actions.length > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">What needs your attention</h3>
+          </div>
+          <ul className="space-y-2">
+            {actions.map((a) => (
+              <li
+                key={a.id}
+                className={cn(
+                  'flex items-center justify-between gap-3 p-3 rounded-lg border text-sm',
+                  a.severity === 'red'   ? 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20' :
+                  a.severity === 'amber' ? 'border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20' :
+                                           'border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-900/20'
+                )}
+              >
+                <span className={cn(
+                  a.severity === 'red'   ? 'text-red-800 dark:text-red-200' :
+                  a.severity === 'amber' ? 'text-amber-800 dark:text-amber-200' :
+                                           'text-blue-800 dark:text-blue-200'
+                )}>{a.title}</span>
+                <Button size="sm" variant="outline" onClick={a.onClick} className="flex-shrink-0">
+                  {a.cta} <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Cadence target + auto-generate. The slider sets the agent's daily
+          target; clicking Auto-generate refills the Content Bank with
+          exactly that many fresh posts in one API call. */}
+      <Card className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Posting cadence</h3>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              You're publishing <strong>{cadence.current}</strong> post{cadence.current === 1 ? '' : 's'}/day · target
+              is <strong>{cadence.target}</strong>/day.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={autoGenerateBatch} loading={autogenerating} disabled={autogenerating}>
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Auto-generate {postsPerDay} post{postsPerDay === 1 ? '' : 's'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onGoTo('compose')}>
+              Fine-tune in Compose <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div
+            className={cn(
+              'h-full transition-all',
+              cadence.ratio >= 0.9 ? 'bg-green-500' : cadence.ratio >= 0.5 ? 'bg-amber-500' : 'bg-red-500'
+            )}
+            style={{ width: `${Math.min(100, (cadence.ratio / 1.5) * 100)}%` }}
+          />
+        </div>
+
+        {/* Target picker — slider + numeric pills. Mobile-friendly: tap a
+            pill on small screens; on desktop drag the slider for finer
+            cadence-vs-quality intuition. */}
+        <div>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Posts per day target
+            </label>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Auto-generate clicks produce <strong className="text-gray-700 dark:text-gray-200">{postsPerDay * 7}</strong>{' '}
+              posts per week.
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={1}
+              max={6}
+              step={1}
+              value={postsPerDay}
+              onChange={(e) => setPostsPerDay(Number(e.target.value))}
+              className="flex-1 accent-primary-600"
+            />
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setPostsPerDay(n)}
+                  className={cn(
+                    'h-7 w-7 rounded-md text-xs font-semibold border transition-colors',
+                    postsPerDay === n
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+                  )}
+                >{n}</button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 leading-snug">
+            {postsPerDay === 1 && 'Minimum-viable cadence — stays top-of-mind without exhausting the feed.'}
+            {postsPerDay === 2 && 'Recommended for most pages — one morning hook, one evening payoff.'}
+            {postsPerDay === 3 && 'Aggressive but sustainable when the bank is full and the team is shipping.'}
+            {postsPerDay >= 4 && 'Heavy cadence — make sure each post earns its slot. Audiences unsubscribe past this rate.'}
+            {' '}When per-post engagement data is wired up, the agent will nudge this number based on what's actually working.
+          </p>
+        </div>
+      </Card>
+
+      {/* Best times to post. PHT-tuned for the Filipino-nurse audience. Each
+          row CTAs into Bank → schedule modal so the operator can act on the
+          recommendation in two clicks. */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Best times to post · PH time</h3>
+        </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+          Windows tuned for your audience: Filipino healthcare professionals in Asia/Manila planning the US move.
+        </p>
+        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+          {(stats.connectedPlatforms.length > 0
+            ? stats.connectedPlatforms
+            : (['facebook', 'instagram', 'threads', 'linkedin'] as Platform[])
+          ).map((pl) => {
+            const meta = PLATFORM_META[pl]
+            const Icon = meta.icon
+            const bt = BEST_TIMES[pl]
+            return (
+              <li key={pl} className="py-2.5 flex items-start gap-3">
+                <span className={cn('h-8 w-8 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{meta.label}</div>
+                  <div className="text-xs text-gray-700 dark:text-gray-300 mt-0.5">
+                    <span className="inline-flex items-center gap-1 mr-3"><span className="text-gray-500 dark:text-gray-400">Weekdays:</span> {bt.weekday}</span>
+                    <span className="inline-flex items-center gap-1"><span className="text-gray-500 dark:text-gray-400">Weekends:</span> {bt.weekend}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{bt.reason}</div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        {stats.connectedPlatforms.length === 0 && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-3 italic">
+            Connect an account to see times tailored to your active platforms.
+          </p>
+        )}
+      </Card>
+
+      {/* Viral topic ideas — clickable. Each topic routes to Compose
+          with the topic pre-filled, OR into Ads via the small ad-CTA. */}
+      <Card className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Topics that tend to land</h3>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              Trending hooks for the Filipino-nurse audience, plus a few curated GritSync angles. Click any to start
+              a fresh post in Compose.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {TRENDING_TOPIC_IDEAS.map((t) => (
+            <div
+              key={t.title}
+              className="group flex items-start justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                    {t.tag}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.title}</span>
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{t.brief}</p>
+              </div>
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                <Button size="sm" onClick={() => onComposeWith(t.brief)}>
+                  <Sparkles className="h-3 w-3 mr-1" /> Generate
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onUseInAd(t.brief)}>
+                  <Megaphone className="h-3 w-3 mr-1" /> Use in ad
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {recommendedTemplates.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-2">
+              From the brand library
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {recommendedTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onComposeWith('', t.id)}
+                  className="group text-left rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 transition-colors bg-white dark:bg-gray-900"
+                >
+                  <div className={cn('aspect-[5/3] flex items-center justify-center', t.gradient)}>
+                    <span className="text-3xl drop-shadow-sm">{t.emoji}</span>
+                  </div>
+                  <div className="p-2">
+                    <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-1">{t.label}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// Small stat tile used in ManagerView. Each tile is a deep-link button —
+// clicking it sets the parent's tab so the operator never has to context-
+// switch via the top nav.
+function ManagerStatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  tone,
+  onClick,
+}: {
+  label: string
+  value: string
+  sub: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: 'green' | 'amber' | 'red' | 'gray'
+  onClick: () => void
+}) {
+  const tones: Record<string, string> = {
+    green: 'border-green-200 dark:border-green-800/50 bg-green-50/60 dark:bg-green-900/20',
+    amber: 'border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/20',
+    red:   'border-red-200 dark:border-red-800/50 bg-red-50/60 dark:bg-red-900/20',
+    gray:  'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800',
+  }
+  const iconTones: Record<string, string> = {
+    green: 'text-green-600 dark:text-green-400',
+    amber: 'text-amber-600 dark:text-amber-400',
+    red:   'text-red-600 dark:text-red-400',
+    gray:  'text-gray-500 dark:text-gray-400',
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group text-left rounded-lg border p-3 transition-all hover:shadow-sm hover:-translate-y-0.5',
+        tones[tone]
+      )}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icon className={cn('h-3.5 w-3.5', iconTones[tone])} />
+        <span className="text-[10px] uppercase tracking-wider font-medium text-gray-600 dark:text-gray-300">{label}</span>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
+      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
+        {sub}
+        <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </button>
+  )
+}
+
 function AccountsView({
   accounts,
+  posts,
   onConnect,
   onManual,
   onDisconnect,
 }: {
   accounts: SocialAccount[]
+  // Used to surface "Last published N min/hours/days ago" on each connected
+  // account row — sourced from `posts[*].results[account_id].at`, so even
+  // partial-success publishes still count as a heartbeat.
+  posts: SocialPost[]
   onConnect: (p: Platform) => void
   onManual: (p: Platform) => void
   onDisconnect: (id: string) => void
 }) {
+  // Most-recent successful publish per account id. Walks through every
+  // post's `results` map and keeps the latest `.at` timestamp seen for
+  // each account. Memoised because History can hold hundreds of posts.
+  const lastPublishedById = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const p of posts) {
+      if (!p.results) continue
+      for (const [accId, r] of Object.entries(p.results)) {
+        if (!r?.ok || !r.at) continue
+        if (!out[accId] || new Date(r.at) > new Date(out[accId])) {
+          out[accId] = r.at
+        }
+      }
+    }
+    return out
+  }, [posts])
   const { showToast } = useToast()
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
@@ -1412,6 +2622,23 @@ function AccountsView({
     }
   }
 
+  // Threads is the only non-Meta platform with a separate refresh-token
+  // endpoint; LinkedIn/YouTube/TikTok refresh automatically server-side at
+  // publish time using stored refresh tokens.
+  const [threadsBusy, setThreadsBusy] = useState(false)
+  async function refreshThreadsToken() {
+    setThreadsBusy(true)
+    try {
+      await api('/threads/refresh-token', { method: 'POST' })
+      showToast('Threads token refreshed (+60 days)', 'success')
+      window.dispatchEvent(new CustomEvent('gritsync-accounts-changed'))
+    } catch (err: any) {
+      showToast(err.message || 'Threads refresh failed', 'error')
+    } finally {
+      setThreadsBusy(false)
+    }
+  }
+
   async function disconnectMeta() {
     if (!confirm('Disconnect Meta? This removes all Facebook Pages, Instagram Business accounts, and ad-account access. You can reconnect anytime.')) return
     setMetaBusy(true)
@@ -1474,7 +2701,6 @@ function AccountsView({
   }
 
   const anyOAuthReady = Object.values(oauthStatus).some((s) => s?.oauth_ready)
-  const oauthMissingPlatforms = ALL_PLATFORMS.filter((p) => oauthStatus[p] && !oauthStatus[p].oauth_ready)
 
   return (
     <div className="space-y-6">
@@ -1551,122 +2777,81 @@ function AccountsView({
         onDisconnect={disconnectMeta}
       />
 
+      {/* Per-platform OAuth cards. Each card is a self-contained "Sign in
+          with X" surface — connected state, identity, last publish, and
+          manage actions live inside the card so there's no separate
+          "connected accounts" list to drift out of sync. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {(['threads', 'linkedin', 'youtube', 'tiktok'] as Platform[]).map((p) => {
+          const acc = accounts.find((a) => a.platform === p) || null
+          const lastAt = acc ? (lastPublishedById[acc.id] || null) : null
+          return (
+            <PlatformCard
+              key={p}
+              platform={p}
+              account={acc}
+              oauthStatus={oauthStatus[p]}
+              lastPublishedAt={lastAt}
+              busy={p === 'threads' ? threadsBusy : false}
+              onConnect={() => onConnect(p)}
+              onManual={() => onManual(p)}
+              onDisconnect={onDisconnect}
+              onRefreshThreads={p === 'threads' && acc ? refreshThreadsToken : undefined}
+            />
+          )
+        })}
+      </div>
+
+      {/* When every configured platform is OAuth-blocked the operator needs
+          a single, calm "this is a server-side config issue" hint rather
+          than four amber boxes shouting in sequence. */}
       {Object.keys(oauthStatus).length > 0 && !anyOAuthReady && (
         <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800 dark:text-amber-200">
-              <strong>OAuth is not configured for any platform.</strong> The "Connect" buttons will only work once
-              Meta / LinkedIn / TikTok / YouTube app credentials are set on the server. In the meantime, use the
-              <strong> Manual</strong> button to paste a long-lived access token you obtained from each platform's
-              developer portal — that's what actually drives publishing.
+              <strong>None of the platform OAuth apps are configured yet.</strong> Add the missing app credentials in{' '}
+              Vercel → Settings → Environment Variables, redeploy, then refresh this page. Each card above shows the
+              specific env vars it's waiting on.
             </div>
           </div>
         </Card>
       )}
 
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Connect a platform</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          OAuth is the preferred path. Where it's not yet wired up on the server, paste a long-lived token via the
-          Manual button instead — that's the path the publishing pipeline actually uses.
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {ALL_PLATFORMS.map((p) => {
-            const meta = PLATFORM_META[p]
-            const Icon = meta.icon
-            const connectedCount = accounts.filter((a) => a.platform === p).length
-            const status = oauthStatus[p]
-            const oauthReady = status?.oauth_ready ?? true  // unknown → assume ready (legacy behaviour)
-            return (
-              <div
-                key={p}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800 flex flex-col items-center text-center"
-              >
-                <div className={cn('h-12 w-12 rounded-full flex items-center justify-center text-white mb-2', meta.color)}>
-                  <Icon className="h-6 w-6" />
-                </div>
-                <div className="font-medium text-gray-900 dark:text-gray-100">{meta.label}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {connectedCount > 0 ? `${connectedCount} connected` : 'Not connected'}
-                </div>
-                {status && (
-                  <div
-                    className={cn(
-                      'text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full mb-2',
-                      oauthReady
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                    )}
-                    title={oauthReady ? 'Server has OAuth credentials configured' : `Missing on server: ${status.missing.join(', ')}`}
-                  >
-                    {oauthReady ? 'OAuth ready' : 'Manual only'}
-                  </div>
-                )}
-                <div className="flex flex-col gap-1 w-full">
-                  <Button
-                    size="sm"
-                    onClick={() => oauthReady ? onConnect(p) : onManual(p)}
-                    variant={oauthReady ? undefined : 'outline'}
-                    title={oauthReady ? undefined : `OAuth needs ${status?.missing.join(' + ')} on the server — using Manual instead`}
-                  >
-                    {oauthReady ? (
-                      <><Plus className="h-3.5 w-3.5 mr-1" /> Connect</>
-                    ) : (
-                      <>Manual setup</>
-                    )}
-                  </Button>
-                  {oauthReady && (
-                    <Button size="sm" variant="outline" onClick={() => onManual(p)}>
-                      Manual
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        {oauthMissingPlatforms.length > 0 && oauthMissingPlatforms.length < ALL_PLATFORMS.length && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            OAuth missing for: <strong>{oauthMissingPlatforms.map((p) => PLATFORM_META[p].label).join(', ')}</strong>.
-            Use the Manual button on those for now.
+      {/* Advanced — manual token entry. Hidden by default since OAuth is
+          the supported path; surfaces a "still need a manual token?"
+          link for each platform. */}
+      <details className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/60 rounded-lg">
+          Advanced — connect with an access token
+        </summary>
+        <div className="px-4 pb-4 pt-1 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+          <p>
+            If a platform's OAuth flow isn't configured yet, or you already have a long-lived access token from the
+            platform's developer portal, you can paste it in directly. This is the same token the publishing pipeline
+            uses — it just skips the login dance.
           </p>
-        )}
-      </Card>
-
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Connected accounts</h2>
-        {accounts.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">No accounts connected yet.</div>
-        ) : (
-          <div className="space-y-3">
-            {accounts.map((a) => {
-              const meta = PLATFORM_META[a.platform]
+          <div className="flex flex-wrap gap-2">
+            {ALL_PLATFORMS.map((p) => {
+              const meta = PLATFORM_META[p]
               const Icon = meta.icon
               return (
-                <div
-                  key={a.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700"
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onManual(p)}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 hover:text-primary-700 dark:hover:text-primary-300"
                 >
-                  <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{a.display_name}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {meta.label} · ID {a.platform_user_id}
-                      {a.last_error && <span className="ml-2 text-red-600 dark:text-red-400">⚠ {a.last_error}</span>}
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => onDisconnect(a.id)} title="Disconnect">
-                    <Trash2 className="h-4 w-4 text-red-600" />
-                  </Button>
-                </div>
+                  <span className={cn('h-4 w-4 rounded-full inline-flex items-center justify-center text-white', meta.color)}>
+                    <Icon className="h-2.5 w-2.5" />
+                  </span>
+                  Token for {meta.label}
+                </button>
               )
             })}
           </div>
-        )}
-      </Card>
+        </div>
+      </details>
     </div>
   )
 }
@@ -1675,16 +2860,26 @@ function AccountsView({
 function GeneratorView({
   hasAccounts,
   onGenerated,
+  prefill,
+  onPrefillConsumed,
 }: {
   hasAccounts: boolean
   onGenerated: (items: BankItem[]) => void
+  // Optional one-shot prefill from the Manager tab: jumps straight into
+  // a topic + (optionally) a curated template, consuming the prefill
+  // after applying so future tab switches don't reset the user's edits.
+  prefill?: { topic?: string; templateId?: string } | null
+  onPrefillConsumed?: () => void
 }) {
   const { showToast } = useToast()
   const [topic, setTopic] = useState('')
   const [templateId, setTemplateId] = useState('')
+  // Visual-style override picked from the IMAGE_TEMPLATES library. When set,
+  // its `image_prompt` is sent as `template_image_prompt` and wins over any
+  // post-template's built-in visual prompt — pair any topic with any look.
+  const [imageTemplateId, setImageTemplateId] = useState('')
   const [goal, setGoal] = useState<CampaignGoal>('build_trust')
   const [audiencePreset, setAudiencePreset] = useState<AudiencePreset>('ph_considering')
-  const [platforms, setPlatforms] = useState<Platform[]>([])
   const [tone, setTone] = useState('friendly')
   const [length, setLength] = useState<'short' | 'medium' | 'long'>('medium')
   const [language, setLanguage] = useState<'taglish' | 'english' | 'filipino'>('taglish')
@@ -1696,10 +2891,23 @@ function GeneratorView({
   const [phase, setPhase] = useState<'idle' | 'planning' | 'writing' | 'rendering'>('idle')
 
   const template = POST_TEMPLATES.find((t) => t.id === templateId) || null
+  const imageTemplate = IMAGE_TEMPLATES.find((t) => t.id === imageTemplateId) || null
 
-  function togglePlatform(p: Platform) {
-    setPlatforms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))
+  function pickRandomImageTemplate() {
+    const idx = Math.floor(Math.random() * IMAGE_TEMPLATES.length)
+    setImageTemplateId(IMAGE_TEMPLATES[idx].id)
   }
+
+  // Apply a one-shot prefill from the Manager tab — sets the topic and/or
+  // selected template, then clears the prefill upstream so subsequent
+  // re-renders don't keep overwriting the user's edits.
+  useEffect(() => {
+    if (!prefill) return
+    if (prefill.topic) setTopic(prefill.topic)
+    if (prefill.templateId) setTemplateId(prefill.templateId)
+    onPrefillConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
 
   async function generate() {
     if (!topic.trim() && !template) {
@@ -1720,13 +2928,17 @@ function GeneratorView({
           topic: topic.trim(),
           // We keep the legacy `preselected_idea` field name for the brief so
           // the backend prompt-enhancer sees it without a rename. `template_id`
-          // and `template_image_prompt` are the new template-specific signals.
+          // and `template_image_prompt` are the template-specific signals.
+          // image-template wins over topic-template for the visual prompt.
           preselected_idea: template?.brief || null,
           template_id: template?.id || null,
-          template_image_prompt: template?.image_prompt || null,
+          template_image_prompt: imageTemplate?.image_prompt || template?.image_prompt || null,
+          image_template_id: imageTemplate?.id || null,
           goal: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === audiencePreset)?.brief || '',
-          platforms,
+          // Platforms are no longer chosen here — the operator picks accounts
+          // at Schedule time. Backend treats [] as "platform-agnostic copy".
+          platforms: [],
           tone,
           length,
           language,
@@ -1763,9 +2975,9 @@ function GeneratorView({
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Post generator</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Plan like a social-media manager: pick a <strong>goal</strong>, name the <strong>audience</strong>, choose
-            the <strong>angle</strong>, and we'll have the strategist agent draft a hook + payoff + CTA before the
-            copywriter writes variants. Everything lands in the <strong>Content Bank</strong> — from there, click{' '}
-            <strong>Use in Ad</strong> on any item to repurpose it as paid creative.
+            the <strong>angle</strong>, and the strategist agent drafts a hook + payoff + CTA before the copywriter
+            writes variants. Everything lands in the <strong>Content Bank</strong> — pick which accounts to publish to
+            when you schedule.
           </p>
         </div>
 
@@ -1778,7 +2990,7 @@ function GeneratorView({
           </label>
           <div>
             <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-              Campaign goal
+              Content goal
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {CAMPAIGN_GOALS.map((g) => {
@@ -1842,7 +3054,7 @@ function GeneratorView({
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                GritSync templates — NCLEX & USRN path
+                GritSync topics — NCLEX & USRN path
               </p>
               {template && (
                 <button
@@ -1854,97 +3066,183 @@ function GeneratorView({
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {POST_TEMPLATES.map((t) => {
-                const selected = templateId === t.id
+            <select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+            >
+              <option value="">— No topic (free-form from your prompt above) —</option>
+              {(Object.keys(TEMPLATE_CATEGORY_LABEL) as TemplateCategory[]).map((cat) => {
+                const inCat = POST_TEMPLATES.filter((t) => t.category === cat)
+                if (inCat.length === 0) return null
+                return (
+                  <optgroup key={cat} label={TEMPLATE_CATEGORY_LABEL[cat]}>
+                    {inCat.map((t) => (
+                      <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>
+                    ))}
+                  </optgroup>
+                )
+              })}
+            </select>
+            {template && (
+              <div className="mt-2 flex items-start gap-3 p-3 rounded-lg border border-primary-200 dark:border-primary-800/50 bg-primary-50/60 dark:bg-primary-900/15">
+                <div className={cn('w-14 h-14 rounded-lg flex items-center justify-center text-3xl flex-shrink-0', template.gradient)}>
+                  {template.emoji}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{template.label}</div>
+                  <div className="text-[11px] uppercase tracking-wider text-primary-700 dark:text-primary-300 mt-0.5">
+                    {TEMPLATE_CATEGORY_LABEL[template.category]}
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-snug">{template.description}</p>
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
+              30 GritSync-aligned topics grouped by category. Leave it on "No topic" to write purely from your prompt above.
+            </p>
+          </div>
+
+          {/* Image style — 15 brand-aligned visual templates the AI uses when
+              rendering the post image. Overrides the topic's built-in visual
+              prompt when set. Random shuffles the picker so the feed stays
+              visually varied without manual choice each time. */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Image style — company visual templates
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={pickRandomImageTemplate}
+                  className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 hover:text-primary-700 dark:hover:text-primary-300 inline-flex items-center gap-1"
+                  title="Pick a random image template"
+                >
+                  🎲 Random
+                </button>
+                {imageTemplate && (
+                  <button
+                    type="button"
+                    onClick={() => setImageTemplateId('')}
+                    className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+              {/* "Auto" tile — leave it on this when the topic should drive
+                  the visual (the topic-template's built-in image_prompt
+                  wins). Visually treated like an image option for parity. */}
+              <button
+                type="button"
+                onClick={() => setImageTemplateId('')}
+                className={cn(
+                  'group text-left rounded-xl overflow-hidden border-2 transition-all bg-white dark:bg-gray-900',
+                  !imageTemplate
+                    ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 shadow-md'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
+                )}
+                title="Let the topic decide the visual"
+              >
+                <div className="relative aspect-square flex items-center justify-center bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 dark:from-gray-800 dark:via-gray-700 dark:to-gray-600">
+                  <Wand2 className="h-8 w-8 text-gray-500 dark:text-gray-300 drop-shadow-sm" />
+                  {!imageTemplate && (
+                    <div className="absolute inset-0 bg-primary-600/10 flex items-center justify-center">
+                      <span className="bg-primary-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow">
+                        Auto
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="p-1.5 text-center">
+                  <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 leading-tight">Auto</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">From topic</div>
+                </div>
+              </button>
+
+              {IMAGE_TEMPLATES.map((t) => {
+                const selected = imageTemplateId === t.id
                 return (
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setTemplateId(selected ? '' : t.id)}
+                    onClick={() => setImageTemplateId(selected ? '' : t.id)}
                     className={cn(
                       'group text-left rounded-xl overflow-hidden border-2 transition-all bg-white dark:bg-gray-900',
                       selected
                         ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 shadow-md'
                         : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-sm'
                     )}
+                    title={t.description}
                   >
-                    {/* Branded sample preview tile — illustrative of the visual
-                        family the AI will generate from `image_prompt`. */}
-                    <div className={cn('relative aspect-square flex items-center justify-center', t.gradient)}>
-                      <div className="text-5xl drop-shadow-sm">{t.emoji}</div>
-                      <span className="absolute top-2 left-2 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-white/80 dark:bg-black/40 text-gray-700 dark:text-gray-100 backdrop-blur-sm">
-                        {TEMPLATE_CATEGORY_LABEL[t.category]}
+                    <div className="relative aspect-square overflow-hidden">
+                      <img
+                        src={imageTemplatePreview(t)}
+                        alt={t.label}
+                        loading="lazy"
+                        onError={(e) => {
+                          const img = e.currentTarget
+                          if (!img.dataset.fallback) {
+                            img.dataset.fallback = '1'
+                            img.src = imageTemplateFallback(t.id)
+                          }
+                        }}
+                        className={cn(
+                          'w-full h-full object-cover transition-transform group-hover:scale-105',
+                          selected && 'brightness-90'
+                        )}
+                      />
+                      {/* Emoji badge — quick visual ID without obscuring the photo. */}
+                      <span className="absolute top-1.5 left-1.5 h-7 w-7 rounded-full bg-white/85 dark:bg-black/55 backdrop-blur-sm flex items-center justify-center text-base shadow-sm">
+                        {t.emoji}
                       </span>
                       {selected && (
-                        <div className="absolute inset-0 bg-primary-600/10 flex items-center justify-center">
-                          <span className="bg-primary-600 text-white text-xs px-3 py-1 rounded-full font-medium shadow">
+                        <div className="absolute inset-0 bg-primary-600/25 flex items-center justify-center">
+                          <span className="bg-primary-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow">
                             Selected
                           </span>
                         </div>
                       )}
                     </div>
-                    <div className="p-2.5">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-                        {t.label}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                        {t.description}
-                      </div>
+                    <div className="p-1.5 text-center">
+                      <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 leading-tight line-clamp-1">{t.label}</div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">{t.description}</div>
                     </div>
                   </button>
                 )
               })}
             </div>
+            {imageTemplate && (
+              <div className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-primary-200 dark:border-primary-800/50 bg-primary-50/60 dark:bg-primary-900/15">
+                <div className={cn('w-14 h-14 rounded-lg flex items-center justify-center text-3xl flex-shrink-0', imageTemplate.gradient)}>
+                  {imageTemplate.emoji}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{imageTemplate.label}</div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-snug">{imageTemplate.description}</p>
+                </div>
+              </div>
+            )}
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
-              Template tiles are illustrative — when you generate, the AI produces a fresh on-brand image using the
-              template's visual prompt (Filipino healthcare professionals, modern US settings, no fake logos or
-              testimonials).
+              15 visual templates with a consistent brand look (Filipino healthcare professionals, modern US settings,
+              no fake logos or testimonials). Picking one overrides the topic's default visual. The 🎲 Random button
+              shuffles for you — handy when you want feed variety without manual choice.
             </p>
           </div>
         </div>
 
-        {/* 3. Channels & format */}
+        {/* 3. Format — voice + length + language + how many variants. Account
+            selection (which platforms to publish to) now happens at Schedule
+            time so the same Content Bank item can land on different accounts
+            on different days. */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            3. Channels & format
-            <span className="text-gray-400 font-normal"> — where it runs and how it sounds</span>
+            3. Format
+            <span className="text-gray-400 font-normal"> — how it sounds (accounts get picked at Schedule)</span>
           </label>
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-              Target platforms <span className="text-gray-400 normal-case">(pick any — the agent calibrates per channel)</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {ALL_PLATFORMS.map((p) => {
-                const meta = PLATFORM_META[p]
-                const Icon = meta.icon
-                const active = platforms.includes(p)
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => togglePlatform(p)}
-                    className={cn(
-                      'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
-                      active
-                        ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
-                    )}
-                  >
-                    <span className={cn('h-4 w-4 rounded-full inline-flex items-center justify-center text-white', meta.color)}>
-                      <Icon className="h-2.5 w-2.5" />
-                    </span>
-                    {meta.label}
-                  </button>
-                )
-              })}
-            </div>
-            {platforms.length === 0 && (
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
-                None selected → platform-agnostic copy (works on every channel).
-              </p>
-            )}
-          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tone</label>
@@ -2127,6 +3425,28 @@ function ContentBankView({
   hasAccounts: boolean
 }) {
   const [viewItem, setViewItem] = useState<BankItem | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'pending_media' | 'media_failed' | 'used'>('all')
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video'>('all')
+
+  // Count by status — drives the filter chip badges so the operator can
+  // see at a glance how many items are stuck rendering or failed.
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: bank.length, available: 0, pending_media: 0, media_failed: 0, used: 0 }
+    for (const it of bank) counts[it.status] = (counts[it.status] || 0) + 1
+    return counts
+  }, [bank])
+
+  const filteredBank = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    return bank.filter((it) => {
+      if (statusFilter !== 'all' && it.status !== statusFilter) return false
+      if (mediaFilter !== 'all' && it.media_type !== mediaFilter) return false
+      if (q && !it.caption.toLowerCase().includes(q) && !(it.source_topic || '').toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [bank, searchTerm, statusFilter, mediaFilter])
+
   if (loading && bank.length === 0) {
     return <div className="py-12"><Loading text="Loading content bank…" /></div>
   }
@@ -2140,18 +3460,114 @@ function ContentBankView({
       </Card>
     )
   }
+
+  const filtersActive = searchTerm.trim() !== '' || statusFilter !== 'all' || mediaFilter !== 'all'
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center gap-3 flex-wrap">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {bank.length} item{bank.length === 1 ? '' : 's'} in your bank — schedule one to push it to your accounts.
+          {filtersActive
+            ? <>Showing <strong className="text-gray-700 dark:text-gray-200">{filteredBank.length}</strong> of {bank.length} items</>
+            : <>{bank.length} item{bank.length === 1 ? '' : 's'} in your bank — schedule one to push it to your accounts.</>}
         </p>
         <Button variant="outline" size="sm" onClick={onRefresh}>
           <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
         </Button>
       </div>
+
+      <Card className="p-3 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search captions or topic…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full text-sm pl-8 pr-8 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              title="Clear"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Filter className="h-3.5 w-3.5 text-gray-400" />
+          {([
+            { id: 'all',           label: 'All' },
+            { id: 'available',     label: 'Ready' },
+            { id: 'pending_media', label: 'Rendering' },
+            { id: 'media_failed',  label: 'Failed' },
+            { id: 'used',          label: 'Used' },
+          ] as const).map((s) => {
+            const active = statusFilter === s.id
+            const count = statusCounts[s.id] ?? 0
+            return (
+              <button
+                key={s.id}
+                onClick={() => setStatusFilter(s.id)}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                  active
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+                )}
+              >
+                {s.label}
+                {count > 0 && (
+                  <span className={cn(
+                    'inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[10px] font-semibold',
+                    active ? 'bg-white/25 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                  )}>{count}</span>
+                )}
+              </button>
+            )
+          })}
+          <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
+          {([
+            { id: 'all',   label: 'All media' },
+            { id: 'image', label: 'Image' },
+            { id: 'video', label: 'Video' },
+          ] as const).map((m) => {
+            const active = mediaFilter === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setMediaFilter(m.id)}
+                className={cn(
+                  'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                  active
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+                )}
+              >
+                {m.label}
+              </button>
+            )
+          })}
+          {filtersActive && (
+            <button
+              onClick={() => { setSearchTerm(''); setStatusFilter('all'); setMediaFilter('all') }}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </Card>
+
+      {filteredBank.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          No items match these filters.
+        </Card>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {bank.map((item) => (
+        {filteredBank.map((item) => (
           <Card key={item.id} className="overflow-hidden flex flex-col">
             <button
               type="button"
@@ -2251,6 +3667,7 @@ function ContentBankView({
           </Card>
         ))}
       </div>
+      )}
       <BankItemModal
         item={viewItem}
         onClose={() => setViewItem(null)}
@@ -2454,7 +3871,7 @@ function ScheduleModal({
         ? new Date(state.editing_post.scheduled_at).toISOString().slice(0, 16)
         : '')
     } else {
-      setAccountIds([])
+      setAccountIds(state.initial_account_ids || [])
       setWhen('')
     }
   }, [state])
@@ -2616,21 +4033,168 @@ function PostList({
   onEdit,
   onDelete,
   onPublish,
+  onRepost,
   showResults = false,
+  enableCalendarView = false,
 }: {
   posts: SocialPost[]
   emptyText: string
   onEdit: (p: SocialPost) => void
   onDelete: (id: string) => void
   onPublish: (id: string) => void
+  // Optional — only History wires this up. Lets the operator clone a
+  // previously-published post into the schedule modal for a fresh send,
+  // typically a few weeks later or to a different subset of accounts.
+  onRepost?: (p: SocialPost) => void
   showResults?: boolean
+  // When true, surfaces a List/Calendar view toggle. Calendar plots posts
+  // onto the month grid by `scheduled_at`. Enabled for the Scheduled tab.
+  enableCalendarView?: boolean
 }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [platformFilter, setPlatformFilter] = useState<Platform | 'all'>('all')
+  const [view, setView] = useState<'list' | 'calendar'>('list')
+
+  // Platforms actually present across this set — drives the filter chip
+  // row so we don't show YouTube when the user has only FB+IG accounts.
+  const availablePlatforms = useMemo(() => {
+    const set = new Set<Platform>()
+    for (const p of posts) {
+      for (const a of p.accounts || []) set.add(a.platform)
+    }
+    return ALL_PLATFORMS.filter((pl) => set.has(pl))
+  }, [posts])
+
+  const filteredPosts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    return posts.filter((p) => {
+      if (platformFilter !== 'all' && !(p.accounts || []).some((a) => a.platform === platformFilter)) return false
+      if (q && !p.content.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [posts, searchTerm, platformFilter])
+
   if (posts.length === 0) {
     return <Card className="p-8 text-center text-gray-500 dark:text-gray-400">{emptyText}</Card>
   }
+
+  const filtersActive = searchTerm.trim() !== '' || platformFilter !== 'all'
+
   return (
     <div className="space-y-3">
-      {posts.map((p) => (
+      <Card className="p-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search post text…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full text-sm pl-8 pr-8 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                title="Clear"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {enableCalendarView && (
+            <div className="flex items-center rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setView('list')}
+                className={cn(
+                  'text-xs px-3 py-2 transition-colors',
+                  view === 'list'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                )}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('calendar')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-xs px-3 py-2 transition-colors',
+                  view === 'calendar'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                )}
+              >
+                <Calendar className="h-3.5 w-3.5" /> Calendar
+              </button>
+            </div>
+          )}
+        </div>
+        {availablePlatforms.length > 1 && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <Filter className="h-3.5 w-3.5 text-gray-400" />
+            <button
+              onClick={() => setPlatformFilter('all')}
+              className={cn(
+                'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                platformFilter === 'all'
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+              )}
+            >
+              All platforms
+            </button>
+            {availablePlatforms.map((pl) => {
+              const meta = PLATFORM_META[pl]
+              const Icon = meta.icon
+              const active = platformFilter === pl
+              return (
+                <button
+                  key={pl}
+                  onClick={() => setPlatformFilter(pl)}
+                  className={cn(
+                    'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                    active
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+                  )}
+                >
+                  <span className={cn('h-3.5 w-3.5 rounded-full inline-flex items-center justify-center text-white', meta.color)}>
+                    <Icon className="h-2 w-2" />
+                  </span>
+                  {meta.label}
+                </button>
+              )
+            })}
+            {filtersActive && (
+              <button
+                onClick={() => { setSearchTerm(''); setPlatformFilter('all') }}
+                className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
+        {filtersActive && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Showing <strong className="text-gray-700 dark:text-gray-200">{filteredPosts.length}</strong> of {posts.length}
+          </p>
+        )}
+      </Card>
+
+      {enableCalendarView && view === 'calendar' ? (
+        <PostsCalendar
+          posts={filteredPosts}
+          onEdit={onEdit}
+          onPublish={onPublish}
+          onDelete={onDelete}
+        />
+      ) : filteredPosts.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No posts match these filters.</Card>
+      ) : filteredPosts.map((p) => (
         <Card key={p.id} className="p-4">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
@@ -2667,25 +4231,39 @@ function PostList({
                 {p.content}
               </p>
               {Array.isArray(p.media_urls) && p.media_urls.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {p.media_urls.map((u, i) => (
-                    <a
-                      key={i}
-                      href={u}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline truncate max-w-xs"
-                    >
-                      <ImageIcon className="inline h-3 w-3 mr-1" />
-                      Media {i + 1}
-                    </a>
-                  ))}
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {p.media_urls.map((u, i) => {
+                    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(u)
+                    return (
+                      <a
+                        key={i}
+                        href={u}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 relative"
+                        title="Open original"
+                      >
+                        {isVideo ? (
+                          <video src={u} className="w-full h-full object-cover" muted preload="metadata" />
+                        ) : (
+                          <img src={u} alt="" loading="lazy" className="w-full h-full object-cover" />
+                        )}
+                        <span className="absolute top-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-black/55 text-white">
+                          {isVideo ? 'video' : 'image'}
+                        </span>
+                        <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                          <ExternalLink className="h-4 w-4 text-white" />
+                        </span>
+                      </a>
+                    )
+                  })}
                 </div>
               )}
               {showResults && p.results && Object.keys(p.results).length > 0 && (
                 <div className="mt-3 space-y-1">
                   {Object.entries(p.results).map(([accId, r]) => {
                     const meta = PLATFORM_META[r.platform]
+                    const url = r.ok ? platformPostUrl(r.platform, r.remote_id) : null
                     return (
                       <div
                         key={accId}
@@ -2699,6 +4277,17 @@ function PostList({
                         <span className="truncate">
                           {r.ok ? `OK${r.remote_id ? ` · ${r.remote_id}` : ''}` : r.error}
                         </span>
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-primary-600 dark:text-primary-400 hover:underline ml-auto"
+                            title={`Open on ${meta?.label || r.platform}`}
+                          >
+                            <ExternalLink className="h-3 w-3" /> View
+                          </a>
+                        )}
                       </div>
                     )
                   })}
@@ -2706,7 +4295,7 @@ function PostList({
               )}
             </div>
             <div className="flex flex-col gap-1.5 flex-shrink-0 w-32">
-              {(p.status === 'draft' || p.status === 'scheduled' || p.status === 'failed') && (
+              {(p.status === 'draft' || p.status === 'scheduled' || p.status === 'failed' || p.status === 'partial') && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -2717,7 +4306,7 @@ function PostList({
                   <PencilLine className="h-3.5 w-3.5 mr-1.5" /> Edit
                 </Button>
               )}
-              {(p.status === 'draft' || p.status === 'scheduled' || p.status === 'failed') && (
+              {(p.status === 'draft' || p.status === 'scheduled') && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -2726,6 +4315,28 @@ function PostList({
                   className="justify-start"
                 >
                   <Send className="h-3.5 w-3.5 mr-1.5" /> Publish
+                </Button>
+              )}
+              {(p.status === 'failed' || p.status === 'partial') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onPublish(p.id)}
+                  title={p.status === 'partial' ? 'Re-attempts every account (including ones that already succeeded)' : 'Re-attempts publishing to every account'}
+                  className="justify-start text-amber-700 hover:text-amber-800 border-amber-300 hover:bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Retry
+                </Button>
+              )}
+              {onRepost && (p.status === 'published' || p.status === 'partial' || p.status === 'failed') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRepost(p)}
+                  title="Clone this post into a fresh draft — pre-fills caption, media, and accounts"
+                  className="justify-start"
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1.5" /> Repost
                 </Button>
               )}
               <Button
@@ -2742,5 +4353,226 @@ function PostList({
         </Card>
       ))}
     </div>
+  )
+}
+
+// Month-grid calendar for the Scheduled tab. Plots posts with a
+// `scheduled_at` onto the day they're due to publish; drafts without a
+// scheduled time are surfaced as a small banner above the grid so they
+// aren't silently dropped from view. Clicking a chip opens Edit.
+function PostsCalendar({
+  posts,
+  onEdit,
+  onPublish,
+  onDelete,
+}: {
+  posts: SocialPost[]
+  onEdit: (p: SocialPost) => void
+  onPublish: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  // Seed the calendar on the month of the earliest scheduled post so the
+  // operator sees content immediately. Falls back to the current month
+  // when nothing is scheduled.
+  const [month, setMonth] = useState<Date>(() => {
+    const dates = posts.map((p) => p.scheduled_at).filter(Boolean) as string[]
+    if (dates.length === 0) return new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    const earliest = Math.min(...dates.map((d) => new Date(d).getTime()))
+    const dt = new Date(earliest)
+    return new Date(dt.getFullYear(), dt.getMonth(), 1)
+  })
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+
+  const { cells, monthLabel, unscheduledDrafts, postsByDay } = useMemo(() => {
+    const year = month.getFullYear()
+    const monthIdx = month.getMonth()
+    const firstDay = new Date(year, monthIdx, 1)
+    const lastDay = new Date(year, monthIdx + 1, 0)
+    const startWeekday = firstDay.getDay()
+    const daysInMonth = lastDay.getDate()
+    const cells: Array<Date | null> = []
+    for (let i = 0; i < startWeekday; i++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, monthIdx, d))
+    while (cells.length % 7 !== 0) cells.push(null)
+    const postsByDay: Record<string, SocialPost[]> = {}
+    let unscheduled = 0
+    for (const p of posts) {
+      if (!p.scheduled_at) { unscheduled += 1; continue }
+      const key = new Date(p.scheduled_at).toDateString()
+      postsByDay[key] = postsByDay[key] || []
+      postsByDay[key].push(p)
+    }
+    return {
+      cells,
+      monthLabel: month.toLocaleString(undefined, { month: 'long', year: 'numeric' }),
+      unscheduledDrafts: unscheduled,
+      postsByDay,
+    }
+  }, [month, posts])
+
+  function jumpMonth(delta: number) {
+    setMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() + delta, 1))
+    setSelectedDay(null)
+  }
+  function jumpToToday() {
+    const t = new Date()
+    setMonth(new Date(t.getFullYear(), t.getMonth(), 1))
+    setSelectedDay(t.toDateString())
+  }
+
+  const todayStr = new Date().toDateString()
+  const selectedPosts = selectedDay ? (postsByDay[selectedDay] || []) : []
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{monthLabel}</h3>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="ghost" onClick={() => jumpMonth(-1)} title="Previous month">‹</Button>
+          <Button size="sm" variant="outline" onClick={jumpToToday}>Today</Button>
+          <Button size="sm" variant="ghost" onClick={() => jumpMonth(1)} title="Next month">›</Button>
+        </div>
+      </div>
+
+      {unscheduledDrafts > 0 && (
+        <div className="text-xs px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-200">
+          {unscheduledDrafts} draft{unscheduledDrafts === 1 ? '' : 's'} without a scheduled time — switch to <strong>List</strong> view to see them.
+        </div>
+      )}
+
+      <div>
+        <div className="grid grid-cols-7 text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+            <div key={d} className="px-2 py-1">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((cell, i) => {
+            if (!cell) {
+              return <div key={i} className="min-h-[88px] rounded-md bg-gray-50 dark:bg-gray-900/30" />
+            }
+            const key = cell.toDateString()
+            const dayPosts = postsByDay[key] || []
+            const isToday = key === todayStr
+            const isSelected = key === selectedDay
+            const isPast = cell.getTime() < new Date(new Date().toDateString()).getTime()
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setSelectedDay(isSelected ? null : key)}
+                className={cn(
+                  'min-h-[88px] rounded-md border p-1.5 text-left transition-colors flex flex-col gap-1',
+                  isSelected
+                    ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 bg-primary-50/50 dark:bg-primary-900/15'
+                    : isToday
+                      ? 'border-primary-300 dark:border-primary-700 bg-primary-50/30 dark:bg-primary-900/10'
+                      : isPast
+                        ? 'border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-900/20'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-primary-300 dark:hover:border-primary-700',
+                )}
+              >
+                <div className={cn(
+                  'text-[11px] font-semibold',
+                  isToday ? 'text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-200'
+                )}>
+                  {cell.getDate()}
+                </div>
+                <div className="flex flex-col gap-0.5 min-h-0">
+                  {dayPosts.slice(0, 3).map((p) => {
+                    const time = new Date(p.scheduled_at!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                    const firstPlatform = p.accounts?.[0]?.platform
+                    const meta = firstPlatform ? PLATFORM_META[firstPlatform] : null
+                    return (
+                      <div
+                        key={p.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); onEdit(p) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onEdit(p) } }}
+                        className={cn(
+                          'group/chip flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer',
+                          meta ? cn(meta.color, 'text-white') : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+                        )}
+                        title={`${time} · ${p.content.slice(0, 80)}${p.content.length > 80 ? '…' : ''}`}
+                      >
+                        <span className="font-semibold flex-shrink-0">{time}</span>
+                        <span className="truncate opacity-90">{p.content.replace(/\s+/g, ' ').slice(0, 24)}</span>
+                      </div>
+                    )
+                  })}
+                  {dayPosts.length > 3 && (
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 px-1.5">
+                      +{dayPosts.length - 3} more
+                    </div>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Selected-day detail — a list of full post cards so the operator
+          can act (edit/publish/delete) without leaving the calendar. */}
+      {selectedDay && (
+        <div className="border-t border-gray-100 dark:border-gray-800 pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {new Date(selectedDay).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+            </div>
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Clear
+            </button>
+          </div>
+          {selectedPosts.length === 0 ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400 italic">No posts scheduled for this day.</p>
+          ) : (
+            selectedPosts
+              .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime())
+              .map((p) => (
+                <div key={p.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                        {new Date(p.scheduled_at!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                      <StatusPill status={p.status} />
+                      <div className="flex items-center gap-1">
+                        {p.accounts?.map((a) => {
+                          const m = PLATFORM_META[a.platform]
+                          const Icon = m?.icon
+                          return Icon ? (
+                            <span key={a.id} className={cn('h-4 w-4 rounded-full inline-flex items-center justify-center text-white', m.color)}>
+                              <Icon className="h-2.5 w-2.5" />
+                            </span>
+                          ) : null
+                        })}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3">
+                      {p.content}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => onEdit(p)} className="justify-start">
+                      <PencilLine className="h-3 w-3 mr-1" /> Edit
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => onPublish(p.id)} className="justify-start">
+                      <Send className="h-3 w-3 mr-1" /> Publish
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => onDelete(p.id)} className="justify-start text-red-600 hover:text-red-700">
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
