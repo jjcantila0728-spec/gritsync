@@ -160,17 +160,17 @@ router.post('/refine-master-prompt', authenticateToken, requireAdmin, async (req
 
     const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. The renderer is DALL·E 3 (hd + natural style), so your refinements should lean into what DALL·E 3 does best — photorealism, cinematic lighting, layered compositions, accurate fabric and skin textures. Avoid prompt patterns that only gpt-image-1 reliably renders (e.g. long arbitrary text strings, perfect typography).
 
-You're refining a "master image prompt" for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. Use these ground-truth facts so the refined prompt stays brand-aligned:
+You're refining a "master image prompt" for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The master prompt is a GUIDE, not a contract — you have license to restructure, drop sections, or add new ones if the brief reads better that way. Use these ground-truth facts so the refined prompt stays brand-aligned:
 
 ${GRITSYNC_KB}
 
 Refinement rules:
-- KEEP the structural sections the operator built (subject, background, supporting characters, visual elements, color palette, headline text, CTA, branding, style, composition, aspect ratio, negative prompt).
+- Treat the master prompt as inspiration: keep the brand feel (color palette, subject identity, composition language) but you may rearrange sections, prune dead phrases, or add fresh visual ideas that strengthen the spec.
 - IMPROVE specificity: tighter visual language, more cinematic descriptors, clearer subject blocking.
-- PRESERVE all brand-critical strings exactly: "GritSync", "gritsync.com", "YOUR USRN DREAM STARTS HERE", "NCLEX Processing • CGFNS • ATT • VisaScreen • End-to-End Guidance", "GET YOUR FREE ASSESSMENT TODAY". Do not paraphrase them.
+- KEEP the brand identity intact — GritSync as the agency name, gritsync.com as the URL, "USRN" / "NCLEX" framing. If headline/CTA text appears, keep its meaning even if you reword for brevity.
 - DO NOT add fabricated claims (no "guaranteed pass", "100% success", named hospitals, fabricated stats).
 - DO NOT add ethnicities other than Filipino, or US-specific landmarks the brand hasn't endorsed.
-- KEEP the negative-prompt section and strengthen anti-artifact terms ("distorted hands", "warped documents", "AI text glitches", etc.).
+- ALWAYS include a negative-prompt section — strengthen anti-artifact terms ("distorted hands", "warped documents", "AI text glitches", etc.).
 - LENGTH: similar order of magnitude to the input — don't more than double or less than half it.`
 
     const userPayload: string[] = [
@@ -231,13 +231,105 @@ Refinement rules:
     // prompt evolved over time (Postgres column is JSONB on a tiny
     // helper table — best-effort, never blocks the response).
     pool.query(
-      `INSERT INTO social_ai_prompt_refinements (user_id, source_prompt, refined_prompt, reasoning, topic, goal_brief)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO social_ai_prompt_refinements (user_id, kind, source_prompt, refined_prompt, reasoning, topic, goal_brief)
+       VALUES ($1, 'image_prompt', $2, $3, $4, $5, $6)`,
       [req.user?.id || null, current_prompt, refined_prompt, reasoning || null, topic || null, goal_brief || null]
     ).catch(() => { /* table may not exist yet — refinement logging is best-effort */ })
     res.json({ data: { refined_prompt, reasoning } })
   } catch (err: any) {
     console.error('AI refine-master-prompt error:', err)
+    res.status(500).json({ error: err.message || 'AI refine failed' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/social/ai/refine-master-caption-format
+// Sibling endpoint to /refine-master-prompt — refines the 11-section
+// master caption format instead of the image prompt. Same contract:
+// returns a refined version and a reasoning blurb; the client previews
+// the result in its editor before persisting.
+//
+// Body: { current_format: string, topic?: string|null, goal_brief?: string|null }
+// Returns: { data: { refined_format: string, reasoning: string } }
+// ---------------------------------------------------------------------------
+router.post('/refine-master-caption-format', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const apiKey = OPENAI_KEY()
+    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
+
+    const { current_format, topic = null, goal_brief = null } = req.body || {}
+    if (!current_format || !String(current_format).trim()) {
+      return res.status(400).json({ error: 'current_format is required' })
+    }
+
+    const system = `You are a senior social-media copywriter who specialises in long-form, conversion-focused Taglish captions for Filipino healthcare audiences. You're refining a "master caption format" template for GritSync, an NCLEX-processing agency for Filipino-trained nurses. Use these ground-truth facts so the refined format stays brand-aligned:
+
+${GRITSYNC_KB}
+
+The current format is the 11-section structural blueprint every generated caption follows: HOOK → SELF-CHECK → PROBLEM REFRAME → GRITSYNC SOLUTION → GRITSYNC PERKS → FUTURE VISION → AUTHORITY / TRUST → DECISION QUESTIONS → CALL TO ACTION → BRAND SIGN-OFF → HASHTAGS.
+
+Refinement rules:
+- KEEP all 11 sections and their numbered headings — the structure is the brand. Do not collapse, drop, or reorder them.
+- KEEP brand-critical strings exactly: "GritSync", "gritsync.com", "www.gritsync.com/quote", "NCLEX", "USRN", "CGFNS", "ATT", "VisaScreen". Do not paraphrase them.
+- IMPROVE within sections: tighter hooks, sharper rhetorical questions, cleaner Taglish, more concrete scenes — but never invent claims that contradict the ground-truth (no "guaranteed pass", no fabricated stats, no named hospitals).
+- KEEP the perks list (Free Business Email Setup, Application Guidance System, Priority Processing Assistance, Personalized NCLEX Roadmap) intact even if reordered for cadence.
+- KEEP at least 8 hashtags in section 11.
+- LENGTH: similar order of magnitude to the input — don't more than double or less than half it. Long is the point.`
+
+    const userPayload: string[] = [
+      'Current master caption format:',
+      '"""',
+      String(current_format),
+      '"""',
+    ]
+    if (topic) userPayload.push('', `Operator is currently writing about: ${topic}`)
+    if (goal_brief) userPayload.push('', `Campaign goal context: ${goal_brief}`)
+    userPayload.push(
+      '',
+      'Return ONLY this JSON object — no markdown fence, no prose around it:',
+      `{ "refined_format": "<full refined 11-section format, multi-line with \\n line breaks>", "reasoning": "<one short sentence summarising what you changed and why>" }`
+    )
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 3200,
+        temperature: 0.6,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userPayload.join('\n') },
+        ],
+      }),
+    })
+    const j: any = await r.json().catch(() => ({}))
+    if (!r.ok) return res.status(502).json({ error: j.error?.message || `OpenAI HTTP ${r.status}` })
+
+    const text = j.choices?.[0]?.message?.content || ''
+    let refined_format = ''
+    let reasoning = ''
+    try {
+      const parsed = JSON.parse(text)
+      refined_format = typeof parsed.refined_format === 'string' ? parsed.refined_format.trim() : ''
+      reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning.trim() : ''
+    } catch {
+      refined_format = String(text).trim()
+    }
+    if (!refined_format) return res.status(502).json({ error: 'Refinement produced no format' })
+
+    // Same audit log as the image-prompt refinement — `kind` column
+    // distinguishes the two paths. Best-effort INSERT; never blocks.
+    pool.query(
+      `INSERT INTO social_ai_prompt_refinements (user_id, kind, source_prompt, refined_prompt, reasoning, topic, goal_brief)
+       VALUES ($1, 'caption_format', $2, $3, $4, $5, $6)`,
+      [req.user?.id || null, current_format, refined_format, reasoning || null, topic || null, goal_brief || null]
+    ).catch(() => { /* table may not exist yet — refinement logging is best-effort */ })
+
+    res.json({ data: { refined_format, reasoning } })
+  } catch (err: any) {
+    console.error('AI refine-master-caption-format error:', err)
     res.status(500).json({ error: err.message || 'AI refine failed' })
   }
 })
@@ -592,7 +684,13 @@ async function generateCaptions(plan: {
   hashtags: string[]
   platform_notes: Record<string, string>
 }, opts: {
-  tone: string; length: string; language: string; count: number; platforms?: string[]
+  tone: string; length: string; language: string; count: number;
+  platforms?: string[]
+  /** The operator's 11-section master caption format from Compose. When
+   *  provided, the LLM must follow this structural blueprint for every
+   *  variant (each variant differs only in hook + section voice). When
+   *  null, falls back to the prior unstructured copywriter behaviour. */
+  caption_format?: string | null
 }): Promise<string[]> {
   const apiKey = OPENAI_KEY()
   if (!apiKey) return Array.from({ length: opts.count }, (_, i) => `${plan.enhanced} (variant ${i + 1})`)
@@ -616,18 +714,33 @@ async function generateCaptions(plan: {
     .map(([p, n]) => `  - ${p}: ${n}`)
     .join('\n') || '  (none — write generically.)'
 
+  const formatBlock = opts.caption_format
+    ? `Master caption format (every variant MUST follow this 11-section blueprint — keep section headings verbatim, fill each section with caption-specific copy):
+"""
+${opts.caption_format}
+"""
+
+`
+    : ''
+
   const system = `You are a senior copywriter at GritSync, writing for Filipino-trained nurses who want to become USRNs. The ground-truth facts below are the single source of company information — every line of copy you write must be consistent with them.
 
 ${GRITSYNC_KB}
 
-Voice rules:
+${formatBlock}Voice rules:
 - Lead with a SPECIFIC, scroll-stopping hook in the first 7-12 words. Concrete scene, not "Are you a nurse?".
 - One concrete detail per paragraph — a name, a scene, a number you can actually cite, a moment.
 - No clichés. No fake stats. No fabricated testimonials. No "the only way" / "guaranteed pass" claims.
-- ONE call-to-action per caption. No CTA stacking.
 - Match the requested tone, length, and language exactly.
-- If hashtags are listed in the plan, include 3-6 of them (or your own equally-relevant ones) only at the very end, on a separate line.
-- Emojis sparingly: at most 2 per caption, used to anchor meaning, never to decorate.
+- ${opts.caption_format
+    ? 'Follow the master caption format above for every variant. Keep ALL 11 section headings ("1. HOOK", "2. SELF-CHECK / AWARENESS QUESTIONS", etc.) and fill each section with copy that reflects this post\'s specific topic. Variants differ in the HOOK (section 1) and the voice of each section — the structure is identical across variants.'
+    : 'ONE call-to-action per caption. No CTA stacking.'}
+- ${opts.caption_format
+    ? 'CTAs live in section 9 of the master format — keep "www.gritsync.com/quote" verbatim and the four bullet CTAs intact.'
+    : 'If hashtags are listed in the plan, include 3-6 of them (or your own equally-relevant ones) only at the very end, on a separate line.'}
+- ${opts.caption_format
+    ? 'Hashtags live in section 11 of the master format — keep them verbatim, or swap for equally-relevant ones if and only if the topic genuinely warrants different tags.'
+    : 'Emojis sparingly: at most 2 per caption, used to anchor meaning, never to decorate.'}
 
 Output STRICT JSON only.`
 
@@ -688,6 +801,99 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
   // Pad if the model returned fewer than requested.
   while (captions.length < opts.count) captions.push(captions[captions.length - 1])
   return captions
+}
+
+// Caption-aware image-prompt derivation. The operator's master image
+// prompt is a GUIDE — this helper takes that guide + the just-generated
+// caption and asks the LLM to produce a fresh image prompt that respects
+// the brand feel of the guide but adapts the scene, subject blocking,
+// and emotional beat to match what the caption is saying. The agent is
+// free to restructure or enhance the master prompt; it isn't a strict
+// template.
+//
+// When the guide is empty (rare), the helper falls back to the brief's
+// `image_prompt_seed` so generation still proceeds.
+async function deriveImagePromptForCaption(args: {
+  caption: string
+  masterImageGuide: string
+  briefImageSeed: string
+}): Promise<string> {
+  const { caption, masterImageGuide, briefImageSeed } = args
+  const fallback = (masterImageGuide || briefImageSeed || '').trim()
+  if (!fallback) return ''
+  const apiKey = OPENAI_KEY()
+  if (!apiKey) return fallback
+
+  const system = `You are a senior creative director who turns social-media captions into DALL·E-3 image prompts for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The brand facts below are ground truth — every image you specify must be consistent with them.
+
+${GRITSYNC_KB}
+
+Your job:
+1. Read the operator's MASTER IMAGE GUIDE — it captures the brand feel (subject identity, color palette, composition language, mood). Treat this as inspiration, not a contract.
+2. Read the CAPTION the image must accompany. Extract the specific scene, emotional beat, and visual cues the copy implies.
+3. Produce ONE final DALL·E-3 image prompt that:
+   - Hews to the brand feel of the guide (Filipino healthcare subjects, premium ad aesthetic, deep-red / white / soft-black / gold palette).
+   - Pictures the caption's specific moment — not a generic brand shot.
+   - You may restructure, prune, or enhance the guide freely if the caption demands it. Reorder sections, add new visual ideas, drop dead phrases.
+   - ALWAYS includes the GritSync brand logo placement (white or red wordmark "GritSync" in a top corner, plus subtle "gritsync.com" footer or website text somewhere unobtrusive). The renderer will approximate the letterforms; specify the placement, the colour, and the size so the composition leaves room for it.
+   - Stays photorealistic + cinematic (DALL·E-3 thrives there).
+   - Includes a negative-prompt block at the end with anti-artifact terms (distorted hands, warped documents, AI text glitches, etc.).
+   - No fabricated claims, no named hospitals, no non-Filipino ethnicities, no US landmarks the brand hasn't endorsed.
+
+TEXT-CORRECTNESS RULES (critical — DALL·E-3 renders text badly when prompted carelessly):
+- LIMIT the number of distinct text strings in the image to AT MOST 3 (logo wordmark + one headline + one CTA / URL). More than that and DALL·E starts inventing letters.
+- Every text string you ask DALL·E to render MUST be wrapped in double quotes in the prompt, exact spelling, e.g. the text "GritSync" in white sans-serif top-right.
+- Keep each text string SHORT — under 6 words for headlines, under 4 for CTAs, single-token for the logo wordmark. Long sentences come out as gibberish.
+- Always include this instruction near the top of the prompt verbatim: "All visible text must be rendered exactly as quoted, with clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs."
+- Verify EVERY string you ask the renderer to draw is correctly spelled. Common brand strings: "GritSync" (one word, capital G + S), "gritsync.com" (all lowercase), "USRN", "NCLEX".
+- Where the master guide asks for a long headline/CTA that's likely to glitch, REPLACE the string with the shortest brand-accurate equivalent (e.g. "YOUR USRN DREAM STARTS HERE" → "USRN STARTS HERE" if needed for legibility).
+- Strengthen the negative-prompt section with: "misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage."
+
+Return STRICT JSON only.`
+
+  const user = `MASTER IMAGE GUIDE (inspiration — you may adapt):
+"""
+${masterImageGuide || briefImageSeed}
+"""
+
+CAPTION (the moment this image must visualise):
+"""
+${caption.slice(0, 1800)}
+"""
+
+Return ONLY this JSON object — no surrounding text, no markdown fence:
+{ "image_prompt": "<the full image prompt as a single string, multi-line with \\n where useful>" }`
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 1400,
+        temperature: 0.7,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+    })
+    const j: any = await r.json().catch(() => ({}))
+    if (!r.ok) return fallback
+    const text = j.choices?.[0]?.message?.content || ''
+    try {
+      const parsed = JSON.parse(text)
+      const derived = typeof parsed.image_prompt === 'string' ? parsed.image_prompt.trim() : ''
+      return derived || fallback
+    } catch {
+      // Non-JSON return — use raw text if it looks prompt-shaped.
+      const trimmed = String(text).trim()
+      return trimmed.length > 60 ? trimmed : fallback
+    }
+  } catch {
+    return fallback
+  }
 }
 
 // ─── Image generation (per-provider) ──────────────────────────────────────
@@ -844,9 +1050,30 @@ function sizeFor(model: OpenAIImageModel, aspect: string): string {
   return '1024x1024'
 }
 
+// Universal text-correctness preamble. DALL·E-3 reliably renders text
+// only when it's short, quoted exactly, and explicitly demanded by the
+// prompt. We prepend this block to every prompt so even the "fallback"
+// path (no per-caption LLM derivation) still gets the brand strings
+// rendered cleanly — and the negative-prompt section gets the standard
+// anti-artifact terms appended regardless of what the caller wrote.
+const IMAGE_TEXT_CORRECTNESS_PREAMBLE =
+  'CRITICAL TEXT-RENDERING REQUIREMENTS: All visible text in the image must be rendered exactly as written in this prompt — clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs, no garbled words. Brand strings to render exactly: "GritSync" (one word, capital G and S), "gritsync.com" (all lowercase). Keep every visible text string short (under 6 words for headlines, under 4 for CTAs) so the renderer can produce legible letterforms.\n\n'
+
+const IMAGE_NEGATIVE_TEXT_SUFFIX =
+  '\n\nReinforced negative prompt (text artifacts): misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage, jumbled letters, distorted hands, warped documents, AI text glitches.'
+
+function applyImageTextGuards(prompt: string): string {
+  return `${IMAGE_TEXT_CORRECTNESS_PREAMBLE}${prompt}${IMAGE_NEGATIVE_TEXT_SUFFIX}`
+}
+
 async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1'): Promise<string> {
   const apiKey = OPENAI_KEY()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
+
+  // Wrap every prompt with the universal text-correctness preamble +
+  // reinforced negative suffix so brand strings render cleanly even on
+  // the fallback path where no per-caption LLM derivation happened.
+  const guardedPrompt = applyImageTextGuards(prompt)
 
   // DALL·E-style pipeline: DALL·E-3 (hd + natural) is the primary —
   // photorealistic, cinematic, and respects the deep-red / white /
@@ -858,7 +1085,7 @@ async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1')
   const chain: OpenAIImageModel[] = ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini']
   let lastError = 'OpenAI image generation failed'
   for (const model of chain) {
-    const r = await tryOpenAIImage(apiKey, prompt, model, sizeFor(model, aspect_ratio))
+    const r = await tryOpenAIImage(apiKey, guardedPrompt, model, sizeFor(model, aspect_ratio))
     if (r.url) return r.url
     lastError = `${model}: ${r.error || 'unknown'}`
     if (!r.shouldFallback) break
@@ -954,6 +1181,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       preselected_idea = null,
       template_id = null,
       template_image_prompt = null,
+      caption_format = null,
       goal = '',
       audience_preset = '',
       platforms = [],
@@ -969,6 +1197,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     const cleanTopic = String(topic).trim()
     const cleanIdea = preselected_idea ? String(preselected_idea).trim() : ''
     const cleanTemplateImagePrompt = template_image_prompt ? String(template_image_prompt).trim() : ''
+    const cleanCaptionFormat = caption_format ? String(caption_format).trim() : ''
     const cleanPlatforms = Array.isArray(platforms)
       ? platforms.map((p: any) => String(p)).filter((p: string) => /^(facebook|instagram|linkedin|youtube|tiktok)$/.test(p))
       : []
@@ -992,15 +1221,29 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       platforms: cleanPlatforms,
     })
 
-    // Step 2: captions per the plan.
+    // Step 2: captions per the plan. The operator's master caption format
+    // (11-section blueprint) is threaded in so every variant follows the
+    // brand's structural template.
     const captions = await generateCaptions(brief, {
-      tone, length, language, count: n, platforms: cleanPlatforms,
+      tone, length, language, count: n,
+      platforms: cleanPlatforms,
+      caption_format: cleanCaptionFormat || null,
     })
 
-    // When a template was picked, its `image_prompt` defines the visual
-    // family — use it verbatim so every post in that template looks like
-    // part of the same brand. Otherwise fall back to the enhancer's seed.
-    const imagePrompt = cleanTemplateImagePrompt || brief.image_prompt_seed
+    // The operator's master image prompt is now a GUIDE, not a strict
+    // template. For each caption variant we ask the LLM to derive a
+    // fresh image prompt that respects the brand feel of the guide but
+    // pictures the specific moment that caption's copy implies. The
+    // helper falls back to the guide-as-is (or the enhancer's seed)
+    // when the LLM is unavailable, so generation never breaks.
+    const masterImageGuide = cleanTemplateImagePrompt || brief.image_prompt_seed
+    const derivedImagePrompts = await Promise.all(captions.map((caption) =>
+      deriveImagePromptForCaption({
+        caption,
+        masterImageGuide,
+        briefImageSeed: brief.image_prompt_seed,
+      })
+    ))
 
     // Step 3+4: per variant, generate media and persist.
     // For video: we always generate a starting frame with the chosen image AI
@@ -1027,7 +1270,8 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     // the slowest single call (~15-25s) which fits comfortably in the
     // bumped maxDuration. Each variant catches its own error and either
     // returns an 'available'/'pending_media' row or a 'media_failed' row.
-    const rows = await Promise.all(captions.map(async (caption) => {
+    const rows = await Promise.all(captions.map(async (caption, idx) => {
+      const imagePrompt = derivedImagePrompts[idx] || masterImageGuide
       try {
         if (ct === 'image') {
           const mediaUrl = await generateImage(provider, imagePrompt)

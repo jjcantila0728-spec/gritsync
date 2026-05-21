@@ -619,6 +619,156 @@ function writeMasterImagePrompt(value: string) {
   }
 }
 
+// ─── Master caption format ────────────────────────────────────────────
+// The structural blueprint every generated caption follows — 11 sections
+// (hook → self-check → reframe → solution → perks → vision → authority →
+// decision → CTA → sign-off → hashtags). Operator can edit + AI-refine
+// from Compose; saved overrides persist in localStorage and reach both
+// Compose's manual generate and the Manager's autonomous Generate Now.
+//
+// Paired with `length: 'long'` everywhere — the format only fits when
+// the model has enough headroom to cover all 11 sections.
+const MASTER_CAPTION_FORMAT_STORAGE_KEY = 'gritsync_socmed_master_caption_format'
+
+const DEFAULT_MASTER_CAPTION_FORMAT = `1. HOOK (THOUGHT-PROVOKING + QUESTIONS)
+
+Have you ever asked yourself bakit parang sobrang complicated ng USRN journey kahit alam mong kaya mo naman maging US Registered Nurse?
+
+Or baka ito ang real question:
+
+👉 Ano ba talaga ang humaharang sa'yo para simulan ang NCLEX journey mo ngayon?
+
+For many Filipino nurses, klaro ang dream—pero confusing ang process.
+
+2. SELF-CHECK / AWARENESS QUESTIONS
+
+Kung ikaw ay:
+
+- nagbabalak mag-NCLEX pero hindi alam saan magsisimula
+- nalilito sa requirements at steps
+- nag-aantay ng "right time"
+- o natatakot magkamali sa application process
+
+Tanungin mo sarili mo:
+
+👉 Alam ko ba talaga ang step-by-step NCLEX process?
+👉 Or nag-i-stuck lang ako kasi wala akong proper guidance?
+👉 Ilang months or years na ba akong nagre-research pero wala pa ring progress?
+
+Most of the time, hindi lack of ability ang issue—kundi lack of structure.
+
+3. PROBLEM REFRAME (INSIGHTFUL)
+
+What if hindi ikaw ang problema?
+
+What if ang real issue ay ginagawa mong mag-isa ang isang process na dapat guided?
+
+NCLEX application can feel overwhelming kapag walang system.
+
+So the real question is:
+
+👉 Gusto mo bang magpatuloy mag-isa?
+👉 Or gusto mo ng guided, step-by-step NCLEX processing support?
+
+4. GRITSYNC SOLUTION (NCLEX PROCESSING ONLY)
+
+At GritSync NCLEX Processing Agency, we help Filipino nurses magkaroon ng clear at structured pathway papuntang USRN via NCLEX.
+
+Hindi ka namin hinahayaan manghula kung ano ang next step.
+
+We guide you step-by-step sa:
+
+- NCLEX application processing
+- Document preparation and submission guidance
+- Eligibility and requirement checking
+- ATT tracking and assistance
+- End-to-end NCLEX journey support
+
+So instead na stress at confusion, clarity at direction ang meron ka.
+
+5. GRITSYNC PERKS (ADDED VALUE SECTION)
+
+When you start your journey with GritSync, you also get exclusive support perks:
+
+✨ Free Business Email Setup (for professional use abroad preparation)
+✨ Application Guidance System (step-by-step tracking support)
+✨ Priority Processing Assistance (faster coordination & updates)
+✨ Personalized NCLEX Roadmap (based on your profile and stage)
+
+Plus:
+
+👉 Get your official quote here:
+🌐 www.gritsync.com/quote
+
+6. FUTURE VISION (EMOTIONAL + QUESTIONS)
+
+Try to imagine this:
+
+Nasa US ka na, working as a Registered Nurse.
+
+👉 How different would your life feel?
+👉 Paano mababago ang buhay ng family mo?
+👉 Gaano ka kalaki yung peace of mind kapag stable ka na?
+👉 At ano kaya ang mangyayari kung nagsimula ka na ngayon instead of later?
+
+Sometimes, the only difference between "someday" and "now" is action.
+
+7. AUTHORITY + TRUST MESSAGE
+
+GritSync is built to make your NCLEX journey clear, structured, and less stressful.
+
+We don't overcomplicate things—we organize the process so you can focus on your goal.
+
+Because the real risk is not starting late—
+
+It is starting without guidance.
+
+8. DECISION QUESTIONS (CONVERSION TRIGGER)
+
+So ngayon, tanungin mo sarili mo:
+
+👉 Ready ka na ba mag-start ng NCLEX journey mo?
+👉 Or magpapatuloy ka pa rin sa pagkalito at waiting game?
+👉 Ano pa bang kailangan mo bago ka mag-decide mag-move forward?
+
+9. CALL TO ACTION (CLEAR + DIRECT)
+
+If ready ka na, we are here to guide you.
+
+👉 Get your FREE assessment today
+👉 Start your NCLEX processing with expert support
+👉 Request your quote here: www.gritsync.com/quote
+👉 Message us now to begin your USRN journey
+
+10. BRAND SIGN-OFF
+
+GritSync NCLEX Processing Agency
+🌐 gritsync.com
+
+11. HASHTAGS
+
+#USRN #NCLEX #FilipinoNurses #NursingCareer #USRNJourney #NurseLife #HealthcareCareers #NCLEXJourney #GritSync #NursesToUSA`
+
+function readMasterCaptionFormat(): string {
+  try {
+    const stored = localStorage.getItem(MASTER_CAPTION_FORMAT_STORAGE_KEY)
+    return (stored && stored.trim().length > 0) ? stored : DEFAULT_MASTER_CAPTION_FORMAT
+  } catch {
+    return DEFAULT_MASTER_CAPTION_FORMAT
+  }
+}
+function writeMasterCaptionFormat(value: string) {
+  try {
+    if (value.trim() === DEFAULT_MASTER_CAPTION_FORMAT.trim()) {
+      localStorage.removeItem(MASTER_CAPTION_FORMAT_STORAGE_KEY)
+    } else {
+      localStorage.setItem(MASTER_CAPTION_FORMAT_STORAGE_KEY, value)
+    }
+  } catch {
+    // Same private-browsing fallback as the image-prompt helper.
+  }
+}
+
 
 const TEMPLATE_CATEGORY_LABEL: Record<TemplateCategory, string> = {
   success: 'Success story',
@@ -2048,11 +2198,14 @@ function ManagerView({
           preselected_idea: plan.topic.brief,
           template_id: null,
           template_image_prompt: readMasterImagePrompt(),
+          caption_format: readMasterCaptionFormat(),
           goal: CAMPAIGN_GOALS.find((g) => g.id === plan.goal)?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === plan.audience)?.brief || '',
           platforms: [],
           tone: plan.tone,
-          length: plan.length,
+          // Captions follow the 11-section master format — only fits in
+          // a long budget. Always long regardless of agent plan defaults.
+          length: 'long',
           language: plan.language,
           count: 1,
           content_type: 'image',
@@ -2086,15 +2239,18 @@ function ManagerView({
           preselected_idea: seed.brief,
           template_id: null,
           // Manager auto-generate uses whatever the operator has saved as
-          // the master image prompt — the same value Compose sends. This
-          // is how the agent stays "continuously learning": refinements
-          // saved in Compose immediately apply to the next auto-batch.
+          // the master image prompt + master caption format — the same
+          // values Compose sends. Refinements saved in Compose
+          // immediately apply to the next auto-batch (continuous
+          // learning).
           template_image_prompt: readMasterImagePrompt(),
+          caption_format: readMasterCaptionFormat(),
           goal: CAMPAIGN_GOALS.find((g) => g.id === 'build_trust')?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === 'ph_considering')?.brief || '',
           platforms: [],
           tone: 'friendly',
-          length: 'medium',
+          // 11-section captions only fit in a long budget.
+          length: 'long',
           language: 'taglish',
           count: postsPerDay,
           content_type: 'image',
@@ -2911,12 +3067,27 @@ function GeneratorView({
   const [masterPromptOpen, setMasterPromptOpen] = useState(false)
   const [masterPromptDraft, setMasterPromptDraft] = useState<string>('')
   const [masterPromptRefining, setMasterPromptRefining] = useState(false)
+  // Master caption format — 11-section structural template every caption
+  // follows. Parallel to the image-prompt editor: read/write helpers
+  // persist overrides in localStorage; refinements via AI come back into
+  // a draft for review.
+  const [masterCaptionFormat, setMasterCaptionFormat] = useState<string>(() => readMasterCaptionFormat())
+  const [captionEditorOpen, setCaptionEditorOpen] = useState(false)
+  const [captionDraft, setCaptionDraft] = useState<string>('')
+  const [captionRefining, setCaptionRefining] = useState(false)
   const [goal, setGoal] = useState<CampaignGoal>('build_trust')
   const [audiencePreset, setAudiencePreset] = useState<AudiencePreset>('ph_considering')
   const [tone, setTone] = useState('friendly')
-  const [length, setLength] = useState<'short' | 'medium' | 'long'>('medium')
+  // Length is FORCED to 'long' so every generated caption can fully cover
+  // the 11 sections in the master caption format. Kept as state for
+  // payload consistency but no UI picker — the format itself sets the
+  // expected length.
+  const [length] = useState<'short' | 'medium' | 'long'>('long')
   const [language, setLanguage] = useState<'taglish' | 'english' | 'filipino'>('taglish')
-  const [resultCount, setResultCount] = useState(3)
+  // Long captions are expensive to generate (and pricey on OpenAI), so
+  // the range is now 1–3 with a default of 1. Operators can still bump
+  // to 3 for A/B comparison.
+  const [resultCount, setResultCount] = useState(1)
   const [contentType, setContentType] = useState<'image' | 'video'>('image')
   const [imageAi, setImageAi] = useState<'openai' | 'nano-banana' | 'grok'>('openai')
   const [additionalDetails, setAdditionalDetails] = useState('')
@@ -2960,6 +3131,56 @@ function GeneratorView({
   function resetMasterPromptToDefault() {
     setMasterPromptDraft(DEFAULT_MASTER_IMAGE_PROMPT)
   }
+  // ── Master caption format editor handlers ─────────────────────────
+  function openCaptionEditor() {
+    setCaptionDraft(masterCaptionFormat)
+    setCaptionEditorOpen(true)
+  }
+  function saveCaptionFormat() {
+    const value = captionDraft.trim()
+    if (!value) {
+      showToast('Master caption format cannot be empty', 'error')
+      return
+    }
+    setMasterCaptionFormat(value)
+    writeMasterCaptionFormat(value)
+    setCaptionEditorOpen(false)
+    showToast(value === DEFAULT_MASTER_CAPTION_FORMAT.trim()
+      ? 'Reset to brand default — future captions will follow it'
+      : 'Master caption format saved — future captions will follow it', 'success')
+  }
+  function resetCaptionFormat() {
+    setCaptionDraft(DEFAULT_MASTER_CAPTION_FORMAT)
+  }
+  async function refineCaptionFormat() {
+    setCaptionRefining(true)
+    try {
+      const r = await api<{ refined_format: string; reasoning?: string }>(
+        '/ai/refine-master-caption-format',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            current_format: captionDraft || masterCaptionFormat,
+            topic: topic.trim() || null,
+            goal_brief: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || null,
+          }),
+        }
+      )
+      if (r.refined_format && r.refined_format.trim()) {
+        setCaptionDraft(r.refined_format.trim())
+        showToast(r.reasoning
+          ? `Refined — ${r.reasoning.slice(0, 90)}${r.reasoning.length > 90 ? '…' : ''}`
+          : 'Master caption format refined — review and Save when ready', 'success')
+      } else {
+        throw new Error('No refined format returned')
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Refine failed', 'error')
+    } finally {
+      setCaptionRefining(false)
+    }
+  }
+
   async function refineMasterPromptWithAI() {
     setMasterPromptRefining(true)
     try {
@@ -3021,6 +3242,10 @@ function GeneratorView({
           // this from the editor below; whatever's saved in localStorage
           // is what ships to the backend.
           template_image_prompt: masterImagePrompt,
+          // Parallel for captions: the 11-section master format is what
+          // the LLM hews to when writing every variant. Length is forced
+          // to 'long' so the model has room to cover all sections.
+          caption_format: masterCaptionFormat,
           goal: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === audiencePreset)?.brief || '',
           // Platforms are no longer chosen here — the operator picks accounts
@@ -3200,7 +3425,11 @@ function GeneratorView({
             3. Format
             <span className="text-gray-400 font-normal"> — how it sounds (accounts get picked at Schedule)</span>
           </label>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Length picker removed — every caption follows the 11-section
+              master caption format, which only fits in a "long" budget.
+              Operators tune structure via the format editor below, not
+              via a length toggle. */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tone</label>
               <select
@@ -3216,18 +3445,6 @@ function GeneratorView({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Length</label>
-              <select
-                value={length}
-                onChange={(e) => setLength(e.target.value as 'short' | 'medium' | 'long')}
-                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
-              >
-                <option value="short">Short (&lt;100 chars)</option>
-                <option value="medium">Medium (~150 chars)</option>
-                <option value="long">Long (300+ chars)</option>
-              </select>
-            </div>
-            <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Language</label>
               <select
                 value={language}
@@ -3240,17 +3457,89 @@ function GeneratorView({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Results</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                Results <span className="opacity-60">(long captions are pricey — keep small)</span>
+              </label>
               <select
                 value={resultCount}
                 onChange={(e) => setResultCount(Number(e.target.value))}
                 className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
               >
-                {[1, 2, 3, 4, 5, 6].map((n) => (
+                {[1, 2, 3].map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Master caption format — 11-section structural template every
+              caption follows. Parallel to the Master image prompt editor
+              under section 4: edit + AI-refine, persists in localStorage. */}
+          <div className="rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/15 p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <PencilLine className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Master caption format</h3>
+                  {masterCaptionFormat !== DEFAULT_MASTER_CAPTION_FORMAT && (
+                    <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                      Customised
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+                  11-section blueprint every generated caption follows — hook → self-check → reframe → solution →
+                  perks → vision → authority → decision → CTA → sign-off → hashtags. Refinements persist on your
+                  device and feed both Compose and the Manager's Generate Now.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={openCaptionEditor}>
+                <PencilLine className="h-3.5 w-3.5 mr-1" /> Edit format
+              </Button>
+            </div>
+            <div className="mt-3 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 max-h-32 overflow-y-auto">
+              <p className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-snug line-clamp-6">
+                {masterCaptionFormat}
+              </p>
+            </div>
+            {captionEditorOpen && (
+              <div className="mt-4 space-y-3 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Editing master caption format
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
+                    <span><strong className="text-gray-700 dark:text-gray-200">{captionDraft.length.toLocaleString()}</strong> chars</span>
+                    <span><strong className="text-gray-700 dark:text-gray-200">{captionDraft.trim() ? captionDraft.trim().split(/\s+/).length.toLocaleString() : 0}</strong> words</span>
+                    <span><strong className="text-gray-700 dark:text-gray-200">{(captionDraft.match(/^\d+\.\s/gm) || []).length}</strong>/11 sections</span>
+                  </div>
+                </div>
+                <Textarea
+                  rows={18}
+                  value={captionDraft}
+                  onChange={(e) => setCaptionDraft(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setCaptionEditorOpen(false)} disabled={captionRefining}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={resetCaptionFormat} disabled={captionRefining}>
+                    Reset to brand default
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={refineCaptionFormat} loading={captionRefining} disabled={captionRefining}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1" /> Refine with AI
+                  </Button>
+                  <Button size="sm" onClick={saveCaptionFormat} disabled={captionRefining || !captionDraft.trim()}>
+                    Save
+                  </Button>
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                  Refine with AI sends the current draft + your active topic/goal to <span className="font-mono">/ai/refine-master-caption-format</span>.
+                  The model returns a tighter version of the same 11-section blueprint; review then click Save.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
