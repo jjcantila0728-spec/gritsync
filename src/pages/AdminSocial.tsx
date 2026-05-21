@@ -36,10 +36,12 @@ import {
   Eye,
   Copy,
   Download,
+  AtSign,
+  Zap,
 } from 'lucide-react'
 import { AdsGenerator, type AdVariant } from './AdminAds'
 
-type Platform = 'facebook' | 'instagram' | 'linkedin' | 'youtube' | 'tiktok'
+type Platform = 'facebook' | 'instagram' | 'threads' | 'linkedin' | 'youtube' | 'tiktok'
 
 interface SocialAccount {
   id: string
@@ -92,6 +94,10 @@ interface ScheduleModalState {
   media_urls: string[]
   bank_id: string | null
   editing_post: SocialPost | null
+  // When true the modal hides the schedule date picker and shows a
+  // single "Publish to selected accounts" CTA — the one-click "Post
+  // Now" path triggered from Content Bank cards.
+  quick_post?: boolean
 }
 
 // Post templates — branded around GritSync's core mission of helping
@@ -385,12 +391,13 @@ const TEMPLATE_CATEGORY_LABEL: Record<TemplateCategory, string> = {
 const PLATFORM_META: Record<Platform, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
   facebook: { label: 'Facebook', color: 'bg-blue-600', icon: Facebook },
   instagram: { label: 'Instagram', color: 'bg-pink-600', icon: Instagram },
+  threads: { label: 'Threads', color: 'bg-gray-900', icon: AtSign },
   linkedin: { label: 'LinkedIn', color: 'bg-sky-700', icon: Linkedin },
   youtube: { label: 'YouTube', color: 'bg-red-600', icon: Youtube },
   tiktok: { label: 'TikTok', color: 'bg-black', icon: Music2 },
 }
 
-const ALL_PLATFORMS: Platform[] = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok']
+const ALL_PLATFORMS: Platform[] = ['facebook', 'instagram', 'threads', 'linkedin', 'youtube', 'tiktok']
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('gritsync_token')
@@ -745,6 +752,13 @@ export function AdminSocial() {
                 media_urls: item.media_url ? [item.media_url] : [],
                 bank_id: item.id,
                 editing_post: null,
+              })}
+              onPostNow={(item) => setScheduleModal({
+                caption: item.caption,
+                media_urls: item.media_url ? [item.media_url] : [],
+                bank_id: item.id,
+                editing_post: null,
+                quick_post: true,
               })}
               onUseInAd={(item) => {
                 // Hand the bank item off to the Ads tab via query params —
@@ -1180,6 +1194,18 @@ const MANUAL_INSTRUCTIONS: Record<Platform, {
       { text: 'Paste the IG Business User ID below as the platform ID and the Page Access Token as Access token.' },
     ],
     fields: { id: 'Instagram Business User ID', token: 'Page Access Token (long-lived)' },
+  },
+  threads: {
+    intro: 'Threads publishing uses the Threads API (separate Meta app from Facebook/Instagram, but same dashboard). You need the user-level long-lived token (60-day TTL, refreshable).',
+    steps: [
+      { text: 'In Meta Developers, open your Threads app (or create one with the "Access the Threads API" use case).', href: 'https://developers.facebook.com/apps/', hrefLabel: 'Meta Developers' },
+      { text: 'Under Use cases → Threads → Settings, add this redirect URI: https://app.gritsync.com/api/social/oauth/threads/callback' },
+      { text: 'Click the user-token tester button next to your app to mint a short-lived token with scopes threads_basic + threads_content_publish.' },
+      { text: 'Call GET https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=<SECRET>&access_token=<SHORT> to upgrade to a 60-day long-lived token.' },
+      { text: 'Call GET https://graph.threads.net/v1.0/me?fields=id,username,name with the long-lived token — copy the numeric `id`.' },
+      { text: 'Paste the `id` as Threads User ID and the long-lived access_token below.' },
+    ],
+    fields: { id: 'Threads User ID (numeric)', token: 'Long-lived access token' },
   },
   linkedin: {
     intro: 'LinkedIn posts use the UGC API on behalf of a member. You need an OAuth app with the w_member_social scope and a member access token.',
@@ -2086,6 +2112,7 @@ function ContentBankView({
   onRefreshItem,
   onDelete,
   onSchedule,
+  onPostNow,
   onUseInAd,
   hasAccounts,
 }: {
@@ -2095,6 +2122,7 @@ function ContentBankView({
   onRefreshItem: (id: string) => void
   onDelete: (id: string) => void
   onSchedule: (item: BankItem) => void
+  onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
   hasAccounts: boolean
 }) {
@@ -2185,9 +2213,18 @@ function ContentBankView({
                 )}
                 <Button
                   size="sm"
+                  onClick={() => onPostNow(item)}
+                  disabled={!hasAccounts || item.status === 'pending_media'}
+                  title={!hasAccounts ? 'Connect a social account first' : item.status === 'pending_media' ? 'Wait for video to finish' : 'Publish immediately to selected accounts'}
+                >
+                  <Zap className="h-3.5 w-3.5 mr-1" /> Post Now
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => onSchedule(item)}
                   disabled={!hasAccounts || item.status === 'pending_media'}
-                  title={!hasAccounts ? 'Connect a social account first' : item.status === 'pending_media' ? 'Wait for video to finish' : 'Schedule this'}
+                  title={!hasAccounts ? 'Connect a social account first' : 'Schedule for later'}
                 >
                   <Clock className="h-3.5 w-3.5 mr-1" /> Schedule
                 </Button>
@@ -2218,6 +2255,7 @@ function ContentBankView({
         item={viewItem}
         onClose={() => setViewItem(null)}
         onSchedule={(it) => { setViewItem(null); onSchedule(it) }}
+        onPostNow={(it) => { setViewItem(null); onPostNow(it) }}
         onUseInAd={(it) => { setViewItem(null); onUseInAd(it) }}
         hasAccounts={hasAccounts}
       />
@@ -2233,12 +2271,14 @@ function BankItemModal({
   item,
   onClose,
   onSchedule,
+  onPostNow,
   onUseInAd,
   hasAccounts,
 }: {
   item: BankItem | null
   onClose: () => void
   onSchedule: (item: BankItem) => void
+  onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
   hasAccounts: boolean
 }) {
@@ -2352,9 +2392,18 @@ function BankItemModal({
           <div className="flex flex-wrap gap-2 mt-auto pt-3 border-t border-gray-100 dark:border-gray-800">
             <Button
               size="sm"
+              onClick={() => onPostNow(item)}
+              disabled={!hasAccounts || item.status === 'pending_media' || !item.media_url}
+              title={!hasAccounts ? 'Connect a social account first' : 'Publish immediately'}
+            >
+              <Zap className="h-3.5 w-3.5 mr-1" /> Post Now
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => onSchedule(item)}
               disabled={!hasAccounts || item.status === 'pending_media' || !item.media_url}
-              title={!hasAccounts ? 'Connect a social account first' : 'Schedule this'}
+              title={!hasAccounts ? 'Connect a social account first' : 'Schedule for later'}
             >
               <Clock className="h-3.5 w-3.5 mr-1" /> Schedule
             </Button>
@@ -2456,7 +2505,12 @@ function ScheduleModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={editingId ? 'Edit post' : 'Schedule post'} size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingId ? 'Edit post' : state?.quick_post ? 'Post now' : 'Schedule post'}
+      size="lg"
+    >
       <div className="space-y-4">
         <Textarea
           label="Caption"
@@ -2523,23 +2577,30 @@ function ScheduleModal({
             </div>
           )}
         </div>
-        <Input
-          label="Schedule for (optional)"
-          type="datetime-local"
-          value={when}
-          onChange={(e) => setWhen(e.target.value)}
-          help="Leave blank to post immediately."
-        />
+        {/* In quick-post mode (triggered by the bank's "Post Now" button) we
+            hide the datetime picker + draft option so the operator just picks
+            accounts and hits Publish. */}
+        {!state?.quick_post && (
+          <Input
+            label="Schedule for (optional)"
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            help="Leave blank to post immediately."
+          />
+        )}
         <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
           <Button variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button>
-          <Button variant="outline" onClick={() => submit('draft')} disabled={submitting}>Save draft</Button>
-          {when ? (
+          {!state?.quick_post && (
+            <Button variant="outline" onClick={() => submit('draft')} disabled={submitting}>Save draft</Button>
+          )}
+          {when && !state?.quick_post ? (
             <Button onClick={() => submit('schedule')} loading={submitting}>
               <Clock className="h-4 w-4 mr-1" /> Schedule
             </Button>
           ) : (
             <Button onClick={() => submit('now')} loading={submitting}>
-              <Send className="h-4 w-4 mr-1" /> Post now
+              <Zap className="h-4 w-4 mr-1" /> Publish now
             </Button>
           )}
         </div>

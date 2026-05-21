@@ -15,7 +15,7 @@ const router = Router()
 // while OAuth apps are still being reviewed).
 // ---------------------------------------------------------------------------
 
-const PLATFORMS = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'] as const
+const PLATFORMS = ['facebook', 'instagram', 'threads', 'linkedin', 'youtube', 'tiktok'] as const
 type Platform = (typeof PLATFORMS)[number]
 
 const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')
@@ -66,6 +66,17 @@ const PLATFORM_CONFIG: Record<Platform, {
     scopes: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
     envIdKey: 'FACEBOOK_APP_ID',
     envSecretKey: 'FACEBOOK_APP_SECRET',
+  },
+  threads: {
+    // Threads is a separate Meta app from the Facebook/Instagram one — it
+    // has its own App ID / Secret and its own OAuth host (threads.net, not
+    // facebook.com). Long-lived tokens are 60 days and refreshable via
+    // /access_token?grant_type=th_refresh_token, same shape as IG Basic.
+    authUrl: 'https://threads.net/oauth/authorize',
+    tokenUrl: 'https://graph.threads.net/oauth/access_token',
+    scopes: 'threads_basic,threads_content_publish,threads_manage_insights,threads_manage_replies,threads_read_replies',
+    envIdKey: 'THREADS_APP_ID',
+    envSecretKey: 'THREADS_APP_SECRET',
   },
   linkedin: {
     authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
@@ -244,6 +255,16 @@ router.get('/oauth/:platform/callback', async (req, res) => {
         userId,
         shortLivedUserToken: accessToken,
         clientId,
+        clientSecret,
+        scopesCsv: cfg.scopes,
+      })
+    } else if (platform === 'threads') {
+      // Threads also gets a long-lived exchange. We exchange the 1-hour
+      // short token for a 60-day token, then fetch the user's profile so
+      // the UI has a username to display.
+      await handleThreadsConnect({
+        userId,
+        shortLivedUserToken: accessToken,
         clientSecret,
         scopesCsv: cfg.scopes,
       })
@@ -714,6 +735,128 @@ async function fbExchangeLongLived(
 }
 
 // ---------------------------------------------------------------------------
+// Threads connection — long-lived exchange + profile fetch.
+//
+// Differences from Facebook:
+//   - Different host (graph.threads.net, not graph.facebook.com).
+//   - Long-lived exchange uses grant_type=th_exchange_token (not
+//     fb_exchange_token) and requires client_secret AS A QUERY PARAM
+//     (not the short-lived token's app secret) per the Threads API spec.
+//   - There's no "Pages" layer — each connection is one Threads user.
+//   - Refresh works the same: GET /refresh_access_token?grant_type=th_refresh_token.
+// ---------------------------------------------------------------------------
+async function handleThreadsConnect(args: {
+  userId: string
+  shortLivedUserToken: string
+  clientSecret: string
+  scopesCsv: string
+}): Promise<void> {
+  const { userId, shortLivedUserToken, clientSecret, scopesCsv } = args
+
+  // 1. Short → long-lived exchange (60-day token).
+  const exchangeParams = new URLSearchParams({
+    grant_type: 'th_exchange_token',
+    client_secret: clientSecret,
+    access_token: shortLivedUserToken,
+  })
+  const exchangeRes = await fetch(`https://graph.threads.net/access_token?${exchangeParams.toString()}`)
+  const exchangeJson: any = await exchangeRes.json()
+  if (!exchangeRes.ok || !exchangeJson.access_token) {
+    throw new Error(exchangeJson.error?.message || exchangeJson.error_description || 'Threads long-lived token exchange failed')
+  }
+  const longLivedToken: string = exchangeJson.access_token
+  const longTokenExpiresAt = exchangeJson.expires_in
+    ? new Date(Date.now() + Number(exchangeJson.expires_in) * 1000)
+    : null
+
+  // 2. Fetch the user's profile so the UI has a username/avatar to show.
+  const meRes = await fetch(
+    `https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url&access_token=${encodeURIComponent(longLivedToken)}`
+  )
+  const me: any = await meRes.json()
+  if (!meRes.ok || !me.id) {
+    throw new Error(me.error?.message || 'Failed to fetch Threads profile')
+  }
+
+  await query(
+    `INSERT INTO social_accounts
+       (platform, display_name, platform_user_id, access_token, refresh_token,
+        token_expires_at, profile_url, avatar_url, scopes, metadata,
+        status, connected_by_user_id, connected_at)
+     VALUES ('threads', $1, $2, $3, NULL, $4, $5, $6, $7, $8::jsonb, 'connected', $9, NOW())
+     ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           access_token = EXCLUDED.access_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           profile_url = EXCLUDED.profile_url,
+           avatar_url = EXCLUDED.avatar_url,
+           scopes = EXCLUDED.scopes,
+           metadata = EXCLUDED.metadata,
+           status = 'connected',
+           last_error = NULL,
+           updated_at = NOW(),
+           connected_at = NOW()`,
+    [
+      me.username ? `@${me.username}` : (me.name || `Threads ${me.id}`),
+      me.id,
+      longLivedToken,
+      longTokenExpiresAt,
+      me.username ? `https://www.threads.net/@${me.username}` : null,
+      me.threads_profile_picture_url || null,
+      scopesCsv,
+      JSON.stringify({
+        kind: 'threads_user',
+        threads_user_id: me.id,
+        threads_username: me.username,
+        threads_name: me.name,
+        long_lived_token_expires_at: longTokenExpiresAt,
+      }),
+      userId,
+    ]
+  )
+}
+
+// POST /api/social/threads/refresh-token
+// 60-day long-lived tokens can be refreshed before expiry via a single
+// GET — same pattern as the Meta refresh flow.
+router.post('/threads/refresh-token', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT id, access_token, metadata FROM social_accounts
+       WHERE platform = 'threads'
+       ORDER BY connected_at DESC LIMIT 1`
+    )
+    if (r.rows.length === 0) return res.status(404).json({ error: 'No Threads connection to refresh' })
+
+    const cur = r.rows[0]
+    const refreshParams = new URLSearchParams({
+      grant_type: 'th_refresh_token',
+      access_token: cur.access_token,
+    })
+    const refreshRes = await fetch(`https://graph.threads.net/refresh_access_token?${refreshParams.toString()}`)
+    const refreshJson: any = await refreshRes.json()
+    if (!refreshRes.ok || !refreshJson.access_token) {
+      throw new Error(refreshJson.error?.message || refreshJson.error_description || 'Threads refresh failed')
+    }
+    const expiresAt = refreshJson.expires_in
+      ? new Date(Date.now() + Number(refreshJson.expires_in) * 1000)
+      : null
+    await query(
+      `UPDATE social_accounts
+         SET access_token = $1,
+             token_expires_at = $2,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
+             updated_at = NOW()
+       WHERE id = $4`,
+      [refreshJson.access_token, expiresAt, JSON.stringify({ long_lived_token_expires_at: expiresAt }), cur.id]
+    )
+    res.json({ data: { refreshed: true, expires_at: expiresAt } })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // GET /api/social/facebook/connection-status
 // Returns the unified Meta connection state — connected FB user, expiry of
 // the long-lived user token, list of Pages (each carrying a non-expiring
@@ -1139,6 +1282,55 @@ async function publishToPlatform(
       const j: any = await r.json().catch(() => ({}))
       if (!r.ok || j.error?.code) return { ok: false, error: j.error?.message || `TikTok HTTP ${r.status}` }
       return { ok: true, remote_id: j.data?.publish_id }
+    }
+    if (platform === 'threads') {
+      // Threads publishing is a 2-step container flow, same shape as IG
+      // Graph: POST /me/threads (creates the media container) returns an
+      // id we then POST to /me/threads_publish to actually post.
+      const igUserId = account.platform_user_id
+      const firstMedia = mediaUrls[0] || null
+      const isVideo = firstMedia && /\.(mp4|mov|webm)(\?|$)/i.test(firstMedia)
+      const containerParams = new URLSearchParams({ access_token: token })
+      containerParams.set('media_type', firstMedia ? (isVideo ? 'VIDEO' : 'IMAGE') : 'TEXT')
+      // Threads caps text at 500 chars — truncate so we don't 400.
+      if (content) containerParams.set('text', content.slice(0, 500))
+      if (firstMedia) {
+        containerParams.set(isVideo ? 'video_url' : 'image_url', firstMedia)
+      }
+      const containerRes = await fetch(`https://graph.threads.net/v1.0/${igUserId}/threads`, {
+        method: 'POST',
+        body: containerParams,
+      })
+      const containerJson: any = await containerRes.json().catch(() => ({}))
+      if (!containerRes.ok || !containerJson.id) {
+        return { ok: false, error: containerJson.error?.message || `Threads container failed (HTTP ${containerRes.status})` }
+      }
+
+      // Video containers need ~30s to finish processing before publish.
+      // The /<container>?fields=status_code poll returns FINISHED when ready.
+      if (isVideo) {
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          const statusRes = await fetch(
+            `https://graph.threads.net/v1.0/${containerJson.id}?fields=status_code&access_token=${encodeURIComponent(token)}`
+          )
+          const statusJson: any = await statusRes.json().catch(() => ({}))
+          if (statusJson.status_code === 'FINISHED') break
+          if (statusJson.status_code === 'ERROR') {
+            return { ok: false, error: 'Threads video processing failed' }
+          }
+        }
+      }
+
+      const publishRes = await fetch(`https://graph.threads.net/v1.0/${igUserId}/threads_publish`, {
+        method: 'POST',
+        body: new URLSearchParams({ creation_id: containerJson.id, access_token: token }),
+      })
+      const publishJson: any = await publishRes.json().catch(() => ({}))
+      if (!publishRes.ok || publishJson.error) {
+        return { ok: false, error: publishJson.error?.message || 'Threads publish failed' }
+      }
+      return { ok: true, remote_id: publishJson.id }
     }
     return { ok: false, error: 'Unsupported platform' }
   } catch (err: any) {
