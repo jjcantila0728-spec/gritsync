@@ -1,3 +1,5 @@
+import axios from 'axios'
+import * as FileSystem from 'expo-file-system/legacy'
 import { api, API_BASE_URL } from './api'
 import { storage, StorageKeys } from './storage'
 
@@ -250,29 +252,71 @@ async function doMultipartUpload(
   endpoint: string,
   opts: { uri: string; name: string; mimeType?: string | null; path: string },
 ): Promise<any> {
-  const form = new FormData()
-  // React Native FormData accepts { uri, name, type } objects directly and
-  // translates them to a multipart part on the network.
-  form.append('file', {
-    uri: opts.uri,
-    name: opts.name,
-    type: opts.mimeType || 'application/octet-stream',
-  } as unknown as Blob)
-  form.append('path', opts.path)
+  // Why FileSystem.uploadAsync instead of `fetch` + FormData?
+  //
+  // On RN 0.81 / Expo SDK 54 (especially with the New Architecture), the
+  // classic `FormData.append('file', { uri, name, type })` pattern is
+  // unreliable: the upload silently sends 0 bytes or never reaches the
+  // server. `expo-file-system`'s native uploader streams the file directly
+  // from disk, builds the multipart body in native code, and returns a real
+  // status code we can branch on — which the JS bridge mangled before.
+  const url = `${API_BASE_URL}${endpoint}`
 
-  const token = await storage.get(StorageKeys.accessToken)
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: 'POST',
-    body: form,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `Upload failed (${res.status})`)
+  const send = async (token: string | null) =>
+    FileSystem.uploadAsync(url, opts.uri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType: opts.mimeType || 'application/octet-stream',
+      parameters: { path: opts.path },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+
+  let token = await storage.get(StorageKeys.accessToken)
+  let res = await send(token)
+
+  // Mirror axios's 401 → refresh → retry behavior. Without this, a quietly
+  // expired access token kills every upload until the next axios call
+  // happens to refresh it.
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken()
+    if (refreshed) {
+      token = refreshed
+      res = await send(token)
+    }
   }
-  return await res.json()
+
+  if (res.status < 200 || res.status >= 300) {
+    // Surface the server's actual error message so docs.tsx's Alert is useful
+    // instead of a generic "Upload failed". Truncate to keep the dialog usable.
+    const body = (res.body || '').trim()
+    const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body
+    throw new Error(snippet || `Upload failed (${res.status})`)
+  }
+
+  try {
+    return JSON.parse(res.body)
+  } catch {
+    throw new Error('Upload succeeded but server returned an invalid response')
+  }
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refresh = await storage.get(StorageKeys.refreshToken)
+  if (!refresh) return null
+  try {
+    const r = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+      refresh_token: refresh,
+    })
+    const next = r.data?.session?.access_token ?? r.data?.access_token
+    if (typeof next === 'string') {
+      await storage.set(StorageKeys.accessToken, next)
+      return next
+    }
+  } catch {
+    // fall through
+  }
+  return null
 }
 
 // ---------------------------------------------------------------------------

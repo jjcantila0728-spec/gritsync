@@ -71,6 +71,7 @@ export default function DocsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [uploadingType, setUploadingType] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!user?.id) return
@@ -88,8 +89,9 @@ export default function DocsScreen() {
       ])
       setRequired(req)
       setDocs(mine)
-    } catch {
-      // ignore — empty state will handle
+      setLoadError(null)
+    } catch (e: any) {
+      setLoadError(errorMessage(e, "Couldn't load your documents"))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -187,6 +189,35 @@ export default function DocsScreen() {
             Upload your three required documents below. Take a photo or pick from your files.
           </Text>
         </View>
+
+        {loadError ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              padding: spacing.md,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              backgroundColor: palette.brand.red50,
+              borderColor: palette.brand.red200,
+            }}
+          >
+            <Ionicons name="alert-circle" size={18} color={palette.brand.red700} />
+            <Text style={{ flex: 1, color: palette.brand.red700, fontSize: 12, fontWeight: '600' }} numberOfLines={3}>
+              {loadError}
+            </Text>
+            <Pressable
+              onPress={() => {
+                setRefreshing(true)
+                void load()
+              }}
+              hitSlop={8}
+            >
+              <Text style={{ color: palette.brand.red700, fontWeight: '800', fontSize: 12 }}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <ProgressPill filled={filledPrimary} total={PRIMARY_SLOTS.length} />
 
