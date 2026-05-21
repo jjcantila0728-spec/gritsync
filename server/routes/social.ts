@@ -194,6 +194,51 @@ router.get('/accounts/oauth-status', authenticateToken, requireAdmin, async (_re
 })
 
 // ---------------------------------------------------------------------------
+// Meta webhook callback — single endpoint that handles Facebook, Instagram,
+// and Threads webhook subscriptions. Meta uses the same protocol for all
+// three:
+//   GET  ?hub.mode=subscribe&hub.verify_token=X&hub.challenge=Y
+//        → echo back hub.challenge as text/plain when the token matches
+//   POST { object: 'instagram'|'page'|'threads', entry: [...] }
+//        → ack with 200 quickly; process events async
+//
+// Mounted at /api/social/webhooks/:platform so the same handler covers
+// every product page in Meta's App Dashboard:
+//   - Instagram:  https://app.gritsync.com/api/social/webhooks/instagram
+//   - Facebook:   https://app.gritsync.com/api/social/webhooks/facebook
+//   - Threads:    https://app.gritsync.com/api/social/webhooks/threads
+//
+// Verify token: pick any random string and set it as META_WEBHOOK_VERIFY_TOKEN
+// in Vercel env vars. Paste the SAME string into the "Verify token" field
+// in Meta's webhook config.
+// ---------------------------------------------------------------------------
+function metaWebhookVerifyToken(): string {
+  return process.env.META_WEBHOOK_VERIFY_TOKEN || 'gritsync-meta-webhook'
+}
+
+router.get('/webhooks/:platform', (req, res) => {
+  const mode = req.query['hub.mode']
+  const token = req.query['hub.verify_token']
+  const challenge = req.query['hub.challenge']
+  if (mode === 'subscribe' && token === metaWebhookVerifyToken()) {
+    // Meta requires the raw challenge string back as text/plain, status 200.
+    res.set('content-type', 'text/plain').status(200).send(String(challenge || ''))
+    return
+  }
+  console.warn('[meta-webhook] verification rejected', { mode, tokenMatches: token === metaWebhookVerifyToken() })
+  res.sendStatus(403)
+})
+
+router.post('/webhooks/:platform', (req, res) => {
+  // Ack within Meta's ~20-second budget. We don't have specific handlers
+  // wired up yet — just log the incoming payload so we can see what's
+  // arriving while we build out reactions (DM replies, comment alerts,
+  // story-mention surfacing, etc.).
+  console.log('[meta-webhook]', req.params.platform, JSON.stringify(req.body))
+  res.sendStatus(200)
+})
+
+// ---------------------------------------------------------------------------
 // GET /api/social/oauth/:platform/start
 // Returns the URL the admin should be redirected to in order to authorize the
 // app on the requested platform.
