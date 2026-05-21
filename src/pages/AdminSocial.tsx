@@ -740,22 +740,6 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-// Short, glance-able "5m ago / 3d ago" formatting for the Accounts tab's
-// last-published heartbeat. Falls back to a date when older than ~30 days.
-function relativeTimeFromNow(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diff = Date.now() - then
-  const m = Math.floor(diff / 60_000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  const d = Math.floor(h / 24)
-  if (d < 30) return `${d}d ago`
-  return new Date(iso).toLocaleDateString()
-}
-
 async function api<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api/social${path}`, {
     ...init,
@@ -1213,7 +1197,6 @@ export function AdminSocial() {
           ) : (
             <AccountsView
               accounts={accounts}
-              posts={posts}
               onConnect={startOAuth}
               onManual={(p) => { setConnectPlatform(p); setManualForm({ display_name: '', platform_user_id: '', access_token: '', refresh_token: '', profile_url: '', avatar_url: '' }) }}
               onDisconnect={disconnectAccount}
@@ -1315,13 +1298,14 @@ export function AdminSocial() {
 //     non-expiring Page token so posting is permanent)
 //   - Instagram Business accounts linked to those Pages
 //   - ad accounts the user can manage (used by the AI Ads launch flow)
+// Combined Meta (FB + IG) card — one login wires up every Page you admin
+// plus their linked IG Business accounts. Keeps the same simple shape as
+// SimplePlatformCard so the Accounts grid stays visually uniform.
 function MetaConnectionCard({
   status,
   busy,
   oauthReady,
-  oauthMissing,
   onConnect,
-  onRefreshToken,
   onDisconnect,
 }: {
   status: MetaConnectionStatus | null
@@ -1332,419 +1316,182 @@ function MetaConnectionCard({
   onRefreshToken: () => void
   onDisconnect: () => void
 }) {
-  const fbColor = PLATFORM_META.facebook.color
-  const igColor = PLATFORM_META.instagram.color
-
   if (status === null) {
     return (
-      <Card className="p-6">
-        <div className="text-sm text-gray-500 dark:text-gray-400">Loading Meta connection…</div>
+      <Card className="p-4">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
       </Card>
     )
   }
 
-  if (!status.connected) {
-    const oauthBlocked = oauthReady === false
-    return (
-      <Card className="p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-start gap-3">
-            <div className="flex">
-              <div className={cn('h-12 w-12 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', fbColor)}>
-                <Facebook className="h-6 w-6" />
-              </div>
-              <div className={cn('h-12 w-12 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', igColor)}>
-                <Instagram className="h-6 w-6" />
-              </div>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Meta (Facebook + Instagram)</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-                One OAuth grants posting to every Page you manage, every linked Instagram Business account, and
-                Marketing-API access to your ad accounts. Page tokens are <strong>permanent</strong> so posting never
-                lapses; the user token (used for ads) refreshes every 60 days in one click.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-            Not connected
-          </span>
-        </div>
-
-        {oauthBlocked && (
-          <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-200">
-            <strong>OAuth is not configured.</strong> Missing on server: {oauthMissing.join(', ') || 'FACEBOOK_APP_ID / FACEBOOK_APP_SECRET'}. Set both in Vercel
-            → Settings → Environment Variables, redeploy, then try Connect.
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <Button onClick={onConnect} loading={busy} disabled={busy || oauthBlocked}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Connect Meta
-          </Button>
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            Scopes requested: pages_manage_posts, instagram_content_publish, ads_management, business_management.
-          </span>
-        </div>
-      </Card>
-    )
-  }
-
-  const expiryDays = status.user_token_days_to_expiry ?? null
-  const expiryTone =
-    expiryDays === null ? 'gray'
-    : expiryDays <= 7 ? 'red'
-    : expiryDays <= 21 ? 'amber'
-    : 'green'
-  const expiryClasses: Record<string, string> = {
-    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    red: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-    gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  }
+  const oauthBlocked = oauthReady === false
+  const connected = !!status.connected
+  const pages = status.pages || []
+  const igs = status.instagram_accounts || []
 
   return (
-    <Card className="p-6 space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-3">
-          <div className="flex">
-            <div className={cn('h-12 w-12 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', fbColor)}>
-              <Facebook className="h-6 w-6" />
-            </div>
-            <div className={cn('h-12 w-12 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', igColor)}>
-              <Instagram className="h-6 w-6" />
-            </div>
+    <Card className="p-4 md:p-5">
+      <div className="flex items-center gap-3">
+        <div className="flex flex-shrink-0">
+          <div className={cn('h-10 w-10 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', PLATFORM_META.facebook.color)}>
+            <Facebook className="h-5 w-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Meta — {status.fb_user_name || 'connected'}
-              </h2>
-              <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                Connected
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {status.connected_at && <>Connected {new Date(status.connected_at).toLocaleString()}. </>}
-              Posting tokens are permanent.
-            </p>
+          <div className={cn('h-10 w-10 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', PLATFORM_META.instagram.color)}>
+            <Instagram className="h-5 w-5" />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onRefreshToken} loading={busy} disabled={busy}>
-            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh token
-          </Button>
-          <Button size="sm" variant="outline" onClick={onConnect} disabled={busy}>
-            Reconnect
-          </Button>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+            Facebook &amp; Instagram
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {connected
+              ? `Logged in as ${status.fb_user_name || 'Meta user'}`
+              : oauthBlocked
+                ? 'Login unavailable — server setup needed'
+                : 'Log in to authorize your Pages'}
+          </div>
+        </div>
+        {connected ? (
           <Button size="sm" variant="ghost" onClick={onDisconnect} disabled={busy} className="text-red-600 hover:text-red-700">
             Disconnect
           </Button>
-        </div>
+        ) : (
+          <Button size="sm" onClick={onConnect} loading={busy} disabled={busy || oauthBlocked}>
+            Log in
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-        <MetaStat
-          label="Pages (permanent)"
-          value={String(status.pages?.length || 0)}
-          tone="green"
-        />
-        <MetaStat
-          label="Instagram accounts"
-          value={String(status.instagram_accounts?.length || 0)}
-          tone="green"
-        />
-        <MetaStat
-          label="Ad accounts"
-          value={String(status.ad_accounts?.length || 0)}
-          tone={status.ad_accounts && status.ad_accounts.length > 0 ? 'green' : 'gray'}
-        />
-        <MetaStat
-          label="User token"
-          value={expiryDays === null ? 'no expiry' : `${expiryDays}d left`}
-          tone={expiryTone}
-          className={expiryClasses[expiryTone]}
-        />
-      </div>
-
-      {/* Pages list */}
-      {(status.pages?.length || 0) > 0 && (
-        <div>
+      {connected && (pages.length > 0 || igs.length > 0) && (
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
           <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Pages connected (post permanently)
+            Authorized pages
           </div>
-          <div className="flex flex-wrap gap-2">
-            {status.pages!.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200"
-                title={p.id}
-              >
-                <Facebook className="h-3 w-3" />
-                {p.name}
-                {p.instagram_business_account?.username && (
-                  <span className="text-[10px] text-blue-600 dark:text-blue-300/80 ml-1">↔ @{p.instagram_business_account.username}</span>
-                )}
-              </div>
+          <div className="flex flex-wrap gap-1.5">
+            {pages.map((p) => (
+              <span key={p.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200" title={p.id}>
+                <Facebook className="h-3 w-3" /> {p.name}
+              </span>
+            ))}
+            {igs.map((ig) => (
+              <span key={ig.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-200">
+                <Instagram className="h-3 w-3" /> @{ig.username || ig.id}
+              </span>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Instagram accounts */}
-      {(status.instagram_accounts?.length || 0) > 0 && (
-        <div>
-          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Instagram Business accounts
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {status.instagram_accounts!.map((ig) => (
-              <div
-                key={ig.id}
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-pink-200 dark:border-pink-800/60 bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-200"
-              >
-                <Instagram className="h-3 w-3" />
-                @{ig.username || ig.id}
-                <span className="text-[10px] text-pink-600 dark:text-pink-300/80 ml-1">via {ig.linked_page_name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Ad accounts */}
-      {(status.ad_accounts?.length || 0) > 0 && (
-        <div>
-          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Ad accounts (Marketing API)
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {status.ad_accounts!.map((a) => (
-              <div
-                key={a.id}
-                className="text-xs px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-200"
-                title={a.id}
-              >
-                {a.name}{a.currency ? ` · ${a.currency}` : ''}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {(status.pages?.length || 0) === 0 && (
-        <div className="text-xs p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200">
-          The connected user manages no Facebook Pages. To post, they need to be an admin on at least one Page —
-          reconnect with a different account or grant Page access in Meta Business Suite.
+          {pages.length === 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              No Pages authorized. Reconnect and tick the Pages you want to post to.
+            </div>
+          )}
         </div>
       )}
     </Card>
   )
 }
 
-// Login-first OAuth card used for every non-Meta platform (Threads,
-// LinkedIn, YouTube, TikTok). One big "Sign in with X" CTA is the primary
-// affordance — manual token entry is a fallback exposed only when OAuth
-// credentials aren't configured on the server yet, OR via the global
-// "Advanced" disclosure at the bottom of the Accounts tab.
-function PlatformCard({
+// Uniform per-platform card used across the Accounts grid. Same shape
+// whether disconnected, connected, or OAuth-blocked: logo, name, status
+// line, one primary action. Secondary actions (reconnect, refresh token,
+// manual entry) live as small text links so they don't fight for attention.
+function SimplePlatformCard({
   platform,
   account,
   oauthStatus,
-  lastPublishedAt,
   onConnect,
   onManual,
   onDisconnect,
-  onRefreshThreads,
+  onRefreshToken,
   busy,
 }: {
   platform: Platform
   account: SocialAccount | null
   oauthStatus: OAuthStatus | undefined
-  lastPublishedAt: string | null
   onConnect: () => void
   onManual: () => void
   onDisconnect: (id: string) => void
-  // Optional — only Threads has a server-side refresh endpoint exposed
-  // separately. Other platforms refresh automatically at publish time.
-  onRefreshThreads?: () => void
+  onRefreshToken?: () => void
   busy?: boolean
 }) {
   const meta = PLATFORM_META[platform]
   const Icon = meta.icon
-  const info = PLATFORM_CONNECTION_INFO[platform]
   const oauthReady = oauthStatus?.oauth_ready ?? true
-  const oauthMissing = oauthStatus?.missing || []
   const connected = !!account
 
-  const expiryDays = (() => {
-    if (!account?.token_expires_at) return null
-    const ms = new Date(account.token_expires_at).getTime() - Date.now()
-    if (!Number.isFinite(ms)) return null
-    return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
-  })()
-  const expiryTone =
-    expiryDays === null ? 'gray'
-    : expiryDays <= 3 ? 'red'
-    : expiryDays <= 14 ? 'amber'
-    : 'green'
-  const expiryClasses: Record<string, string> = {
-    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-    gray:  'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  }
+  const statusLine = connected
+    ? `Logged in as ${account!.display_name || 'connected'}`
+    : !oauthReady
+      ? 'Login unavailable — paste a token instead'
+      : `Log in with ${meta.label}`
 
   return (
-    <Card className="p-5 flex flex-col h-full">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className={cn('h-11 w-11 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
-            <Icon className="h-5 w-5" />
+    <Card className="p-4 md:p-5">
+      <div className="flex items-center gap-3">
+        <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+            {meta.label}
           </div>
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              {meta.label}{connected && account?.display_name ? <span className="text-gray-500 dark:text-gray-400 font-normal"> — {account.display_name}</span> : null}
-            </h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-snug">
-              {info?.description || 'Connect to publish.'}
-            </p>
+          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {statusLine}
           </div>
         </div>
-        <span className={cn(
-          'text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-          connected
-            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-            : !oauthReady
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-        )}>
-          {connected ? 'Connected' : !oauthReady ? 'Setup needed' : 'Not connected'}
-        </span>
+        {connected ? (
+          <Button size="sm" variant="ghost" onClick={() => onDisconnect(account!.id)} disabled={busy} className="text-red-600 hover:text-red-700">
+            Disconnect
+          </Button>
+        ) : oauthReady ? (
+          <Button size="sm" onClick={onConnect} loading={busy} disabled={busy}>
+            Log in
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={onManual}>
+            Use token
+          </Button>
+        )}
       </div>
 
-      {connected && account ? (
-        <div className="mt-4 flex-1 flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-              <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Account ID</div>
-              <div className="font-mono text-[11px] text-gray-700 dark:text-gray-200 truncate" title={account.platform_user_id}>{account.platform_user_id}</div>
-            </div>
-            <div className={cn('px-2.5 py-1.5 rounded-md border', expiryClasses[expiryTone].replace('bg-', 'border-').replace('text-', ''), expiryClasses[expiryTone])}>
-              <div className="text-[10px] uppercase tracking-wider opacity-80">Token</div>
-              <div className="text-[11px] font-medium">{expiryDays === null ? 'no expiry' : `${expiryDays}d left`}</div>
-            </div>
-          </div>
+      {connected && account?.last_error && (
+        <div className="mt-3 text-xs p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300">
+          <AlertCircle className="inline h-3 w-3 mr-1" />
+          {account.last_error}
+        </div>
+      )}
 
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {account.connected_at && <>Connected {new Date(account.connected_at).toLocaleDateString()}. </>}
-            {lastPublishedAt
-              ? <>Last published <span title={new Date(lastPublishedAt).toLocaleString()}>{relativeTimeFromNow(lastPublishedAt)}</span>.</>
-              : <span className="italic">No publishes yet.</span>}
-          </div>
-
-          {account.last_error && (
-            <div className="text-xs p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300">
-              <AlertCircle className="inline h-3 w-3 mr-1" />
-              Last publish error: {account.last_error}
-            </div>
-          )}
-
-          <div className="mt-auto flex flex-wrap items-center gap-2">
-            {account.profile_url && (
-              <a
-                href={account.profile_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 hover:text-primary-700 dark:hover:text-primary-300"
-              >
-                <ExternalLink className="h-3 w-3" /> Open profile
-              </a>
-            )}
-            {onRefreshThreads && (
-              <Button size="sm" variant="outline" onClick={onRefreshThreads} loading={busy} disabled={busy}>
-                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh token
-              </Button>
-            )}
-            <Button size="sm" variant="outline" onClick={onConnect} disabled={busy}>
-              Reconnect
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onDisconnect(account.id)}
-              disabled={busy}
-              className="text-red-600 hover:text-red-700 ml-auto"
+      {connected && (onRefreshToken || account?.profile_url) && (
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3 text-xs">
+          {account?.profile_url && (
+            <a
+              href={account.profile_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300"
             >
-              Disconnect
-            </Button>
-          </div>
-        </div>
-      ) : !oauthReady ? (
-        // OAuth credentials missing on server — surface what's missing and
-        // offer the manual fallback so the operator isn't stranded.
-        <div className="mt-4 flex-1 flex flex-col gap-3">
-          <div className="text-xs p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200">
-            <strong>One-time setup needed.</strong> Add{' '}
-            <code className="font-mono text-[11px]">{oauthMissing.join(' + ') || 'app credentials'}</code> to your
-            Vercel env vars, then redeploy. Until then, you can paste a long-lived access token manually.
-          </div>
-          <div className="mt-auto flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={onManual}>
-              Use a manual token instead
-            </Button>
-          </div>
-        </div>
-      ) : (
-        // The happy path — OAuth is wired up, no account yet. One big CTA.
-        <div className="mt-4 flex-1 flex flex-col gap-3">
-          {info && (
-            <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-              <li>{info.whatYouCanDo}</li>
-              <li>Scopes requested: <span className="font-mono text-[11px]">{info.scopes}</span></li>
-              <li>Sign in opens a {meta.label} consent popup — no credentials touch GritSync.</li>
-            </ul>
+              <ExternalLink className="h-3 w-3" /> Open profile
+            </a>
           )}
-          <div className="mt-auto flex flex-wrap items-center gap-2">
-            <Button onClick={onConnect} loading={busy} disabled={busy} className="flex-1 sm:flex-none">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Sign in with {meta.label}
-            </Button>
+          {onRefreshToken && (
             <button
-              onClick={onManual}
-              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
-              title="Paste a long-lived access token instead"
+              onClick={onRefreshToken}
+              disabled={busy}
+              className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300"
             >
-              Advanced: use a token
+              <RefreshCw className={cn('h-3 w-3', busy && 'animate-spin')} /> Refresh token
             </button>
-          </div>
+          )}
+          <button
+            onClick={onConnect}
+            disabled={busy}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
+          >
+            Reconnect
+          </button>
         </div>
       )}
     </Card>
-  )
-}
-
-function MetaStat({
-  label,
-  value,
-  tone,
-  className,
-}: {
-  label: string
-  value: string
-  tone: 'green' | 'amber' | 'red' | 'gray'
-  className?: string
-}) {
-  const tones: Record<string, string> = {
-    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/40 text-green-700 dark:text-green-300',
-    amber: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-300',
-    red: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300',
-    gray: 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
-  }
-  return (
-    <div className={cn('px-3 py-2 rounded-lg border', className || tones[tone])}>
-      <div className="text-[10px] uppercase tracking-wider opacity-80 font-medium">{label}</div>
-      <div className="text-sm font-semibold mt-0.5">{value}</div>
-    </div>
   )
 }
 
@@ -1870,36 +1617,6 @@ function ManualInstructions({ platform }: { platform: Platform }) {
 interface OAuthStatus {
   oauth_ready: boolean
   missing: string[]
-}
-
-// Per-platform copy used by PlatformCard. Meta has its own dedicated card
-// (different shape — multiple Pages/IG accounts/ad accounts under one
-// OAuth), so it's intentionally absent from this map.
-const PLATFORM_CONNECTION_INFO: Partial<Record<Platform, {
-  description: string
-  scopes: string
-  whatYouCanDo: string
-}>> = {
-  threads: {
-    description: 'Post directly to your Threads handle. We refresh the long-lived token automatically before it expires.',
-    scopes: 'threads_basic, threads_content_publish',
-    whatYouCanDo: 'Publish text + image + carousel posts to your @handle.',
-  },
-  linkedin: {
-    description: 'Post as your LinkedIn member profile. Reach professional connections without leaving GritSync.',
-    scopes: 'openid, profile, email, w_member_social',
-    whatYouCanDo: 'Publish text + image posts to your personal feed.',
-  },
-  youtube: {
-    description: 'Upload videos to your YouTube channel. Feed-style posts aren\'t supported by the API — videos only.',
-    scopes: 'youtube.upload, youtube.readonly',
-    whatYouCanDo: 'Upload short-form vertical and long-form video.',
-  },
-  tiktok: {
-    description: 'Post videos to your TikTok account via the Content Posting API.',
-    scopes: 'user.info.basic, video.publish, video.upload',
-    whatYouCanDo: 'Upload mobile-first vertical videos to your feed.',
-  },
 }
 
 interface DriveStatus {
@@ -2642,36 +2359,15 @@ function ManagerStatCard({
 
 function AccountsView({
   accounts,
-  posts,
   onConnect,
   onManual,
   onDisconnect,
 }: {
   accounts: SocialAccount[]
-  // Used to surface "Last published N min/hours/days ago" on each connected
-  // account row — sourced from `posts[*].results[account_id].at`, so even
-  // partial-success publishes still count as a heartbeat.
-  posts: SocialPost[]
   onConnect: (p: Platform) => void
   onManual: (p: Platform) => void
   onDisconnect: (id: string) => void
 }) {
-  // Most-recent successful publish per account id. Walks through every
-  // post's `results` map and keeps the latest `.at` timestamp seen for
-  // each account. Memoised because History can hold hundreds of posts.
-  const lastPublishedById = useMemo(() => {
-    const out: Record<string, string> = {}
-    for (const p of posts) {
-      if (!p.results) continue
-      for (const [accId, r] of Object.entries(p.results)) {
-        if (!r?.ok || !r.at) continue
-        if (!out[accId] || new Date(r.at) > new Date(out[accId])) {
-          out[accId] = r.at
-        }
-      }
-    }
-    return out
-  }, [posts])
   const { showToast } = useToast()
   const [oauthStatus, setOauthStatus] = useState<Record<string, OAuthStatus>>({})
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
@@ -2821,137 +2517,77 @@ function AccountsView({
     }
   }
 
-  const anyOAuthReady = Object.values(oauthStatus).some((s) => s?.oauth_ready)
-
   return (
-    <div className="space-y-6">
-      {/* Storage integration — Google Drive. When connected, all AI-generated
-          images + videos are uploaded to a "GritSync Social" folder and the
-          bank stores the Drive public URL. Falls back to in-database storage
-          when not connected, so nothing breaks if Drive isn't set up yet. */}
-      <Card className="p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Media storage</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-              Connect a Google Drive account to host all AI-generated images and videos in a shared{' '}
-              <strong>GritSync Social</strong> folder. Drive URLs are publicly fetchable, so the social
-              platforms can pull them at publish time without going through our server.
-            </p>
-          </div>
-          {driveStatus?.connected ? (
-            <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
-              Connected
-            </span>
-          ) : (
-            <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-              Using in-database storage
-            </span>
-          )}
-        </div>
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Connected accounts</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          Log in to each platform, authorize the pages you want to post to, and save. Repeat for every account you manage.
+        </p>
+      </div>
 
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          {driveStatus?.connected ? (
-            <>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-gray-800 dark:text-gray-200">
-                  <strong>{driveStatus.email || 'Connected account'}</strong>
-                  {driveStatus.folder_name && <span className="text-gray-500 dark:text-gray-400"> · folder “{driveStatus.folder_name}”</span>}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  New AI-generated media now flows here. Existing bank items stay where they were created.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>
-                Reconnect
-              </Button>
-              <Button size="sm" variant="ghost" onClick={disconnectDrive} disabled={driveBusy} className="text-red-600 hover:text-red-700">
-                Disconnect
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> Connect Google Drive
-              </Button>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Opens a Google consent popup. Requires <code className="text-[11px]">GOOGLE_DRIVE_CLIENT_ID</code> +{' '}
-                <code className="text-[11px]">_SECRET</code> set on the server.
-              </span>
-            </>
-          )}
-        </div>
-      </Card>
-
-      {/* Meta (Facebook + Instagram) connection — one OAuth grants posting to
-          every Page the user manages, every linked Instagram Business
-          account, and Marketing-API access to every ad account the user
-          can manage. Long-lived user token is 60 days; page tokens are
-          permanent so posting never breaks even if the user token lapses. */}
-      <MetaConnectionCard
-        status={metaStatus}
-        busy={metaBusy}
-        oauthReady={oauthStatus.facebook?.oauth_ready}
-        oauthMissing={oauthStatus.facebook?.missing || []}
-        onConnect={() => onConnect('facebook')}
-        onRefreshToken={refreshMetaToken}
-        onDisconnect={disconnectMeta}
-      />
-
-      {/* Per-platform OAuth cards. Each card is a self-contained "Sign in
-          with X" surface — connected state, identity, last publish, and
-          manage actions live inside the card so there's no separate
-          "connected accounts" list to drift out of sync. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <MetaConnectionCard
+          status={metaStatus}
+          busy={metaBusy}
+          oauthReady={oauthStatus.facebook?.oauth_ready}
+          oauthMissing={oauthStatus.facebook?.missing || []}
+          onConnect={() => onConnect('facebook')}
+          onRefreshToken={refreshMetaToken}
+          onDisconnect={disconnectMeta}
+        />
         {(['threads', 'linkedin', 'youtube', 'tiktok'] as Platform[]).map((p) => {
           const acc = accounts.find((a) => a.platform === p) || null
-          const lastAt = acc ? (lastPublishedById[acc.id] || null) : null
           return (
-            <PlatformCard
+            <SimplePlatformCard
               key={p}
               platform={p}
               account={acc}
               oauthStatus={oauthStatus[p]}
-              lastPublishedAt={lastAt}
               busy={p === 'threads' ? threadsBusy : false}
               onConnect={() => onConnect(p)}
               onManual={() => onManual(p)}
               onDisconnect={onDisconnect}
-              onRefreshThreads={p === 'threads' && acc ? refreshThreadsToken : undefined}
+              onRefreshToken={p === 'threads' && acc ? refreshThreadsToken : undefined}
             />
           )
         })}
       </div>
 
-      {/* When every configured platform is OAuth-blocked the operator needs
-          a single, calm "this is a server-side config issue" hint rather
-          than four amber boxes shouting in sequence. */}
-      {Object.keys(oauthStatus).length > 0 && !anyOAuthReady && (
-        <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800 dark:text-amber-200">
-              <strong>None of the platform OAuth apps are configured yet.</strong> Add the missing app credentials in{' '}
-              Vercel → Settings → Environment Variables, redeploy, then refresh this page. Each card above shows the
-              specific env vars it's waiting on.
-            </div>
+      <details className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/60 rounded-lg">
+          Media storage {driveStatus?.connected ? <span className="text-xs font-normal text-green-700 dark:text-green-300 ml-1">· Google Drive connected</span> : <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">· using in-database storage</span>}
+        </summary>
+        <div className="px-4 pb-4 pt-1 text-sm text-gray-600 dark:text-gray-400 space-y-3">
+          <p>
+            Optional: connect a Google Drive account to host AI-generated images and videos in a shared <strong>GritSync Social</strong> folder.
+            Without Drive, media is stored in-database and still works fine.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {driveStatus?.connected ? (
+              <>
+                <div className="flex-1 min-w-0 text-xs text-gray-700 dark:text-gray-200">
+                  <strong>{driveStatus.email || 'Connected'}</strong>
+                  {driveStatus.folder_name && <span className="text-gray-500 dark:text-gray-400"> · folder “{driveStatus.folder_name}”</span>}
+                </div>
+                <Button size="sm" variant="outline" onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>Reconnect</Button>
+                <Button size="sm" variant="ghost" onClick={disconnectDrive} disabled={driveBusy} className="text-red-600 hover:text-red-700">Disconnect</Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={connectDrive} loading={driveBusy} disabled={driveBusy}>
+                Connect Google Drive
+              </Button>
+            )}
           </div>
-        </Card>
-      )}
+        </div>
+      </details>
 
-      {/* Advanced — manual token entry. Hidden by default since OAuth is
-          the supported path; surfaces a "still need a manual token?"
-          link for each platform. */}
       <details className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/60 rounded-lg">
           Advanced — connect with an access token
         </summary>
         <div className="px-4 pb-4 pt-1 space-y-3 text-sm text-gray-600 dark:text-gray-400">
-          <p>
-            If a platform's OAuth flow isn't configured yet, or you already have a long-lived access token from the
-            platform's developer portal, you can paste it in directly. This is the same token the publishing pipeline
-            uses — it just skips the login dance.
-          </p>
+          <p>If a platform's OAuth isn't set up yet, paste a long-lived access token directly.</p>
           <div className="flex flex-wrap gap-2">
             {ALL_PLATFORMS.map((p) => {
               const meta = PLATFORM_META[p]
