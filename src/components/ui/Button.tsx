@@ -1,15 +1,18 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'ghost' | 'outline' | 'destructive' | 'success'
   size?: 'sm' | 'md' | 'lg'
-  /** When true, disables the button (e.g. while an async action is in flight). */
+  /** When true, disables the button AND renders an animated spinner that
+   * replaces any leading icon. The button's text stays visible so the
+   * operator can still tell what they clicked. */
   loading?: boolean
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'md', loading = false, disabled, ...props }, ref) => {
+  ({ className, variant = 'default', size = 'md', loading = false, disabled, children, ...props }, ref) => {
     return (
       <button
         className={cn(
@@ -24,13 +27,30 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             'h-10 px-4 text-base': size === 'md',
             'h-12 px-6 text-lg': size === 'lg',
           },
+          loading && 'cursor-wait',
           className
         )}
         ref={ref}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         {...props}
-      />
+      >
+        {loading && (
+          <Loader2
+            aria-hidden="true"
+            className={cn(
+              'animate-spin shrink-0',
+              size === 'sm' ? 'h-3.5 w-3.5 mr-1.5' : size === 'lg' ? 'h-5 w-5 mr-2' : 'h-4 w-4 mr-2'
+            )}
+          />
+        )}
+        {/* Wrap children so we can hide the leading icon (if any) while
+            loading — keeps the spinner from competing with a static icon
+            for the eye's attention. Text stays visible regardless. */}
+        <span className={cn('inline-flex items-center', loading && '[&>svg]:hidden')}>
+          {children}
+        </span>
+      </button>
     )
   }
 )

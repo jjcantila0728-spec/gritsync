@@ -3189,76 +3189,6 @@ function GeneratorView({
               30 GritSync-aligned topics grouped by category. Leave it on "No topic" to write purely from your prompt above.
             </p>
           </div>
-
-          {/* Master image prompt — single source of truth for the image AI.
-              Operator can edit + AI-refine; saved overrides persist in
-              localStorage so the agent's "learning" carries across
-              sessions. Compose and Manager auto-generate both send
-              whatever's saved here as `template_image_prompt`. */}
-          <div className="rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/15 p-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Master image prompt</h3>
-                  {masterImagePrompt !== DEFAULT_MASTER_IMAGE_PROMPT && (
-                    <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                      Customised
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-                  Drives every image the AI renders for posts. Edit it to evolve the look — refinements are saved on
-                  your device and the model can self-improve via the Refine button.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={openMasterPromptEditor}>
-                <PencilLine className="h-3.5 w-3.5 mr-1" /> Edit prompt
-              </Button>
-            </div>
-            <div className="mt-3 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 max-h-32 overflow-y-auto">
-              <p className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-snug line-clamp-6">
-                {masterImagePrompt}
-              </p>
-            </div>
-            {masterPromptOpen && (
-              <div className="mt-4 space-y-3 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Editing master prompt
-                  </div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    {masterPromptDraft.length.toLocaleString()} chars
-                  </div>
-                </div>
-                <Textarea
-                  rows={14}
-                  value={masterPromptDraft}
-                  onChange={(e) => setMasterPromptDraft(e.target.value)}
-                  className="font-mono text-xs"
-                />
-                <div className="flex flex-wrap items-center gap-2 justify-end">
-                  <Button size="sm" variant="ghost" onClick={() => setMasterPromptOpen(false)} disabled={masterPromptRefining}>
-                    Cancel
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={resetMasterPromptToDefault} disabled={masterPromptRefining}>
-                    Reset to brand default
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={refineMasterPromptWithAI} loading={masterPromptRefining} disabled={masterPromptRefining}>
-                    <Sparkles className="h-3.5 w-3.5 mr-1" /> Refine with AI
-                  </Button>
-                  <Button size="sm" onClick={saveMasterPrompt} disabled={masterPromptRefining || !masterPromptDraft.trim()}>
-                    Save
-                  </Button>
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-                  Refine with AI sends the current draft + your active topic/goal to <span className="font-mono">/ai/refine-master-prompt</span>.
-                  The model returns an improved version; review then click Save. Reset wipes your override so future
-                  default-prompt updates in code reach you automatically.
-                </p>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* 3. Format — voice + length + language + how many variants. Account
@@ -3371,7 +3301,7 @@ function GeneratorView({
             </label>
             <div className="grid grid-cols-3 gap-2">
               {([
-                { id: 'openai',      label: 'OpenAI',      sub: 'gpt-image-1 → dall-e fallback' },
+                { id: 'openai',      label: 'OpenAI',      sub: 'dall-e-3 hd + natural' },
                 { id: 'nano-banana', label: 'Nano Banana', sub: 'Gemini 2.5 Flash Image' },
                 { id: 'grok',        label: 'Grok',        sub: 'grok-2-image' },
               ] as const).map((opt) => (
@@ -3392,6 +3322,80 @@ function GeneratorView({
               ))}
             </div>
           </div>
+
+          {/* Master image prompt — single source of truth for the image AI.
+              Only relevant in Image mode (Video mode renders the still
+              frame from a separate Replicate pipeline). Operator can
+              edit + AI-refine; saved overrides persist in localStorage
+              so the agent's "learning" carries across sessions. Compose
+              and Manager auto-generate both send whatever's saved here
+              as `template_image_prompt`. */}
+          {contentType === 'image' && (
+            <div className="mt-4 rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/15 p-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Master image prompt</h3>
+                    {masterImagePrompt !== DEFAULT_MASTER_IMAGE_PROMPT && (
+                      <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                        Customised
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+                    Drives every image the AI renders for posts. Edit it to evolve the look — refinements are saved on
+                    your device and the model can self-improve via the Refine button.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={openMasterPromptEditor}>
+                  <PencilLine className="h-3.5 w-3.5 mr-1" /> Edit prompt
+                </Button>
+              </div>
+              <div className="mt-3 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 max-h-32 overflow-y-auto">
+                <p className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-snug line-clamp-6">
+                  {masterImagePrompt}
+                </p>
+              </div>
+              {masterPromptOpen && (
+                <div className="mt-4 space-y-3 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Editing master prompt
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {masterPromptDraft.length.toLocaleString()} chars
+                    </div>
+                  </div>
+                  <Textarea
+                    rows={14}
+                    value={masterPromptDraft}
+                    onChange={(e) => setMasterPromptDraft(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => setMasterPromptOpen(false)} disabled={masterPromptRefining}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={resetMasterPromptToDefault} disabled={masterPromptRefining}>
+                      Reset to brand default
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={refineMasterPromptWithAI} loading={masterPromptRefining} disabled={masterPromptRefining}>
+                      <Sparkles className="h-3.5 w-3.5 mr-1" /> Refine with AI
+                    </Button>
+                    <Button size="sm" onClick={saveMasterPrompt} disabled={masterPromptRefining || !masterPromptDraft.trim()}>
+                      Save
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                    Refine with AI sends the current draft + your active topic/goal to <span className="font-mono">/ai/refine-master-prompt</span>.
+                    The model returns an improved version; review then click Save. Reset wipes your override so future
+                    default-prompt updates in code reach you automatically.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 5. Specifics — extra guidance the strategist agent should respect */}
