@@ -1298,10 +1298,10 @@ export function AdminSocial() {
 //     non-expiring Page token so posting is permanent)
 //   - Instagram Business accounts linked to those Pages
 //   - ad accounts the user can manage (used by the AI Ads launch flow)
-// Combined Meta (FB + IG) card — one login wires up every Page you admin
-// plus their linked IG Business accounts. Keeps the same simple shape as
-// SimplePlatformCard so the Accounts grid stays visually uniform.
-function MetaConnectionCard({
+// Facebook card — primary login surface for the Meta OAuth. One log in
+// here grants posting to every Page the admin manages plus any linked
+// IG Business accounts (rendered in InstagramCard below).
+function FacebookCard({
   status,
   busy,
   oauthReady,
@@ -1311,39 +1311,27 @@ function MetaConnectionCard({
   status: MetaConnectionStatus | null
   busy: boolean
   oauthReady: boolean | undefined
-  oauthMissing: string[]
   onConnect: () => void
-  onRefreshToken: () => void
   onDisconnect: () => void
 }) {
   if (status === null) {
     return (
-      <Card className="p-4">
-        <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
-      </Card>
+      <Card className="p-4"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>
     )
   }
 
   const oauthBlocked = oauthReady === false
   const connected = !!status.connected
   const pages = status.pages || []
-  const igs = status.instagram_accounts || []
 
   return (
     <Card className="p-4 md:p-5">
       <div className="flex items-center gap-3">
-        <div className="flex flex-shrink-0">
-          <div className={cn('h-10 w-10 rounded-full -mr-3 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', PLATFORM_META.facebook.color)}>
-            <Facebook className="h-5 w-5" />
-          </div>
-          <div className={cn('h-10 w-10 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-white', PLATFORM_META.instagram.color)}>
-            <Instagram className="h-5 w-5" />
-          </div>
+        <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-white flex-shrink-0', PLATFORM_META.facebook.color)}>
+          <Facebook className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-            Facebook &amp; Instagram
-          </div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">Facebook</div>
           <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
             {connected
               ? `Logged in as ${status.fb_user_name || 'Meta user'}`
@@ -1363,28 +1351,109 @@ function MetaConnectionCard({
         )}
       </div>
 
-      {connected && (pages.length > 0 || igs.length > 0) && (
+      {connected && (
         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
           <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
             Authorized pages
           </div>
+          {pages.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {pages.map((p) => (
+                <span key={p.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200" title={p.id}>
+                  <Facebook className="h-3 w-3" /> {p.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-amber-700 dark:text-amber-300">
+              No Pages authorized. Reconnect and tick the Pages you want to post to.
+            </div>
+          )}
+          {connected && (
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <button
+                onClick={onConnect}
+                disabled={busy}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                Reconnect to add more pages
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// Instagram card — Meta requires the Facebook OAuth to surface IG
+// Business accounts, so the connect CTA delegates to the same flow.
+// Shows IG accounts linked through any authorized Page once connected.
+function InstagramCard({
+  status,
+  busy,
+  oauthReady,
+  onConnect,
+}: {
+  status: MetaConnectionStatus | null
+  busy: boolean
+  oauthReady: boolean | undefined
+  onConnect: () => void
+}) {
+  if (status === null) {
+    return (
+      <Card className="p-4"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>
+    )
+  }
+
+  const oauthBlocked = oauthReady === false
+  const connected = !!status.connected
+  const igs = status.instagram_accounts || []
+
+  return (
+    <Card className="p-4 md:p-5">
+      <div className="flex items-center gap-3">
+        <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-white flex-shrink-0', PLATFORM_META.instagram.color)}>
+          <Instagram className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">Instagram</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {connected
+              ? igs.length > 0
+                ? `${igs.length} Business account${igs.length === 1 ? '' : 's'} linked`
+                : 'No IG Business accounts linked to your Pages'
+              : oauthBlocked
+                ? 'Login unavailable — server setup needed'
+                : 'Log in via Facebook to authorize Instagram'}
+          </div>
+        </div>
+        {!connected && (
+          <Button size="sm" variant="outline" onClick={onConnect} loading={busy} disabled={busy || oauthBlocked}>
+            Log in via Facebook
+          </Button>
+        )}
+      </div>
+
+      {connected && igs.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Linked accounts
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            {pages.map((p) => (
-              <span key={p.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200" title={p.id}>
-                <Facebook className="h-3 w-3" /> {p.name}
-              </span>
-            ))}
             {igs.map((ig) => (
               <span key={ig.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-200">
                 <Instagram className="h-3 w-3" /> @{ig.username || ig.id}
               </span>
             ))}
           </div>
-          {pages.length === 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              No Pages authorized. Reconnect and tick the Pages you want to post to.
-            </div>
-          )}
+        </div>
+      )}
+
+      {connected && igs.length === 0 && (
+        <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+          To enable Instagram posting, link an Instagram Business or Creator account to one of your Facebook Pages in
+          Meta Business Suite, then click <strong>Reconnect</strong> on the Facebook card.
         </div>
       )}
     </Card>
@@ -2421,24 +2490,6 @@ function AccountsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function refreshMetaToken() {
-    setMetaBusy(true)
-    try {
-      const r = await fetch('/api/social/facebook/refresh-token', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders() },
-      })
-      const j = await r.json()
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
-      showToast('Meta user token refreshed (+60 days)', 'success')
-      refreshMetaStatus()
-    } catch (err: any) {
-      showToast(err.message || 'Token refresh failed', 'error')
-    } finally {
-      setMetaBusy(false)
-    }
-  }
-
   // Threads is the only non-Meta platform with a separate refresh-token
   // endpoint; LinkedIn/YouTube/TikTok refresh automatically server-side at
   // publish time using stored refresh tokens.
@@ -2527,14 +2578,18 @@ function AccountsView({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <MetaConnectionCard
+        <FacebookCard
           status={metaStatus}
           busy={metaBusy}
           oauthReady={oauthStatus.facebook?.oauth_ready}
-          oauthMissing={oauthStatus.facebook?.missing || []}
           onConnect={() => onConnect('facebook')}
-          onRefreshToken={refreshMetaToken}
           onDisconnect={disconnectMeta}
+        />
+        <InstagramCard
+          status={metaStatus}
+          busy={metaBusy}
+          oauthReady={oauthStatus.facebook?.oauth_ready}
+          onConnect={() => onConnect('facebook')}
         />
         {(['threads', 'linkedin', 'youtube', 'tiktok'] as Platform[]).map((p) => {
           const acc = accounts.find((a) => a.platform === p) || null
