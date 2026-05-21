@@ -543,160 +543,82 @@ const AUDIENCE_PRESETS: AudienceOption[] = [
   },
 ]
 
-// Image-style library — 15 GritSync-branded visual templates that operators
-// can pick instead of letting the AI choose freely. The chosen template's
-// `image_prompt` overrides the post-template's `image_prompt` (if any) when
-// the generator request goes to the backend. Pair any image template with
-// any caption: the brand look stays consistent across the feed.
+// ─── Master image prompt ──────────────────────────────────────────────
+// Single source of truth for the image-AI. Every /generate-batch call
+// (Compose + Manager auto-generate) sends this verbatim as the
+// `template_image_prompt`, so every post in the feed inherits the same
+// premium ad aesthetic.
 //
-// `preview_url` is what the picker tiles display. Until the team renders a
-// proper brand sample per template (one AI generation per id, saved to
-// /public/images/templates/<id>.jpg), each entry falls back to a
-// deterministic picsum placeholder so the UI shows real photos instead of
-// flat gradients. Swap `preview_url` to the real asset path when ready.
-interface ImageTemplate {
-  id: string
-  label: string
-  emoji: string
-  description: string
-  gradient: string
-  image_prompt: string
-  preview_url?: string
+// Operators can edit + refine this from the Compose tab — overrides
+// live in localStorage so refinements persist across sessions. A
+// "Refine with AI" CTA hits POST /api/social/ai/refine-master-prompt
+// to let the model improve the prompt itself; that's the continuous-
+// learning loop.
+const MASTER_IMAGE_PROMPT_STORAGE_KEY = 'gritsync_socmed_master_image_prompt'
+
+const DEFAULT_MASTER_IMAGE_PROMPT = `Ultra-realistic cinematic social media advertisement for "GritSync NCLEX Processing Agency", featuring a beautiful and confident Filipino nurse in modern navy blue scrubs holding NCLEX application documents, passport, and a coffee cup while standing inside a luxurious modern healthcare office. The nurse should look hopeful, motivated, and professional.
+
+Background includes a subtle USA skyline at sunset, hospital environment, glowing city lights, modern glass office interiors, premium healthcare branding atmosphere, and soft depth-of-field blur.
+
+Add supporting characters in the background such as professional agency staff assisting nurses with paperwork, laptops, visa documents, and online processing systems.
+
+Include realistic visual elements:
+- official-looking NCLEX paperwork
+- CGFNS forms
+- ATT approval email on laptop screen
+- passport and travel documents
+- hospital badge IDs
+- modern workspace setup
+- elegant red-and-white brand accents
+
+Use a premium color palette: deep red, white, soft black, subtle gold highlights.
+
+Main headline text using ultra high-quality modern luxury fonts:
+"YOUR USRN DREAM STARTS HERE"
+
+Subheadline:
+"NCLEX Processing • CGFNS • ATT • VisaScreen • End-to-End Guidance"
+
+Add CTA button design:
+"GET YOUR FREE ASSESSMENT TODAY"
+
+Add company branding:
+- realistic GritSync logo placement on upper corner
+- subtle watermark logo background pattern
+- official website text: "gritsync.com"
+
+Style: ultra photorealistic, cinematic lighting, luxury healthcare advertisement aesthetic, highly detailed skin textures, realistic eyes and facial expressions, professional typography layout, premium Facebook/Instagram ad composition, elegant shadows and reflections, realistic fabric textures, polished marketing-agency quality, visually emotional and aspirational, modern social media campaign style, sharp focus, HDR, 8k resolution, realistic color grading, award-winning advertisement design.
+
+Composition: centered main character, layered depth composition, text positioned cleanly for readability, balanced negative space, premium luxury layout.
+
+Aspect ratio: 1:1 for Instagram post, 4:5 for Facebook ad, 9:16 for story/reels version.
+
+Negative prompt: blurry text, distorted hands, extra fingers, cartoon, low quality, oversaturated colors, unrealistic anatomy, poor typography, cluttered composition, low resolution, duplicate people, AI artifacts, warped documents, pixelated logo, fake-looking faces.`
+
+function readMasterImagePrompt(): string {
+  try {
+    const stored = localStorage.getItem(MASTER_IMAGE_PROMPT_STORAGE_KEY)
+    return (stored && stored.trim().length > 0) ? stored : DEFAULT_MASTER_IMAGE_PROMPT
+  } catch {
+    return DEFAULT_MASTER_IMAGE_PROMPT
+  }
+}
+function writeMasterImagePrompt(value: string) {
+  try {
+    // Clear the override when the operator resets to the brand default —
+    // keeps localStorage clean and means future default-prompt edits in
+    // code automatically reach operators who never customised.
+    if (value.trim() === DEFAULT_MASTER_IMAGE_PROMPT.trim()) {
+      localStorage.removeItem(MASTER_IMAGE_PROMPT_STORAGE_KEY)
+    } else {
+      localStorage.setItem(MASTER_IMAGE_PROMPT_STORAGE_KEY, value)
+    }
+  } catch {
+    // localStorage can throw in some private-browsing modes — silently
+    // degrade to in-memory only. The next session falls back to default.
+  }
 }
 
-// Resolve the preview URL for an image-template tile.
-//   1. Prefer an explicit `preview_url` on the template — set this to a
-//      local /images/templates/<id>.jpg path AFTER you've rendered the
-//      branded sample (see scripts/generate-image-template-previews.cjs).
-//   2. Otherwise fall back to a curated Unsplash CDN photo themed to the
-//      template, so every tile shows a real photo immediately with zero
-//      404 flicker.
-function imageTemplatePreview(t: ImageTemplate): string {
-  return t.preview_url || IMAGE_TEMPLATE_STOCK_URLS[t.id] || `https://picsum.photos/seed/gritsync-${t.id}/600/600`
-}
-
-// Curated stock photos — one Unsplash CDN URL per template id, picked so
-// the picker shows a real on-theme photo immediately even when no
-// branded sample has been rendered yet. Unsplash explicitly permits this
-// hotlinking pattern for production apps.
-const IMAGE_TEMPLATE_STOCK_URLS: Record<string, string> = {
-  'editorial-portrait':  'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&h=600&fit=crop&auto=format&q=80',
-  'hospital-corridor':   'https://images.unsplash.com/photo-1538108149393-fbbd81895907?w=600&h=600&fit=crop&auto=format&q=80',
-  'study-desk-overhead': 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&h=600&fit=crop&auto=format&q=80',
-  'golden-hour-outdoor': 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?w=600&h=600&fit=crop&auto=format&q=80',
-  'bright-apartment':    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&h=600&fit=crop&auto=format&q=80',
-  'document-flatlay':    'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=600&h=600&fit=crop&auto=format&q=80',
-  'group-consult':       'https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&h=600&fit=crop&auto=format&q=80',
-  'quiet-reflection':    'https://images.unsplash.com/photo-1499728603263-13726abce5fd?w=600&h=600&fit=crop&auto=format&q=80',
-  'diploma-closeup':     'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=600&fit=crop&auto=format&q=80',
-  'us-cityscape':        'https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=600&h=600&fit=crop&auto=format&q=80',
-  'filipino-home-scene': 'https://images.unsplash.com/photo-1567016432779-094069958ea5?w=600&h=600&fit=crop&auto=format&q=80',
-  'workspace-detail':    'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=600&h=600&fit=crop&auto=format&q=80',
-  'celebration-moment':  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=600&fit=crop&auto=format&q=80',
-  'night-study-lamp':    'https://images.unsplash.com/photo-1456735185569-4e2c1efcb96f?w=600&h=600&fit=crop&auto=format&q=80',
-  'formal-interview':    'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=600&h=600&fit=crop&auto=format&q=80',
-}
-
-// Last-resort fallback fired by the `<img>` onError handler when even the
-// curated stock URL fails (rare — usually only if Unsplash retires a
-// photo). Goes straight to picsum so we don't bounce between two failing
-// CDNs on the same tile.
-function imageTemplateFallback(id: string): string {
-  return `https://picsum.photos/seed/gritsync-${id}/600/600`
-}
-
-const IMAGE_TEMPLATES: ImageTemplate[] = [
-  {
-    id: 'editorial-portrait', label: 'Editorial Portrait', emoji: '📸',
-    description: 'Soft-light editorial headshot.',
-    gradient: 'bg-gradient-to-br from-amber-200 via-orange-200 to-rose-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Editorial-grade portrait of a Filipino healthcare professional, soft window light, navy or light-blue scrubs, neutral background, eyes warm and confident, shallow depth of field.`,
-  },
-  {
-    id: 'hospital-corridor', label: 'Hospital Corridor', emoji: '🏥',
-    description: 'Walking through a modern US hospital.',
-    gradient: 'bg-gradient-to-br from-sky-200 via-blue-200 to-indigo-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse walking through a modern US hospital corridor at golden-hour sunrise, ID badge visible but unreadable, gentle motion blur of a colleague in the background, warm clinical lighting.`,
-  },
-  {
-    id: 'study-desk-overhead', label: 'Study Desk Overhead', emoji: '📚',
-    description: 'Overhead flatlay of NCLEX prep desk.',
-    gradient: 'bg-gradient-to-br from-yellow-200 via-amber-200 to-orange-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Overhead view of a Filipino nurse's study desk: open NCLEX review book, laminated credentialing documents, passport, pen, steaming mug, neutral wood surface. Warm afternoon light, soft shadows.`,
-  },
-  {
-    id: 'golden-hour-outdoor', label: 'Golden Hour Outdoor', emoji: '🌅',
-    description: 'Aspirational sunset scene outdoors.',
-    gradient: 'bg-gradient-to-br from-orange-200 via-amber-300 to-rose-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN standing outside a modern US hospital entrance at golden hour, soft warm light, US flag softly blurred in background, hopeful expression, cinematic framing.`,
-  },
-  {
-    id: 'bright-apartment', label: 'Bright Apartment', emoji: '🛋️',
-    description: 'Sunlit Filipino-American home interior.',
-    gradient: 'bg-gradient-to-br from-rose-100 via-pink-200 to-rose-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Bright modern apartment interior: Filipino nurse on a tablet/laptop on the sofa, large windows, hints of warm Filipino touches (rattan, potted plants), natural daylight, lived-in but tidy.`,
-  },
-  {
-    id: 'document-flatlay', label: 'Document Flatlay', emoji: '📋',
-    description: 'Credentialing papers arranged neatly.',
-    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-cyan-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Top-down flatlay on a clean wood desk: PRC license folder, passport, transcripts, credentialing forms, US-state seal partially visible, small Filipino flag pin, coffee mug, pen. Warm daylight.`,
-  },
-  {
-    id: 'group-consult', label: 'Group Consult', emoji: '👥',
-    description: 'Small group around a laptop.',
-    gradient: 'bg-gradient-to-br from-violet-200 via-purple-200 to-fuchsia-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Two or three Filipino healthcare professionals around a laptop in a modern office: focused, collaborative, no client face visible. Warm office light, clean modern desk, faint background blur.`,
-  },
-  {
-    id: 'quiet-reflection', label: 'Quiet Reflection', emoji: '🪟',
-    description: 'Solo nurse, soft window light.',
-    gradient: 'bg-gradient-to-br from-slate-200 via-blue-200 to-indigo-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Quiet, intimate framing: Filipino nurse leaning against a window in scrubs during a break, soft late-afternoon light, tired-but-determined faint smile, coffee cup in hand. Cinematic depth of field.`,
-  },
-  {
-    id: 'diploma-closeup', label: 'Diploma Close-up', emoji: '🎓',
-    description: 'License or diploma macro.',
-    gradient: 'bg-gradient-to-br from-yellow-200 via-yellow-300 to-amber-400',
-    image_prompt: `${BRAND_IMAGE_BASE} Macro close-up of a US RN license / NCLEX pass document / nursing diploma corner with subtle gold seal, navy-scrub sleeve in frame holding it, soft natural light. No readable names.`,
-  },
-  {
-    id: 'us-cityscape', label: 'US Cityscape', emoji: '🏙️',
-    description: 'US skyline aspiration shot.',
-    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-300 to-blue-400',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse silhouette or back-of-shoulder framing looking at a US city skyline at dawn or dusk (generic — no specific landmark), navy scrubs, hopeful contemplative mood, soft warm/cool color contrast.`,
-  },
-  {
-    id: 'filipino-home-scene', label: 'Filipino Home Scene', emoji: '🏠',
-    description: 'Warm Filipino family moment.',
-    gradient: 'bg-gradient-to-br from-amber-100 via-orange-200 to-rose-300',
-    image_prompt: `${BRAND_IMAGE_BASE} Warm Filipino home interior — sala/kitchen scene: nurse on a video call or studying at a wooden dining table, family member subtly in background (not the focus), warm yellow tungsten light, hints of rattan and family photos softly blurred.`,
-  },
-  {
-    id: 'workspace-detail', label: 'Workspace Detail', emoji: '💻',
-    description: 'Laptop + checklist desk flatlay.',
-    gradient: 'bg-gradient-to-br from-gray-200 via-slate-300 to-zinc-400',
-    image_prompt: `${BRAND_IMAGE_BASE} Side-angle shot of a clean modern desk: open laptop with unreadable screen, printed checklist, highlighter, stethoscope draped on a chair back, warm afternoon light through a window. Filipino nurse's hand frame on the keyboard.`,
-  },
-  {
-    id: 'celebration-moment', label: 'Celebration Moment', emoji: '🎉',
-    description: 'Confetti / hug / win scene.',
-    gradient: 'bg-gradient-to-br from-pink-200 via-fuchsia-300 to-rose-400',
-    image_prompt: `${BRAND_IMAGE_BASE} Joyful celebration scene: Filipino nurse looking at a phone or tablet with a green "PASS" indicator, hands raised, soft window light, modern apartment or hospital break room. Subtle confetti or balloon hint optional, never overdone.`,
-  },
-  {
-    id: 'night-study-lamp', label: 'Night Study Lamp', emoji: '🌙',
-    description: 'Warm lamp, late-night study.',
-    gradient: 'bg-gradient-to-br from-indigo-300 via-purple-400 to-violet-500',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse studying at a cozy desk lamp at night, NCLEX review book open, highlighters scattered, focused expression, warm yellow lamp light, hint of Filipino home interior softly blurred in background.`,
-  },
-  {
-    id: 'formal-interview', label: 'Formal Interview', emoji: '🤝',
-    description: 'Professional handshake / smile.',
-    gradient: 'bg-gradient-to-br from-teal-200 via-emerald-300 to-green-400',
-    image_prompt: `${BRAND_IMAGE_BASE} Professional setting: Filipino nurse in a clean blazer or smart-casual top shaking hands with a US-coded recruiter or HR person at a modern office desk. Warm soft light, US flag pin subtle in background, confident calm expression.`,
-  },
-]
 
 const TEMPLATE_CATEGORY_LABEL: Record<TemplateCategory, string> = {
   success: 'Success story',
@@ -2069,8 +1991,11 @@ function ManagerView({
           topic: seed.title,
           preselected_idea: seed.brief,
           template_id: null,
-          template_image_prompt: null,
-          image_template_id: null,
+          // Manager auto-generate uses whatever the operator has saved as
+          // the master image prompt — the same value Compose sends. This
+          // is how the agent stays "continuously learning": refinements
+          // saved in Compose immediately apply to the next auto-batch.
+          template_image_prompt: readMasterImagePrompt(),
           goal: CAMPAIGN_GOALS.find((g) => g.id === 'build_trust')?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === 'ph_considering')?.brief || '',
           platforms: [],
@@ -2874,10 +2799,14 @@ function GeneratorView({
   const { showToast } = useToast()
   const [topic, setTopic] = useState('')
   const [templateId, setTemplateId] = useState('')
-  // Visual-style override picked from the IMAGE_TEMPLATES library. When set,
-  // its `image_prompt` is sent as `template_image_prompt` and wins over any
-  // post-template's built-in visual prompt — pair any topic with any look.
-  const [imageTemplateId, setImageTemplateId] = useState('')
+  // The current master image prompt — drives the image AI for every
+  // generation. Reads from localStorage (or DEFAULT_MASTER_IMAGE_PROMPT
+  // for fresh sessions); writes back on every edit so refinements stick
+  // across sessions and across Compose ↔ Manager auto-generate.
+  const [masterImagePrompt, setMasterImagePrompt] = useState<string>(() => readMasterImagePrompt())
+  const [masterPromptOpen, setMasterPromptOpen] = useState(false)
+  const [masterPromptDraft, setMasterPromptDraft] = useState<string>('')
+  const [masterPromptRefining, setMasterPromptRefining] = useState(false)
   const [goal, setGoal] = useState<CampaignGoal>('build_trust')
   const [audiencePreset, setAudiencePreset] = useState<AudiencePreset>('ph_considering')
   const [tone, setTone] = useState('friendly')
@@ -2891,12 +2820,6 @@ function GeneratorView({
   const [phase, setPhase] = useState<'idle' | 'planning' | 'writing' | 'rendering'>('idle')
 
   const template = POST_TEMPLATES.find((t) => t.id === templateId) || null
-  const imageTemplate = IMAGE_TEMPLATES.find((t) => t.id === imageTemplateId) || null
-
-  function pickRandomImageTemplate() {
-    const idx = Math.floor(Math.random() * IMAGE_TEMPLATES.length)
-    setImageTemplateId(IMAGE_TEMPLATES[idx].id)
-  }
 
   // Apply a one-shot prefill from the Manager tab — sets the topic and/or
   // selected template, then clears the prefill upstream so subsequent
@@ -2908,6 +2831,63 @@ function GeneratorView({
     onPrefillConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill])
+
+  // Master image prompt — edit / reset / AI-refine. Refining hits the
+  // server's /ai/refine-master-prompt endpoint and applies the returned
+  // version straight to the editor draft so the operator can review
+  // before saving.
+  function openMasterPromptEditor() {
+    setMasterPromptDraft(masterImagePrompt)
+    setMasterPromptOpen(true)
+  }
+  function saveMasterPrompt() {
+    const value = masterPromptDraft.trim()
+    if (!value) {
+      showToast('Master image prompt cannot be empty', 'error')
+      return
+    }
+    setMasterImagePrompt(value)
+    writeMasterImagePrompt(value)
+    setMasterPromptOpen(false)
+    showToast(value === DEFAULT_MASTER_IMAGE_PROMPT.trim()
+      ? 'Reset to brand default — future generations will use it'
+      : 'Master image prompt saved — future generations will use it', 'success')
+  }
+  function resetMasterPromptToDefault() {
+    setMasterPromptDraft(DEFAULT_MASTER_IMAGE_PROMPT)
+  }
+  async function refineMasterPromptWithAI() {
+    setMasterPromptRefining(true)
+    try {
+      const r = await api<{ refined_prompt: string; reasoning?: string }>(
+        '/ai/refine-master-prompt',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            current_prompt: masterPromptDraft || masterImagePrompt,
+            // Hint the model with context that's likely in flight so the
+            // refinement keeps the relevant brand cues. Topic is what
+            // the operator is currently writing about; campaign goal
+            // shapes what "good" looks like for this round.
+            topic: topic.trim() || null,
+            goal_brief: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || null,
+          }),
+        }
+      )
+      if (r.refined_prompt && r.refined_prompt.trim()) {
+        setMasterPromptDraft(r.refined_prompt.trim())
+        showToast(r.reasoning
+          ? `Refined — ${r.reasoning.slice(0, 90)}${r.reasoning.length > 90 ? '…' : ''}`
+          : 'Master prompt refined — review and Save when ready', 'success')
+      } else {
+        throw new Error('No refined prompt returned')
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Refine failed', 'error')
+    } finally {
+      setMasterPromptRefining(false)
+    }
+  }
 
   async function generate() {
     if (!topic.trim() && !template) {
@@ -2932,8 +2912,11 @@ function GeneratorView({
           // image-template wins over topic-template for the visual prompt.
           preselected_idea: template?.brief || null,
           template_id: template?.id || null,
-          template_image_prompt: imageTemplate?.image_prompt || template?.image_prompt || null,
-          image_template_id: imageTemplate?.id || null,
+          // Always send the master image prompt — single source of truth
+          // for what the image AI renders. The operator can edit/refine
+          // this from the editor below; whatever's saved in localStorage
+          // is what ships to the backend.
+          template_image_prompt: masterImagePrompt,
           goal: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || '',
           audience_preset: AUDIENCE_PRESETS.find((a) => a.id === audiencePreset)?.brief || '',
           // Platforms are no longer chosen here — the operator picks accounts
@@ -3103,134 +3086,74 @@ function GeneratorView({
             </p>
           </div>
 
-          {/* Image style — 15 brand-aligned visual templates the AI uses when
-              rendering the post image. Overrides the topic's built-in visual
-              prompt when set. Random shuffles the picker so the feed stays
-              visually varied without manual choice each time. */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Image style — company visual templates
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={pickRandomImageTemplate}
-                  className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 hover:text-primary-700 dark:hover:text-primary-300 inline-flex items-center gap-1"
-                  title="Pick a random image template"
-                >
-                  🎲 Random
-                </button>
-                {imageTemplate && (
-                  <button
-                    type="button"
-                    onClick={() => setImageTemplateId('')}
-                    className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-              {/* "Auto" tile — leave it on this when the topic should drive
-                  the visual (the topic-template's built-in image_prompt
-                  wins). Visually treated like an image option for parity. */}
-              <button
-                type="button"
-                onClick={() => setImageTemplateId('')}
-                className={cn(
-                  'group text-left rounded-xl overflow-hidden border-2 transition-all bg-white dark:bg-gray-900',
-                  !imageTemplate
-                    ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 shadow-md'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
-                )}
-                title="Let the topic decide the visual"
-              >
-                <div className="relative aspect-square flex items-center justify-center bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 dark:from-gray-800 dark:via-gray-700 dark:to-gray-600">
-                  <Wand2 className="h-8 w-8 text-gray-500 dark:text-gray-300 drop-shadow-sm" />
-                  {!imageTemplate && (
-                    <div className="absolute inset-0 bg-primary-600/10 flex items-center justify-center">
-                      <span className="bg-primary-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow">
-                        Auto
-                      </span>
-                    </div>
+          {/* Master image prompt — single source of truth for the image AI.
+              Operator can edit + AI-refine; saved overrides persist in
+              localStorage so the agent's "learning" carries across
+              sessions. Compose and Manager auto-generate both send
+              whatever's saved here as `template_image_prompt`. */}
+          <div className="rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/15 p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Master image prompt</h3>
+                  {masterImagePrompt !== DEFAULT_MASTER_IMAGE_PROMPT && (
+                    <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                      Customised
+                    </span>
                   )}
                 </div>
-                <div className="p-1.5 text-center">
-                  <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 leading-tight">Auto</div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">From topic</div>
-                </div>
-              </button>
-
-              {IMAGE_TEMPLATES.map((t) => {
-                const selected = imageTemplateId === t.id
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setImageTemplateId(selected ? '' : t.id)}
-                    className={cn(
-                      'group text-left rounded-xl overflow-hidden border-2 transition-all bg-white dark:bg-gray-900',
-                      selected
-                        ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 shadow-md'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-sm'
-                    )}
-                    title={t.description}
-                  >
-                    <div className="relative aspect-square overflow-hidden">
-                      <img
-                        src={imageTemplatePreview(t)}
-                        alt={t.label}
-                        loading="lazy"
-                        onError={(e) => {
-                          const img = e.currentTarget
-                          if (!img.dataset.fallback) {
-                            img.dataset.fallback = '1'
-                            img.src = imageTemplateFallback(t.id)
-                          }
-                        }}
-                        className={cn(
-                          'w-full h-full object-cover transition-transform group-hover:scale-105',
-                          selected && 'brightness-90'
-                        )}
-                      />
-                      {/* Emoji badge — quick visual ID without obscuring the photo. */}
-                      <span className="absolute top-1.5 left-1.5 h-7 w-7 rounded-full bg-white/85 dark:bg-black/55 backdrop-blur-sm flex items-center justify-center text-base shadow-sm">
-                        {t.emoji}
-                      </span>
-                      {selected && (
-                        <div className="absolute inset-0 bg-primary-600/25 flex items-center justify-center">
-                          <span className="bg-primary-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow">
-                            Selected
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-1.5 text-center">
-                      <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 leading-tight line-clamp-1">{t.label}</div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">{t.description}</div>
-                    </div>
-                  </button>
-                )
-              })}
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
+                  Drives every image the AI renders for posts. Edit it to evolve the look — refinements are saved on
+                  your device and the model can self-improve via the Refine button.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={openMasterPromptEditor}>
+                <PencilLine className="h-3.5 w-3.5 mr-1" /> Edit prompt
+              </Button>
             </div>
-            {imageTemplate && (
-              <div className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-primary-200 dark:border-primary-800/50 bg-primary-50/60 dark:bg-primary-900/15">
-                <div className={cn('w-14 h-14 rounded-lg flex items-center justify-center text-3xl flex-shrink-0', imageTemplate.gradient)}>
-                  {imageTemplate.emoji}
+            <div className="mt-3 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 max-h-32 overflow-y-auto">
+              <p className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-snug line-clamp-6">
+                {masterImagePrompt}
+              </p>
+            </div>
+            {masterPromptOpen && (
+              <div className="mt-4 space-y-3 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Editing master prompt
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                    {masterPromptDraft.length.toLocaleString()} chars
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{imageTemplate.label}</div>
-                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-snug">{imageTemplate.description}</p>
+                <Textarea
+                  rows={14}
+                  value={masterPromptDraft}
+                  onChange={(e) => setMasterPromptDraft(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setMasterPromptOpen(false)} disabled={masterPromptRefining}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={resetMasterPromptToDefault} disabled={masterPromptRefining}>
+                    Reset to brand default
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={refineMasterPromptWithAI} loading={masterPromptRefining} disabled={masterPromptRefining}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1" /> Refine with AI
+                  </Button>
+                  <Button size="sm" onClick={saveMasterPrompt} disabled={masterPromptRefining || !masterPromptDraft.trim()}>
+                    Save
+                  </Button>
                 </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                  Refine with AI sends the current draft + your active topic/goal to <span className="font-mono">/ai/refine-master-prompt</span>.
+                  The model returns an improved version; review then click Save. Reset wipes your override so future
+                  default-prompt updates in code reach you automatically.
+                </p>
               </div>
             )}
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
-              15 visual templates with a consistent brand look (Filipino healthcare professionals, modern US settings,
-              no fake logos or testimonials). Picking one overrides the topic's default visual. The 🎲 Random button
-              shuffles for you — handy when you want feed variety without manual choice.
-            </p>
           </div>
         </div>
 

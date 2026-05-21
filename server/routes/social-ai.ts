@@ -136,6 +136,113 @@ router.post('/image', authenticateToken, requireAdmin, async (req: Authenticated
 })
 
 // ---------------------------------------------------------------------------
+// POST /api/social/ai/refine-master-prompt
+// Continuous-learning loop for the image-AI master prompt. Takes the
+// operator's current master prompt + optional context (active topic,
+// campaign goal) and asks gpt-4o-mini to propose an improved version
+// that hews to GritSync's brand. Returns the refined prompt + a short
+// reasoning blurb. The client overwrites its localStorage-backed prompt
+// only after the operator reviews + clicks Save, so AI never silently
+// rewrites brand-critical copy.
+//
+// Body: { current_prompt: string, topic?: string|null, goal_brief?: string|null }
+// Returns: { data: { refined_prompt: string, reasoning: string } }
+// ---------------------------------------------------------------------------
+router.post('/refine-master-prompt', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const apiKey = OPENAI_KEY()
+    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
+
+    const { current_prompt, topic = null, goal_brief = null } = req.body || {}
+    if (!current_prompt || !String(current_prompt).trim()) {
+      return res.status(400).json({ error: 'current_prompt is required' })
+    }
+
+    const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. You optimise prompts so models like gpt-image-1, DALL·E 3, and Imagen 3 render advertisement-grade visuals consistently.
+
+You're refining a "master image prompt" for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. Use these ground-truth facts so the refined prompt stays brand-aligned:
+
+${GRITSYNC_KB}
+
+Refinement rules:
+- KEEP the structural sections the operator built (subject, background, supporting characters, visual elements, color palette, headline text, CTA, branding, style, composition, aspect ratio, negative prompt).
+- IMPROVE specificity: tighter visual language, more cinematic descriptors, clearer subject blocking.
+- PRESERVE all brand-critical strings exactly: "GritSync", "gritsync.com", "YOUR USRN DREAM STARTS HERE", "NCLEX Processing • CGFNS • ATT • VisaScreen • End-to-End Guidance", "GET YOUR FREE ASSESSMENT TODAY". Do not paraphrase them.
+- DO NOT add fabricated claims (no "guaranteed pass", "100% success", named hospitals, fabricated stats).
+- DO NOT add ethnicities other than Filipino, or US-specific landmarks the brand hasn't endorsed.
+- KEEP the negative-prompt section and strengthen anti-artifact terms ("distorted hands", "warped documents", "AI text glitches", etc.).
+- LENGTH: similar order of magnitude to the input — don't more than double or less than half it.`
+
+    const userPayload: string[] = [
+      'Current master image prompt:',
+      '"""',
+      String(current_prompt),
+      '"""',
+    ]
+    if (topic) {
+      userPayload.push('', `Operator is currently writing about: ${topic}`)
+    }
+    if (goal_brief) {
+      userPayload.push('', `Campaign goal context: ${goal_brief}`)
+    }
+    userPayload.push(
+      '',
+      'Return ONLY this JSON object — no markdown fence, no prose around it:',
+      `{ "refined_prompt": "<full refined prompt, multi-line with \\n line breaks>", "reasoning": "<one short sentence summarising what you changed and why>" }`
+    )
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 2400,
+        temperature: 0.6,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userPayload.join('\n') },
+        ],
+      }),
+    })
+    const j: any = await r.json().catch(() => ({}))
+    if (!r.ok) {
+      return res.status(502).json({ error: j.error?.message || `OpenAI HTTP ${r.status}` })
+    }
+    const text = j.choices?.[0]?.message?.content || ''
+    let refined_prompt = ''
+    let reasoning = ''
+    try {
+      const parsed = JSON.parse(text)
+      refined_prompt = typeof parsed.refined_prompt === 'string' ? parsed.refined_prompt.trim() : ''
+      reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning.trim() : ''
+    } catch {
+      // If the model returned something un-JSONable, treat the whole
+      // body as the refined prompt and skip the reasoning.
+      refined_prompt = String(text).trim()
+    }
+    if (!refined_prompt) {
+      return res.status(502).json({ error: 'Refinement produced no prompt' })
+    }
+    // Log the refinement so we can audit how the operator's master
+    // prompt evolved over time (Postgres column is JSONB on a tiny
+    // helper table — best-effort, never blocks the response).
+    pool.query(
+      `INSERT INTO social_ai_prompt_refinements (user_id, source_prompt, refined_prompt, reasoning, topic, goal_brief)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [req.user?.id || null, current_prompt, refined_prompt, reasoning || null, topic || null, goal_brief || null]
+    ).catch(() => { /* table may not exist yet — refinement logging is best-effort */ })
+    res.json({ data: { refined_prompt, reasoning } })
+  } catch (err: any) {
+    console.error('AI refine-master-prompt error:', err)
+    res.status(500).json({ error: err.message || 'AI refine failed' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // POST /api/social/ai/video
 // Kicks off a text-to-video Replicate prediction. Body: { prompt,
 // aspect_ratio?, duration? }. Returns the prediction id; the client polls
