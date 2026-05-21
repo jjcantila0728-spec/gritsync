@@ -72,16 +72,29 @@ const PLATFORM_CONFIG: Record<Platform, {
     extraAuthParams: { auth_type: 'rerequest' },
   },
   instagram: {
-    // Kept as a back-compat entry for the "Log in with Instagram" path on
-    // the SimplePlatformCard manual-token fallback. The Accounts tab's IG
-    // card now delegates to the facebook flow above, but if a caller ever
-    // hits /oauth/instagram/start directly we still surface the full IG
-    // publishing scope set so the resulting token is actually usable.
-    authUrl: 'https://www.facebook.com/v20.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-    scopes: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
-    envIdKey: 'FACEBOOK_APP_ID',
-    envSecretKey: 'FACEBOOK_APP_SECRET',
+    // Direct Instagram Login flow (separate Meta app from the Facebook
+    // one — uses Instagram's own OAuth at instagram.com, not facebook.com,
+    // and the newer `instagram_business_*` scope set). Tokens here are
+    // Instagram user tokens; publishing uses graph.instagram.com — see
+    // handleInstagramDirectConnect + the IG branch of publishToPlatform.
+    //
+    // Required env vars (separate app, separate client):
+    //   INSTAGRAM_APP_ID      — your IG app's client_id
+    //   INSTAGRAM_APP_SECRET  — your IG app's client secret
+    authUrl: 'https://www.instagram.com/oauth/authorize',
+    tokenUrl: 'https://api.instagram.com/oauth/access_token',
+    scopes: [
+      'instagram_business_basic',
+      'instagram_business_content_publish',
+      'instagram_business_manage_comments',
+      'instagram_business_manage_messages',
+      'instagram_business_manage_insights',
+    ].join(','),
+    envIdKey: 'INSTAGRAM_APP_ID',
+    envSecretKey: 'INSTAGRAM_APP_SECRET',
+    // force_reauth=true makes Meta re-show the consent dialog every time,
+    // which is what we want when adding scopes or switching accounts.
+    extraAuthParams: { force_reauth: 'true' },
   },
   threads: {
     // Threads is a separate Meta app from the Facebook/Instagram one — it
@@ -341,6 +354,21 @@ router.get('/oauth/:platform/callback', async (req, res) => {
         userId,
         shortLivedUserToken: accessToken,
         clientId,
+        clientSecret,
+        scopesCsv: cfg.scopes,
+      })
+    } else if (platform === 'instagram') {
+      // Direct Instagram Login flow: the short-lived IG user token from
+      // api.instagram.com → exchanged for a 60-day long-lived token at
+      // graph.instagram.com → profile fetch → upsert as an IG row.
+      // The token carries instagram_business_* scopes and publishing
+      // hits graph.instagram.com (NOT graph.facebook.com).
+      await handleInstagramDirectConnect({
+        userId,
+        shortLivedUserToken: accessToken,
+        // Instagram's token-exchange response includes the user_id at the
+        // top level — pass it through so we don't need a second profile call.
+        igUserIdFromExchange: tokenJson.user_id ? String(tokenJson.user_id) : null,
         clientSecret,
         scopesCsv: cfg.scopes,
       })
@@ -857,6 +885,100 @@ async function fbExchangeLongLived(
 //   - There's no "Pages" layer — each connection is one Threads user.
 //   - Refresh works the same: GET /refresh_access_token?grant_type=th_refresh_token.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Instagram direct OAuth — short → long-lived exchange + profile fetch.
+//
+// Differences from the FB-driven IG flow:
+//   - Token lives on graph.instagram.com (NOT graph.facebook.com).
+//   - One-step: each connect grants exactly ONE IG Business/Creator account.
+//   - Long-lived exchange uses ?grant_type=ig_exchange_token (60 days).
+//   - Refreshable via /refresh_access_token?grant_type=ig_refresh_token.
+//
+// Stored rows are tagged metadata.kind='ig_direct' so publishToPlatform
+// dispatches them to the graph.instagram.com endpoints instead of the
+// graph.facebook.com Page-token endpoints used by ig_business rows.
+// ---------------------------------------------------------------------------
+async function handleInstagramDirectConnect(args: {
+  userId: string
+  shortLivedUserToken: string
+  igUserIdFromExchange: string | null
+  clientSecret: string
+  scopesCsv: string
+}): Promise<void> {
+  const { userId, shortLivedUserToken, igUserIdFromExchange, clientSecret, scopesCsv } = args
+
+  // 1. Short → long-lived exchange (60-day TTL).
+  const exchangeUrl =
+    `https://graph.instagram.com/access_token?grant_type=ig_exchange_token` +
+    `&client_secret=${encodeURIComponent(clientSecret)}` +
+    `&access_token=${encodeURIComponent(shortLivedUserToken)}`
+  const exchangeRes = await fetch(exchangeUrl)
+  const exchangeJson: any = await exchangeRes.json().catch(() => ({}))
+  if (!exchangeRes.ok || !exchangeJson.access_token) {
+    throw new Error(exchangeJson.error?.message || exchangeJson.error_message || 'Instagram long-lived token exchange failed')
+  }
+  const longLivedToken: string = exchangeJson.access_token
+  const longTokenExpiresAt = exchangeJson.expires_in
+    ? new Date(Date.now() + Number(exchangeJson.expires_in) * 1000)
+    : null
+
+  // 2. Fetch the IG user profile so the UI has a username + picture.
+  const meRes = await fetch(
+    `https://graph.instagram.com/v20.0/me?fields=user_id,username,name,profile_picture_url,account_type&access_token=${encodeURIComponent(longLivedToken)}`
+  )
+  const me: any = await meRes.json().catch(() => ({}))
+  if (!meRes.ok || !me.user_id) {
+    // Fallback to the user_id Instagram returned in the token exchange.
+    if (!igUserIdFromExchange) {
+      throw new Error(me.error?.message || 'Failed to fetch Instagram profile')
+    }
+    me.user_id = igUserIdFromExchange
+    me.username = me.username || null
+  }
+
+  const displayName = me.username ? `@${me.username}` : (me.name || `IG ${me.user_id}`)
+  const profileUrl = me.username ? `https://www.instagram.com/${me.username}` : null
+
+  // 3. Upsert. platform_user_id is the IG user id (graph.instagram.com calls
+  //    use this as the {ig-user-id} path component for /media + /media_publish).
+  await query(
+    `INSERT INTO social_accounts
+       (platform, display_name, platform_user_id, access_token, refresh_token,
+        token_expires_at, profile_url, avatar_url, scopes, metadata,
+        status, connected_by_user_id, connected_at)
+     VALUES ('instagram', $1, $2, $3, NULL, $4, $5, $6, $7, $8::jsonb, 'connected', $9, NOW())
+     ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           access_token = EXCLUDED.access_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           profile_url = EXCLUDED.profile_url,
+           avatar_url = EXCLUDED.avatar_url,
+           scopes = EXCLUDED.scopes,
+           metadata = EXCLUDED.metadata,
+           status = 'connected',
+           last_error = NULL,
+           updated_at = NOW(),
+           connected_at = NOW()`,
+    [
+      displayName,
+      String(me.user_id),
+      longLivedToken,
+      longTokenExpiresAt,
+      profileUrl,
+      me.profile_picture_url || null,
+      scopesCsv,
+      JSON.stringify({
+        kind: 'ig_direct',
+        ig_user_id: String(me.user_id),
+        ig_username: me.username || null,
+        account_type: me.account_type || null,
+        long_lived_token_expires_at: longTokenExpiresAt,
+      }),
+      userId,
+    ]
+  )
+}
+
 async function handleThreadsConnect(args: {
   userId: string
   shortLivedUserToken: string
@@ -1408,31 +1530,42 @@ async function publishToPlatform(
     }
     if (platform === 'instagram') {
       // Instagram Content Publishing API. Two-step container + publish flow.
-      // Requires:
-      //   - An Instagram Business or Creator account linked to a Facebook Page.
-      //   - A Page access token (NOT a user token) — the linked-page token
-      //     is what social_accounts.access_token holds for IG rows (see the
-      //     OAuth flow's handleFacebookConnect, which copies the page token
-      //     onto the IG row).
-      // Docs: developers.facebook.com/docs/instagram-platform/content-publishing
+      // Two underlying flavors of IG row in social_accounts:
+      //   kind='ig_direct'   — Direct IG Login flow (instagram.com OAuth).
+      //                         Token is an IG user token + publish hits
+      //                         graph.instagram.com. Scopes use the new
+      //                         instagram_business_* prefix.
+      //   kind='ig_business' — Old Facebook-OAuth-driven flow. Token is a
+      //                         Page token + publish hits graph.facebook.com.
+      //                         Scopes use the legacy instagram_basic +
+      //                         instagram_content_publish.
+      // Docs:
+      //   Direct:   developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
+      //   Via FB:   developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login
       const igUserId = account.platform_user_id
       const firstMedia = mediaUrls[0] || null
       if (!firstMedia) {
         return { ok: false, error: 'Instagram posts require an image or video' }
       }
       const isVideo = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
+      const igMeta = account.metadata || {}
+      const isDirectFlow = igMeta.kind === 'ig_direct'
+      const igHost = isDirectFlow ? 'https://graph.instagram.com' : 'https://graph.facebook.com/v20.0'
 
-      // Preflight: token must carry both instagram_basic AND
-      // instagram_content_publish. Most common failure modes:
-      //   - Token minted before the scopes were added to OAuth (fix:
-      //     disconnect + reconnect)
-      //   - Permission not added to the app's Instagram use case in the
-      //     App Dashboard (fix: add it there, then reconnect)
-      const igScopeMissing = await missingScopes(token, ['instagram_basic', 'instagram_content_publish'])
-      if (igScopeMissing.length) {
-        return {
-          ok: false,
-          error: `Instagram publishing scope missing: ${igScopeMissing.join(', ')}. If the permission is listed in your Meta App Dashboard (Use Cases → Instagram → Permissions), Disconnect Facebook on the Accounts tab and Log in again to mint a fresh token. Otherwise add the permission in the App Dashboard first.`,
+      // Preflight: token must carry the right publishing scope. The
+      // scope name differs by flow — the new direct flow uses the
+      // instagram_business_* prefix; the legacy flow uses instagram_basic
+      // + instagram_content_publish. Direct-flow tokens live on
+      // graph.instagram.com and don't expose /me/permissions, so we
+      // skip the preflight there (Meta returns clearly-typed errors at
+      // /media if scopes are missing).
+      if (!isDirectFlow) {
+        const igScopeMissing = await missingScopes(token, ['instagram_basic', 'instagram_content_publish'])
+        if (igScopeMissing.length) {
+          return {
+            ok: false,
+            error: `Instagram publishing scope missing: ${igScopeMissing.join(', ')}. If the permission is listed in your Meta App Dashboard (Use Cases → Instagram → Permissions), Disconnect Facebook on the Accounts tab and Log in again to mint a fresh token. Otherwise add the permission in the App Dashboard first.`,
+          }
         }
       }
       // IG caps captions at 2200 chars + 30 hashtags. Truncate the body so
@@ -1450,7 +1583,7 @@ async function publishToPlatform(
       } else {
         containerParams.set('image_url', firstMedia)
       }
-      const containerRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media`, {
+      const containerRes = await fetch(`${igHost}/${igUserId}/media`, {
         method: 'POST',
         body: containerParams,
       })
@@ -1466,7 +1599,7 @@ async function publishToPlatform(
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((r) => setTimeout(r, 2000))
         const statusRes = await fetch(
-          `https://graph.facebook.com/v20.0/${containerJson.id}?fields=status_code&access_token=${encodeURIComponent(token)}`
+          `${igHost}/${containerJson.id}?fields=status_code&access_token=${encodeURIComponent(token)}`
         )
         const statusJson: any = await statusRes.json().catch(() => ({}))
         if (statusJson.status_code === 'FINISHED') break
@@ -1476,7 +1609,7 @@ async function publishToPlatform(
       }
 
       // 3. Publish.
-      const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
+      const publishRes = await fetch(`${igHost}/${igUserId}/media_publish`, {
         method: 'POST',
         body: new URLSearchParams({ creation_id: containerJson.id, access_token: token }),
       })

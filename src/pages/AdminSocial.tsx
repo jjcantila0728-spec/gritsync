@@ -1670,79 +1670,10 @@ function FacebookCard({
   )
 }
 
-// Instagram card — Meta requires the Facebook OAuth to surface IG
-// Business accounts, so the connect CTA delegates to the same flow.
-// Shows IG accounts linked through any authorized Page once connected.
-function InstagramCard({
-  status,
-  busy,
-  oauthReady,
-  onConnect,
-}: {
-  status: MetaConnectionStatus | null
-  busy: boolean
-  oauthReady: boolean | undefined
-  onConnect: () => void
-}) {
-  if (status === null) {
-    return (
-      <Card className="p-4"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>
-    )
-  }
-
-  const oauthBlocked = oauthReady === false
-  const connected = !!status.connected
-  const igs = status.instagram_accounts || []
-
-  return (
-    <Card className="p-4 md:p-5">
-      <div className="flex items-center gap-3">
-        <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-white flex-shrink-0', PLATFORM_META.instagram.color)}>
-          <Instagram className="h-5 w-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">Instagram</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-            {connected
-              ? igs.length > 0
-                ? `${igs.length} Business account${igs.length === 1 ? '' : 's'} linked`
-                : 'No IG Business accounts linked to your Pages'
-              : oauthBlocked
-                ? 'Login unavailable — server setup needed'
-                : 'Log in via Facebook to authorize Instagram'}
-          </div>
-        </div>
-        {!connected && (
-          <Button size="sm" variant="outline" onClick={onConnect} loading={busy} disabled={busy || oauthBlocked}>
-            Log in via Facebook
-          </Button>
-        )}
-      </div>
-
-      {connected && igs.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Linked accounts
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {igs.map((ig) => (
-              <span key={ig.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-200">
-                <Instagram className="h-3 w-3" /> @{ig.username || ig.id}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {connected && igs.length === 0 && (
-        <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
-          To enable Instagram posting, link an Instagram Business or Creator account to one of your Facebook Pages in
-          Meta Business Suite, then click <strong>Reconnect</strong> on the Facebook card.
-        </div>
-      )}
-    </Card>
-  )
-}
+// (InstagramCard removed — IG is now wired through its own Instagram Login
+//  OAuth flow at /oauth/instagram/start, so it's rendered by SimplePlatformCard
+//  just like Threads/LinkedIn/etc. The legacy via-Facebook IG rows still
+//  publish correctly because publishToPlatform dispatches by metadata.kind.)
 
 // Uniform per-platform card used across the Accounts grid. Same shape
 // whether disconnected, connected, or OAuth-blocked: logo, name, status
@@ -2861,13 +2792,11 @@ function AccountsView({
           onDisconnect={onMetaDisconnect}
           onChoosePages={onChoosePages}
         />
-        <InstagramCard
-          status={metaStatus}
-          busy={metaBusy}
-          oauthReady={oauthStatus.facebook?.oauth_ready}
-          onConnect={() => onConnect('facebook')}
-        />
-        {(['threads', 'linkedin', 'youtube', 'tiktok'] as Platform[]).map((p) => {
+        {/* Instagram, Threads, LinkedIn, YouTube, TikTok all follow the
+            same single-account-per-platform pattern. IG was previously a
+            sibling of Facebook (linked via the FB OAuth); it now has its
+            own Instagram Login OAuth (see PLATFORM_CONFIG.instagram). */}
+        {(['instagram', 'threads', 'linkedin', 'youtube', 'tiktok'] as Platform[]).map((p) => {
           const acc = accounts.find((a) => a.platform === p) || null
           return (
             <SimplePlatformCard
