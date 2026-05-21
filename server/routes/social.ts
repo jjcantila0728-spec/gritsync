@@ -1263,6 +1263,27 @@ async function fetchPlatformProfile(
   return { display_name: `${platform} account`, platform_user_id: `${platform}:${Date.now()}` }
 }
 
+// Return the subset of `required` scopes that the given Meta token is
+// NOT currently granted. Falls back to "[] (assume granted)" when the
+// /me/permissions call itself fails — we'd rather attempt the publish
+// and surface Meta's own error than refuse to try because of a
+// transient diagnostic-endpoint hiccup.
+async function missingScopes(token: string, required: string[]): Promise<string[]> {
+  try {
+    const r = await fetch(
+      `https://graph.facebook.com/v20.0/me/permissions?access_token=${encodeURIComponent(token)}`
+    )
+    const j: any = await r.json().catch(() => ({}))
+    if (!r.ok || !Array.isArray(j.data)) return []
+    const granted = new Set<string>(
+      j.data.filter((p: any) => p.status === 'granted').map((p: any) => p.permission)
+    )
+    return required.filter((s) => !granted.has(s))
+  } catch {
+    return []
+  }
+}
+
 async function publishToPlatform(
   account: any,
   content: string,
@@ -1281,6 +1302,19 @@ async function publishToPlatform(
       const pageId = account.platform_user_id
       const firstMedia = mediaUrls[0] || null
       const isVideo = firstMedia && /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
+
+      // Preflight: verify the Page token carries pages_manage_posts. The
+      // most common cause of silent FB publish failures is the app's
+      // permissions list not having pages_manage_posts added to its
+      // Facebook Login use case — Meta then drops it from the consent
+      // dialog and the resulting Page token can't post.
+      const fbScopeMissing = await missingScopes(token, ['pages_manage_posts'])
+      if (fbScopeMissing.length) {
+        return {
+          ok: false,
+          error: `Facebook Page posting scope missing: ${fbScopeMissing.join(', ')}. Add this permission under App Dashboard → Use Cases → Facebook Login → Permissions, then Disconnect + Reconnect Facebook on the Accounts tab.`,
+        }
+      }
 
       // No media → plain status update via /feed.
       if (!firstMedia) {
@@ -1343,28 +1377,17 @@ async function publishToPlatform(
       }
       const isVideo = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
 
-      // Preflight: verify the page token actually carries
-      // instagram_content_publish. The most common cause of "Application
-      // does not have permission for this action" is a token that was
-      // minted before the IG scopes were added to the OAuth config —
-      // surfacing that explicitly saves operators from staring at Meta's
-      // generic error string.
-      const scopeCheck = await fetch(
-        `https://graph.facebook.com/v20.0/me/permissions?access_token=${encodeURIComponent(token)}`
-      )
-      const scopeJson: any = await scopeCheck.json().catch(() => ({}))
-      const grantedPerms = new Set<string>(
-        (scopeJson.data || [])
-          .filter((p: any) => p.status === 'granted')
-          .map((p: any) => p.permission)
-      )
-      const missingScopes = ['instagram_basic', 'instagram_content_publish'].filter(
-        (s) => !grantedPerms.has(s)
-      )
-      if (missingScopes.length) {
+      // Preflight: token must carry both instagram_basic AND
+      // instagram_content_publish. Most common failure modes:
+      //   - Token minted before the scopes were added to OAuth (fix:
+      //     disconnect + reconnect)
+      //   - Permission not added to the app's Instagram use case in the
+      //     App Dashboard (fix: add it there, then reconnect)
+      const igScopeMissing = await missingScopes(token, ['instagram_basic', 'instagram_content_publish'])
+      if (igScopeMissing.length) {
         return {
           ok: false,
-          error: `Instagram publishing scope missing: ${missingScopes.join(', ')}. Disconnect Facebook on the Accounts tab and Log in again — the consent dialog will ask for Instagram posting permission. The existing token was minted before this app required it.`,
+          error: `Instagram publishing scope missing: ${igScopeMissing.join(', ')}. If the permission is listed in your Meta App Dashboard (Use Cases → Instagram → Permissions), Disconnect Facebook on the Accounts tab and Log in again to mint a fresh token. Otherwise add the permission in the App Dashboard first.`,
         }
       }
       // IG caps captions at 2200 chars + 30 hashtags. Truncate the body so
