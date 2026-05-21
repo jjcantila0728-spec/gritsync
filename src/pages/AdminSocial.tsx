@@ -1974,6 +1974,100 @@ function ManagerView({
     return { target, current, ratio }
   }, [postsPerDay, stats.avgPerDay])
 
+  // ── Agent decision-making ──────────────────────────────────────────
+  // `decideAgentPlan()` is the brain behind the "Generate Now" button:
+  // the agent picks topic, goal, audience, and tone instead of leaving
+  // the choice to the operator. Decisions are dynamic — we avoid topics
+  // covered in recent posts, rotate goals across the week, match
+  // audience to the topic's tag, and rotate tone across the day so a
+  // single operator clicking Generate Now repeatedly gets variety.
+  interface AgentPlan {
+    topic: typeof TRENDING_TOPIC_IDEAS[number]
+    goal: CampaignGoal
+    audience: AudiencePreset
+    tone: string
+    length: 'short' | 'medium' | 'long'
+    language: 'taglish' | 'english' | 'filipino'
+    reasoning: string
+  }
+  function decideAgentPlan(): AgentPlan {
+    // Topic: skip ideas whose tag or title fragment appears in any of
+    // the last 10 posts so the feed doesn't repeat itself. Fall back
+    // to the full list if everything's been used recently.
+    const recentBlob = posts.slice(0, 10).map((p) => (p.content || '').toLowerCase()).join(' ')
+    const fresh = TRENDING_TOPIC_IDEAS.filter((t) => {
+      const tagHit = recentBlob.includes(t.tag.toLowerCase())
+      const titleHit = recentBlob.includes(t.title.toLowerCase().slice(0, 20))
+      return !tagHit && !titleHit
+    })
+    const pool = fresh.length > 0 ? fresh : TRENDING_TOPIC_IDEAS
+    const topic = pool[Math.floor(Math.random() * pool.length)]
+
+    // Goal: rotate across the week (day-of-week index into the 6 goals)
+    // so even a once-daily click maintains a balanced mix of trust-
+    // building, education, share-wins, etc. The operator can override
+    // anytime by jumping into Compose directly.
+    const goalRotation: CampaignGoal[] = ['build_trust', 'educate', 'share_win', 'community', 'promote_service', 'book_consult']
+    const goal = goalRotation[new Date().getDay() % goalRotation.length]
+
+    // Audience: match the topic's tag where possible — NCLEX content
+    // should target nurses actively in NCLEX prep, visa content should
+    // target nurses on the visa journey, etc. Falls back to the broad
+    // "considering" segment when the tag isn't audience-specific.
+    let audience: AudiencePreset = 'ph_considering'
+    if (topic.tag === 'NCLEX') audience = 'ph_nclex_prep'
+    else if (topic.tag === 'Visa') audience = 'ph_visa_stage'
+    else if (topic.tag === 'Career' || topic.tag === 'Lifestyle') audience = 'ien_already_us'
+
+    // Tone: rotate across the day so consecutive clicks read differently.
+    const toneRotation = ['friendly', 'encouraging', 'professional', 'informative']
+    const tone = toneRotation[new Date().getHours() % toneRotation.length]
+
+    const goalLabel = CAMPAIGN_GOALS.find((g) => g.id === goal)?.label || goal
+    const audienceLabel = AUDIENCE_PRESETS.find((a) => a.id === audience)?.label || audience
+    const reasoning = `${topic.tag} angle for ${audienceLabel} · goal: ${goalLabel} · tone: ${tone}`
+
+    return { topic, goal, audience, tone, length: 'medium', language: 'taglish', reasoning }
+  }
+
+  // Generate Now — the agent decides everything (topic, goal, audience,
+  // tone) and produces ONE post in the bank. Faster feedback than the
+  // cadence-driven Auto-generate button below (which batches postsPerDay
+  // items at once). Always uses openai for the image AI per the brand
+  // brief's DALL·E-style pipeline.
+  const [agentGenerating, setAgentGenerating] = useState(false)
+  async function agentGenerateNow() {
+    setAgentGenerating(true)
+    try {
+      const plan = decideAgentPlan()
+      showToast(`Agent: ${plan.reasoning}`, 'info')
+      const data = await api<{ items: BankItem[]; brief: string }>('/ai/generate-batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          topic: plan.topic.title,
+          preselected_idea: plan.topic.brief,
+          template_id: null,
+          template_image_prompt: readMasterImagePrompt(),
+          goal: CAMPAIGN_GOALS.find((g) => g.id === plan.goal)?.brief || '',
+          audience_preset: AUDIENCE_PRESETS.find((a) => a.id === plan.audience)?.brief || '',
+          platforms: [],
+          tone: plan.tone,
+          length: plan.length,
+          language: plan.language,
+          count: 1,
+          content_type: 'image',
+          additional_details: 'Social-media manager agent — autonomous decision. Keep claims grounded, no guarantees.',
+          image_provider: 'openai',
+        }),
+      })
+      onBatchGenerated(data.items || [])
+    } catch (err: any) {
+      showToast(err.message || 'Generate Now failed', 'error')
+    } finally {
+      setAgentGenerating(false)
+    }
+  }
+
   // Auto-generate `postsPerDay` items into the Content Bank in a single
   // API call. Picks a random trending topic so consecutive clicks produce
   // varied output rather than 6 copies of the same idea. Uses GeneratorView's
@@ -2101,7 +2195,17 @@ function ManagerView({
               </p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              onClick={agentGenerateNow}
+              loading={agentGenerating}
+              disabled={agentGenerating || accounts.length === 0}
+              title={accounts.length === 0
+                ? 'Connect a social account in the Accounts tab before the agent can generate.'
+                : 'Agent decides topic, goal, audience, tone — then renders one post via DALL·E.'}
+            >
+              <Sparkles className="h-4 w-4 mr-1.5" /> Generate Now
+            </Button>
             <button
               onClick={toggleAutopilot}
               className={cn(
@@ -2116,8 +2220,8 @@ function ManagerView({
               Autopilot {autopilot ? 'ON' : 'OFF'}
               <span className="text-[9px] uppercase tracking-wider opacity-70">Beta</span>
             </button>
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">
-              {autopilot ? 'Agent will nudge you daily.' : 'Agent only recommends when you open this tab.'}
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 text-right max-w-[200px]">
+              Generate Now: single autonomous post · Autopilot: daily nudges {autopilot ? 'on' : 'off'}.
             </span>
           </div>
         </div>
