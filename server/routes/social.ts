@@ -106,8 +106,30 @@ function isPlatform(s: string): s is Platform {
   return (PLATFORMS as readonly string[]).includes(s)
 }
 
-function callbackUrl(platform: Platform) {
-  return `${PUBLIC_BASE}/api/social/oauth/${platform}/callback`
+// Build the OAuth callback URL the platform should redirect back to.
+//
+// Critical: this URL MUST match exactly between the authorization-code
+// step (where we send `redirect_uri` to the platform's authorize URL)
+// and the token-exchange step (where we send the same `redirect_uri`
+// with the code). If the two differ, Meta / LinkedIn / TikTok will
+// reject the exchange.
+//
+// Why does it take `req`? On Vercel, PUBLIC_BASE_URL is often unset,
+// and a module-init constant would default to `http://localhost:5173`
+// — which then ends up in the redirect_uri we send to Meta, which
+// then refuses to redirect back. Deriving from the incoming request's
+// proto + host gives us the right scheme/host on every deploy with
+// zero env-var configuration.
+function callbackUrl(req: any, platform: Platform) {
+  const base = publicBaseFromReq(req)
+  return `${base}/api/social/oauth/${platform}/callback`
+}
+
+function publicBaseFromReq(req: any): string {
+  if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '')
+  const proto = (req?.headers?.['x-forwarded-proto'] as string) || req?.protocol || 'https'
+  const host = req?.headers?.host
+  return host ? `${proto}://${host}` : 'https://app.gritsync.com'
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +201,7 @@ router.get('/oauth/:platform/start', authenticateToken, requireAdmin, async (req
     })).toString('base64url')
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: callbackUrl(platform),
+      redirect_uri: callbackUrl(req, platform),
       response_type: 'code',
       scope: cfg.scopes,
       state,
@@ -225,7 +247,10 @@ router.get('/oauth/:platform/callback', async (req, res) => {
       client_secret: clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: callbackUrl(platform),
+      // Must match the redirect_uri sent at /oauth/:platform/start exactly
+      // — both are derived from the same request-host helper, so they
+      // stay in sync even when PUBLIC_BASE_URL isn't set on Vercel.
+      redirect_uri: callbackUrl(req, platform),
     })
     const tokenRes = await fetch(cfg.tokenUrl, {
       method: 'POST',
@@ -484,9 +509,13 @@ router.delete('/posts/:id', authenticateToken, requireAdmin, async (req, res) =>
 
 router.post('/posts/:id/publish', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    // 'partial' is included so the Retry button in History can re-queue a
+    // post that succeeded on some accounts but failed on others. The
+    // publisher overwrites results wholesale, so a retry re-attempts every
+    // account — including the ones that already succeeded.
     await query(
       `UPDATE social_posts SET status = 'queued', scheduled_at = NULL, updated_at = NOW()
-       WHERE id = $1 AND status IN ('draft','scheduled','failed')`,
+       WHERE id = $1 AND status IN ('draft','scheduled','failed','partial')`,
       [req.params.id]
     )
     res.json({ success: true })
