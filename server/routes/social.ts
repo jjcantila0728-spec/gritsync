@@ -56,8 +56,19 @@ const PLATFORM_CONFIG: Record<Platform, {
       'pages_read_engagement',
       'pages_manage_ads',
       'pages_manage_metadata',
+      // Insights API + Inbox + Comment moderation. The Manager tab's
+      // analytics card uses read_insights; AutoReply needs pages_messaging
+      // (Inbox replies) and pages_manage_engagement (reply/hide/like FB
+      // comments). instagram_manage_comments + instagram_manage_insights
+      // unlock the IG side of those same flows through the page token.
+      'read_insights',
+      'pages_messaging',
+      'pages_manage_engagement',
       'instagram_basic',
       'instagram_content_publish',
+      'instagram_manage_comments',
+      'instagram_manage_insights',
+      'instagram_manage_messages',
       'ads_management',
       'ads_read',
       'business_management',
@@ -176,6 +187,7 @@ router.get('/accounts', authenticateToken, requireAdmin, async (_req: Authentica
               last_error
        FROM social_accounts
        WHERE platform_user_id NOT LIKE 'fbuser:%'
+         AND status <> 'revoked'
        ORDER BY platform ASC, created_at DESC`
     )
     res.json({ data: result.rows })
@@ -530,7 +542,7 @@ router.get('/posts', authenticateToken, requireAdmin, async (req, res) => {
 
 router.post('/posts', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const { account_ids, content, media_urls, scheduled_at, status } = req.body || {}
+    const { account_ids, content, media_urls, scheduled_at, status, bank_id } = req.body || {}
     if (!Array.isArray(account_ids) || account_ids.length === 0) {
       return res.status(400).json({ error: 'Select at least one account' })
     }
@@ -552,6 +564,22 @@ router.post('/posts', authenticateToken, requireAdmin, async (req: Authenticated
         req.user!.id,
       ]
     )
+
+    // If this post was created from a Content Bank item, mark the bank
+    // row as 'used' so it disappears from the Bank tab. The post itself
+    // (with the same caption + media) carries it forward into History.
+    if (bank_id && typeof bank_id === 'string') {
+      try {
+        await query(
+          `UPDATE social_content_bank
+              SET status = 'used', updated_at = NOW()
+            WHERE id = $1`,
+          [bank_id]
+        )
+      } catch (e: any) {
+        console.warn('Failed to mark bank item as used:', e.message)
+      }
+    }
     // "Post now" runs the scheduler INLINE and awaits it. On Vercel
     // serverless, firing it after res.json() is unreliable — the function
     // instance can be killed the moment the response is sent, leaving
@@ -685,7 +713,7 @@ async function handleFacebookConnect(args: {
   )
   const pagesJson: any = await pagesRes.json()
   if (!pagesRes.ok) throw new Error(pagesJson.error?.message || 'Failed to list Facebook pages')
-  const pages: Array<{
+  const allPages: Array<{
     id: string
     name: string
     access_token: string
@@ -694,6 +722,15 @@ async function handleFacebookConnect(args: {
     picture?: { data?: { url?: string } } | { url?: string }
     instagram_business_account?: { id: string; username?: string; name?: string; profile_picture_url?: string }
   }> = pagesJson.data || []
+
+  // Filter to only the Pages the user actually authorized in this OAuth
+  // consent. /me/accounts returns every Page they have a role on, so
+  // without this filter we'd surface (and persist) Pages the user
+  // explicitly deselected on the page-picker step.
+  const grantedPageIds = await fbGetGrantedPageIds(longLived.access_token, clientId, clientSecret)
+  const pages = grantedPageIds
+    ? allPages.filter((p) => grantedPageIds.has(String(p.id)))
+    : allPages
 
   // 4. Fetch ad accounts the user can manage.
   const adAccountsRes = await fetch(
@@ -853,6 +890,43 @@ async function handleFacebookConnect(args: {
       )
     }
   }
+
+  // Revoke any Pages (and their linked IG accounts) we previously
+  // stored under this FB user that the user did NOT re-authorize this
+  // round. Without this, deselecting a Page on a fresh OAuth grant
+  // leaves stale 'connected' rows in the DB and they keep showing up
+  // in the UI's "Authorized pages" list.
+  if (grantedPageIds) {
+    const authorizedIds = pages.map((p) => p.id)
+    const authorizedIgIds = pages
+      .map((p) => p.instagram_business_account?.id)
+      .filter((x): x is string => !!x)
+
+    // Mark stale FB Page rows tied to this fb_user_id as revoked.
+    await query(
+      `UPDATE social_accounts
+          SET status = 'revoked',
+              last_error = 'Not re-authorized in latest OAuth grant',
+              updated_at = NOW()
+        WHERE platform = 'facebook'
+          AND platform_user_id NOT LIKE 'fbuser:%'
+          AND metadata->>'fb_user_id' = $1
+          AND ($2::text[] = '{}'::text[] OR NOT (platform_user_id = ANY($2::text[])))`,
+      [me.id, authorizedIds]
+    )
+
+    // Mark stale IG rows that were linked through this fb_user_id.
+    await query(
+      `UPDATE social_accounts
+          SET status = 'revoked',
+              last_error = 'Linked FB Page not re-authorized in latest OAuth grant',
+              updated_at = NOW()
+        WHERE platform = 'instagram'
+          AND metadata->>'fb_user_id' = $1
+          AND ($2::text[] = '{}'::text[] OR NOT (platform_user_id = ANY($2::text[])))`,
+      [me.id, authorizedIgIds]
+    )
+  }
 }
 
 async function fbExchangeLongLived(
@@ -872,6 +946,50 @@ async function fbExchangeLongLived(
     throw new Error(j.error?.message || j.error_description || 'Facebook long-lived token exchange failed')
   }
   return j
+}
+
+// Read granular_scopes via /debug_token to learn which Pages the user
+// actually granted to our app during the consent flow. /me/accounts
+// returns every Page the user has a role on regardless of consent, so
+// without this filter we surface Pages the user explicitly deselected.
+//
+// Returns the union of target_ids across every pages_* scope. Returns
+// null when the token has no granular_scopes block (older app config
+// without granular permissions) — caller treats that as "no filtering".
+async function fbGetGrantedPageIds(
+  userAccessToken: string,
+  clientId: string,
+  clientSecret: string
+): Promise<Set<string> | null> {
+  try {
+    const appAccessToken = `${clientId}|${clientSecret}`
+    const r = await fetch(
+      `https://graph.facebook.com/v20.0/debug_token?input_token=${encodeURIComponent(userAccessToken)}&access_token=${encodeURIComponent(appAccessToken)}`
+    )
+    const j: any = await r.json()
+    if (!r.ok) {
+      console.warn('debug_token failed:', j.error?.message)
+      return null
+    }
+    const granular: Array<{ scope: string; target_ids?: string[] }> = j.data?.granular_scopes || []
+    if (!granular.length) return null
+    const granted = new Set<string>()
+    let sawPageScope = false
+    for (const gs of granular) {
+      if (!gs.scope?.startsWith('pages_')) continue
+      sawPageScope = true
+      for (const tid of gs.target_ids || []) granted.add(String(tid))
+    }
+    // A pages_* scope with NO target_ids means "all pages" (the user
+    // granted the scope without restricting it). Don't filter in that
+    // case — fall back to /me/accounts as-is.
+    if (!sawPageScope) return null
+    if (granted.size === 0) return null
+    return granted
+  } catch (err: any) {
+    console.warn('fbGetGrantedPageIds failed:', err.message)
+    return null
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1259,15 +1377,28 @@ router.post('/facebook/create-ad', authenticateToken, requireAdmin, async (req: 
       cta = 'LEARN_MORE',
     } = req.body || {}
 
-    if (!bank_id) return res.status(400).json({ error: 'bank_id is required' })
+    // Support EITHER bank_id (legacy / from the Bank tab) OR a direct
+    // payload { image_url, caption } so the Ads tab can launch standalone
+    // without first persisting the creative to the bank.
+    const directImage: string | undefined = req.body?.image_url
+    const directCaption: string | undefined = req.body?.caption || req.body?.primary_text || req.body?.message
     if (!ad_account_id) return res.status(400).json({ error: 'ad_account_id is required' })
     if (!page_id) return res.status(400).json({ error: 'page_id is required' })
+    if (!bank_id && !directImage) {
+      return res.status(400).json({ error: 'Either bank_id or image_url is required' })
+    }
 
-    // 1. Pull the bank item — we need its caption + media_url.
-    const bankRes = await query(`SELECT id, caption, media_url FROM social_content_bank WHERE id = $1`, [bank_id])
-    if (bankRes.rows.length === 0) return res.status(404).json({ error: 'Bank item not found' })
-    const item = bankRes.rows[0]
-    if (!item.media_url) return res.status(400).json({ error: 'Bank item has no image — generate one before launching an ad' })
+    // 1. Resolve caption + media_url from whichever source the caller used.
+    let item: { caption: string; media_url: string }
+    if (bank_id) {
+      const bankRes = await query(`SELECT id, caption, media_url FROM social_content_bank WHERE id = $1`, [bank_id])
+      if (bankRes.rows.length === 0) return res.status(404).json({ error: 'Bank item not found' })
+      const row = bankRes.rows[0]
+      if (!row.media_url) return res.status(400).json({ error: 'Bank item has no image — generate one before launching an ad' })
+      item = { caption: row.caption || '', media_url: row.media_url }
+    } else {
+      item = { caption: directCaption || '', media_url: directImage! }
+    }
 
     // 2. Pull the long-lived user token (ads_management is user-level).
     const tokenRes = await query(

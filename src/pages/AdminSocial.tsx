@@ -46,6 +46,11 @@ import {
   Activity,
   ArrowRight,
   Brain,
+  MessageSquare,
+  MessageCircle,
+  Users,
+  Link2,
+  ArrowUpRight,
 } from 'lucide-react'
 import { AdsGenerator, type AdVariant } from './AdminAds'
 
@@ -778,10 +783,10 @@ export function AdminSocial() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  type SocialTab = 'manager' | 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads'
+  type SocialTab = 'manager' | 'compose' | 'bank' | 'scheduled' | 'history' | 'accounts' | 'ads' | 'autoreply' | 'groups'
   const initialTab: SocialTab = (() => {
     const t = searchParams.get('tab')
-    return (['manager', 'compose', 'bank', 'scheduled', 'history', 'accounts', 'ads'] as const).includes(t as any)
+    return (['manager', 'compose', 'bank', 'scheduled', 'history', 'accounts', 'ads', 'autoreply', 'groups'] as const).includes(t as any)
       ? (t as SocialTab)
       : 'manager'
   })()
@@ -1043,6 +1048,19 @@ export function AdminSocial() {
     }
   }
 
+  async function regenerateBankItemImage(
+    id: string,
+    image_prompt: string,
+    provider?: 'openai' | 'nano-banana' | 'grok'
+  ): Promise<BankItem> {
+    const updated = await api<BankItem>(`/ai/content-bank/${id}/regenerate-image`, {
+      method: 'POST',
+      body: JSON.stringify({ image_prompt, provider }),
+    })
+    setBank((cur) => cur.map((it) => (it.id === id ? { ...it, ...updated } : it)))
+    return updated
+  }
+
   // Load the bank the first time the Content Bank tab is opened — and also
   // when the Manager tab is opened, since Manager surfaces a "bank ready"
   // count and gap-detection that depends on knowing the current bank state.
@@ -1105,6 +1123,8 @@ export function AdminSocial() {
                 { id: 'bank', label: 'Content Bank', count: bank.length },
                 { id: 'scheduled', label: 'Scheduled', count: scheduledPosts.length },
                 { id: 'history', label: 'History', count: historyPosts.length },
+                { id: 'autoreply', label: 'AutoReply', count: null },
+                { id: 'groups', label: 'Groups', count: null },
                 { id: 'ads', label: 'Ads', count: null },
                 { id: 'accounts', label: 'Accounts', count: accounts.length },
               ] as const).map((t) => (
@@ -1173,6 +1193,7 @@ export function AdminSocial() {
               onRefresh={loadBank}
               onRefreshItem={refreshBankItem}
               onDelete={deleteBankItem}
+              onRegenerateImage={regenerateBankItemImage}
               onSchedule={(item) => setScheduleModal({
                 caption: item.caption,
                 media_urls: item.media_url ? [item.media_url] : [],
@@ -1221,6 +1242,10 @@ export function AdminSocial() {
               onRepost={repostPost}
               showResults
             />
+          ) : tab === 'autoreply' ? (
+            <AutoReplyView showToast={showToast} hasMetaAccounts={accounts.some((a) => a.platform === 'facebook' || a.platform === 'instagram')} />
+          ) : tab === 'groups' ? (
+            <GroupsView showToast={showToast} />
           ) : tab === 'ads' ? (
             <AdsGenerator
               onPushToSocial={(ad: AdVariant) => {
@@ -2224,25 +2249,6 @@ function ManagerView({
       .sort((a, b) => (b.daysSince ?? 999) - (a.daysSince ?? 999))
   }, [posts, accounts])
 
-  // Recommended template mix — pick four POST_TEMPLATES across categories
-  // so the operator gets variety without scrolling the dropdown. Memoised
-  // so it doesn't reshuffle on every render.
-  const recommendedTemplates = useMemo(() => {
-    const byCategory: Record<string, typeof POST_TEMPLATES> = {}
-    for (const t of POST_TEMPLATES) {
-      byCategory[t.category] = byCategory[t.category] || []
-      byCategory[t.category].push(t)
-    }
-    const cats = Object.keys(byCategory)
-    const picks: typeof POST_TEMPLATES = []
-    for (const cat of cats.slice(0, 4)) {
-      const list = byCategory[cat]
-      picks.push(list[Math.floor(Math.random() * list.length)])
-    }
-    return picks
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // Action queue — each item is "thing that's off, here's the one-click
   // fix". Ordered by severity; the most actionable item is first.
   const actions = useMemo(() => {
@@ -2517,76 +2523,281 @@ function ManagerView({
         )}
       </Card>
 
-      {/* Viral topic ideas — clickable. Each topic routes to Compose
-          with the topic pre-filled, OR into Ads via the small ad-CTA. */}
-      <Card className="p-5">
-        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Topics that tend to land</h3>
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-              Trending hooks for the Filipino-nurse audience, plus a few curated GritSync angles. Click any to start
-              a fresh post in Compose.
-            </p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          {TRENDING_TOPIC_IDEAS.map((t) => (
-            <div
-              key={t.title}
-              className="group flex items-start justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                    {t.tag}
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.title}</span>
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{t.brief}</p>
-              </div>
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <Button size="sm" onClick={() => onComposeWith(t.brief)}>
-                  <Sparkles className="h-3 w-3 mr-1" /> Generate
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => onUseInAd(t.brief)}>
-                  <Megaphone className="h-3 w-3 mr-1" /> Use in ad
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {recommendedTemplates.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <div className="text-[11px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-2">
-              From the brand library
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {recommendedTemplates.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => onComposeWith('', t.id)}
-                  className="group text-left rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 transition-colors bg-white dark:bg-gray-900"
-                >
-                  <div className={cn('aspect-[5/3] flex items-center justify-center', t.gradient)}>
-                    <span className="text-3xl drop-shadow-sm">{t.emoji}</span>
-                  </div>
-                  <div className="p-2">
-                    <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-1">{t.label}</div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.description}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </Card>
+      {/* Live performance — pulls Page Insights from Facebook + Instagram
+          via the connected long-lived token. The "Generate AI plan" button
+          feeds the metrics into gpt-4o-mini to produce a cadence + topic
+          plan grounded in what's actually working, not a static topic list. */}
+      <ManagerInsightsCard
+        connectedPlatforms={stats.connectedPlatforms}
+        onComposeWith={onComposeWith}
+        onUseInAd={onUseInAd}
+        postsPerDay={postsPerDay}
+        showToast={showToast}
+      />
     </div>
   )
+}
+
+// Live FB/IG insights + AI plan. Decoupled from ManagerView so it can own
+// its own fetch state without re-rendering the whole agent surface.
+function ManagerInsightsCard({
+  connectedPlatforms,
+  onComposeWith,
+  onUseInAd,
+  postsPerDay,
+  showToast,
+}: {
+  connectedPlatforms: Platform[]
+  onComposeWith: (topic: string, templateId?: string) => void
+  onUseInAd: (brief: string) => void
+  postsPerDay: number
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  type InsightsSummary = {
+    platforms: Array<{
+      platform: 'facebook' | 'instagram'
+      account: { id: string; name: string }
+      reach_28d: number | null
+      engagement_28d: number | null
+      followers: number | null
+      follower_growth_28d: number | null
+      top_posts: Array<{
+        id: string
+        permalink: string | null
+        caption: string
+        published_at: string | null
+        reach: number | null
+        engagement: number | null
+      }>
+      error?: string | null
+    }>
+  }
+  type PlanRecommendation = {
+    summary: string
+    cadence: { recommended_per_day: number; rationale: string }
+    best_times: Array<{ platform: string; window: string; note: string }>
+    topic_recommendations: Array<{ title: string; brief: string; tag: string; why: string }>
+  }
+
+  const [data, setData] = useState<InsightsSummary | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [plan, setPlan] = useState<PlanRecommendation | null>(null)
+  const [planLoading, setPlanLoading] = useState(false)
+
+  const fbConnected = connectedPlatforms.includes('facebook') || connectedPlatforms.includes('instagram')
+
+  async function loadInsights() {
+    setLoading(true)
+    try {
+      const r = await api<InsightsSummary>('/analytics/summary')
+      setData(r)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load insights', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function generatePlan() {
+    setPlanLoading(true)
+    try {
+      const r = await api<PlanRecommendation>('/analytics/plan', {
+        method: 'POST',
+        body: JSON.stringify({ posts_per_day_target: postsPerDay }),
+      })
+      setPlan(r)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate plan', 'error')
+    } finally {
+      setPlanLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (fbConnected && !data && !loading) loadInsights()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fbConnected])
+
+  if (!fbConnected) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <TrendingUp className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Live performance & plan</h3>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Connect Facebook or Instagram in the Accounts tab — once linked, this card pulls real reach, engagement, and
+          follower growth, then asks the AI to build a posting plan around what's actually landing.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Live performance & plan</h3>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+            Real numbers from Facebook + Instagram Page Insights (last 28 days). The AI plan uses your top-performing
+            posts to recommend what to publish next.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={loadInsights} disabled={loading}>
+            <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
+          </Button>
+          <Button size="sm" onClick={generatePlan} loading={planLoading} disabled={planLoading || loading || !data}>
+            <Brain className="h-3.5 w-3.5 mr-1" /> Generate AI plan
+          </Button>
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="py-6"><Loading text="Pulling insights from Meta…" /></div>
+      )}
+
+      {data && data.platforms.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 italic">No analytics available yet — once your Pages have published posts, metrics will appear here.</p>
+      )}
+
+      {data && data.platforms.map((p) => (
+        <div key={`${p.platform}-${p.account.id}`} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className={cn('h-7 w-7 rounded-full flex items-center justify-center text-white', PLATFORM_META[p.platform].color)}>
+                {p.platform === 'facebook' ? <Facebook className="h-3.5 w-3.5" /> : <Instagram className="h-3.5 w-3.5" />}
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.account.name}</div>
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{PLATFORM_META[p.platform].label}</div>
+              </div>
+            </div>
+            {p.error && (
+              <span className="text-[11px] text-amber-700 dark:text-amber-300" title={p.error}>insights limited</span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <InsightStat label="Reach 28d" value={p.reach_28d} />
+            <InsightStat label="Engagement 28d" value={p.engagement_28d} />
+            <InsightStat label="Followers" value={p.followers} />
+            <InsightStat label="Growth 28d" value={p.follower_growth_28d} signed />
+          </div>
+          {p.top_posts.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                Top posts
+              </div>
+              <ul className="space-y-1.5">
+                {p.top_posts.slice(0, 3).map((post) => (
+                  <li key={post.id} className="flex items-start justify-between gap-2 text-xs">
+                    <a
+                      href={post.permalink || '#'}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400"
+                      title={post.caption}
+                    >
+                      {post.caption || '(no caption)'}
+                    </a>
+                    <span className="flex-shrink-0 text-gray-500 dark:text-gray-400 tabular-nums">
+                      {formatCompact(post.engagement)} eng
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {plan && (
+        <div className="rounded-lg border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/20 p-3 space-y-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Brain className="h-3.5 w-3.5 text-primary-600 dark:text-primary-400" />
+              <span className="text-xs font-semibold text-primary-700 dark:text-primary-300 uppercase tracking-wider">AI Plan</span>
+            </div>
+            <p className="text-sm text-gray-800 dark:text-gray-100">{plan.summary}</p>
+          </div>
+
+          <div className="text-xs text-gray-700 dark:text-gray-200">
+            <strong>Recommended cadence:</strong> {plan.cadence.recommended_per_day}/day · {plan.cadence.rationale}
+          </div>
+
+          {plan.best_times.length > 0 && (
+            <div className="text-xs text-gray-700 dark:text-gray-200">
+              <strong>Best times:</strong>
+              <ul className="mt-1 space-y-0.5 ml-4 list-disc">
+                {plan.best_times.map((bt, i) => (
+                  <li key={i}><span className="font-medium capitalize">{bt.platform}:</span> {bt.window} <span className="text-gray-500 dark:text-gray-400">— {bt.note}</span></li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {plan.topic_recommendations.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                Topic recommendations
+              </div>
+              <div className="space-y-2">
+                {plan.topic_recommendations.map((t, i) => (
+                  <div key={i} className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 flex-shrink-0">
+                          {t.tag}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</span>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <Button size="sm" onClick={() => onComposeWith(t.brief)}>
+                          <Sparkles className="h-3 w-3 mr-1" /> Generate
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onUseInAd(t.brief)}>
+                          <Megaphone className="h-3 w-3 mr-1" /> Ad
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{t.brief}</p>
+                    <p className="text-[10px] text-primary-700 dark:text-primary-300 italic mt-1">Why now: {t.why}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function InsightStat({ label, value, signed }: { label: string; value: number | null; signed?: boolean }) {
+  const tone = signed && typeof value === 'number'
+    ? value > 0 ? 'text-green-600 dark:text-green-400'
+    : value < 0 ? 'text-red-600 dark:text-red-400'
+    : 'text-gray-700 dark:text-gray-200'
+    : 'text-gray-900 dark:text-gray-100'
+  return (
+    <div className="rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-2">
+      <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</div>
+      <div className={cn('text-base font-semibold tabular-nums', tone)}>
+        {value === null || value === undefined ? '—' : `${signed && value > 0 ? '+' : ''}${formatCompact(value)}`}
+      </div>
+    </div>
+  )
+}
+
+function formatCompact(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(Math.round(n))
 }
 
 // Small stat tile used in ManagerView. Each tile is a deep-link button —
@@ -3782,6 +3993,7 @@ function ContentBankView({
   onRefresh,
   onRefreshItem,
   onDelete,
+  onRegenerateImage,
   onSchedule,
   onPostNow,
   onUseInAd,
@@ -3792,6 +4004,7 @@ function ContentBankView({
   onRefresh: () => void
   onRefreshItem: (id: string) => void
   onDelete: (id: string) => void
+  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok') => Promise<BankItem>
   onSchedule: (item: BankItem) => void
   onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
@@ -4047,6 +4260,12 @@ function ContentBankView({
         onSchedule={(it) => { setViewItem(null); onSchedule(it) }}
         onPostNow={(it) => { setViewItem(null); onPostNow(it) }}
         onUseInAd={(it) => { setViewItem(null); onUseInAd(it) }}
+        onDelete={(id) => { onDelete(id); setViewItem(null) }}
+        onRegenerateImage={async (id, prompt, provider) => {
+          const updated = await onRegenerateImage(id, prompt, provider)
+          setViewItem(updated)
+          return updated
+        }}
         hasAccounts={hasAccounts}
       />
     </div>
@@ -4063,6 +4282,8 @@ function BankItemModal({
   onSchedule,
   onPostNow,
   onUseInAd,
+  onDelete,
+  onRegenerateImage,
   hasAccounts,
 }: {
   item: BankItem | null
@@ -4070,9 +4291,23 @@ function BankItemModal({
   onSchedule: (item: BankItem) => void
   onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
+  onDelete: (id: string) => void
+  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok') => Promise<BankItem>
   hasAccounts: boolean
 }) {
   const { showToast } = useToast()
+  const [promptDraft, setPromptDraft] = useState('')
+  const [regenProvider, setRegenProvider] = useState<'openai' | 'nano-banana' | 'grok'>('openai')
+  const [regenerating, setRegenerating] = useState(false)
+
+  useEffect(() => {
+    if (item) {
+      setPromptDraft(item.image_prompt || '')
+      const p = item.generation_settings?.image_provider
+      setRegenProvider(p === 'nano-banana' || p === 'grok' ? p : 'openai')
+    }
+  }, [item?.id, item?.image_prompt])
+
   if (!item) return null
   const settings = item.generation_settings || {}
   const created = new Date(item.created_at)
@@ -4170,24 +4405,69 @@ function BankItemModal({
             </div>
           )}
 
-          {item.image_prompt && (
+          {item.media_type === 'image' && (
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Image prompt used
+                  Image prompt
                 </label>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(item.image_prompt!); showToast('Image prompt copied', 'success') }}
-                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 inline-flex items-center gap-1"
-                >
-                  <Copy className="h-3 w-3" /> Copy
-                </button>
+                <div className="flex items-center gap-3">
+                  {item.image_prompt && promptDraft !== item.image_prompt && (
+                    <button
+                      onClick={() => setPromptDraft(item.image_prompt || '')}
+                      className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(promptDraft); showToast('Image prompt copied', 'success') }}
+                    className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 inline-flex items-center gap-1"
+                  >
+                    <Copy className="h-3 w-3" /> Copy
+                  </button>
+                </div>
               </div>
-              <div className="text-[11px] font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 max-h-56 overflow-y-auto">
-                {item.image_prompt}
+              <Textarea
+                value={promptDraft}
+                onChange={(e) => setPromptDraft(e.target.value)}
+                rows={8}
+                className="text-[11px] font-mono"
+                placeholder="Describe the image you want…"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <select
+                  value={regenProvider}
+                  onChange={(e) => setRegenProvider(e.target.value as 'openai' | 'nano-banana' | 'grok')}
+                  disabled={regenerating}
+                  className="text-xs px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+                >
+                  <option value="openai">OpenAI (gpt-image)</option>
+                  <option value="nano-banana">Gemini (nano-banana)</option>
+                  <option value="grok">Grok</option>
+                </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  loading={regenerating}
+                  disabled={regenerating || !promptDraft.trim()}
+                  onClick={async () => {
+                    setRegenerating(true)
+                    try {
+                      await onRegenerateImage(item.id, promptDraft.trim(), regenProvider)
+                      showToast('Image regenerated', 'success')
+                    } catch (err: any) {
+                      showToast(err.message || 'Regeneration failed', 'error')
+                    } finally {
+                      setRegenerating(false)
+                    }
+                  }}
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-1" /> Regenerate image
+                </Button>
               </div>
               <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
-                Exact prompt sent to the image renderer for this item — useful for debugging or iterating on a template.
+                Edit the prompt and click Regenerate to replace the image. GritSync branding is always re-applied automatically.
               </p>
             </div>
           )}
@@ -4226,6 +4506,18 @@ function BankItemModal({
               disabled={item.status === 'pending_media'}
             >
               <Megaphone className="h-3.5 w-3.5 mr-1" /> Use in Ad
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (!confirm('Delete this bank item?')) return
+                onDelete(item.id)
+              }}
+              className="ml-auto text-red-600 hover:text-red-700"
+              title="Delete this bank item"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
             </Button>
           </div>
         </div>
@@ -4292,6 +4584,7 @@ function ScheduleModal({
         media_urls: mediaUrls,
         scheduled_at: mode === 'schedule' ? new Date(when).toISOString() : null,
         status: mode === 'draft' ? 'draft' : undefined,
+        bank_id: state?.bank_id ?? undefined,
       }
       if (editingId) {
         await api(`/posts/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) })
@@ -4969,5 +5262,772 @@ function PostsCalendar({
         </div>
       )}
     </Card>
+  )
+}
+
+// ─── AutoReply tab ─────────────────────────────────────────────────────────
+// Two sub-tabs: Inbox (FB + IG conversations) and Comments (post comments
+// across FB + IG). Both surface a reply box with an optional AI-suggested
+// draft. We deliberately keep auto-send disabled — the AI suggests, the
+// operator picks. That's the right default until autopilot trust is built.
+function AutoReplyView({
+  showToast,
+  hasMetaAccounts,
+}: {
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+  hasMetaAccounts: boolean
+}) {
+  const [sub, setSub] = useState<'inbox' | 'comments'>('inbox')
+
+  if (!hasMetaAccounts) {
+    return (
+      <Card className="p-8 text-center">
+        <MessageSquare className="h-7 w-7 mx-auto text-gray-400 mb-3" />
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          AutoReply needs a connected Facebook Page or Instagram Business account. Connect one in the Accounts tab.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        {([
+          { id: 'inbox' as const, label: 'Inbox', icon: MessageSquare },
+          { id: 'comments' as const, label: 'Comments', icon: MessageCircle },
+        ]).map((t) => {
+          const Icon = t.icon
+          return (
+            <button
+              key={t.id}
+              onClick={() => setSub(t.id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+                sub === t.id
+                  ? 'border-primary-600 text-primary-600 dark:border-primary-400 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" /> {t.label}
+            </button>
+          )
+        })}
+      </div>
+      {sub === 'inbox' ? <InboxView showToast={showToast} /> : <CommentsView showToast={showToast} />}
+    </div>
+  )
+}
+
+interface InboxThread {
+  id: string
+  account_id: string
+  account_platform: 'facebook' | 'instagram'
+  account_name: string
+  with_name: string
+  snippet: string
+  updated_at: string
+  unread: number
+}
+interface InboxMessage {
+  id: string
+  message: string
+  from: { id: string; name?: string }
+  to?: { data?: Array<{ id: string; name?: string }> }
+  created_time: string
+}
+
+function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
+  const [threads, setThreads] = useState<InboxThread[]>([])
+  const [loading, setLoading] = useState(false)
+  const [activeThread, setActiveThread] = useState<InboxThread | null>(null)
+  const [messages, setMessages] = useState<InboxMessage[]>([])
+  const [accountPsid, setAccountPsid] = useState('')
+  const [msgsLoading, setMsgsLoading] = useState(false)
+  const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const r = await api<{ threads: InboxThread[] }>('/autoreply/inbox')
+      setThreads(r.threads)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load inbox', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+
+  async function openThread(t: InboxThread) {
+    setActiveThread(t)
+    setMessages([])
+    setReply('')
+    setMsgsLoading(true)
+    try {
+      const r = await api<{ messages: InboxMessage[]; account_psid: string }>(`/autoreply/inbox/${t.id}/messages?account_id=${t.account_id}`)
+      setMessages(r.messages)
+      setAccountPsid(r.account_psid)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load messages', 'error')
+    } finally {
+      setMsgsLoading(false)
+    }
+  }
+
+  async function suggest() {
+    if (!activeThread) return
+    const lastInbound = [...messages].reverse().find((m) => m.from?.id !== accountPsid)
+    if (!lastInbound?.message) {
+      showToast('No inbound message to draft from', 'info')
+      return
+    }
+    setDrafting(true)
+    try {
+      const r = await api<{ reply: string }>('/autoreply/draft', {
+        method: 'POST',
+        body: JSON.stringify({ context_kind: 'inbox', message: lastInbound.message }),
+      })
+      setReply(r.reply)
+    } catch (err: any) {
+      showToast(err.message || 'AI draft failed', 'error')
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  async function send() {
+    if (!activeThread || !reply.trim()) return
+    setSending(true)
+    try {
+      await api(`/autoreply/inbox/${activeThread.id}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({ account_id: activeThread.account_id, message: reply.trim() }),
+      })
+      setReply('')
+      showToast('Reply sent', 'success')
+      // Refresh the thread so the new message shows.
+      openThread(activeThread)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to send', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[500px]">
+      <Card className="p-0 overflow-hidden lg:col-span-1">
+        <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Conversations</div>
+          <button onClick={load} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 inline-flex items-center gap-1">
+            <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} /> Refresh
+          </button>
+        </div>
+        <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[600px] overflow-y-auto">
+          {loading && threads.length === 0 && <div className="p-6"><Loading text="Loading…" /></div>}
+          {!loading && threads.length === 0 && (
+            <div className="p-6 text-center text-xs text-gray-500 dark:text-gray-400">
+              No conversations. Replies to your Pages/IG will show up here.
+            </div>
+          )}
+          {threads.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => openThread(t)}
+              className={cn(
+                'block w-full text-left p-3 transition-colors',
+                activeThread?.id === t.id ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+              )}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  {t.account_platform === 'facebook' ? <Facebook className="h-3 w-3 text-blue-600 flex-shrink-0" /> : <Instagram className="h-3 w-3 text-pink-500 flex-shrink-0" />}
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.with_name}</span>
+                </div>
+                {t.unread > 0 && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{t.unread}</span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.snippet}</div>
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{new Date(t.updated_at).toLocaleString()} · via {t.account_name}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="p-0 overflow-hidden lg:col-span-2 flex flex-col">
+        {!activeThread ? (
+          <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            Select a conversation to view messages and reply.
+          </div>
+        ) : (
+          <>
+            <div className="p-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{activeThread.with_name}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">{activeThread.account_platform} · {activeThread.account_name}</div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[500px] bg-gray-50 dark:bg-gray-900/30">
+              {msgsLoading && <Loading text="Loading messages…" />}
+              {messages.map((m) => {
+                const own = m.from?.id === accountPsid
+                return (
+                  <div key={m.id} className={cn('flex', own ? 'justify-end' : 'justify-start')}>
+                    <div className={cn(
+                      'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
+                      own ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
+                    )}>
+                      <div className="whitespace-pre-wrap">{m.message}</div>
+                      <div className={cn('text-[10px] mt-0.5', own ? 'text-white/70' : 'text-gray-400 dark:text-gray-500')}>
+                        {new Date(m.created_time).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="border-t border-gray-100 dark:border-gray-800 p-3 space-y-2">
+              <Textarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={3}
+                placeholder="Type your reply…"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting}>
+                  <Sparkles className="h-3.5 w-3.5 mr-1" /> AI suggest
+                </Button>
+                <Button size="sm" onClick={send} loading={sending} disabled={sending || !reply.trim()}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Send
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+interface CommentItem {
+  id: string
+  account_id: string
+  account_platform: 'facebook' | 'instagram'
+  account_name: string
+  from_name: string
+  from_avatar: string | null
+  message: string
+  created_at: string
+  post: { id: string; permalink: string | null; message: string }
+  is_own: boolean
+}
+
+function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
+  const [comments, setComments] = useState<CommentItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'unanswered'>('unanswered')
+  const [replies, setReplies] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<Record<string, boolean>>({})
+
+  async function load() {
+    setLoading(true)
+    try {
+      const r = await api<{ comments: CommentItem[] }>('/autoreply/comments')
+      setComments(r.comments)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load comments', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+
+  async function suggest(c: CommentItem) {
+    setBusy((b) => ({ ...b, [`draft:${c.id}`]: true }))
+    try {
+      const r = await api<{ reply: string }>('/autoreply/draft', {
+        method: 'POST',
+        body: JSON.stringify({ context_kind: 'comment', message: c.message, post_caption: c.post.message }),
+      })
+      setReplies((cur) => ({ ...cur, [c.id]: r.reply }))
+    } catch (err: any) {
+      showToast(err.message || 'AI draft failed', 'error')
+    } finally {
+      setBusy((b) => ({ ...b, [`draft:${c.id}`]: false }))
+    }
+  }
+  async function send(c: CommentItem) {
+    const text = (replies[c.id] || '').trim()
+    if (!text) return
+    setBusy((b) => ({ ...b, [`send:${c.id}`]: true }))
+    try {
+      await api(`/autoreply/comments/${c.id}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({ account_id: c.account_id, message: text }),
+      })
+      setReplies((cur) => ({ ...cur, [c.id]: '' }))
+      showToast('Reply posted', 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Reply failed', 'error')
+    } finally {
+      setBusy((b) => ({ ...b, [`send:${c.id}`]: false }))
+    }
+  }
+
+  const filtered = filter === 'unanswered' ? comments.filter((c) => !c.is_own) : comments
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          {(['unanswered', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                filter === f
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-300'
+              )}
+            >
+              {f === 'unanswered' ? 'Unanswered' : 'All'}
+            </button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
+        </Button>
+      </div>
+
+      {loading && comments.length === 0 && <div className="py-8"><Loading text="Loading comments…" /></div>}
+      {!loading && filtered.length === 0 && (
+        <div className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+          {filter === 'unanswered' ? 'No unanswered comments.' : 'No comments yet.'}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {filtered.map((c) => (
+          <div key={c.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-start gap-2 min-w-0">
+                {c.from_avatar ? (
+                  <img src={c.from_avatar} alt="" className="h-7 w-7 rounded-full flex-shrink-0" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                    <AtSign className="h-3 w-3 text-gray-500" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.from_name}</span>
+                    {c.account_platform === 'facebook'
+                      ? <Facebook className="h-3 w-3 text-blue-600" />
+                      : <Instagram className="h-3 w-3 text-pink-500" />}
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{c.account_name} · {new Date(c.created_at).toLocaleString()}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 dark:text-gray-200 mt-0.5 whitespace-pre-wrap">{c.message}</p>
+                  {c.post.permalink && (
+                    <a
+                      href={c.post.permalink}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center gap-1 mt-1"
+                    >
+                      <ExternalLink className="h-3 w-3" /> on post: {c.post.message || '(no caption)'}
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pl-9">
+              <Textarea
+                value={replies[c.id] || ''}
+                onChange={(e) => setReplies((cur) => ({ ...cur, [c.id]: e.target.value }))}
+                rows={2}
+                placeholder="Reply to this comment…"
+                className="text-sm"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => suggest(c)} loading={!!busy[`draft:${c.id}`]} disabled={!!busy[`draft:${c.id}`]}>
+                  <Sparkles className="h-3 w-3 mr-1" /> AI suggest
+                </Button>
+                <Button size="sm" onClick={() => send(c)} loading={!!busy[`send:${c.id}`]} disabled={!!busy[`send:${c.id}`] || !(replies[c.id] || '').trim()}>
+                  <Send className="h-3 w-3 mr-1" /> Reply
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+// ─── Groups tab ────────────────────────────────────────────────────────────
+// Three sections:
+//  1) "Your groups" — groups Meta returns from /me/groups (user_managed_groups).
+//  2) "Share to a group" — picks one of the operator's recent published posts
+//     and pushes its caption + link into the selected group's feed.
+//  3) "Discover" — Meta killed public group search via Graph for new apps,
+//     so we use gpt-4o-mini to surface group archetypes + facebook.com
+//     search URLs, plus a manual "save candidate" workflow for tracking.
+interface GroupRow { id: string; name: string; member_count?: number; description?: string; icon?: string; privacy?: string }
+interface GroupCandidate { id: string; group_id: string | null; name: string; url: string | null; notes: string | null; status: string; created_at: string }
+interface DiscoverSuggestion { name_pattern: string; why: string; search_url: string; engagement_strategy: string }
+
+function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
+  const [groups, setGroups] = useState<GroupRow[]>([])
+  const [candidates, setCandidates] = useState<GroupCandidate[]>([])
+  const [note, setNote] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [posts, setPosts] = useState<SocialPost[]>([])
+  const [shareModal, setShareModal] = useState<{ group: GroupRow } | null>(null)
+
+  // Discover state
+  const [focus, setFocus] = useState('')
+  const [discovering, setDiscovering] = useState(false)
+  const [suggestions, setSuggestions] = useState<DiscoverSuggestion[]>([])
+
+  // Add-candidate form
+  const [candName, setCandName] = useState('')
+  const [candUrl, setCandUrl] = useState('')
+  const [candNotes, setCandNotes] = useState('')
+  const [candidateAdding, setCandidateAdding] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [g, p] = await Promise.all([
+        api<{ groups: GroupRow[]; candidates: GroupCandidate[]; note: string | null }>('/groups'),
+        api<SocialPost[]>('/posts').catch(() => []),
+      ])
+      setGroups(g.groups || [])
+      setCandidates(g.candidates || [])
+      setNote(g.note || null)
+      setPosts(Array.isArray(p) ? p : [])
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load groups', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+
+  async function discover() {
+    setDiscovering(true)
+    try {
+      const r = await api<{ suggestions: DiscoverSuggestion[] }>('/groups/discover', {
+        method: 'POST',
+        body: JSON.stringify({ focus: focus.trim() || null }),
+      })
+      setSuggestions(r.suggestions || [])
+    } catch (err: any) {
+      showToast(err.message || 'Discover failed', 'error')
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  async function addCandidate() {
+    if (!candName.trim()) {
+      showToast('Group name is required', 'error')
+      return
+    }
+    setCandidateAdding(true)
+    try {
+      const r = await api<GroupCandidate>('/groups/candidates', {
+        method: 'POST',
+        body: JSON.stringify({ name: candName.trim(), url: candUrl.trim() || null, notes: candNotes.trim() || null }),
+      })
+      setCandidates((cur) => [r, ...cur])
+      setCandName(''); setCandUrl(''); setCandNotes('')
+      showToast('Candidate added', 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to add candidate', 'error')
+    } finally {
+      setCandidateAdding(false)
+    }
+  }
+  async function updateCandidate(id: string, patch: Partial<GroupCandidate>) {
+    try {
+      const r = await api<GroupCandidate>(`/groups/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+      setCandidates((cur) => cur.map((c) => (c.id === id ? r : c)))
+    } catch (err: any) {
+      showToast(err.message || 'Update failed', 'error')
+    }
+  }
+  async function deleteCandidate(id: string) {
+    if (!confirm('Remove this candidate?')) return
+    try {
+      await api(`/groups/candidates/${id}`, { method: 'DELETE' })
+      setCandidates((cur) => cur.filter((c) => c.id !== id))
+    } catch (err: any) {
+      showToast(err.message || 'Delete failed', 'error')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Your groups */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your groups</h3>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Facebook groups you administer. Share a recent post into any group with one click.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
+          </Button>
+        </div>
+
+        {loading && groups.length === 0 && <div className="py-6"><Loading text="Loading groups…" /></div>}
+        {!loading && groups.length === 0 && (
+          <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            {note || 'No groups linked yet.'}
+          </div>
+        )}
+        {groups.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {groups.map((g) => (
+              <div key={g.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {g.icon ? <img src={g.icon} alt="" className="h-6 w-6 rounded" /> : <Users className="h-4 w-4 text-gray-400" />}
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{g.name}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    {g.member_count != null ? `${g.member_count.toLocaleString()} members` : 'members count unavailable'} · {g.privacy || 'unknown'}
+                  </div>
+                  {g.description && <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{g.description}</p>}
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setShareModal({ group: g })}>
+                  <Send className="h-3 w-3 mr-1" /> Share
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {note && groups.length > 0 && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2">{note}</p>
+        )}
+      </Card>
+
+      {/* Discover */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Search className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Discover groups to join</h3>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Meta restricts Group search via API, so we use AI to suggest the kinds of groups Filipino nurses gather in,
+          then hand off to Facebook's own search. Save promising ones to your candidates list below.
+        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <Input
+            value={focus}
+            onChange={(e) => setFocus(e.target.value)}
+            placeholder="Optional focus (e.g. 'CGFNS, ATT applicants', 'TX/CA endorsement')"
+          />
+          <Button onClick={discover} loading={discovering} disabled={discovering}>
+            <Wand2 className="h-3.5 w-3.5 mr-1" /> Discover
+          </Button>
+        </div>
+        {suggestions.length > 0 && (
+          <div className="space-y-2">
+            {suggestions.map((s, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{s.name_pattern}</div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{s.why}</p>
+                    <p className="text-[11px] text-primary-700 dark:text-primary-300 italic mt-1">Strategy: {s.engagement_strategy}</p>
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <a
+                      href={s.search_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 hover:border-primary-300 text-gray-700 dark:text-gray-200"
+                    >
+                      <ArrowUpRight className="h-3 w-3" /> Search FB
+                    </a>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setCandName(s.name_pattern)
+                        setCandNotes(s.engagement_strategy)
+                        showToast('Filled candidate form — scroll down to save', 'info')
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Save lead
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Candidates */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Link2 className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Group candidates</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+          <Input value={candName} onChange={(e) => setCandName(e.target.value)} placeholder="Group name" />
+          <Input value={candUrl} onChange={(e) => setCandUrl(e.target.value)} placeholder="facebook.com/groups/… (optional)" />
+          <Input value={candNotes} onChange={(e) => setCandNotes(e.target.value)} placeholder="Notes (optional)" />
+        </div>
+        <div className="flex justify-end mb-3">
+          <Button size="sm" onClick={addCandidate} loading={candidateAdding} disabled={candidateAdding}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add candidate
+          </Button>
+        </div>
+        {candidates.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">No candidates yet — track groups you want to join here.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {candidates.map((c) => (
+              <li key={c.id} className="py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.name}</span>
+                    {c.url && (
+                      <a href={c.url} target="_blank" rel="noreferrer noopener" className="text-[11px] text-gray-500 hover:text-primary-600 inline-flex items-center gap-0.5">
+                        <ExternalLink className="h-3 w-3" /> open
+                      </a>
+                    )}
+                  </div>
+                  {c.notes && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{c.notes}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <select
+                    value={c.status}
+                    onChange={(e) => updateCandidate(c.id, { status: e.target.value })}
+                    className="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+                  >
+                    <option value="researching">Researching</option>
+                    <option value="requested">Requested</option>
+                    <option value="joined">Joined</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <button onClick={() => deleteCandidate(c.id)} className="text-gray-400 hover:text-red-500" title="Delete">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {shareModal && (
+        <ShareToGroupModal
+          group={shareModal.group}
+          posts={posts.filter((p) => p.status === 'published')}
+          onClose={() => setShareModal(null)}
+          onShared={() => { setShareModal(null); showToast('Posted to group', 'success') }}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  )
+}
+
+function ShareToGroupModal({
+  group,
+  posts,
+  onClose,
+  onShared,
+  showToast,
+}: {
+  group: GroupRow
+  posts: SocialPost[]
+  onClose: () => void
+  onShared: () => void
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const [message, setMessage] = useState('')
+  const [link, setLink] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit() {
+    if (!message.trim() && !link.trim()) {
+      showToast('Add a message or link', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await api('/groups/share', {
+        method: 'POST',
+        body: JSON.stringify({ group_id: group.id, message: message.trim(), link: link.trim() || undefined }),
+      })
+      onShared()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to post', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Share to ${group.name}`} size="lg">
+      <div className="space-y-3">
+        {posts.length > 0 && (
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 block">
+              Reuse a recent published post
+            </label>
+            <select
+              onChange={(e) => {
+                const p = posts.find((x) => x.id === e.target.value)
+                if (p) {
+                  setMessage(p.content)
+                  if (p.media_urls?.[0]) setLink(p.media_urls[0])
+                }
+              }}
+              defaultValue=""
+              className="w-full text-sm px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+            >
+              <option value="">— select a post —</option>
+              {posts.slice(0, 25).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {(p.content || '').slice(0, 80)}…
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 block">Message</label>
+          <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="What to share with the group…" />
+        </div>
+        <div>
+          <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 block">Link (optional)</label>
+          <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://gritsync.com/…" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={submit} loading={submitting} disabled={submitting}>
+            <Send className="h-3.5 w-3.5 mr-1" /> Post to group
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }

@@ -154,8 +154,11 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
   }
 
   function openLaunchModal(i: number, ad: AdVariant) {
-    if (!seededBankId) {
-      showToast('Launch needs a Content Bank item — open this Ads tab via Bank → Use in Ad.', 'error')
+    // Launch needs an image. We accept EITHER a bank-sourced creative
+    // (legacy Bank → Use in Ad flow) OR the variant's own freshly-rendered
+    // image_url, so the Ads tab works standalone.
+    if (!seededBankId && !ad.image_url) {
+      showToast('Click "Generate creative" first so the ad has an image to launch with.', 'error')
       return
     }
     void ensureFbDiscovery()
@@ -437,8 +440,12 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
                       size="sm"
                       variant="outline"
                       onClick={() => openLaunchModal(i, ad)}
-                      title={seededBankId ? 'Launch this variant as a PAUSED Facebook ad' : 'Open this tab via Bank → Use in Ad to enable launching'}
-                      disabled={!seededBankId}
+                      title={
+                        seededBankId || ad.image_url
+                          ? 'Launch this variant as a PAUSED Facebook ad'
+                          : 'Click "Generate creative" first so the ad has an image to launch with'
+                      }
+                      disabled={!seededBankId && !ad.image_url}
                     >
                       <Rocket className="h-3.5 w-3.5 mr-1" /> Launch on Facebook
                     </Button>
@@ -477,7 +484,7 @@ export function AdsGenerator({ onPushToSocial, initialBrief }: AdsGeneratorProps
       {launchAd && (
         <LaunchFacebookAdModal
           ad={launchAd.ad}
-          bankId={seededBankId!}
+          bankId={seededBankId}
           pages={fbPages || []}
           adAccounts={fbAdAccounts || []}
           discovering={fbDiscovering}
@@ -502,7 +509,7 @@ function LaunchFacebookAdModal({
   showToast,
 }: {
   ad: AdVariant
-  bankId: string
+  bankId: string | null
   pages: FbPageOpt[]
   adAccounts: FbAdAccountOpt[]
   discovering: boolean
@@ -530,7 +537,12 @@ function LaunchFacebookAdModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
-          bank_id: bankId,
+          // Prefer bank_id (richer provenance + persists the creative) when
+          // present; otherwise pass the variant's image_url + caption so the
+          // ad launches without first storing in the bank.
+          bank_id: bankId || undefined,
+          image_url: bankId ? undefined : ad.image_url,
+          caption: bankId ? undefined : (ad.primary_text || ad.headline || ''),
           ad_account_id: adAccountId,
           page_id: pageId,
           daily_budget_cents: Math.max(100, Math.round(dailyBudget * 100)),

@@ -1321,17 +1321,25 @@ function sizeFor(model: OpenAIImageModel, aspect: string): string {
   return '1024x1024'
 }
 
-// Universal text-correctness preamble. DALL·E-3 reliably renders text
-// only when it's short, quoted exactly, and explicitly demanded by the
-// prompt. We prepend this block to every prompt so even the "fallback"
-// path (no per-caption LLM derivation) still gets the brand strings
-// rendered cleanly — and the negative-prompt section gets the standard
-// anti-artifact terms appended regardless of what the caller wrote.
+// Universal branding + text-correctness preamble. Every image leaving any
+// provider (OpenAI / Gemini / Grok) is wrapped with this block so the
+// GritSync wordmark and URL appear on the composition even when the
+// source prompt forgot to ask. The text-correctness rules keep the
+// brand strings legible — image renderers garble copy when it's vague
+// or unquoted.
+const IMAGE_BRAND_MANDATE =
+  'MANDATORY GRITSYNC BRANDING — every generated image MUST include the GritSync brand identity, even if the source prompt below does not mention it. These elements are NON-NEGOTIABLE:\n' +
+  '  • The "GritSync" wordmark (one word, capital G and capital S) rendered clearly in the composition. Preferred placement: top-right corner, clean white sans-serif on a darker area, roughly 6-8% of the frame height.\n' +
+  '  • The URL "gritsync.com" (all lowercase, no spaces) rendered as a small footer mark. Preferred placement: bottom-center or bottom-right, soft gray sans-serif, roughly 3-4% of the frame height.\n' +
+  '  • Brand color palette anchored to deep red, clean white, soft black, with restrained warm-gold accents.\n' +
+  '  • If the source prompt suggests a placement that would hide these elements, override it — the wordmark and URL must remain visible and legible.\n\n'
+
 const IMAGE_TEXT_CORRECTNESS_PREAMBLE =
-  'CRITICAL TEXT-RENDERING REQUIREMENTS: All visible text in the image must be rendered exactly as written in this prompt — clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs, no garbled words. Brand strings to render exactly: "GritSync" (one word, capital G and S), "gritsync.com" (all lowercase). Keep every visible text string short (under 6 words for headlines, under 4 for CTAs) so the renderer can produce legible letterforms.\n\n'
+  IMAGE_BRAND_MANDATE +
+  'TEXT-RENDERING REQUIREMENTS: All visible text in the image must be rendered exactly as written — clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs, no garbled words. Brand strings to render exactly: "GritSync" (one word, capital G and S), "gritsync.com" (all lowercase). Keep every visible text string short (under 6 words for headlines, under 4 for CTAs) so the renderer can produce legible letterforms.\n\n'
 
 const IMAGE_NEGATIVE_TEXT_SUFFIX =
-  '\n\nReinforced negative prompt (text artifacts): misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage, jumbled letters, distorted hands, warped documents, AI text glitches.'
+  '\n\nReinforced negative prompt (text artifacts + branding): misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling (never "GritSink", "GritSinc", "Grit Sync", "gritsync com"), illegible signage, jumbled letters, distorted hands, warped documents, AI text glitches, missing GritSync wordmark, missing gritsync.com URL, off-brand color palette.'
 
 function applyImageTextGuards(prompt: string): string {
   return `${IMAGE_TEXT_CORRECTNESS_PREAMBLE}${prompt}${IMAGE_NEGATIVE_TEXT_SUFFIX}`
@@ -1367,13 +1375,14 @@ async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1')
 async function generateImageGemini(prompt: string): Promise<string> {
   const apiKey = GOOGLE_KEY()
   if (!apiKey) throw new Error('GOOGLE_API_KEY is not set on the server')
+  const guardedPrompt = applyImageTextGuards(prompt)
   const r = await fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent',
     {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: guardedPrompt }] }],
       }),
     }
   )
@@ -1390,12 +1399,13 @@ async function generateImageGemini(prompt: string): Promise<string> {
 async function generateImageGrok(prompt: string): Promise<string> {
   const apiKey = XAI_KEY()
   if (!apiKey) throw new Error('XAI_API_KEY is not set on the server')
+  const guardedPrompt = applyImageTextGuards(prompt)
   const r = await fetch('https://api.x.ai/v1/images/generations', {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'grok-2-image-1212',
-      prompt,
+      prompt: guardedPrompt,
       n: 1,
       response_format: 'url',
     }),
@@ -1621,6 +1631,66 @@ router.delete('/content-bank/:id', authenticateToken, requireAdmin, async (req: 
     res.json({ data: { id, deleted: true } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+// Regenerate the image for an existing bank item using a (possibly edited)
+// prompt. Image items only — videos must be re-rendered through the batch
+// generator. The new prompt + provider get persisted onto the row so the
+// modal shows the prompt that produced the visible image.
+router.post('/content-bank/:id/regenerate-image', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id)
+    const { image_prompt, provider } = req.body || {}
+
+    const row = (await pool.query(`SELECT * FROM social_content_bank WHERE id = $1`, [id])).rows[0]
+    if (!row) return res.status(404).json({ error: 'Bank item not found' })
+    if (row.media_type !== 'image') {
+      return res.status(400).json({ error: 'Only image items can be regenerated. Use the batch generator to remake videos.' })
+    }
+
+    const nextPrompt = typeof image_prompt === 'string' && image_prompt.trim()
+      ? image_prompt.trim()
+      : (row.image_prompt || '').trim()
+    if (!nextPrompt) return res.status(400).json({ error: 'image_prompt is required' })
+
+    const existingProvider: ImageProvider =
+      row.generation_settings?.image_provider === 'nano-banana' ? 'nano-banana'
+      : row.generation_settings?.image_provider === 'grok' ? 'grok'
+      : 'openai'
+    const nextProvider: ImageProvider =
+      provider === 'nano-banana' || provider === 'grok' || provider === 'openai'
+        ? provider
+        : existingProvider
+
+    let mediaUrl: string
+    try {
+      mediaUrl = await generateImage(nextProvider, nextPrompt)
+    } catch (err: any) {
+      return res.status(502).json({ error: err.message || 'Image regeneration failed' })
+    }
+
+    const nextSettings = {
+      ...(row.generation_settings || {}),
+      image_provider: nextProvider,
+      regenerated_at: new Date().toISOString(),
+    }
+
+    const upd = await pool.query(
+      `UPDATE social_content_bank
+         SET media_url = $1,
+             image_prompt = $2,
+             generation_settings = $3::jsonb,
+             status = 'available',
+             updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [mediaUrl, nextPrompt, JSON.stringify(nextSettings), id]
+    )
+    res.json({ data: upd.rows[0] })
+  } catch (err: any) {
+    console.error('regenerate-image error:', err)
+    res.status(500).json({ error: err.message || 'Image regeneration failed' })
   }
 })
 

@@ -15,6 +15,7 @@ import referralRoutes from './routes/referrals'
 import socialRoutes, { processDuePosts } from './routes/social'
 import { pollPushReceipts, pruneStalePushTokens } from './lib/push'
 import socialAiRoutes from './routes/social-ai'
+import socialMetaRoutes from './routes/social-meta'
 import integrationsRoutes from './routes/integrations'
 import nclexRoutes from './routes/nclex'
 import processingAccountsRoutes from './routes/processing-accounts'
@@ -49,6 +50,7 @@ app.use('/api/messages', messageRoutes)
 app.use('/api/referrals', referralRoutes)
 app.use('/api/social', socialRoutes)
 app.use('/api/social/ai', socialAiRoutes)
+app.use('/api/social', socialMetaRoutes)
 app.use('/api/integrations', integrationsRoutes)
 app.use('/api/nclex', nclexRoutes)
 app.use('/api/processing-accounts', processingAccountsRoutes)
