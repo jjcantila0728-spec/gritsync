@@ -335,6 +335,199 @@ Refinement rules:
 })
 
 // ---------------------------------------------------------------------------
+// Image-template library
+// ---------------------------------------------------------------------------
+// CRUD for operator-managed (name, prompt, preview_url) templates.
+// The frontend's Compose tab uses these instead of a single master prompt
+// so the team can save multiple branded "looks" and pick one per
+// generation. The preview is rendered by the same DALL·E-3 pipeline as
+// real post images so the operator sees exactly what generation looks
+// like before they commit.
+//
+// All endpoints are admin-only. Missing-table failures degrade
+// gracefully (GET returns empty list) so the UI doesn't break before the
+// migration is applied.
+// ---------------------------------------------------------------------------
+
+let imageTemplatesTableMissing = false
+async function safeQueryImageTemplates<T = any>(text: string, params?: any[]): Promise<{ rows: T[] } | null> {
+  try {
+    const r = await pool.query(text, params)
+    return r as unknown as { rows: T[] }
+  } catch (err: any) {
+    if (err?.code === '42P01') {
+      imageTemplatesTableMissing = true
+      return null
+    }
+    throw err
+  }
+}
+
+router.get('/image-templates', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    if (imageTemplatesTableMissing) return res.json({ data: [] })
+    const r = await safeQueryImageTemplates(
+      `SELECT id, name, prompt, preview_url, preview_status, preview_error, is_default, created_at, updated_at
+         FROM social_image_templates
+        ORDER BY is_default DESC, updated_at DESC`
+    )
+    if (!r) return res.json({ data: [] })
+    res.json({ data: r.rows })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load image templates' })
+  }
+})
+
+router.post('/image-templates', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { name = '', prompt = '', is_default = false } = req.body || {}
+    const cleanName = String(name).trim()
+    const cleanPrompt = String(prompt).trim()
+    if (!cleanName) return res.status(400).json({ error: 'name is required' })
+    if (!cleanPrompt) return res.status(400).json({ error: 'prompt is required' })
+
+    // Generate the preview synchronously — single OpenAI call. The same
+    // applyImageTextGuards wrapping the production image-gen path
+    // applies, so previews look like actual generated posts.
+    let preview_url: string | null = null
+    let preview_status: 'available' | 'failed' = 'failed'
+    let preview_error: string | null = null
+    try {
+      preview_url = await generateImageOpenAI(cleanPrompt)
+      preview_status = 'available'
+    } catch (err: any) {
+      preview_error = err.message || 'Preview render failed'
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO social_image_templates
+         (name, prompt, preview_url, preview_status, preview_error, is_default, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, prompt, preview_url, preview_status, preview_error, is_default, created_at, updated_at`,
+      [cleanName, cleanPrompt, preview_url, preview_status, preview_error, !!is_default, req.user!.id]
+    )
+    res.json({ data: ins.rows[0] })
+  } catch (err: any) {
+    console.error('image-template create error:', err)
+    res.status(500).json({ error: err.message || 'Failed to create image template' })
+  }
+})
+
+router.patch('/image-templates/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id || '')
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const existing = await pool.query(
+      `SELECT id, name, prompt FROM social_image_templates WHERE id = $1`,
+      [id]
+    )
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Template not found' })
+
+    const cur = existing.rows[0]
+    const nextName = req.body?.name !== undefined ? String(req.body.name).trim() : cur.name
+    const nextPrompt = req.body?.prompt !== undefined ? String(req.body.prompt).trim() : cur.prompt
+    if (!nextName) return res.status(400).json({ error: 'name cannot be empty' })
+    if (!nextPrompt) return res.status(400).json({ error: 'prompt cannot be empty' })
+
+    // If the prompt actually changed, regenerate the preview so it stays
+    // in sync. If only the name changed, skip the OpenAI roundtrip.
+    let preview_url: string | null | undefined = undefined
+    let preview_status: string | undefined
+    let preview_error: string | null | undefined
+    if (nextPrompt !== cur.prompt) {
+      try {
+        preview_url = await generateImageOpenAI(nextPrompt)
+        preview_status = 'available'
+        preview_error = null
+      } catch (err: any) {
+        preview_url = null
+        preview_status = 'failed'
+        preview_error = err.message || 'Preview render failed'
+      }
+    }
+
+    const upd = preview_status !== undefined
+      ? await pool.query(
+          `UPDATE social_image_templates
+              SET name = $1, prompt = $2, preview_url = $3, preview_status = $4, preview_error = $5, updated_at = NOW()
+            WHERE id = $6
+            RETURNING id, name, prompt, preview_url, preview_status, preview_error, is_default, created_at, updated_at`,
+          [nextName, nextPrompt, preview_url, preview_status, preview_error, id]
+        )
+      : await pool.query(
+          `UPDATE social_image_templates
+              SET name = $1, prompt = $2, updated_at = NOW()
+            WHERE id = $3
+            RETURNING id, name, prompt, preview_url, preview_status, preview_error, is_default, created_at, updated_at`,
+          [nextName, nextPrompt, id]
+        )
+    res.json({ data: upd.rows[0] })
+  } catch (err: any) {
+    console.error('image-template patch error:', err)
+    res.status(500).json({ error: err.message || 'Failed to update image template' })
+  }
+})
+
+router.post('/image-templates/:id/regenerate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id || '')
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const existing = await pool.query(
+      `SELECT id, prompt FROM social_image_templates WHERE id = $1`,
+      [id]
+    )
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Template not found' })
+
+    const prompt: string = existing.rows[0].prompt
+    let preview_url: string | null = null
+    let preview_status: 'available' | 'failed' = 'failed'
+    let preview_error: string | null = null
+    try {
+      preview_url = await generateImageOpenAI(prompt)
+      preview_status = 'available'
+    } catch (err: any) {
+      preview_error = err.message || 'Preview render failed'
+    }
+
+    const upd = await pool.query(
+      `UPDATE social_image_templates
+          SET preview_url = $1, preview_status = $2, preview_error = $3, updated_at = NOW()
+        WHERE id = $4
+        RETURNING id, name, prompt, preview_url, preview_status, preview_error, is_default, created_at, updated_at`,
+      [preview_url, preview_status, preview_error, id]
+    )
+    res.json({ data: upd.rows[0] })
+  } catch (err: any) {
+    console.error('image-template regenerate error:', err)
+    res.status(500).json({ error: err.message || 'Failed to regenerate preview' })
+  }
+})
+
+router.delete('/image-templates/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id || '')
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const existing = await pool.query(
+      `SELECT is_default FROM social_image_templates WHERE id = $1`,
+      [id]
+    )
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Template not found' })
+    if (existing.rows[0].is_default) {
+      return res.status(400).json({ error: 'Cannot delete the default template — edit it instead.' })
+    }
+
+    await pool.query(`DELETE FROM social_image_templates WHERE id = $1`, [id])
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('image-template delete error:', err)
+    res.status(500).json({ error: err.message || 'Failed to delete image template' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // POST /api/social/ai/video
 // Kicks off a text-to-video Replicate prediction. Body: { prompt,
 // aspect_ratio?, duration? }. Returns the prediction id; the client polls
@@ -824,30 +1017,80 @@ async function deriveImagePromptForCaption(args: {
   const apiKey = OPENAI_KEY()
   if (!apiKey) return fallback
 
-  const system = `You are a senior creative director who turns social-media captions into DALL·E-3 image prompts for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The brand facts below are ground truth — every image you specify must be consistent with them.
+  const system = `You are a senior creative director who turns social-media captions into image prompts for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The renderer is OpenAI's gpt-image-2 (with gpt-image-1 / DALL·E fallbacks) at the "high" quality tier — it does photoreal subjects, cinematic light, and short on-image text strings well. The brand facts below are ground truth — every image you specify must be consistent with them.
 
 ${GRITSYNC_KB}
 
-Your job:
+YOUR JOB:
 1. Read the operator's MASTER IMAGE GUIDE — it captures the brand feel (subject identity, color palette, composition language, mood). Treat this as inspiration, not a contract.
 2. Read the CAPTION the image must accompany. Extract the specific scene, emotional beat, and visual cues the copy implies.
-3. Produce ONE final DALL·E-3 image prompt that:
+3. Produce ONE final image prompt (STRUCTURED, multi-paragraph) that:
    - Hews to the brand feel of the guide (Filipino healthcare subjects, premium ad aesthetic, deep-red / white / soft-black / gold palette).
    - Pictures the caption's specific moment — not a generic brand shot.
    - You may restructure, prune, or enhance the guide freely if the caption demands it. Reorder sections, add new visual ideas, drop dead phrases.
-   - ALWAYS includes the GritSync brand logo placement (white or red wordmark "GritSync" in a top corner, plus subtle "gritsync.com" footer or website text somewhere unobtrusive). The renderer will approximate the letterforms; specify the placement, the colour, and the size so the composition leaves room for it.
-   - Stays photorealistic + cinematic (DALL·E-3 thrives there).
+   - ALWAYS includes the GritSync brand wordmark + gritsync.com URL in the composition (specify placement + color + size — the renderer will approximate the letterforms).
+   - Stays photorealistic + cinematic.
    - Includes a negative-prompt block at the end with anti-artifact terms (distorted hands, warped documents, AI text glitches, etc.).
    - No fabricated claims, no named hospitals, no non-Filipino ethnicities, no US landmarks the brand hasn't endorsed.
 
-TEXT-CORRECTNESS RULES (critical — DALL·E-3 renders text badly when prompted carelessly):
-- LIMIT the number of distinct text strings in the image to AT MOST 3 (logo wordmark + one headline + one CTA / URL). More than that and DALL·E starts inventing letters.
-- Every text string you ask DALL·E to render MUST be wrapped in double quotes in the prompt, exact spelling, e.g. the text "GritSync" in white sans-serif top-right.
+PROMPT STRUCTURE — every output should follow these labelled sections in order:
+   Subject: <one short sentence: who's in the frame, age range, scrubs/clothing>
+   Action: <what they're doing in the caption's specific moment>
+   Setting: <where + when, lighting, weather/mood>
+   Composition: <camera angle, framing, depth of field, focal point>
+   Brand elements: <GritSync logo placement, gritsync.com URL placement, color palette anchors>
+   Text overlays (max 3, each quoted): <"...", "...", "...">  // skip if the moment doesn't need text
+   Style: <photoreal / cinematic descriptors>
+   Negative prompt: <comma-separated anti-artifact terms>
+
+TEXT-CORRECTNESS RULES (critical — image renderers garble text when prompted carelessly):
+- LIMIT the number of distinct text strings in the image to AT MOST 3 (logo wordmark + one headline + one CTA / URL). More than that and the renderer starts inventing letters.
+- Every text string you ask the renderer to render MUST be wrapped in double quotes in the prompt, exact spelling, e.g. the text "GritSync" in white sans-serif top-right.
 - Keep each text string SHORT — under 6 words for headlines, under 4 for CTAs, single-token for the logo wordmark. Long sentences come out as gibberish.
 - Always include this instruction near the top of the prompt verbatim: "All visible text must be rendered exactly as quoted, with clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs."
-- Verify EVERY string you ask the renderer to draw is correctly spelled. Common brand strings: "GritSync" (one word, capital G + S), "gritsync.com" (all lowercase), "USRN", "NCLEX".
-- Where the master guide asks for a long headline/CTA that's likely to glitch, REPLACE the string with the shortest brand-accurate equivalent (e.g. "YOUR USRN DREAM STARTS HERE" → "USRN STARTS HERE" if needed for legibility).
+- Verify EVERY string you ask the renderer to draw is correctly spelled. Common brand strings: "GritSync" (one word, capital G + S), "gritsync.com" (all lowercase), "USRN", "NCLEX", "ATT".
+- Where the master guide asks for a long headline/CTA that's likely to glitch, REPLACE the string with the shortest brand-accurate equivalent (e.g. "YOUR USRN DREAM STARTS HERE" → "USRN STARTS HERE").
 - Strengthen the negative-prompt section with: "misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage."
+
+────────────────────────────────────────────────────────────────────────
+FEW-SHOT EXAMPLES — match this shape, vocabulary, and discipline.
+
+EXAMPLE 1 — Caption hook: "Nakapasa sa NCLEX gamit ang GritSync na walang stress"
+Image prompt:
+  All visible text must be rendered exactly as quoted, with clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs.
+  Subject: Filipino registered nurse, late 20s, light-blue scrubs, hair tied back, holding a tablet that shows a clean green "PASS" indicator on a soft white UI background.
+  Action: Quiet relief — eyes lit up, faint smile, tablet held close to chest as she looks slightly off-camera.
+  Setting: Modern apartment break-room corner at golden hour, soft window light from the side, hint of a coffee mug on a wood side table.
+  Composition: Medium-close portrait, shallow depth of field, subject slightly right-of-center, negative space top-left for the logo.
+  Brand elements: White "GritSync" wordmark in top-right, small "gritsync.com" footer text in soft gray bottom-right, deep-red and gold subtle accents on the tablet UI.
+  Text overlays: "GritSync", "gritsync.com".
+  Style: Photoreal editorial, cinematic warm tones, gentle natural light, premium social-ad aesthetic.
+  Negative prompt: misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage, distorted hands, warped documents, AI text glitches.
+
+EXAMPLE 2 — Caption hook: "Iniwan kang mag-isa sa NCLEX paperwork? Hindi kami ganon."
+Image prompt:
+  All visible text must be rendered exactly as quoted, with clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs.
+  Subject: Two Filipino professionals at a clean modern office desk — one in light-blue scrubs (the client), one in a soft navy blazer (the GritSync advisor), heads angled toward each other in collaboration.
+  Action: Advisor's finger lightly touching a printed NCLEX application checklist; client nodding with a relieved expression.
+  Setting: Bright minimalist office, large window blurred behind them, warm afternoon light, hint of red-and-white branding on the back wall.
+  Composition: Three-quarter angle, shallow depth of field, top-third of the frame open for the wordmark.
+  Brand elements: White "GritSync" wordmark in top-right of the image, small "gritsync.com" text in soft gray bottom-center.
+  Text overlays: "GritSync", "gritsync.com".
+  Style: Photoreal editorial, soft cinematic light, premium agency feel.
+  Negative prompt: misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage, distorted hands, AI text glitches.
+
+EXAMPLE 3 — Caption hook: "ATT mo, hinihintay namin para sa'yo araw-araw."
+Image prompt:
+  All visible text must be rendered exactly as quoted, with clean modern sans-serif typography, no spelling errors, no extra letters, no warped glyphs.
+  Subject: Filipino healthcare professional, mid-20s, sitting at a tidy desk, soft focus on a laptop screen showing a clean email inbox with a single highlighted notification.
+  Action: Hand lightly resting on the trackpad, slight forward lean, calm focused expression — the moment they see the notification land.
+  Setting: Modern home office at evening, warm desk-lamp light, a small plant and a mug just out of focus.
+  Composition: Over-the-shoulder framing, shallow depth of field, screen filling the right two-thirds of the frame.
+  Brand elements: "GritSync" wordmark subtly visible on the laptop's open browser tab UI; "gritsync.com" in small text at the corner of the screen.
+  Text overlays: "ATT received", "GritSync".
+  Style: Photoreal cinematic, warm tones, ad-quality lighting.
+  Negative prompt: misspelled text, garbled letters, fake-looking typography, double-printed words, extra characters, wrong brand spelling, illegible signage, distorted hands, warped documents, AI text glitches.
+────────────────────────────────────────────────────────────────────────
 
 Return STRICT JSON only.`
 
@@ -975,7 +1218,7 @@ function toAbsoluteUrl(maybeRelative: string): string {
 // Try one OpenAI image model. Returns the persisted URL on success, or a
 // detail object with a structured error so the caller can decide whether
 // to fall back to a different model.
-type OpenAIImageModel = 'gpt-image-1' | 'gpt-image-1-mini' | 'dall-e-3' | 'dall-e-2'
+type OpenAIImageModel = 'gpt-image-2' | 'gpt-image-1' | 'gpt-image-1-mini' | 'dall-e-3' | 'dall-e-2'
 
 async function tryOpenAIImage(
   apiKey: string,
@@ -986,18 +1229,17 @@ async function tryOpenAIImage(
   // Build the minimal valid body per model. The Images API rejects unknown
   // parameters, so we send only what each model accepts.
   const body: Record<string, any> = { model, prompt, n: 1, size }
-  if (model === 'dall-e-3') {
-    // DALL·E-3: HD + natural is the right call for GritSync's master
-    // prompt — photorealistic, cinematic, "premium Facebook/Instagram
-    // ad" composition. `vivid` over-saturates; `natural` matches the
-    // deep-red / white / soft-black palette the brand specifies.
+  if (model === 'gpt-image-2' || model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+    // gpt-image-* family shares the same `quality` parameter shape. High
+    // is the right call for the brand — text rendering + photoreal subject
+    // come out much cleaner than `medium` and the latency overhead is
+    // acceptable for ad-style generations.
+    body.quality = 'high'
+  } else if (model === 'dall-e-3') {
+    // DALL·E-3: HD + natural matches the brand palette best (`vivid`
+    // oversaturates the deep-red / white / soft-black system).
     body.quality = 'hd'
     body.style = 'natural'
-  } else if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
-    // gpt-image-1 family is the legacy fallback path now — see chain
-    // ordering in generateImageOpenAI. Keep medium to balance latency
-    // when DALL·E access is the rare miss.
-    body.quality = 'medium'
   }
   // dall-e-2: just model + prompt + n + size.
 
@@ -1035,8 +1277,8 @@ async function tryOpenAIImage(
 }
 
 // Sizes each OpenAI image model accepts. We pick the closest match per
-// requested aspect ratio. dall-e-2 only does square sizes; gpt-image-1*
-// accept 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape).
+// requested aspect ratio. dall-e-2 only does square sizes; the gpt-image
+// family accepts 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape).
 function sizeFor(model: OpenAIImageModel, aspect: string): string {
   if (model === 'dall-e-2') return '1024x1024'
   if (model === 'dall-e-3') {
@@ -1044,7 +1286,7 @@ function sizeFor(model: OpenAIImageModel, aspect: string): string {
     if (aspect === '9:16' || aspect === '4:5') return '1024x1792'
     return '1024x1024'
   }
-  // gpt-image-1 / gpt-image-1-mini
+  // gpt-image-2 / gpt-image-1 / gpt-image-1-mini share the size set.
   if (aspect === '16:9') return '1536x1024'
   if (aspect === '9:16' || aspect === '4:5') return '1024x1536'
   return '1024x1024'
@@ -1075,14 +1317,12 @@ async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1')
   // the fallback path where no per-caption LLM derivation happened.
   const guardedPrompt = applyImageTextGuards(prompt)
 
-  // DALL·E-style pipeline: DALL·E-3 (hd + natural) is the primary —
-  // photorealistic, cinematic, and respects the deep-red / white /
-  // soft-black palette the master prompt asks for. DALL·E-2 catches
-  // legacy projects that haven't been granted DALL·E-3 access. The
-  // gpt-image-1 variants stay in the chain ONLY as a last-resort
-  // fallback for projects with no DALL·E access at all — the brand
-  // wants the DALL·E look, so we always try it first.
-  const chain: OpenAIImageModel[] = ['dall-e-3', 'dall-e-2', 'gpt-image-1', 'gpt-image-1-mini']
+  // Cascade ordering: GPT image 2 is the primary (best text rendering +
+  // photoreal subjects on the same call), then gpt-image-1 / mini for
+  // projects that haven't been granted access to the v2 series, then
+  // DALL·E-3 / DALL·E-2 as the final fallback. If OpenAI returns
+  // `model_not_found` for any step the chain quietly tries the next.
+  const chain: OpenAIImageModel[] = ['gpt-image-2', 'gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2']
   let lastError = 'OpenAI image generation failed'
   for (const model of chain) {
     const r = await tryOpenAIImage(apiKey, guardedPrompt, model, sizeFor(model, aspect_ratio))
@@ -1275,12 +1515,17 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
       try {
         if (ct === 'image') {
           const mediaUrl = await generateImage(provider, imagePrompt)
+          // image_prompt persists the EXACT prompt sent to the renderer
+          // (the per-caption-derived one, falling back to the master
+          // guide) so the BankItemModal can show it and operators can
+          // copy/iterate. The column was added in
+          // 2026-05-20_social_content_bank_image_prompt.sql.
           const ins = await pool.query(
             `INSERT INTO social_content_bank
-               (caption, media_url, media_type, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
-             VALUES ($1, $2, 'image', $3, $4, $5::jsonb, 'available', $6)
+               (caption, media_url, media_type, source_topic, enhanced_prompt, image_prompt, generation_settings, status, created_by_user_id)
+             VALUES ($1, $2, 'image', $3, $4, $5, $6::jsonb, 'available', $7)
              RETURNING *`,
-            [caption, mediaUrl, cleanTopic || cleanIdea, brief.enhanced, JSON.stringify(settings), req.user!.id]
+            [caption, mediaUrl, cleanTopic || cleanIdea, brief.enhanced, imagePrompt, JSON.stringify(settings), req.user!.id]
           )
           return ins.rows[0]
         } else {
@@ -1296,22 +1541,24 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
           )
           const ins = await pool.query(
             `INSERT INTO social_content_bank
-               (caption, media_url, media_type, prediction_id, source_image_url, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
-             VALUES ($1, NULL, 'video', $2, $3, $4, $5, $6::jsonb, 'pending_media', $7)
+               (caption, media_url, media_type, prediction_id, source_image_url, source_topic, enhanced_prompt, image_prompt, generation_settings, status, created_by_user_id)
+             VALUES ($1, NULL, 'video', $2, $3, $4, $5, $6, $7::jsonb, 'pending_media', $8)
              RETURNING *`,
-            [caption, predictionId, sourceImageUrl, cleanTopic || cleanIdea, brief.enhanced, JSON.stringify(settings), req.user!.id]
+            [caption, predictionId, sourceImageUrl, cleanTopic || cleanIdea, brief.enhanced, imagePrompt, JSON.stringify(settings), req.user!.id]
           )
           return ins.rows[0]
         }
       } catch (perItemErr: any) {
         // Persist a caption-only row so the operator doesn't lose the
-        // copy when image/video generation hits a provider error.
+        // copy when image/video generation hits a provider error. Keep
+        // the image_prompt that WOULD have been used so the operator
+        // can copy + retry from the BankItemModal.
         const ins = await pool.query(
           `INSERT INTO social_content_bank
-             (caption, media_type, source_topic, enhanced_prompt, generation_settings, status, created_by_user_id)
-           VALUES ($1, $2, $3, $4, $5::jsonb, 'media_failed', $6)
+             (caption, media_type, source_topic, enhanced_prompt, image_prompt, generation_settings, status, created_by_user_id)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'media_failed', $7)
            RETURNING *`,
-          [caption, ct, cleanTopic || cleanIdea, brief.enhanced + `\n\n[media error: ${perItemErr.message}]`, JSON.stringify(settings), req.user!.id]
+          [caption, ct, cleanTopic || cleanIdea, brief.enhanced + `\n\n[media error: ${perItemErr.message}]`, imagePrompt, JSON.stringify(settings), req.user!.id]
         )
         return ins.rows[0]
       }

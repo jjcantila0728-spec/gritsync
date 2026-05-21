@@ -88,6 +88,10 @@ interface BankItem {
   source_image_url: string | null
   source_topic: string | null
   enhanced_prompt: string | null
+  // The exact image prompt sent to the renderer for this item — captured
+  // by /generate-batch (per-caption derivation OR the master guide). Null
+  // for older rows generated before the column landed.
+  image_prompt: string | null
   generation_settings: any
   status: 'available' | 'pending_media' | 'media_failed' | 'scheduled' | 'used'
   created_at: string
@@ -123,7 +127,12 @@ interface ScheduleModalState {
 //      retain their tag, but the Compose UI no longer surfaces an
 //      "Ad-ready" badge (every saved post can become an ad via the
 //      Bank → Use in Ad shortcut, so the distinction is just noise)
-type TemplateCategory = 'success' | 'education' | 'visa' | 'lifestyle' | 'motivation' | 'cta' | 'bts'
+// Categories are scoped to GritSync's NCLEX-processing service + the
+// marketing that surrounds it. 'visa' and 'lifestyle' were dropped —
+// those topics belong to a broader migration agency, not our NCLEX
+// processing focus. 'service' is the new category for posts that
+// explain a specific GritSync service or perk.
+type TemplateCategory = 'success' | 'education' | 'service' | 'motivation' | 'cta' | 'bts'
 
 interface PostTemplate {
   id: string
@@ -146,313 +155,215 @@ const BRAND_IMAGE_BASE =
   'No text overlays, no readable signage, no logos, no watermarks.'
 
 const POST_TEMPLATES: PostTemplate[] = [
+  // ── Success / Marketing ────────────────────────────────────────────
   {
-    id: 'nclex-passer-spotlight',
-    label: 'NCLEX Passer Spotlight',
-    emoji: '🎉',
+    id: 'nclex-passer-spotlight', label: 'NCLEX Passer Spotlight', emoji: '🎉',
     category: 'success',
     description: 'Celebrate a Filipino nurse who just passed the NCLEX-RN.',
-    brief:
-      'Celebrate an anonymized Filipino nurse who just passed the NCLEX-RN. Acknowledge the long road — years balancing duty work, study, and family. End with quiet encouragement for nurses still on the journey and a soft reminder that GritSync walks with them step by step. Do not fabricate names, scores, or timelines.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse in light-blue scrubs holding a tablet with a green "PASS" indicator, eyes lit up with quiet relief, soft window light from the side, clean modern apartment or hospital break-room background.`,
-    gradient: 'bg-gradient-to-br from-amber-200 via-rose-200 to-rose-300',
-    ad_ready: true,
+    brief: 'Celebrate an anonymized Filipino nurse who just passed the NCLEX-RN with GritSync\'s processing support. Acknowledge the long road. Position GritSync as the partner who handled the application paperwork so they could focus on studying. End with a soft CTA — start your NCLEX journey at gritsync.com.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse holding a tablet with a green "PASS" indicator, eyes lit up with quiet relief.`,
+    gradient: 'bg-gradient-to-br from-amber-200 via-rose-200 to-rose-300', ad_ready: true,
   },
   {
-    id: 'ph-to-usrn-step-guide',
-    label: 'PH → USRN Step Guide',
-    emoji: '📋',
-    category: 'education',
-    description: 'Walk through one step of the Philippines-to-USRN journey.',
-    brief:
-      'Pick ONE step in the Philippines-to-USRN journey (CGFNS application, state BON application, NCLEX ATT, VisaScreen, immigrant petition) and walk a Filipino nurse through it in plain language. Cover what is needed, the general timeline range (never fabricated specifics), and one common mistake to avoid. End with a soft CTA to consult GritSync for the actual filing.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Overhead view of a Filipino nurse's study desk: open NCLEX review book, laminated credentialing documents, passport, pen, steaming mug, neutral wood surface. Warm afternoon light.`,
-    gradient: 'bg-gradient-to-br from-blue-200 via-indigo-200 to-indigo-300',
-    ad_ready: false,
-  },
-  {
-    id: 'credentialing-explainer',
-    label: 'Credentialing Explainer',
-    emoji: '🧾',
-    category: 'education',
-    description: 'Demystify CGFNS, VisaScreen, or a specific state BON.',
-    brief:
-      'Pick ONE of CGFNS, VisaScreen, or a specific state Board of Nursing requirement. Explain what it is, why it exists, and exactly what a Filipino-trained nurse needs to submit. Short sentences. One concrete tip. No fabricated stats. End with a soft CTA to GritSync for help with the filing.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Close-up of a Filipino nurse's hands organising a folder of credentialing documents with a faint US state seal visible on one paper, navy scrubs sleeve in frame, warm office-desk lighting.`,
-    gradient: 'bg-gradient-to-br from-sky-200 via-blue-200 to-blue-300',
-    ad_ready: false,
-  },
-  {
-    id: 'visa-bulletin-update',
-    label: 'Visa Bulletin Update',
-    emoji: '📅',
-    category: 'visa',
-    description: 'Neutral, factual EB-3 / Schedule A movement for nurses.',
-    brief:
-      'Write a short, factual update on the current US visa bulletin movement for nurses (focus on EB-3 Schedule A and Philippines if relevant). Stay neutral — no speculation, no fabricated dates. Explain in one sentence what "retrogression" or "priority date current" means. End with a reminder that GritSync helps clients track this and stay application-ready.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse studying a calendar on a tablet beside a US passport and what looks like an I-140 packet, soft window light, navy and white palette, modern home setting.`,
-    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-teal-300',
-    ad_ready: false,
-  },
-  {
-    id: 'day-in-the-life-usrn',
-    label: 'Day-in-the-Life USRN',
-    emoji: '🩺',
+    id: 'day-in-the-life-usrn', label: 'USRN Dream — Day in the Life', emoji: '🩺',
     category: 'success',
-    description: 'A small, specific scene from a Filipino USRN\'s workday.',
-    brief:
-      'Paint a small, specific scene from a Filipino USRN\'s workday — early commute, first patient handoff, lunch with co-workers, end-of-shift moment. Make it relatable, never boastful. No fabricated dollar amounts or named hospitals. Close with one sentence reminding readers that GritSync helps Filipino nurses get here.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino USRN in navy scrubs walking through a modern US hospital corridor at golden-hour sunrise, ID badge visible but unreadable, warm caring expression, gentle motion blur of a colleague in the background.`,
-    gradient: 'bg-gradient-to-br from-orange-200 via-amber-200 to-amber-300',
-    ad_ready: true,
+    description: 'Aspirational scene of a Filipino USRN on the job.',
+    brief: 'Paint a specific scene from a Filipino USRN\'s workday — first patient handoff, lunch with co-workers, end-of-shift moment. Relatable, never boastful. End by reminding readers the journey starts with the NCLEX, and GritSync handles that processing end-to-end.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN walking through a modern US hospital corridor at golden-hour sunrise.`,
+    gradient: 'bg-gradient-to-br from-orange-200 via-amber-200 to-amber-300', ad_ready: true,
   },
+
+  // ── NCLEX Education (process-focused only — no CGFNS/VisaScreen/visa) ──
   {
-    id: 'nclex-study-tip',
-    label: 'NCLEX Study Tip',
-    emoji: '🧠',
+    id: 'nclex-application-walkthrough', label: 'NCLEX Application Walkthrough', emoji: '🧭',
     category: 'education',
-    description: 'One actionable NCLEX-RN study tactic a nurse can apply today.',
-    brief:
-      'Give ONE specific, actionable NCLEX-RN study tip — focused enough that a nurse can apply it today (e.g. priority/safety filter on SATA questions, how to mine UWorld rationales, time-boxing Qbank sessions). Plain language, no clichés. End with a soft invite to GritSync\'s NCLEX prep guidance.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse studying at a cozy desk lamp at night, NCLEX review book open, highlighters scattered, focused expression, warm yellow lamp light, hint of Filipino home interior (rattan, family photo softly blurred in background).`,
-    gradient: 'bg-gradient-to-br from-indigo-200 via-purple-200 to-purple-300',
-    ad_ready: false,
+    description: 'Step-by-step walkthrough of the NCLEX-RN application.',
+    brief: 'Walk a Filipino nurse through the NCLEX-RN application end-to-end in plain language: pick a state Board of Nursing, register for NCLEX, submit credentials, wait for eligibility, receive the ATT, schedule the exam. Keep it general — no fabricated timelines. End with: GritSync handles every step for you.',
+    image_prompt: `${BRAND_IMAGE_BASE} Overhead view of a Filipino nurse's desk with an open NCLEX application checklist, passport, pen, coffee mug.`,
+    gradient: 'bg-gradient-to-br from-blue-200 via-indigo-200 to-indigo-300', ad_ready: false,
   },
   {
-    id: 'migration-myth-buster',
-    label: 'Migration Myth Buster',
-    emoji: '❌',
+    id: 'att-explainer', label: 'What is the ATT?', emoji: '📨',
     category: 'education',
-    description: 'Debunk a common US-nursing-migration myth.',
-    brief:
-      'Debunk ONE common myth about US nursing migration for Filipinos (e.g. "I need a job offer before NCLEX", "CGFNS is automatic if I already have a PH license", "I can only work in California"). State the myth, the truth in one sentence, and what to actually do. No fabricated numbers. End with GritSync as the credible source for ongoing guidance.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse at a desk, thoughtful expression, a notebook on one side and an organised stack of correct credentialing documents on the other, warm office light, navy scrubs, modern Filipino home setting.`,
-    gradient: 'bg-gradient-to-br from-red-200 via-rose-200 to-rose-300',
-    ad_ready: false,
+    description: 'Explain the Authorization to Test (ATT) and how to get it.',
+    brief: 'Demystify the ATT (Authorization to Test) for the NCLEX-RN: what it is, when it arrives, how long it\'s valid, what triggers it. Plain language. Mention that GritSync tracks ATT issuance for clients so they can book Pearson VUE the moment it lands.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse checking a laptop email inbox with a highlighted "Authorization to Test" notification.`,
+    gradient: 'bg-gradient-to-br from-sky-200 via-blue-200 to-blue-300', ad_ready: false,
   },
   {
-    id: 'document-checklist',
-    label: 'Document Checklist',
-    emoji: '📁',
+    id: 'eligibility-explainer', label: 'NCLEX Eligibility 101', emoji: '✅',
     category: 'education',
-    description: 'What you actually need for the next filing step.',
-    brief:
-      'Pick ONE filing (state BON, NCLEX registration, CGFNS, VisaScreen) and list the documents a Filipino-trained nurse needs. Use short bullet-style phrases. Add a note about the most-commonly-missing item. No fabricated requirements — keep it general and accurate. End with a CTA to GritSync\'s checklist review service.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Top-down photo of a neat stack of credentialing documents — passport, PRC license folder, transcripts, birth-certificate envelope — arranged on a wood desk with a small Filipino flag pin and a coffee mug. Warm natural light.`,
-    gradient: 'bg-gradient-to-br from-yellow-200 via-amber-200 to-orange-300',
-    ad_ready: false,
+    description: 'Who can apply for the NCLEX-RN as a Filipino-trained nurse?',
+    brief: 'Plain-language explainer of NCLEX-RN eligibility for Filipino-trained RNs: PRC license requirement, BSN equivalency, English competency. Avoid fabricated state-by-state rules — keep it general. End by inviting a free eligibility check with GritSync.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse smiling at a desk holding their PRC license folder.`,
+    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-teal-300', ad_ready: false,
   },
   {
-    id: 'state-spotlight',
-    label: 'State Spotlight',
-    emoji: '🗺️',
+    id: 'document-checklist-nclex', label: 'NCLEX Document Checklist', emoji: '📁',
     category: 'education',
-    description: 'Why a particular US state works well for Filipino IENs.',
-    brief:
-      'Pick ONE US state (rotate: California, Texas, Nevada, New York, Florida) and write a short, factual spotlight: how friendly the state BON tends to be toward foreign-educated nurses in general terms, demand for RNs, lifestyle notes (cost of living, Filipino community). Avoid fabricated numbers. End by reminding readers GritSync helps match them to the right state pathway.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Cinematic shot of a Filipino USRN in scrubs standing in front of a modern US hospital entrance at golden hour, US flag softly out of focus to one side, hopeful expression.`,
-    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-200 to-sky-300',
-    ad_ready: false,
-  },
-  {
-    id: 'encouragement',
-    label: 'Encouragement Post',
-    emoji: '💪',
-    category: 'motivation',
-    description: 'Quiet, specific pep talk for nurses mid-journey.',
-    brief:
-      'Write a warm, specific encouragement for Filipino nurses in the middle of their NCLEX or immigration journey — name the hard moments (long shifts, slow paperwork, family pressure) without melodrama. Keep it short. Close with GritSync standing alongside them, not above them.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse in scrubs leaning against a hospital wall during a break, soft late-afternoon light through a window, tired-but-determined faint smile, holding a coffee cup. Intimate framing.`,
-    gradient: 'bg-gradient-to-br from-pink-200 via-rose-200 to-rose-400',
-    ad_ready: false,
-  },
-  {
-    id: 'free-consult-cta',
-    label: 'Free Consultation CTA',
-    emoji: '📞',
-    category: 'cta',
-    description: 'Direct invite to book a free GritSync consult.',
-    brief:
-      'Write a direct CTA post inviting Filipino nurses to book a free GritSync consultation about their NCLEX or USRN application. Lead with the outcome (clear roadmap, no guesswork). Name who it\'s for (PH-trained nurses planning the US move). Close with a single clear next step. Keep claims grounded — no guarantees of outcomes or timelines.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Filipino nurse smiling on a video call, laptop on a clean desk, light headset visible, light-blue scrubs at the shoulder, warm window light, small plant in the corner.`,
-    gradient: 'bg-gradient-to-br from-primary-200 via-primary-300 to-primary-500',
-    ad_ready: true,
-  },
-  {
-    id: 'behind-the-scenes',
-    label: 'Behind the Scenes',
-    emoji: '👥',
-    category: 'bts',
-    description: 'Show the human side of GritSync helping a client.',
-    brief:
-      'Write a warm behind-the-scenes post about a GritSync workflow — a credential review session, an interview prep call, the team double-checking a VisaScreen submission. Make it feel human and specific. No fake testimonials, no named clients. End by reminding readers that this hands-on care is what they get when they work with GritSync.',
-    image_prompt:
-      `${BRAND_IMAGE_BASE} Two Filipino GritSync staff at a clean modern desk reviewing a printed checklist together, warm office light, laptops open with unreadable screens, focused expressions, no client face visible.`,
-    gradient: 'bg-gradient-to-br from-slate-200 via-gray-200 to-gray-300',
-    ad_ready: false,
-  },
-  // ── Added topics — bringing the library to 30 GritSync-aligned templates ──
-  {
-    id: 'first-month-in-us', label: 'First Month in the US', emoji: '🇺🇸',
-    category: 'success',
-    description: 'Reflection on the first month as a USRN.',
-    brief: 'A Filipino RN reflects on their first month working as a USRN — the homesickness, the wins (first solo shift, first US paycheck), the small culture-shock moments. Keep it grounded and non-boastful. End by noting that GritSync helps Filipino nurses prepare for this transition, not just the paperwork.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN in navy scrubs in front of a modest US apartment window at dawn, coffee in hand, contemplative smile, soft warm morning light, lived-in but tidy interior behind.`,
-    gradient: 'bg-gradient-to-br from-blue-200 via-red-200 to-red-300', ad_ready: false,
-  },
-  {
-    id: 'new-state-license', label: 'New State License', emoji: '🗽',
-    category: 'success',
-    description: 'Endorsed your license to a new US state.',
-    brief: 'A Filipino USRN just endorsed their license to a new US state (e.g. California → Texas, or NY → Florida). Note the paperwork involved, the timeline range (no fabricated specifics), and why the move made sense (job offer, family, pay). End with GritSync as a guide for endorsements too — it\'s not just about the first license.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN holding a fresh state RN license document with subtle US-state seal visible, navy scrubs sleeve in frame, warm desk light, faint US-state map or skyline silhouette softly blurred in background.`,
-    gradient: 'bg-gradient-to-br from-purple-200 via-violet-200 to-indigo-300', ad_ready: false,
-  },
-  {
-    id: 'consular-interview-passed', label: 'Consular Interview Passed', emoji: '🛂',
-    category: 'success',
-    description: 'Cleared the US visa interview.',
-    brief: 'Celebrate (anonymously) a Filipino nurse who just cleared their US consular interview. Acknowledge the nerves, the document prep, the calm-but-fast Q&A. One concrete tip future interviewees can apply. No fabricated questions or quotes. End by reminding readers that GritSync helps clients rehearse the interview, not just file the paperwork.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse smiling outside a US embassy-style building at golden hour, holding a folder of documents, soft confident relief on the face, no readable signage on the building.`,
-    gradient: 'bg-gradient-to-br from-emerald-200 via-green-200 to-teal-300', ad_ready: true,
-  },
-  {
-    id: 'cgfns-vs-eric', label: 'CGFNS vs ERIC', emoji: '🆚',
-    category: 'education',
-    description: 'Difference between CGFNS and ERIC evaluations.',
-    brief: 'Explain in plain language the difference between CGFNS Credentials Evaluation Service and ERES/ERIC reports. Which one your destination state accepts, and the practical timeline difference. No fabricated stats. End with a soft CTA to GritSync for help picking the right evaluator.',
-    image_prompt: `${BRAND_IMAGE_BASE} Side-by-side flatlay on a wood desk: two folders labeled (unreadably) with credentialing report stacks, Filipino nurse\'s hand holding a pen above one of them, soft warm desk lamp.`,
-    gradient: 'bg-gradient-to-br from-sky-200 via-cyan-200 to-blue-300', ad_ready: false,
-  },
-  {
-    id: 'ielts-prep-tips', label: 'IELTS Prep Tips', emoji: '🗣️',
-    category: 'education',
-    description: 'IELTS-Academic prep tactics for nurses.',
-    brief: 'Give 2-3 specific, actionable IELTS-Academic prep tips for Filipino nurses — focus on writing task 1 (visual description) and speaking part 3 (extended answers). Plain language, no clichés. End with a soft invite to GritSync\'s English-prep support.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse practicing IELTS speaking on a video call, light headset, notebook of cue cards beside laptop, modern home setting, warm window light.`,
-    gradient: 'bg-gradient-to-br from-amber-200 via-yellow-200 to-orange-300', ad_ready: false,
-  },
-  {
-    id: 'license-endorsement-101', label: 'License Endorsement 101', emoji: '🔁',
-    category: 'education',
-    description: 'How US interstate license endorsement works.',
-    brief: 'Walk a Filipino USRN through the basics of endorsing a US RN license from one state to another (e.g. CA → TX, NV → IL). Cover the typical documents, fees range, and what "verification of licensure" means. Avoid fabricated state-specific timelines. End with GritSync as ongoing-pathway support.',
-    image_prompt: `${BRAND_IMAGE_BASE} Top-down flatlay: two US state-seal-style icons on either side of a Filipino nurse\'s hands organising endorsement paperwork, neutral wood desk, warm daylight.`,
-    gradient: 'bg-gradient-to-br from-indigo-200 via-blue-200 to-sky-300', ad_ready: false,
-  },
-  {
-    id: 'choosing-your-state', label: 'Choosing Your State', emoji: '🗺️',
-    category: 'education',
-    description: 'How to pick the right first US state.',
-    brief: 'Help a Filipino nurse think through how to pick their first US state: BON friendliness toward foreign-educated nurses (in general terms), demand for RNs, cost of living, Filipino-community size, climate. No fabricated rankings. End with GritSync as the partner for matching person → state.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking at a US map on a tablet at a modern desk, mug of coffee, notepad with pros/cons partially visible, warm desk lamp, contemplative expression.`,
-    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-200 to-blue-400', ad_ready: false,
-  },
-  {
-    id: 'red-flag-recruiters', label: 'Red-Flag Recruiters', emoji: '🚩',
-    category: 'education',
-    description: 'How to spot scammy US recruiters.',
-    brief: 'Walk Filipino nurses through 3-4 red flags when evaluating a US nursing recruiter (asking for upfront fees, vague employer info, "guaranteed visa" claims, pressure tactics). Plain language. End by positioning GritSync as the transparent, no-hidden-fee alternative — without trashing competitors by name.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking thoughtfully at a laptop screen with a vague email open (unreadable), eyebrows slightly raised, warm home desk light, modern interior.`,
-    gradient: 'bg-gradient-to-br from-red-200 via-orange-200 to-rose-300', ad_ready: false,
-  },
-  {
-    id: 'schedule-a-explained', label: 'Schedule A Explained', emoji: '📜',
-    category: 'visa',
-    description: 'What Schedule A nurse classification means.',
-    brief: 'Explain Schedule A for nurses (EB-3 Schedule A pre-certified occupations) in plain language: why nurses are classified this way, how it affects PERM, and what it doesn\'t guarantee. No fabricated dates. End by reminding readers GritSync tracks visa-bulletin movement on their behalf.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse reading a US visa-classification document on a tablet beside an open passport and notepad, warm window light, navy scrubs sleeve, modern home setting.`,
-    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-cyan-300', ad_ready: false,
-  },
-  {
-    id: 'visa-screen-walkthrough', label: 'VisaScreen Walkthrough', emoji: '🧾',
-    category: 'visa',
-    description: 'Step-by-step VisaScreen overview.',
-    brief: 'Walk Filipino-trained nurses through the VisaScreen certificate process (CGFNS): purpose, the four parts (education review, license verification, English proficiency, exam), and a common mistake (e.g. ordering transcripts to the wrong address). No fabricated timelines. End with GritSync as a guide for filing.',
-    image_prompt: `${BRAND_IMAGE_BASE} Close-up of a Filipino nurse organising VisaScreen application materials — transcripts envelope, license copy, ID — on a clean wood desk, warm afternoon light.`,
-    gradient: 'bg-gradient-to-br from-green-200 via-emerald-200 to-teal-300', ad_ready: false,
-  },
-  {
-    id: 'prc-good-standing', label: 'PRC Good Standing for the US', emoji: '🇵🇭',
-    category: 'visa',
-    description: 'Getting a PRC certification of good standing.',
-    brief: 'Explain how a Filipino RN requests a PRC Certification of Good Standing for US credentialing purposes (where to file, what fields the receiving state BON needs, common reasons it gets rejected). Avoid fabricated fees. End with GritSync as the partner for chasing PH-side documents.',
-    image_prompt: `${BRAND_IMAGE_BASE} Top-down photo of a PRC license folder and certification request form arranged neatly on a Filipino-coded wood desk, small Filipino flag pin, warm soft daylight.`,
+    description: 'Documents Filipino nurses need to register for the NCLEX.',
+    brief: 'List the documents a Filipino RN typically needs to register for NCLEX-RN: PRC license, transcripts, course-by-course evaluation, photo ID, application fees. Short bullet phrases. Note the most-commonly-missing item. End with: GritSync prepares + submits all of this for you.',
+    image_prompt: `${BRAND_IMAGE_BASE} Top-down photo of a neat stack of NCLEX-application documents on a wood desk.`,
     gradient: 'bg-gradient-to-br from-yellow-200 via-amber-200 to-orange-300', ad_ready: false,
   },
   {
-    id: 'first-shift-tips', label: 'First US Shift', emoji: '🩹',
-    category: 'lifestyle',
-    description: 'What to expect on your first US shift.',
-    brief: 'Give Filipino nurses 3 grounded tips for their very first US hospital shift: charting (EHR system unfamiliarity), patient-care ratios, asking for help from charge nurses. Keep it warm and tactical. End by noting that GritSync\'s onboarding guidance covers the soft side of the move, not just papers.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN at a hospital nurses\' station looking at an EHR screen with a senior colleague gesturing to help, soft clinical lighting, both in scrubs, faces partially turned away, calm and collaborative scene.`,
-    gradient: 'bg-gradient-to-br from-rose-200 via-pink-200 to-fuchsia-300', ad_ready: false,
+    id: 'common-application-mistakes', label: 'Common NCLEX Application Mistakes', emoji: '⚠️',
+    category: 'education',
+    description: 'Top mistakes Filipino nurses make filing for NCLEX.',
+    brief: 'List 3-4 common mistakes Filipino nurses make when filing for the NCLEX-RN: wrong transcript routing, name mismatches between PRC and passport, missing eval reports, expired payment authorizations. Keep it practical. End with: GritSync catches these before you pay any fee.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking concerned at a laptop screen, paperwork half-organised on a desk.`,
+    gradient: 'bg-gradient-to-br from-red-200 via-rose-200 to-rose-300', ad_ready: false,
   },
   {
-    id: 'finding-filipino-community', label: 'Filipino Community Abroad', emoji: '🏘️',
-    category: 'lifestyle',
-    description: 'Finding Filipino community in your US city.',
-    brief: 'Help newly-arrived Filipino USRNs find their community in their new US city — Filipino churches, Fil-Am nursing associations, grocery stores with Pinoy staples. Warm in tone. End with GritSync\'s Pinoy-USRN alumni network as a soft mention.',
-    image_prompt: `${BRAND_IMAGE_BASE} Group of Filipino USRNs gathered at a small dinner table with familiar Filipino dishes (pancit, lumpia visible in soft focus), laughter, warm modern apartment light.`,
-    gradient: 'bg-gradient-to-br from-orange-200 via-amber-200 to-yellow-300', ad_ready: false,
+    id: 'nclex-study-tip', label: 'NCLEX Study Tip', emoji: '🧠',
+    category: 'education',
+    description: 'One actionable NCLEX-RN study tactic for today.',
+    brief: 'Give ONE specific, actionable NCLEX-RN study tip — priority/safety filter on SATA, time-boxing Qbank sessions, mining UWorld rationales. Plain language, no clichés. End with a reminder that GritSync handles the application paperwork so you can focus on study.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse studying at a cozy desk lamp at night with an NCLEX review book open.`,
+    gradient: 'bg-gradient-to-br from-indigo-200 via-purple-200 to-purple-300', ad_ready: false,
   },
   {
-    id: 'support-family-back-home', label: 'Supporting Family Back Home', emoji: '💌',
-    category: 'lifestyle',
-    description: 'Sending support to family in PH.',
-    brief: 'A grounded reflection on the reality of being the family\'s breadwinner from the US: remittance rhythm, helping siblings finish school, the guilt of being away. No melodrama. End softly — GritSync is built BY Filipino nurses who know this weight.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN on a video call with family in the Philippines, laptop on a small kitchen table, soft warm light, faint expression of love and longing, modern US apartment interior.`,
-    gradient: 'bg-gradient-to-br from-pink-200 via-rose-200 to-red-300', ad_ready: false,
+    id: 'processing-timeline', label: 'NCLEX Processing Timeline', emoji: '⏳',
+    category: 'education',
+    description: 'Realistic timeline ranges for NCLEX-RN processing.',
+    brief: 'Walk through the realistic timeline for NCLEX-RN processing from application to ATT: state BON review window, credentialing eval, Pearson VUE registration. Keep ranges general — no fabricated week-by-week guarantees. Mention that GritSync\'s priority processing tightens the wait where the BON allows.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse studying a calendar with NCLEX milestones marked, tablet in hand.`,
+    gradient: 'bg-gradient-to-br from-cyan-200 via-sky-200 to-sky-300', ad_ready: false,
   },
   {
-    id: 'imposter-syndrome', label: 'Imposter Syndrome', emoji: '🪞',
+    id: 'state-bon-selection', label: 'Picking a State Board for NCLEX', emoji: '🗺️',
+    category: 'education',
+    description: 'How to choose the state Board of Nursing for your NCLEX application.',
+    brief: 'Explain the considerations when picking a state Board of Nursing for NCLEX-RN application: BON friendliness toward foreign-educated nurses (in general terms), processing speed, future endorsement plans. Avoid fabricated state rankings. End with: GritSync helps you match the right BON to your profile.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking at a US map on a tablet at a clean modern desk.`,
+    gradient: 'bg-gradient-to-br from-sky-200 via-cyan-200 to-blue-300', ad_ready: false,
+  },
+  {
+    id: 'red-flag-processors', label: 'Red-Flag Processing "Agents"', emoji: '🚩',
+    category: 'education',
+    description: 'Spotting sketchy NCLEX processing services.',
+    brief: 'Walk Filipino nurses through 3-4 red flags when evaluating an NCLEX processing service: upfront non-refundable fees, vague timelines, "guaranteed pass" claims, pressure tactics. Plain language. Position GritSync as the transparent, no-hidden-fee alternative — without naming competitors.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse looking thoughtfully at a laptop screen with a vague email open.`,
+    gradient: 'bg-gradient-to-br from-red-200 via-orange-200 to-rose-300', ad_ready: false,
+  },
+
+  // ── GritSync Service / Perks ───────────────────────────────────────
+  {
+    id: 'dont-go-alone', label: 'Don\'t Go Alone', emoji: '🤝',
+    category: 'service',
+    description: 'Why an NCLEX processing agency beats DIY.',
+    brief: 'Make the case for using a processing agency over filing solo: the documents are exacting, the timelines are tight, the costs of resubmission stack up fast. Honest framing — agencies aren\'t magic, they\'re structure. End with: GritSync gives you that structure.',
+    image_prompt: `${BRAND_IMAGE_BASE} Two Filipino professionals at a clean modern desk reviewing a printed checklist together.`,
+    gradient: 'bg-gradient-to-br from-violet-200 via-purple-200 to-fuchsia-300', ad_ready: true,
+  },
+  {
+    id: 'service-explainer', label: 'What GritSync Handles', emoji: '🧾',
+    category: 'service',
+    description: 'End-to-end overview of the GritSync NCLEX-processing service.',
+    brief: 'Plain-language overview of what GritSync handles for clients: NCLEX application processing, document preparation + submission, eligibility + requirement checking, ATT tracking + assistance, end-to-end NCLEX journey support. Concrete bullets. End with: book a free assessment at gritsync.com.',
+    image_prompt: `${BRAND_IMAGE_BASE} Top-down flatlay of a clean desk with NCLEX paperwork, a passport, laptop, and small GritSync notebook.`,
+    gradient: 'bg-gradient-to-br from-primary-200 via-primary-300 to-primary-400', ad_ready: true,
+  },
+  {
+    id: 'gritsync-perks-rundown', label: 'GritSync Exclusive Perks', emoji: '✨',
+    category: 'service',
+    description: 'The 4 perks every GritSync client gets.',
+    brief: 'List the four exclusive perks every GritSync client gets: Free Business Email Setup, Application Guidance System, Priority Processing Assistance, Personalized NCLEX Roadmap. One short sentence per perk explaining the concrete benefit. End with: get yours at gritsync.com/quote.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse smiling on a video call at a clean modern home desk, laptop open with unreadable screen.`,
+    gradient: 'bg-gradient-to-br from-fuchsia-200 via-pink-200 to-rose-300', ad_ready: true,
+  },
+  {
+    id: 'personalized-roadmap', label: 'Personalized NCLEX Roadmap', emoji: '🧭',
+    category: 'service',
+    description: 'The Personalized NCLEX Roadmap perk explained.',
+    brief: 'Explain the Personalized NCLEX Roadmap perk: a per-client step-by-step plan calibrated to their profile (PH license stage, target state, study readiness). Why a generic checklist isn\'t enough. End with a soft CTA to get yours via gritsync.com/quote.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse reviewing a printed roadmap document at a modern desk, soft warm light.`,
+    gradient: 'bg-gradient-to-br from-teal-200 via-emerald-200 to-green-300', ad_ready: false,
+  },
+  {
+    id: 'priority-processing', label: 'Priority Processing Assistance', emoji: '⚡',
+    category: 'service',
+    description: 'The Priority Processing perk explained.',
+    brief: 'Explain the Priority Processing Assistance perk: GritSync coordinates faster turnarounds + same-day updates with the state BON where the BON allows it. Honest framing — agencies cannot override BON queues, but they can keep clients out of preventable delay loops.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino professional at a desk with multiple monitors showing application status dashboards.`,
+    gradient: 'bg-gradient-to-br from-amber-200 via-yellow-200 to-orange-300', ad_ready: false,
+  },
+  {
+    id: 'business-email-perk', label: 'Free Business Email Setup', emoji: '📧',
+    category: 'service',
+    description: 'The Free Business Email Setup perk explained.',
+    brief: 'Explain why GritSync sets up a free professional business email for clients: looks professional to US recruiters + state BONs, separates NCLEX correspondence from personal inbox, easier ATT + scheduling notifications.',
+    image_prompt: `${BRAND_IMAGE_BASE} Close-up of a laptop screen showing a clean professional inbox setup, Filipino nurse hand on the trackpad.`,
+    gradient: 'bg-gradient-to-br from-blue-200 via-sky-200 to-cyan-300', ad_ready: false,
+  },
+  {
+    id: 'why-gritsync', label: 'Why GritSync', emoji: '🛡️',
+    category: 'service',
+    description: 'What makes GritSync different from other processors.',
+    brief: 'Make the positioning case for GritSync: NCLEX-only focus (not a generic migration agency), transparent pricing, structured roadmap per client, dedicated processing support. Avoid trashing competitors by name.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino professional smiling confidently in front of a clean modern office space with subtle red/white branding.`,
+    gradient: 'bg-gradient-to-br from-rose-200 via-red-200 to-red-300', ad_ready: true,
+  },
+
+  // ── Motivation (brand voice) ───────────────────────────────────────
+  {
+    id: 'encouragement', label: 'Quiet Encouragement', emoji: '💪',
     category: 'motivation',
-    description: 'Handling imposter syndrome as a new USRN.',
-    brief: 'Speak directly to Filipino USRNs feeling like they don\'t belong on their first US unit (despite years of PH experience). Validate, then offer one reframe and one tactical thing they can do this week (e.g. ask one peer one question per shift). End with quiet GritSync solidarity.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino USRN looking at their reflection in a hospital window during a quiet moment, soft introspective expression, navy scrubs, late-afternoon golden light.`,
-    gradient: 'bg-gradient-to-br from-violet-200 via-purple-200 to-fuchsia-300', ad_ready: false,
+    description: 'Warm, specific pep talk for nurses mid-NCLEX prep.',
+    brief: 'Write a warm, specific encouragement for Filipino nurses in the middle of NCLEX-RN application or prep — name the hard moments (long shifts, slow paperwork, family pressure) without melodrama. Keep it short. Close with GritSync standing alongside them.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse in scrubs leaning against a hospital wall during a break, soft late-afternoon light.`,
+    gradient: 'bg-gradient-to-br from-pink-200 via-rose-200 to-rose-400', ad_ready: false,
   },
   {
     id: 'one-step-at-a-time', label: 'One Step at a Time', emoji: '🪜',
     category: 'motivation',
-    description: 'Break the long USRN road into doable steps.',
-    brief: 'Encourage Filipino nurses overwhelmed by the USRN process by reframing it as a sequence of small, doable steps — not one giant leap. Give a quick example of the typical month-by-month rhythm in general terms. End with GritSync as the partner that breaks it down for you.',
-    image_prompt: `${BRAND_IMAGE_BASE} Wide shot of a Filipino nurse walking up a softly lit modern stairwell, calm and steady, navy scrubs, warm late-afternoon light from a tall window.`,
+    description: 'Break the NCLEX road into doable steps.',
+    brief: 'Encourage Filipino nurses overwhelmed by the NCLEX process by reframing it as a sequence of small, doable steps — application, eligibility, ATT, study, exam. Quick example of the typical month-by-month rhythm in general terms. End with GritSync as the partner that breaks it down for you.',
+    image_prompt: `${BRAND_IMAGE_BASE} Wide shot of a Filipino nurse walking up a softly lit modern stairwell, calm and steady.`,
     gradient: 'bg-gradient-to-br from-teal-200 via-emerald-200 to-green-300', ad_ready: false,
   },
+
+  // ── Calls to action ────────────────────────────────────────────────
   {
-    id: 'credentialing-review-cta', label: 'Credentialing Review CTA', emoji: '✅',
+    id: 'free-assessment-cta', label: 'Free Assessment CTA', emoji: '🎯',
     category: 'cta',
-    description: 'Direct CTA to book a credentialing review.',
-    brief: 'Direct invite for Filipino-trained nurses to book a GritSync credentialing review — a one-hour read of their current documents to catch missing items before they pay any application fee. Lead with the outcome (catch gaps before $$ goes out). Honest claims only.',
-    image_prompt: `${BRAND_IMAGE_BASE} Filipino GritSync advisor (back-of-shoulder framing) walking through a printed credentialing checklist with a client, both at a clean modern desk, warm office lighting, no readable documents.`,
+    description: 'Direct invite to book a free NCLEX assessment.',
+    brief: 'Direct invite for Filipino nurses to book a free GritSync NCLEX assessment — a one-hour review of their current documents + readiness to file. Lead with the outcome (catch gaps before $$ goes out). Single clear next step. Honest claims only.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino GritSync advisor walking through a printed NCLEX checklist with a client, both at a clean modern desk.`,
     gradient: 'bg-gradient-to-br from-primary-200 via-primary-300 to-primary-500', ad_ready: true,
   },
   {
-    id: 'mentorship-cta', label: 'Mentorship CTA', emoji: '🧭',
+    id: 'quote-cta', label: 'Get Your Quote', emoji: '💬',
     category: 'cta',
-    description: 'Pair with a USRN mentor.',
-    brief: 'Invite Filipino nurses still in PH to pair with a GritSync USRN mentor — someone who has already made the move. Lead with the human cost of doing this alone. Honest claims only — no guarantees of outcomes. End with a single clear next step.',
-    image_prompt: `${BRAND_IMAGE_BASE} Two Filipino nurses on a side-by-side video call screen (laptop frame visible), one in PH scrubs and one in US scrubs, warm encouraging conversation, modern home setting.`,
-    gradient: 'bg-gradient-to-br from-sky-200 via-blue-300 to-indigo-400', ad_ready: false,
+    description: 'Drive operators to gritsync.com/quote.',
+    brief: 'Direct CTA inviting Filipino nurses to get their official GritSync NCLEX processing quote at gritsync.com/quote. Lead with clarity (no hidden fees, no guesswork). One clear next step.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse smiling at a phone showing a clean website page, warm modern home setting.`,
+    gradient: 'bg-gradient-to-br from-sky-200 via-blue-300 to-indigo-400', ad_ready: true,
+  },
+  {
+    id: 'free-consult-cta', label: 'Free Consultation', emoji: '📞',
+    category: 'cta',
+    description: 'Book a free GritSync NCLEX consultation.',
+    brief: 'Direct invite to book a free GritSync NCLEX consultation — clear roadmap, no guesswork. Lead with the outcome. Honest claims only — no guarantees of outcomes or timelines.',
+    image_prompt: `${BRAND_IMAGE_BASE} Filipino nurse on a friendly video call at a clean desk, light headset visible.`,
+    gradient: 'bg-gradient-to-br from-emerald-200 via-teal-200 to-cyan-300', ad_ready: true,
+  },
+
+  // ── Behind the scenes ──────────────────────────────────────────────
+  {
+    id: 'behind-the-scenes', label: 'Behind the Scenes', emoji: '👥',
+    category: 'bts',
+    description: 'Show the GritSync NCLEX-processing workflow.',
+    brief: 'Warm behind-the-scenes post about a GritSync NCLEX-processing workflow — a document review session, an ATT-tracking checkpoint, the team double-checking a state-BON submission. No fake testimonials, no named clients. End with: this hands-on care is what you get when you work with GritSync.',
+    image_prompt: `${BRAND_IMAGE_BASE} Two Filipino GritSync staff at a clean modern desk reviewing a printed checklist together.`,
+    gradient: 'bg-gradient-to-br from-slate-200 via-gray-200 to-gray-300', ad_ready: false,
   },
   {
     id: 'team-spotlight', label: 'Team Spotlight', emoji: '⭐',
     category: 'bts',
-    description: 'Meet a GritSync team member (anonymous OK).',
-    brief: 'A warm spotlight on a GritSync team member (role + what they do day-to-day for clients) without revealing private details or attaching real names if not approved. Highlight the human at the other end of the email. End by reminding readers a real Filipino-nurse-friendly team is behind every reply.',
-    image_prompt: `${BRAND_IMAGE_BASE} Editorial-style portrait of a Filipino professional at a clean modern desk (face partially turned or slightly out of focus to protect identity), warm office light, laptop open with unreadable screen.`,
+    description: 'Meet a GritSync NCLEX processor.',
+    brief: 'Warm spotlight on a GritSync NCLEX processor (role + what they do for clients) without revealing private details. Highlight the human at the other end of the email. End with: a real Filipino-nurse-friendly team is behind every submission.',
+    image_prompt: `${BRAND_IMAGE_BASE} Editorial portrait of a Filipino professional at a clean modern desk (face partially turned to protect identity).`,
     gradient: 'bg-gradient-to-br from-slate-200 via-gray-300 to-zinc-400', ad_ready: false,
   },
 ]
@@ -542,6 +453,25 @@ const AUDIENCE_PRESETS: AudienceOption[] = [
     brief: 'A fresh Philippines BSN graduate or board passer (under 1 year experience) starting to think about US opportunities and what they need to do now.',
   },
 ]
+
+// ─── Image templates ──────────────────────────────────────────────────
+// Operator-managed library of (name, prompt, preview) templates that
+// drive image generation. Selecting a template writes its prompt into
+// the legacy `gritsync_socmed_master_image_prompt` key so Manager and
+// any other consumer of `readMasterImagePrompt()` stay in sync.
+interface ImageTemplate {
+  id: string
+  name: string
+  prompt: string
+  preview_url: string | null
+  preview_status: 'pending' | 'available' | 'failed'
+  preview_error: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+const SELECTED_IMAGE_TEMPLATE_ID_KEY = 'gritsync_socmed_selected_image_template_id'
 
 // ─── Master image prompt ──────────────────────────────────────────────
 // Single source of truth for the image-AI. Every /generate-batch call
@@ -771,10 +701,9 @@ function writeMasterCaptionFormat(value: string) {
 
 
 const TEMPLATE_CATEGORY_LABEL: Record<TemplateCategory, string> = {
-  success: 'Success story',
-  education: 'Educational',
-  visa: 'Visa / News',
-  lifestyle: 'Lifestyle',
+  success: 'NCLEX passer / success',
+  education: 'NCLEX education',
+  service: 'GritSync service',
   motivation: 'Motivation',
   cta: 'Call to action',
   bts: 'Behind the scenes',
@@ -2040,14 +1969,14 @@ const BEST_TIMES: Record<Platform, { weekday: string; weekend: string; reason: s
 // hooks. Update this list as the visa bulletin / NCLEX format / state-BON
 // landscape moves.
 const TRENDING_TOPIC_IDEAS: Array<{ title: string; brief: string; tag: string }> = [
-  { title: 'Visa Bulletin retrogression — what it means for nurses right now',     brief: 'Plain-language breakdown of the current EB-3 Schedule A movement for Filipino nurses, what "retrogression" means, and how GritSync helps clients stay application-ready while they wait.',                 tag: 'Visa' },
-  { title: 'NCLEX Next-Gen question types — what changed and how to study',       brief: 'Walk Filipino nurses through the Next-Gen NCLEX-RN format: case-study items, bowtie, matrix, and how Qbank prep needs to shift. Honest, no fabricated pass-rate stats.',                                         tag: 'NCLEX' },
-  { title: 'USRN salary by US state — what is competitive in 2026',                brief: 'A grounded overview of where new USRNs tend to earn well (in general ranges) — Cali, Texas, NY metros — vs cost-of-living trade-offs. No fabricated numbers; cite "general ranges" only.',                              tag: 'Career' },
-  { title: 'The first 30 days as a USRN — what no one tells you',                  brief: 'Reflective post: charting in a new EHR, US patient-care ratios, the surreal first paycheck, homesickness. Warm, non-boastful, grounded.',                                                                       tag: 'Lifestyle' },
-  { title: 'How to spot a scammy US nursing recruiter (4 red flags)',              brief: 'Upfront fees, vague employer info, "guaranteed visa" claims, and high-pressure tactics. Help nurses self-protect. End with GritSync as the transparent, no-hidden-fee alternative — without naming competitors.', tag: 'Education' },
-  { title: 'Schedule A pre-certification explained for Filipino RNs',              brief: 'What Schedule A is, why nurses get it, and what it does NOT guarantee. Honest framing, no fabricated dates. GritSync as the partner that tracks the bulletin on their behalf.',                                   tag: 'Visa' },
-  { title: 'Endorsing your US RN license to a second state — full walk-through',   brief: 'Cover the typical documents, verification-of-licensure step, fees range, and one common mistake. Avoid state-specific fabricated timelines.',                                                                      tag: 'Education' },
-  { title: 'IELTS Academic for nurses — a 2-week prep plan',                       brief: 'A realistic 14-day study plan focused on the bands nurses tend to lose (writing task 1 visual descriptions, speaking part 3 extended answers). Actionable, no fluff.',                                                tag: 'Education' },
+  { title: 'NCLEX application step-by-step for Filipino nurses',                   brief: 'Plain-language walkthrough of the NCLEX-RN application from picking a state Board to getting your ATT. Position GritSync as the partner who handles every step.',                                       tag: 'NCLEX' },
+  { title: 'What is the ATT and how do you get it?',                               brief: 'Demystify the Authorization to Test for Filipino nurses: what it is, when it arrives, validity window. Mention GritSync\'s ATT tracking + booking assistance.',                                  tag: 'NCLEX' },
+  { title: 'Why use an NCLEX processing agency vs filing solo',                    brief: 'Make the case for using a processing agency: tight timelines, exacting documents, the cost of resubmission. Honest framing — GritSync gives structure, not magic.',                                tag: 'Service' },
+  { title: 'Common NCLEX application mistakes (and how to avoid them)',            brief: '3-4 mistakes Filipino nurses make: wrong transcript routing, PRC/passport name mismatches, missing eval reports. End with: GritSync catches these before you pay any fee.',                          tag: 'NCLEX' },
+  { title: 'GritSync exclusive perks for clients',                                 brief: 'Free Business Email Setup, Application Guidance System, Priority Processing Assistance, Personalized NCLEX Roadmap. One concrete benefit per perk. CTA to gritsync.com/quote.',                       tag: 'Service' },
+  { title: 'How to pick a state Board of Nursing for your NCLEX',                  brief: 'Considerations when choosing a state BON for NCLEX-RN application: foreign-nurse friendliness in general terms, processing speed, endorsement plans. GritSync helps match BON to profile.',          tag: 'NCLEX' },
+  { title: 'Red flags when shopping for an NCLEX processor',                       brief: 'Upfront non-refundable fees, vague timelines, "guaranteed pass" claims, pressure tactics. Position GritSync as the transparent, no-hidden-fee alternative.',                                          tag: 'Marketing' },
+  { title: 'Book your free GritSync NCLEX assessment',                             brief: 'Direct CTA inviting Filipino nurses to book a free assessment with GritSync — one-hour review of documents + readiness to file. Catch gaps before any fee goes out.',                                tag: 'Marketing' },
 ]
 
 function ManagerView({
@@ -2165,7 +2094,14 @@ function ManagerView({
     // target nurses on the visa journey, etc. Falls back to the broad
     // "considering" segment when the tag isn't audience-specific.
     let audience: AudiencePreset = 'ph_considering'
+    // Tag-to-audience mapping — every tag in the current
+    // TRENDING_TOPIC_IDEAS is NCLEX-processing-aligned, so we map them
+    // to the two audiences that fit best: nurses actively prepping
+    // (NCLEX tag) vs nurses still researching the move (Service /
+    // Marketing tags). 'Visa' / 'Career' / 'Lifestyle' are no longer
+    // produced but kept as a defensive branch in case the list grows.
     if (topic.tag === 'NCLEX') audience = 'ph_nclex_prep'
+    else if (topic.tag === 'Service' || topic.tag === 'Marketing') audience = 'ph_considering'
     else if (topic.tag === 'Visa') audience = 'ph_visa_stage'
     else if (topic.tag === 'Career' || topic.tag === 'Lifestyle') audience = 'ien_already_us'
 
@@ -3063,10 +2999,20 @@ function GeneratorView({
   // generation. Reads from localStorage (or DEFAULT_MASTER_IMAGE_PROMPT
   // for fresh sessions); writes back on every edit so refinements stick
   // across sessions and across Compose ↔ Manager auto-generate.
-  const [masterImagePrompt, setMasterImagePrompt] = useState<string>(() => readMasterImagePrompt())
-  const [masterPromptOpen, setMasterPromptOpen] = useState(false)
-  const [masterPromptDraft, setMasterPromptDraft] = useState<string>('')
-  const [masterPromptRefining, setMasterPromptRefining] = useState(false)
+  // Image templates — operator-managed list of (name, prompt, preview)
+  // tiles. Replaces the single master image prompt: now the operator
+  // picks from a library + can add/edit/regenerate templates from the
+  // Media section. The selected template's prompt is what gets sent to
+  // the backend as `template_image_prompt` on every generation.
+  const [imageTemplates, setImageTemplates] = useState<ImageTemplate[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [selectedImageTemplateId, setSelectedImageTemplateIdRaw] = useState<string | null>(() => {
+    try { return localStorage.getItem(SELECTED_IMAGE_TEMPLATE_ID_KEY) || null } catch { return null }
+  })
+  const [regeneratingTemplateIds, setRegeneratingTemplateIds] = useState<Set<string>>(new Set())
+  const [templateModalOpen, setTemplateModalOpen] = useState<{ mode: 'new' } | { mode: 'edit'; template: ImageTemplate } | null>(null)
+  const [templateDraft, setTemplateDraft] = useState<{ name: string; prompt: string }>({ name: '', prompt: '' })
+  const [templateSubmitting, setTemplateSubmitting] = useState(false)
   // Master caption format — 11-section structural template every caption
   // follows. Parallel to the image-prompt editor: read/write helpers
   // persist overrides in localStorage; refinements via AI come back into
@@ -3107,29 +3053,149 @@ function GeneratorView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill])
 
-  // Master image prompt — edit / reset / AI-refine. Refining hits the
-  // server's /ai/refine-master-prompt endpoint and applies the returned
-  // version straight to the editor draft so the operator can review
-  // before saving.
-  function openMasterPromptEditor() {
-    setMasterPromptDraft(masterImagePrompt)
-    setMasterPromptOpen(true)
+  // ── Image-template handlers ───────────────────────────────────────
+  // Load templates on first mount. If none exist, seed the default one
+  // from DEFAULT_MASTER_IMAGE_PROMPT so the operator has something to
+  // start from instead of an empty grid.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setTemplatesLoading(true)
+      try {
+        const list = await api<ImageTemplate[]>('/ai/image-templates')
+        if (cancelled) return
+        if (Array.isArray(list) && list.length > 0) {
+          setImageTemplates(list)
+        } else {
+          // First-run seed: create the default GritSync Master template.
+          // POST /image-templates renders the preview synchronously, so
+          // the operator sees the brand image immediately.
+          try {
+            const seed = await api<ImageTemplate>('/ai/image-templates', {
+              method: 'POST',
+              body: JSON.stringify({
+                name: 'GritSync Master',
+                prompt: DEFAULT_MASTER_IMAGE_PROMPT,
+                is_default: true,
+              }),
+            })
+            if (!cancelled) setImageTemplates([seed])
+          } catch (seedErr: any) {
+            if (!cancelled) showToast(seedErr.message || 'Failed to seed default template', 'error')
+          }
+        }
+      } catch (err: any) {
+        if (!cancelled) showToast(err.message || 'Failed to load image templates', 'error')
+      } finally {
+        if (!cancelled) setTemplatesLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Resolved selected template — falls back to the default tile if the
+  // operator hasn't picked one yet (or the previously-selected id is no
+  // longer in the list, e.g. after deletion).
+  const selectedImageTemplate = useMemo<ImageTemplate | null>(() => {
+    if (imageTemplates.length === 0) return null
+    return imageTemplates.find((t) => t.id === selectedImageTemplateId)
+      || imageTemplates.find((t) => t.is_default)
+      || imageTemplates[0]
+      || null
+  }, [imageTemplates, selectedImageTemplateId])
+
+  // Keep the legacy localStorage key in sync with the current selection
+  // so Manager's autoGenerateBatch + agentGenerateNow (which read via
+  // readMasterImagePrompt) automatically use the operator's pick.
+  useEffect(() => {
+    if (!selectedImageTemplate) return
+    writeMasterImagePrompt(selectedImageTemplate.prompt)
+    try { localStorage.setItem(SELECTED_IMAGE_TEMPLATE_ID_KEY, selectedImageTemplate.id) } catch {}
+  }, [selectedImageTemplate?.id, selectedImageTemplate?.prompt])
+
+  function selectImageTemplate(id: string) {
+    setSelectedImageTemplateIdRaw(id)
   }
-  function saveMasterPrompt() {
-    const value = masterPromptDraft.trim()
-    if (!value) {
-      showToast('Master image prompt cannot be empty', 'error')
+
+  function openNewTemplate() {
+    setTemplateDraft({ name: '', prompt: DEFAULT_MASTER_IMAGE_PROMPT })
+    setTemplateModalOpen({ mode: 'new' })
+  }
+  function openEditTemplate(t: ImageTemplate) {
+    setTemplateDraft({ name: t.name, prompt: t.prompt })
+    setTemplateModalOpen({ mode: 'edit', template: t })
+  }
+  async function submitTemplate() {
+    const name = templateDraft.name.trim()
+    const prompt = templateDraft.prompt.trim()
+    if (!name || !prompt) {
+      showToast('Name and prompt are both required', 'error')
       return
     }
-    setMasterImagePrompt(value)
-    writeMasterImagePrompt(value)
-    setMasterPromptOpen(false)
-    showToast(value === DEFAULT_MASTER_IMAGE_PROMPT.trim()
-      ? 'Reset to brand default — future generations will use it'
-      : 'Master image prompt saved — future generations will use it', 'success')
+    setTemplateSubmitting(true)
+    try {
+      if (!templateModalOpen) return
+      if (templateModalOpen.mode === 'new') {
+        const created = await api<ImageTemplate>('/ai/image-templates', {
+          method: 'POST',
+          body: JSON.stringify({ name, prompt }),
+        })
+        setImageTemplates((cur) => [created, ...cur])
+        setSelectedImageTemplateIdRaw(created.id)
+        showToast(created.preview_status === 'available'
+          ? `Created "${created.name}" — preview rendered`
+          : `Created "${created.name}" — preview render failed (${created.preview_error || 'unknown'})`,
+          created.preview_status === 'available' ? 'success' : 'error')
+      } else {
+        const id = templateModalOpen.template.id
+        const updated = await api<ImageTemplate>(`/ai/image-templates/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, prompt }),
+        })
+        setImageTemplates((cur) => cur.map((t) => t.id === id ? updated : t))
+        showToast(`Updated "${updated.name}"`, 'success')
+      }
+      setTemplateModalOpen(null)
+    } catch (err: any) {
+      showToast(err.message || 'Save failed', 'error')
+    } finally {
+      setTemplateSubmitting(false)
+    }
   }
-  function resetMasterPromptToDefault() {
-    setMasterPromptDraft(DEFAULT_MASTER_IMAGE_PROMPT)
+  async function regenerateTemplate(id: string) {
+    setRegeneratingTemplateIds((cur) => new Set(cur).add(id))
+    try {
+      const updated = await api<ImageTemplate>(`/ai/image-templates/${id}/regenerate`, { method: 'POST' })
+      setImageTemplates((cur) => cur.map((t) => t.id === id ? updated : t))
+      showToast(updated.preview_status === 'available' ? 'Preview regenerated' : `Preview render failed: ${updated.preview_error || 'unknown'}`,
+        updated.preview_status === 'available' ? 'success' : 'error')
+    } catch (err: any) {
+      showToast(err.message || 'Regenerate failed', 'error')
+    } finally {
+      setRegeneratingTemplateIds((cur) => {
+        const next = new Set(cur)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+  async function deleteTemplate(id: string) {
+    if (!confirm('Delete this image template?')) return
+    try {
+      await api(`/ai/image-templates/${id}`, { method: 'DELETE' })
+      setImageTemplates((cur) => cur.filter((t) => t.id !== id))
+      // If the deleted one was selected, pick the default (or the first
+      // remaining) so subsequent generations have a valid prompt.
+      if (selectedImageTemplateId === id) {
+        const fallback = imageTemplates.find((t) => t.id !== id && t.is_default)
+          || imageTemplates.find((t) => t.id !== id)
+        setSelectedImageTemplateIdRaw(fallback?.id || null)
+      }
+      showToast('Template deleted', 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Delete failed', 'error')
+    }
   }
   // ── Master caption format editor handlers ─────────────────────────
   function openCaptionEditor() {
@@ -3181,38 +3247,7 @@ function GeneratorView({
     }
   }
 
-  async function refineMasterPromptWithAI() {
-    setMasterPromptRefining(true)
-    try {
-      const r = await api<{ refined_prompt: string; reasoning?: string }>(
-        '/ai/refine-master-prompt',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            current_prompt: masterPromptDraft || masterImagePrompt,
-            // Hint the model with context that's likely in flight so the
-            // refinement keeps the relevant brand cues. Topic is what
-            // the operator is currently writing about; campaign goal
-            // shapes what "good" looks like for this round.
-            topic: topic.trim() || null,
-            goal_brief: CAMPAIGN_GOALS.find((g) => g.id === goal)?.brief || null,
-          }),
-        }
-      )
-      if (r.refined_prompt && r.refined_prompt.trim()) {
-        setMasterPromptDraft(r.refined_prompt.trim())
-        showToast(r.reasoning
-          ? `Refined — ${r.reasoning.slice(0, 90)}${r.reasoning.length > 90 ? '…' : ''}`
-          : 'Master prompt refined — review and Save when ready', 'success')
-      } else {
-        throw new Error('No refined prompt returned')
-      }
-    } catch (err: any) {
-      showToast(err.message || 'Refine failed', 'error')
-    } finally {
-      setMasterPromptRefining(false)
-    }
-  }
+
 
   async function generate() {
     if (!topic.trim() && !template) {
@@ -3237,11 +3272,11 @@ function GeneratorView({
           // image-template wins over topic-template for the visual prompt.
           preselected_idea: template?.brief || null,
           template_id: template?.id || null,
-          // Always send the master image prompt — single source of truth
-          // for what the image AI renders. The operator can edit/refine
-          // this from the editor below; whatever's saved in localStorage
-          // is what ships to the backend.
-          template_image_prompt: masterImagePrompt,
+          // The selected image template's prompt — single source of truth
+          // for what the image AI renders this batch. Falls back to the
+          // default master prompt if no template has loaded yet (rare,
+          // only on first paint before /image-templates returns).
+          template_image_prompt: selectedImageTemplate?.prompt || DEFAULT_MASTER_IMAGE_PROMPT,
           // Parallel for captions: the 11-section master format is what
           // the LLM hews to when writing every variant. Length is forced
           // to 'long' so the model has room to cover all sections.
@@ -3612,75 +3647,142 @@ function GeneratorView({
             </div>
           </div>
 
-          {/* Master image prompt — single source of truth for the image AI.
-              Only relevant in Image mode (Video mode renders the still
-              frame from a separate Replicate pipeline). Operator can
-              edit + AI-refine; saved overrides persist in localStorage
-              so the agent's "learning" carries across sessions. Compose
-              and Manager auto-generate both send whatever's saved here
-              as `template_image_prompt`. */}
+          {/* Image templates — operator-managed library of (name, prompt,
+              preview) tiles. Selecting a tile sets it as the current
+              image-generation prompt for all of Compose + Manager. Click
+              a tile to select; use the row of actions under each to edit
+              the prompt (auto-regenerates preview), regenerate the
+              preview without prompt changes, or delete (non-default
+              templates only). The + New template tile opens the editor
+              modal in create mode. */}
           {contentType === 'image' && (
             <div className="mt-4 rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/15 p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Brain className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Master image prompt</h3>
-                    {masterImagePrompt !== DEFAULT_MASTER_IMAGE_PROMPT && (
-                      <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                        Customised
-                      </span>
-                    )}
+                    <ImageIcon className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Image templates</h3>
                   </div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-                    Drives every image the AI renders for posts. Edit it to evolve the look — refinements are saved on
-                    your device and the model can self-improve via the Refine button.
+                    Pick the template whose look you want for this batch. The selected template's prompt drives every
+                    image generated below. Click <strong>+ New template</strong> to design your own.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={openMasterPromptEditor}>
-                  <PencilLine className="h-3.5 w-3.5 mr-1" /> Edit prompt
+                <Button size="sm" variant="outline" onClick={openNewTemplate}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> New template
                 </Button>
               </div>
-              <div className="mt-3 rounded-lg bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 max-h-32 overflow-y-auto">
-                <p className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-snug line-clamp-6">
-                  {masterImagePrompt}
-                </p>
-              </div>
-              {masterPromptOpen && (
-                <div className="mt-4 space-y-3 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-3">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Editing master prompt
-                    </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                      {masterPromptDraft.length.toLocaleString()} chars
-                    </div>
-                  </div>
-                  <Textarea
-                    rows={14}
-                    value={masterPromptDraft}
-                    onChange={(e) => setMasterPromptDraft(e.target.value)}
-                    className="font-mono text-xs"
-                  />
-                  <div className="flex flex-wrap items-center gap-2 justify-end">
-                    <Button size="sm" variant="ghost" onClick={() => setMasterPromptOpen(false)} disabled={masterPromptRefining}>
-                      Cancel
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={resetMasterPromptToDefault} disabled={masterPromptRefining}>
-                      Reset to brand default
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={refineMasterPromptWithAI} loading={masterPromptRefining} disabled={masterPromptRefining}>
-                      <Sparkles className="h-3.5 w-3.5 mr-1" /> Refine with AI
-                    </Button>
-                    <Button size="sm" onClick={saveMasterPrompt} disabled={masterPromptRefining || !masterPromptDraft.trim()}>
-                      Save
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-                    Refine with AI sends the current draft + your active topic/goal to <span className="font-mono">/ai/refine-master-prompt</span>.
-                    The model returns an improved version; review then click Save. Reset wipes your override so future
-                    default-prompt updates in code reach you automatically.
-                  </p>
+
+              {templatesLoading && imageTemplates.length === 0 ? (
+                <div className="py-8 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading templates…
+                </div>
+              ) : imageTemplates.length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No templates yet. Click <strong>+ New template</strong> to create one.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {imageTemplates.map((t) => {
+                    const selected = selectedImageTemplateId === t.id
+                    return (
+                      <div
+                        key={t.id}
+                        className={cn(
+                          'group rounded-xl overflow-hidden border-2 bg-white dark:bg-gray-900 transition-all',
+                          selected
+                            ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-900/40 shadow-md'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => selectImageTemplate(t.id)}
+                          className="block w-full relative aspect-square overflow-hidden"
+                          title={selected ? 'Selected — drives current image generation' : `Use "${t.name}" for this batch`}
+                        >
+                          {t.preview_url ? (
+                            <img
+                              src={t.preview_url}
+                              alt={t.name}
+                              loading="lazy"
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            />
+                          ) : t.preview_status === 'pending' ? (
+                            <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex flex-col items-center justify-center text-xs text-gray-500 dark:text-gray-400">
+                              <Loader2 className="h-5 w-5 animate-spin mb-1" />
+                              Rendering…
+                            </div>
+                          ) : (
+                            <div className="w-full h-full bg-amber-50 dark:bg-amber-900/20 flex flex-col items-center justify-center text-[10px] text-amber-700 dark:text-amber-300 p-3 text-center">
+                              <AlertCircle className="h-5 w-5 mb-1" />
+                              <span className="line-clamp-3">{t.preview_error || 'No preview'}</span>
+                            </div>
+                          )}
+                          {t.is_default && (
+                            <span className="absolute top-1.5 left-1.5 text-[9px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full bg-white/85 dark:bg-black/55 backdrop-blur-sm text-gray-700 dark:text-gray-200">
+                              Default
+                            </span>
+                          )}
+                          {selected && (
+                            <div className="absolute inset-0 bg-primary-600/25 flex items-center justify-center pointer-events-none">
+                              <span className="bg-primary-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow">
+                                Selected
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                        <div className="p-1.5 text-center">
+                          <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 leading-tight truncate" title={t.name}>{t.name}</div>
+                          <div className="flex items-center justify-center gap-1 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditTemplate(t)}
+                              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                              title="Edit prompt"
+                            >
+                              <PencilLine className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => regenerateTemplate(t.id)}
+                              disabled={regeneratingTemplateIds.has(t.id)}
+                              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-wait"
+                              title="Regenerate preview"
+                            >
+                              {regeneratingTemplateIds.has(t.id) ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3" />
+                              )}
+                            </button>
+                            {!t.is_default && (
+                              <button
+                                type="button"
+                                onClick={() => deleteTemplate(t.id)}
+                                className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-300"
+                                title="Delete template"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* + New template tile — visual parity with the template
+                      cards so the create affordance feels first-class. */}
+                  <button
+                    type="button"
+                    onClick={openNewTemplate}
+                    className="group rounded-xl overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary-400 dark:hover:border-primary-600 bg-white/40 dark:bg-gray-900/40 transition-colors flex flex-col items-center justify-center aspect-square text-gray-500 dark:text-gray-400 hover:text-primary-700 dark:hover:text-primary-300"
+                  >
+                    <Plus className="h-7 w-7 mb-1" />
+                    <span className="text-xs font-medium">New template</span>
+                    <span className="text-[10px] opacity-70">Prompt → render</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -3718,6 +3820,61 @@ function GeneratorView({
           </Button>
         </div>
       </Card>
+
+      {/* New / Edit image template modal. Renders the same form for both
+          modes — the only difference is whether `submitTemplate` POSTs
+          or PATCHes. Save triggers a (re-)render of the preview server-
+          side so the operator sees what their prompt actually produces. */}
+      <Modal
+        isOpen={!!templateModalOpen}
+        onClose={() => !templateSubmitting && setTemplateModalOpen(null)}
+        title={templateModalOpen?.mode === 'edit'
+          ? `Edit "${templateModalOpen.template.name}"`
+          : 'New image template'}
+        size="xl"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Template name"
+            placeholder="e.g. Premium Ad — Hospital Hero"
+            value={templateDraft.name}
+            onChange={(e) => setTemplateDraft((d) => ({ ...d, name: e.target.value }))}
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Image prompt
+              <span className="text-gray-400 dark:text-gray-500 font-normal text-xs ml-2">
+                ({templateDraft.prompt.length.toLocaleString()} chars · {templateDraft.prompt.trim() ? templateDraft.prompt.trim().split(/\s+/).length.toLocaleString() : 0} words)
+              </span>
+            </label>
+            <Textarea
+              rows={16}
+              value={templateDraft.prompt}
+              onChange={(e) => setTemplateDraft((d) => ({ ...d, prompt: e.target.value }))}
+              className="font-mono text-xs"
+              placeholder="Describe the visual style: subject, setting, brand elements, palette, composition, negative-prompt block…"
+            />
+          </div>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+            Saving renders a preview via the production image pipeline (GPT image 2 → fallback chain), so what you see
+            on the tile is what your generated posts will look like. Previews count as ONE image generation each — the
+            same as a real post — so iterate thoughtfully.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
+            <Button variant="ghost" onClick={() => setTemplateModalOpen(null)} disabled={templateSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitTemplate}
+              loading={templateSubmitting}
+              disabled={templateSubmitting || !templateDraft.name.trim() || !templateDraft.prompt.trim()}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              {templateModalOpen?.mode === 'edit' ? 'Save + regenerate preview' : 'Create + render preview'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -4114,6 +4271,28 @@ function BankItemModal({
               <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 max-h-40 overflow-y-auto">
                 {item.enhanced_prompt}
               </div>
+            </div>
+          )}
+
+          {item.image_prompt && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Image prompt used
+                </label>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(item.image_prompt!); showToast('Image prompt copied', 'success') }}
+                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 inline-flex items-center gap-1"
+                >
+                  <Copy className="h-3 w-3" /> Copy
+                </button>
+              </div>
+              <div className="text-[11px] font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 max-h-56 overflow-y-auto">
+                {item.image_prompt}
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
+                Exact prompt sent to the image renderer for this item — useful for debugging or iterating on a template.
+              </p>
             </div>
           )}
 
