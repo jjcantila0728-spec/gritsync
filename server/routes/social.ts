@@ -1259,17 +1259,57 @@ async function publishToPlatform(
   const mediaUrls = mediaUrlsRaw.map(toAbsoluteMediaUrl)
   try {
     if (platform === 'facebook') {
-      // Posts to the page feed. The token must be a page access token; the
-      // OAuth flow above returns a user token, which the admin can swap for a
-      // page token via /me/accounts when wiring this up.
+      // Page-level publish. The token must be a Page access token (the
+      // OAuth flow stores the non-expiring page token alongside each
+      // /me/accounts row, so account.access_token IS the page token).
       const pageId = account.platform_user_id
-      const url = `https://graph.facebook.com/v19.0/${pageId}/feed`
-      const body = new URLSearchParams({ message: content, access_token: token })
-      if (mediaUrls[0]) body.set('link', mediaUrls[0])
-      const r = await fetch(url, { method: 'POST', body })
+      const firstMedia = mediaUrls[0] || null
+      const isVideo = firstMedia && /\.(mp4|mov|webm|m4v)(\?|$)/i.test(firstMedia)
+
+      // No media → plain status update via /feed.
+      if (!firstMedia) {
+        const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/feed`, {
+          method: 'POST',
+          body: new URLSearchParams({ message: content, access_token: token }),
+        })
+        const j: any = await r.json()
+        if (!r.ok || j.error) return { ok: false, error: j.error?.message || 'Facebook publish failed' }
+        return { ok: true, remote_id: j.id }
+      }
+
+      // Video → /videos with file_url. Facebook fetches the media from the
+      // public URL we pass — keep the URL absolute (toAbsoluteMediaUrl
+      // already did that) and let Meta handle the encoding.
+      if (isVideo) {
+        const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/videos`, {
+          method: 'POST',
+          body: new URLSearchParams({ file_url: firstMedia, description: content, access_token: token }),
+        })
+        const j: any = await r.json()
+        if (!r.ok || j.error) return { ok: false, error: j.error?.message || 'Facebook video publish failed' }
+        return { ok: true, remote_id: j.id }
+      }
+
+      // Image → /photos with url + caption. This creates an actual photo
+      // post, not a link preview (which is what /feed with `link=` did
+      // in an earlier version of this code, causing image URLs to show
+      // up as plain links in the feed).
+      const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, {
+        method: 'POST',
+        body: new URLSearchParams({
+          url: firstMedia,
+          caption: content,
+          access_token: token,
+          // published=true (default) immediately posts; pass explicitly so
+          // intent is obvious to future readers.
+          published: 'true',
+        }),
+      })
       const j: any = await r.json()
-      if (!r.ok || j.error) return { ok: false, error: j.error?.message || 'Facebook publish failed' }
-      return { ok: true, remote_id: j.id }
+      if (!r.ok || j.error) return { ok: false, error: j.error?.message || 'Facebook photo publish failed' }
+      // /photos returns { id: <photo_id>, post_id: <feed_post_id> } — the
+      // post_id is what links to the feed entry, so prefer that.
+      return { ok: true, remote_id: j.post_id || j.id }
     }
     if (platform === 'instagram') {
       // Instagram Graph publishing is a two-step process: create container,
