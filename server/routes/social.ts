@@ -248,11 +248,14 @@ function metaWebhookVerifyToken(): string {
 }
 
 router.get('/webhooks/:platform', (req, res) => {
-  const mode = req.query['hub.mode']
-  const token = req.query['hub.verify_token']
-  const challenge = req.query['hub.challenge']
+  // Use URLSearchParams to parse — qs (Express default) may expand dots into
+  // nested objects ({hub:{mode:...}}) depending on version/config, while
+  // URLSearchParams always treats dots as literal characters in param names.
+  const params = new URLSearchParams(req.url.split('?')[1] || '')
+  const mode = params.get('hub.mode')
+  const token = params.get('hub.verify_token')
+  const challenge = params.get('hub.challenge')
   if (mode === 'subscribe' && token === metaWebhookVerifyToken()) {
-    // Meta requires the raw challenge string back as text/plain, status 200.
     res.set('content-type', 'text/plain').status(200).send(String(challenge || ''))
     return
   }
