@@ -127,7 +127,24 @@ const PLATFORM_CONFIG: Record<Platform, {
   linkedin: {
     authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
     tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
-    scopes: 'openid,profile,email,w_member_social',
+    // Base scopes (always requested): personal profile + member-level posting.
+    // When LINKEDIN_INCLUDE_ORG_SCOPES=true, we ALSO request the restricted
+    // organization scopes — w_organization_social (post as Company Page),
+    // r_organization_social (read Page posts), rw_organization_admin (list
+    // which Pages the user admins). Those three require LinkedIn Marketing
+    // Developer Platform / Community Management API approval first; without
+    // approval, LinkedIn rejects the auth request when these are present.
+    // The env flag lets operators flip it on the moment MDP approval lands
+    // without a code change. See OAuthSetupHint for the user-facing copy.
+    scopes: [
+      'openid',
+      'profile',
+      'email',
+      'w_member_social',
+      ...(process.env.LINKEDIN_INCLUDE_ORG_SCOPES === 'true'
+        ? ['w_organization_social', 'r_organization_social', 'rw_organization_admin']
+        : []),
+    ].join(','),
     envIdKey: 'LINKEDIN_CLIENT_ID',
     envSecretKey: 'LINKEDIN_CLIENT_SECRET',
   },
@@ -515,6 +532,18 @@ router.get('/oauth/:platform/callback', async (req, res) => {
         // top level — pass it through so we don't need a second profile call.
         igUserIdFromExchange: tokenJson.user_id ? String(tokenJson.user_id) : null,
         clientSecret,
+        scopesCsv: cfg.scopes,
+      })
+    } else if (platform === 'linkedin') {
+      // Personal profile row + (when MDP-approved) one row per Company
+      // Page the user admins. Each org row stores the same access token
+      // — LinkedIn's /v2/ugcPosts authorizes the org post by the URN in
+      // the `author` field plus the user's rw_organization_admin grant.
+      await handleLinkedInConnect({
+        userId,
+        accessToken,
+        refreshToken,
+        expiresAt,
         scopesCsv: cfg.scopes,
       })
     } else if (platform === 'threads') {
@@ -1230,6 +1259,165 @@ async function handleInstagramDirectConnect(args: {
   )
 }
 
+// ---------------------------------------------------------------------------
+// LinkedIn connect — personal profile + Company Pages.
+//
+// The personal flow uses /v2/userinfo (OpenID, requires `openid profile email`)
+// and persists a single row with metadata.kind = 'member'.
+//
+// The Company-Page flow uses /v2/organizationAcls?q=roleAssignee — returns
+// every org the connected user has ADMIN role on. That endpoint requires
+// `rw_organization_admin` (LinkedIn Marketing Developer Platform restricted
+// scope). When the scope isn't granted we silently skip — only the personal
+// row gets created and the operator can still post as themselves.
+//
+// Each org becomes its own social_accounts row with:
+//   - platform_user_id = "org:<numericId>"  (prefix distinguishes from member rows)
+//   - metadata.kind = 'org'
+//   - metadata.org_urn = "urn:li:organization:<numericId>"  (publish uses this as `author`)
+// ---------------------------------------------------------------------------
+async function handleLinkedInConnect(args: {
+  userId: string
+  accessToken: string
+  refreshToken: string | null
+  expiresAt: Date | null
+  scopesCsv: string
+}): Promise<void> {
+  const { userId, accessToken, refreshToken, expiresAt, scopesCsv } = args
+
+  // ── 1. Personal profile (always available with base scopes).
+  const meRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const me: any = await meRes.json().catch(() => ({}))
+  if (!meRes.ok || !me.sub) {
+    throw new Error(me.error?.message || me.error_description || 'LinkedIn /userinfo failed')
+  }
+
+  await query(
+    `INSERT INTO social_accounts
+       (platform, display_name, platform_user_id, access_token, refresh_token,
+        token_expires_at, profile_url, avatar_url, scopes, metadata,
+        status, connected_by_user_id, connected_at)
+     VALUES ('linkedin', $1, $2, $3, $4, $5, NULL, $6, $7, $8::jsonb, 'connected', $9, NOW())
+     ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           access_token = EXCLUDED.access_token,
+           refresh_token = COALESCE(EXCLUDED.refresh_token, social_accounts.refresh_token),
+           token_expires_at = EXCLUDED.token_expires_at,
+           avatar_url = EXCLUDED.avatar_url,
+           scopes = EXCLUDED.scopes,
+           metadata = EXCLUDED.metadata,
+           status = 'connected',
+           last_error = NULL,
+           updated_at = NOW(),
+           connected_at = NOW()`,
+    [
+      me.name || me.email || 'LinkedIn account',
+      me.sub,
+      accessToken,
+      refreshToken,
+      expiresAt,
+      me.picture || null,
+      scopesCsv,
+      JSON.stringify({ kind: 'member', li_user_id: me.sub, li_email: me.email || null }),
+      userId,
+    ]
+  )
+
+  // ── 2. Discover Company Pages the user admins. Gracefully no-op when
+  // rw_organization_admin isn't granted — that scope is gated behind the
+  // Marketing Developer Platform program. A 403 here just means "operator
+  // hasn't been approved yet" — surface it via console.warn and continue.
+  const aclsRes = await fetch(
+    'https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=50',
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+    }
+  )
+  if (!aclsRes.ok) {
+    const detail: any = await aclsRes.json().catch(() => ({}))
+    console.warn(`LinkedIn /organizationAcls returned ${aclsRes.status} — Company Pages not loaded:`, detail?.message || detail?.error)
+    return
+  }
+  const aclsJson: any = await aclsRes.json().catch(() => ({}))
+  const elements: Array<{ organization?: string; organizationalTarget?: string; role: string; state: string }> = aclsJson?.elements || []
+
+  for (const acl of elements) {
+    // organization OR organizationalTarget — depending on LinkedIn API
+    // version, the URN field name differs. Both look like
+    // "urn:li:organization:12345".
+    const urn = acl.organization || acl.organizationalTarget || ''
+    const numericId = urn.split(':').pop()
+    if (!numericId) continue
+
+    // Fetch org name + logo. The Pages API uses Restli — projection
+    // expansion pulls the playable streams (CDN URLs) inline.
+    let orgName = `LinkedIn Page ${numericId}`
+    let orgLogo: string | null = null
+    let vanityName: string | null = null
+    try {
+      const orgRes = await fetch(
+        `https://api.linkedin.com/v2/organizations/${numericId}?projection=(id,localizedName,vanityName,logoV2(original~:playableStreams))`,
+        { headers: { Authorization: `Bearer ${accessToken}`, 'X-Restli-Protocol-Version': '2.0.0' } }
+      )
+      if (orgRes.ok) {
+        const orgJson: any = await orgRes.json().catch(() => ({}))
+        orgName = orgJson.localizedName || orgName
+        vanityName = orgJson.vanityName || null
+        const streams = orgJson?.logoV2?.['original~']?.elements
+        if (Array.isArray(streams) && streams[0]?.identifiers?.[0]?.identifier) {
+          orgLogo = streams[0].identifiers[0].identifier
+        }
+      }
+    } catch (err: any) {
+      console.warn(`Org lookup ${numericId} failed:`, err.message)
+    }
+
+    await query(
+      `INSERT INTO social_accounts
+         (platform, display_name, platform_user_id, access_token, refresh_token,
+          token_expires_at, profile_url, avatar_url, scopes, metadata,
+          status, connected_by_user_id, connected_at)
+       VALUES ('linkedin', $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'connected', $10, NOW())
+       ON CONFLICT (platform, platform_user_id) DO UPDATE
+         SET display_name = EXCLUDED.display_name,
+             access_token = EXCLUDED.access_token,
+             refresh_token = COALESCE(EXCLUDED.refresh_token, social_accounts.refresh_token),
+             token_expires_at = EXCLUDED.token_expires_at,
+             profile_url = EXCLUDED.profile_url,
+             avatar_url = EXCLUDED.avatar_url,
+             scopes = EXCLUDED.scopes,
+             metadata = EXCLUDED.metadata,
+             status = 'connected',
+             last_error = NULL,
+             updated_at = NOW(),
+             connected_at = NOW()`,
+      [
+        `${orgName} (Page)`,
+        `org:${numericId}`,
+        accessToken,
+        refreshToken,
+        expiresAt,
+        vanityName ? `https://www.linkedin.com/company/${vanityName}` : `https://www.linkedin.com/company/${numericId}`,
+        orgLogo,
+        scopesCsv,
+        JSON.stringify({
+          kind: 'org',
+          li_org_id: numericId,
+          li_org_urn: `urn:li:organization:${numericId}`,
+          vanity_name: vanityName,
+          via_user_id: me.sub,
+        }),
+        userId,
+      ]
+    )
+  }
+}
+
 async function handleThreadsConnect(args: {
   userId: string
   shortLivedUserToken: string
@@ -1884,7 +2072,15 @@ async function publishToPlatform(
       return { ok: true, remote_id: publishJson.id }
     }
     if (platform === 'linkedin') {
-      const author = `urn:li:person:${account.platform_user_id}`
+      // Org rows (created by handleLinkedInConnect when MDP is approved)
+      // carry metadata.kind === 'org'. Post AS that Company Page by
+      // swapping the author URN; everything else (visibility envelope,
+      // share content) stays the same shape.
+      const meta = (account.metadata as any) || {}
+      const isOrg = meta.kind === 'org' && meta.li_org_urn
+      const author = isOrg
+        ? meta.li_org_urn // already "urn:li:organization:<id>"
+        : `urn:li:person:${account.platform_user_id}`
       const r = await fetch('https://api.linkedin.com/v2/ugcPosts', {
         method: 'POST',
         headers: {

@@ -1849,7 +1849,9 @@ const OAUTH_SETUP_GUIDE: Record<Platform, {
     console_url: 'https://www.linkedin.com/developers/apps',
     notes: [
       'Add the redirect URL under Authorized redirect URLs for your app.',
-      'Required scopes (already configured in our codebase): openid, profile, email, w_member_social.',
+      'Personal-profile posting works out of the box with scopes: openid, profile, email, w_member_social.',
+      'Posting as a Company Page is a separate gate — request the Marketing Developer Platform / Community Management API products from your app dashboard. Once LinkedIn approves you, w_organization_social + r_organization_social + rw_organization_admin become available in your scope list.',
+      'After MDP approval, set LINKEDIN_INCLUDE_ORG_SCOPES=true on Vercel and reconnect — the app will auto-discover every Company Page you admin and persist one Account row per Page so you can post to either.',
     ],
   },
   youtube: {
