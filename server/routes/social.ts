@@ -2140,14 +2140,96 @@ async function publishToPlatform(
     }
     if (platform === 'linkedin') {
       // Org rows (created by handleLinkedInConnect when MDP is approved)
-      // carry metadata.kind === 'org'. Post AS that Company Page by
-      // swapping the author URN; everything else (visibility envelope,
-      // share content) stays the same shape.
+      // carry metadata.kind === 'org'. Post AS that Page by swapping the
+      // author URN; the share envelope stays identical.
       const meta = (account.metadata as any) || {}
       const isOrg = meta.kind === 'org' && meta.li_org_urn
-      const author = isOrg
-        ? meta.li_org_urn // already "urn:li:organization:<id>"
+      const author: string = isOrg
+        ? meta.li_org_urn
         : `urn:li:person:${account.platform_user_id}`
+
+      // LinkedIn image posting is a 3-step dance:
+      //   1) POST /v2/assets?action=registerUpload → returns an upload
+      //      URL + asset URN.
+      //   2) PUT the image bytes to the upload URL.
+      //   3) Reference the asset URN in ugcPosts.specificContent.media.
+      // Previously the code always sent shareMediaCategory: 'NONE' and
+      // dropped the image silently — that was the "only caption posts"
+      // bug. Now we upload up to 9 images (LinkedIn's cap) and any image
+      // that fails its upload is dropped from the share so the text +
+      // successful images still go through.
+      const mediaAssets: Array<{ status: 'READY'; media: string }> = []
+      const imageUrls = mediaUrls
+        // Videos use a separate recipe + async processing — skip for now.
+        .filter((u) => !/\.(mp4|mov|webm|m4v)(\?|$)/i.test(u))
+        .slice(0, 9)
+
+      for (const url of imageUrls) {
+        try {
+          const reg = await fetch('https://api.linkedin.com/v2/assets?action=registerUpload', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'X-Restli-Protocol-Version': '2.0.0',
+            },
+            body: JSON.stringify({
+              registerUploadRequest: {
+                recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+                owner: author,
+                serviceRelationships: [
+                  { relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' },
+                ],
+              },
+            }),
+          })
+          const regJson: any = await reg.json().catch(() => ({}))
+          if (!reg.ok) {
+            console.warn(`LinkedIn registerUpload failed for ${url}:`, regJson?.message || regJson)
+            continue
+          }
+          const uploadUrl: string | undefined =
+            regJson?.value?.uploadMechanism?.['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']?.uploadUrl
+          const assetUrn: string | undefined = regJson?.value?.asset
+          if (!uploadUrl || !assetUrn) {
+            console.warn(`LinkedIn registerUpload returned no uploadUrl/asset for ${url}`)
+            continue
+          }
+
+          // Fetch our hosted image bytes + PUT them to the upload URL.
+          const imgRes = await fetch(url)
+          if (!imgRes.ok) {
+            console.warn(`Could not fetch image ${url} for LinkedIn upload: HTTP ${imgRes.status}`)
+            continue
+          }
+          const imgBuf = Buffer.from(await imgRes.arrayBuffer())
+          const ct = imgRes.headers.get('content-type') || 'image/jpeg'
+          const putRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': ct,
+            },
+            body: imgBuf,
+          })
+          if (!putRes.ok) {
+            const detail = await putRes.text().catch(() => '')
+            console.warn(`LinkedIn image PUT failed for ${url}: HTTP ${putRes.status} ${detail.slice(0, 200)}`)
+            continue
+          }
+
+          mediaAssets.push({ status: 'READY', media: assetUrn })
+        } catch (err: any) {
+          console.warn(`LinkedIn image upload threw for ${url}:`, err.message)
+        }
+      }
+
+      const shareContent: Record<string, any> = {
+        shareCommentary: { text: content },
+        shareMediaCategory: mediaAssets.length > 0 ? 'IMAGE' : 'NONE',
+      }
+      if (mediaAssets.length > 0) shareContent.media = mediaAssets
+
       const r = await fetch('https://api.linkedin.com/v2/ugcPosts', {
         method: 'POST',
         headers: {
@@ -2159,10 +2241,7 @@ async function publishToPlatform(
           author,
           lifecycleState: 'PUBLISHED',
           specificContent: {
-            'com.linkedin.ugc.ShareContent': {
-              shareCommentary: { text: content },
-              shareMediaCategory: 'NONE',
-            },
+            'com.linkedin.ugc.ShareContent': shareContent,
           },
           visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
         }),
