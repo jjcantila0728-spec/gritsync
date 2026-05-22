@@ -2651,7 +2651,7 @@ function ManagerInsightsCard({
             <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button size="sm" onClick={generatePlan} loading={planLoading} disabled={planLoading || loading || !data}>
-            <Brain className="h-3.5 w-3.5 mr-1" /> Generate AI plan
+            <Brain className="h-3.5 w-3.5 mr-1" /> Ask Strat for a plan
           </Button>
         </div>
       </div>
@@ -2719,7 +2719,8 @@ function ManagerInsightsCard({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Brain className="h-3.5 w-3.5 text-primary-600 dark:text-primary-400" />
-              <span className="text-xs font-semibold text-primary-700 dark:text-primary-300 uppercase tracking-wider">AI Plan</span>
+              <span className="text-xs font-semibold text-primary-700 dark:text-primary-300 uppercase tracking-wider">Strat says</span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">· plan grounded in your 28-day metrics</span>
             </div>
             <p className="text-sm text-gray-800 dark:text-gray-100">{plan.summary}</p>
           </div>
@@ -5290,6 +5291,10 @@ function AutoReplyView({
     )
   }
 
+  const activeAgent = sub === 'inbox'
+    ? { name: 'Mika', role: 'DM concierge', desc: 'Replies privately in the inbox — mirrors the writer\'s language, can quote pricing + ask follow-ups.' }
+    : { name: 'Kuya Jay', role: 'public-comments specialist', desc: 'Replies in public Taglish — warm "po"/"opo" tone, defers personal questions to DMs, never argues.' }
+
   return (
     <div className="space-y-4">
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
@@ -5314,7 +5319,28 @@ function AutoReplyView({
           )
         })}
       </div>
+      <AgentBadge name={activeAgent.name} role={activeAgent.role} desc={activeAgent.desc} />
       {sub === 'inbox' ? <InboxView showToast={showToast} /> : <CommentsView showToast={showToast} />}
+    </div>
+  )
+}
+
+// Tiny labeled chip that tells the operator which named AI agent is on the
+// hook for this tab. Helps the team mentally separate Mika (private)
+// from Kuya Jay (public Taglish) so they know what voice will come out.
+function AgentBadge({ name, role, desc }: { name: string; role: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-primary-50/60 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/40">
+      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center flex-shrink-0">
+        <Sparkles className="h-3.5 w-3.5 text-white" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs">
+          <span className="font-semibold text-primary-700 dark:text-primary-300">{name}</span>{' '}
+          <span className="text-gray-500 dark:text-gray-400">· {role}</span>
+        </div>
+        <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug mt-0.5">{desc}</div>
+      </div>
     </div>
   )
 }
@@ -5498,8 +5524,8 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
                 placeholder="Type your reply…"
               />
               <div className="flex items-center justify-between gap-2">
-                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting}>
-                  <Sparkles className="h-3.5 w-3.5 mr-1" /> AI suggest
+                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting} title="Mika drafts a private, on-brand DM reply">
+                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Ask Mika
                 </Button>
                 <Button size="sm" onClick={send} loading={sending} disabled={sending || !reply.trim()}>
                   <Send className="h-3.5 w-3.5 mr-1" /> Send
@@ -5655,8 +5681,8 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
                 className="text-sm"
               />
               <div className="flex items-center justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={() => suggest(c)} loading={!!busy[`draft:${c.id}`]} disabled={!!busy[`draft:${c.id}`]}>
-                  <Sparkles className="h-3 w-3 mr-1" /> AI suggest
+                <Button size="sm" variant="outline" onClick={() => suggest(c)} loading={!!busy[`draft:${c.id}`]} disabled={!!busy[`draft:${c.id}`]} title="Kuya Jay drafts a public-comment reply in Taglish (the GritSync way)">
+                  <Sparkles className="h-3 w-3 mr-1" /> Ask Kuya Jay
                 </Button>
                 <Button size="sm" onClick={() => send(c)} loading={!!busy[`send:${c.id}`]} disabled={!!busy[`send:${c.id}`] || !(replies[c.id] || '').trim()}>
                   <Send className="h-3 w-3 mr-1" /> Reply
@@ -5831,8 +5857,8 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Discover groups to join</h3>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Meta restricts Group search via API, so we use AI to suggest the kinds of groups Filipino nurses gather in,
-          then hand off to Facebook's own search. Save promising ones to your candidates list below.
+          Meta restricts Group search via API, so <strong>Scout</strong> suggests group archetypes Filipino nurses gather in
+          (with engagement strategy + search URL). Save promising ones to your candidates list below.
         </p>
         <div className="flex items-center gap-2 mb-3">
           <Input
@@ -5840,8 +5866,8 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
             onChange={(e) => setFocus(e.target.value)}
             placeholder="Optional focus (e.g. 'CGFNS, ATT applicants', 'TX/CA endorsement')"
           />
-          <Button onClick={discover} loading={discovering} disabled={discovering}>
-            <Wand2 className="h-3.5 w-3.5 mr-1" /> Discover
+          <Button onClick={discover} loading={discovering} disabled={discovering} title="Scout suggests Facebook group archetypes Filipino nurses actually gather in">
+            <Wand2 className="h-3.5 w-3.5 mr-1" /> Ask Scout
           </Button>
         </div>
         {suggestions.length > 0 && (
