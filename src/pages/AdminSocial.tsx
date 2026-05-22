@@ -1765,6 +1765,10 @@ function SimplePlatformCard({
         )}
       </div>
 
+      {!connected && !oauthReady && (
+        <OAuthSetupHint platform={platform} missing={oauthStatus?.missing || []} />
+      )}
+
       {connected && account?.last_error && (
         <div className="mt-3 text-xs p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300">
           <AlertCircle className="inline h-3 w-3 mr-1" />
@@ -1803,6 +1807,139 @@ function SimplePlatformCard({
         </div>
       )}
     </Card>
+  )
+}
+
+// ─── OAuth setup hint ─────────────────────────────────────────────────────
+// Shown under a platform's "Use token" button when its OAuth credentials
+// aren't configured server-side. Tells the operator exactly which env vars
+// to set on Vercel, which redirect URL to register, and where to get the
+// credentials. Per-platform copy lives below — keyed by Platform.
+const OAUTH_SETUP_GUIDE: Record<Platform, {
+  console_label: string
+  console_url: string
+  notes: string[]
+}> = {
+  facebook: {
+    console_label: 'Meta for Developers → My Apps → your app → App settings → Basic',
+    console_url: 'https://developers.facebook.com/apps/',
+    notes: [
+      'Use the App ID + App Secret (the FB OAuth flow drives both Facebook Pages and the linked Instagram Business accounts).',
+      'Add Facebook Login product if it isn\'t already enabled, then list the redirect URL under Valid OAuth Redirect URIs.',
+    ],
+  },
+  instagram: {
+    console_label: 'Meta for Developers → your IG-only app → Instagram Basic Display / Instagram with Login',
+    console_url: 'https://developers.facebook.com/apps/',
+    notes: [
+      'This is the DIRECT IG login (separate Meta app from the Facebook one). Use the IG Business app\'s App ID + App Secret.',
+      'Register the redirect URL under Instagram → Basic Display / API setup → OAuth Redirect URIs.',
+    ],
+  },
+  threads: {
+    console_label: 'Meta for Developers → Threads app → Threads API → Use cases',
+    console_url: 'https://developers.facebook.com/apps/',
+    notes: [
+      'Threads is a separate Meta app from Facebook + IG — needs its own App ID + Secret.',
+      'Register the redirect URL under Threads → API setup → Redirect URIs.',
+    ],
+  },
+  linkedin: {
+    console_label: 'LinkedIn Developer Portal → your app → Auth tab',
+    console_url: 'https://www.linkedin.com/developers/apps',
+    notes: [
+      'Add the redirect URL under Authorized redirect URLs for your app.',
+      'Required scopes (already configured in our codebase): openid, profile, email, w_member_social.',
+    ],
+  },
+  youtube: {
+    console_label: 'Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs',
+    console_url: 'https://console.cloud.google.com/apis/credentials',
+    notes: [
+      'Create an OAuth 2.0 Client ID of type "Web application".',
+      'Enable the YouTube Data API v3 under APIs & Services → Library before connecting.',
+      'Add the redirect URL under Authorized redirect URIs on the OAuth client.',
+    ],
+  },
+  tiktok: {
+    console_label: 'TikTok for Developers → your app → App settings',
+    console_url: 'https://developers.tiktok.com/apps',
+    notes: [
+      'TikTok uses Client Key (not Client ID) — that\'s the env var name our server expects.',
+      'Add the redirect URL under Login Kit → Redirect domain / Web URL.',
+      'Enable the Content Posting API product to allow video uploads.',
+    ],
+  },
+}
+function OAuthSetupHint({ platform, missing }: { platform: Platform; missing: string[] }) {
+  const [open, setOpen] = useState(false)
+  const guide = OAUTH_SETUP_GUIDE[platform]
+  const redirectUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://app.gritsync.com'}/api/social/oauth/${platform}/callback`
+
+  function copy(s: string) {
+    navigator.clipboard.writeText(s).catch(() => {})
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-900/20">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-200 flex items-center justify-between gap-2"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <AlertCircle className="h-3 w-3" />
+          OAuth not configured — click for setup instructions
+        </span>
+        <span className="text-amber-700 dark:text-amber-300">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2.5 text-xs text-gray-700 dark:text-gray-200">
+          <ol className="list-decimal pl-4 space-y-1.5">
+            <li>
+              Go to <a href={guide.console_url} target="_blank" rel="noreferrer noopener" className="text-primary-700 dark:text-primary-300 hover:underline inline-flex items-center gap-0.5">{guide.console_label} <ExternalLink className="h-3 w-3" /></a> and grab your app credentials.
+            </li>
+            <li>
+              Add this <strong>redirect URL</strong> to the app:
+              <div className="mt-1 flex items-center gap-1">
+                <code className="flex-1 min-w-0 px-2 py-1 rounded bg-white/70 dark:bg-gray-900/50 border border-amber-200 dark:border-amber-800/40 font-mono text-[10px] break-all">{redirectUrl}</code>
+                <button type="button" onClick={() => copy(redirectUrl)} className="px-2 py-1 rounded border border-amber-200 dark:border-amber-800/40 text-[10px] hover:bg-white/70 dark:hover:bg-gray-900/50">Copy</button>
+              </div>
+            </li>
+            <li>
+              On Vercel → Project Settings → Environment Variables → <strong>Production</strong> scope, set:
+              <ul className="mt-1 space-y-0.5">
+                {missing.length > 0 ? missing.map((k) => (
+                  <li key={k} className="flex items-center gap-1">
+                    <code className="flex-1 min-w-0 px-2 py-1 rounded bg-white/70 dark:bg-gray-900/50 border border-amber-200 dark:border-amber-800/40 font-mono text-[10px]">{k}</code>
+                    <button type="button" onClick={() => copy(k)} className="px-2 py-1 rounded border border-amber-200 dark:border-amber-800/40 text-[10px] hover:bg-white/70 dark:hover:bg-gray-900/50">Copy</button>
+                  </li>
+                )) : (
+                  <li className="text-[10px] text-gray-500 dark:text-gray-400">(server didn't report which keys are missing — set all of the platform's env vars to be safe)</li>
+                )}
+              </ul>
+            </li>
+            <li>
+              <strong>Redeploy</strong> on Vercel so the new env vars hit running functions (Deployments → latest → ⋯ → Redeploy, without build cache). Saving env vars alone isn't enough.
+            </li>
+            <li>
+              Refresh this page — the card should flip from "Use token" to "Log in".
+            </li>
+          </ol>
+          {guide.notes.length > 0 && (
+            <div className="pt-1.5 mt-1.5 border-t border-amber-200 dark:border-amber-800/40">
+              <div className="text-[10px] uppercase tracking-wider font-medium text-amber-700 dark:text-amber-300 mb-1">Notes</div>
+              <ul className="space-y-0.5 list-disc pl-4 text-[11px]">
+                {guide.notes.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            </div>
+          )}
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 italic pt-1">
+            Until OAuth is configured, you can still use the <strong>Use token</strong> button to paste an access token by hand.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
