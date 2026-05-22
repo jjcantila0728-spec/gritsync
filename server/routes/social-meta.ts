@@ -36,17 +36,33 @@ export const AGENT_NAMES = {
 function agentHeader(name: string, role: string): string {
   return `You are ${name}, ${role} for GritSync. Speak in first person as ${name} only when the operator addresses you directly — never sign comments/messages "— ${name}" (those go out under the GritSync brand).
 
-GROUND TRUTH — use these facts verbatim. Never contradict them, never invent missing details:
+GROUND TRUTH — your ONLY authoritative source. Never contradict it, never invent missing details:
 
 ${GRITSYNC_KB}
+
+AUTHORIZED SOURCES — strict rule:
+- The GROUND TRUTH block above is your ONLY information source. Plus these official GritSync URLs you may link to:
+  · https://www.gritsync.com/         (homepage / process overview)
+  · https://www.gritsync.com/quote    (personalized pricing + apply)
+  · https://www.gritsync.com/faqs     (FAQ page — direct people here for in-depth questions)
+- NEVER pull facts from general web knowledge, news, training-data memory of NCLEX/USRN/visa rules, or anything outside the GROUND TRUTH block.
+- NEVER make assumptions to fill gaps. If a fact isn't above, you don't know it.
+
+WHEN YOU DON'T KNOW (this happens often — handle it gracefully):
+- If the inbound question is about something NOT covered in GROUND TRUTH (e.g. visa types, non-NY states, salary expectations, specific hospitals, immigration steps, English proficiency tests, study materials), DO NOT guess.
+- Reply with a short honest deflection that invites them to the right place. Examples:
+  · "Naku, mas safe na sa team ko ma-confirm 'yan — pa-DM po kayo sa Page so we can check details with you."
+  · "That's not something we publish — kindly visit https://www.gritsync.com/faqs or DM the Page para sigurado ang sagot."
+  · "Hindi po naming na-co-cover 'yan as a service (NY-only kami via NYSED-direct) — but our team can help you find the right next step. DM po."
+- It is FAR better to escalate than to invent.
 
 GUARDRAILS that apply to every reply you write:
 - Never promise NCLEX pass rates, visa outcomes, salaries, or timelines outside the published ranges.
 - Never name specific hospitals, schools, employers, or clients GritSync hasn't publicly endorsed.
 - Never give legal, medical, or immigration advice.
-- Only mention services GritSync actually does (NY pathway, NYSED-direct submission, Pearson VUE registration). Never claim CGFNS, VisaScreen, or non-NY state processing.
-- For pricing, prefer "around $800-$900 total split across two payments" or point readers to https://www.gritsync.com/quote.
-- For deep questions about timelines, document status, or eligibility, invite the person to DM the page or visit https://www.gritsync.com/quote.`
+- Only mention services GritSync actually does (NY pathway, NYSED-direct submission, Pearson VUE registration, the 3 document uploads: 2x2 photo / nursing diploma / Philippine passport). Never claim CGFNS, VisaScreen, or non-NY state processing.
+- For pricing, use ranges from GROUND TRUTH ("around $800-$900 split across two payments") or point to https://www.gritsync.com/quote.
+- For deep / personal questions (application status, eligibility check, exact timeline for THIS person), invite them to DM the Page or visit https://www.gritsync.com/quote.`
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -389,62 +405,99 @@ async function buildAnalyticsSummary(accounts: Awaited<ReturnType<typeof listMet
 // Lists active conversations across every connected FB Page + IG Business
 // account. Each platform's API returns its own conversation envelope; we
 // normalise to a common shape the UI can render uniformly.
+// Walks Meta's cursor-paginated conversations until we hit a sane cap.
+// Used by /autoreply/inbox so the lead list reflects the entire history,
+// not just the most recent page. Each cursor follow is a separate Graph
+// call so we cap aggressively to stay well inside serverless time budgets.
+async function fetchAllConversations(
+  endpointId: string,
+  accessToken: string,
+  options: { igPlatform?: boolean; maxThreads?: number } = {}
+): Promise<any[]> {
+  const maxThreads = options.maxThreads ?? 200
+  const all: any[] = []
+  let after: string | null = null
+  const baseParams: Record<string, string> = {
+    fields: 'id,updated_time,snippet,unread_count,participants{name,id}',
+    limit: '100',
+  }
+  if (options.igPlatform) baseParams.platform = 'instagram'
+
+  // Bounded loop: max 5 pages * 100 = 500 conversations theoretical max
+  // per account. We cut early at `maxThreads`.
+  for (let page = 0; page < 5 && all.length < maxThreads; page++) {
+    const params: Record<string, string> = { ...baseParams }
+    if (after) params.after = after
+    const r = await fbGet(`${endpointId}/conversations`, accessToken, params)
+    for (const c of r.data || []) all.push(c)
+    after = r.paging?.cursors?.after || null
+    if (!after || !r.paging?.next) break
+  }
+  return all.slice(0, maxThreads)
+}
+
 router.get('/autoreply/inbox', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
     const accounts = await listMetaAccounts()
     const threads: any[] = []
+    // PSID → profile pic lookups are billed per request, so we batch
+    // them at the end across all accounts and dedup. Capped at the first
+    // 80 unique participants (top-of-list bias by recency).
+    const picLookups: Array<{ psid: string; accessToken: string; platform: 'facebook' | 'instagram' }> = []
+    const picBySender = new Map<string, string | null>()
 
     await Promise.all(accounts.map(async (acc) => {
       try {
-        if (acc.platform === 'facebook') {
-          const r = await fbGet(`${acc.platform_user_id}/conversations`, acc.access_token, {
-            fields: 'id,updated_time,snippet,unread_count,participants{name,id}',
-            limit: '25',
-          })
-          for (const c of r.data || []) {
-            const participants = (c.participants?.data || []).filter((p: any) => p.id !== acc.platform_user_id)
-            threads.push({
-              id: c.id,
-              account_id: acc.id,
-              account_platform: 'facebook',
-              account_name: acc.display_name,
-              with_name: participants[0]?.name || 'Unknown',
-              snippet: c.snippet || '',
-              updated_at: c.updated_time,
-              unread: c.unread_count || 0,
-            })
+        const isIg = acc.platform === 'instagram'
+        const baseId = isIg ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
+        if (isIg && !acc.metadata?.linked_page_id) return
+
+        const conversations = await fetchAllConversations(baseId, acc.access_token, { igPlatform: isIg, maxThreads: 200 })
+        for (const c of conversations) {
+          const participants = (c.participants?.data || []).filter((p: any) => p.id !== acc.platform_user_id)
+          const otherId = participants[0]?.id
+          if (otherId && !picBySender.has(otherId)) {
+            picBySender.set(otherId, null) // placeholder so we don't queue twice
+            picLookups.push({ psid: otherId, accessToken: acc.access_token, platform: acc.platform })
           }
-        } else {
-          // IG via the linked Page: same /conversations endpoint, but pass
-          // `platform=instagram` so Meta routes to the IG inbox.
-          const linkedPageId = acc.metadata?.linked_page_id
-          if (!linkedPageId) return
-          const r = await fbGet(`${linkedPageId}/conversations`, acc.access_token, {
-            platform: 'instagram',
-            fields: 'id,updated_time,snippet,unread_count,participants{name,id}',
-            limit: '25',
+          threads.push({
+            id: c.id,
+            account_id: acc.id,
+            account_platform: acc.platform,
+            account_name: acc.display_name,
+            with_name: participants[0]?.name || 'Unknown',
+            with_id: otherId || null,
+            with_avatar: null as string | null, // populated below
+            snippet: c.snippet || '',
+            updated_at: c.updated_time,
+            unread: c.unread_count || 0,
           })
-          for (const c of r.data || []) {
-            const participants = (c.participants?.data || []).filter((p: any) => p.id !== acc.platform_user_id)
-            threads.push({
-              id: c.id,
-              account_id: acc.id,
-              account_platform: 'instagram',
-              account_name: acc.display_name,
-              with_name: participants[0]?.name || 'Unknown',
-              snippet: c.snippet || '',
-              updated_at: c.updated_time,
-              unread: c.unread_count || 0,
-            })
-          }
         }
       } catch (err: any) {
-        // One platform failing shouldn't take down the whole inbox.
         console.warn(`Inbox fetch failed for ${acc.platform}:${acc.display_name}:`, err.message)
       }
     }))
 
     threads.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+    // Batch fetch profile pics for the first 80 unique participants. FB
+    // uses /{psid}?fields=profile_pic (returns a short-lived CDN URL); IG
+    // uses /{igsid}?fields=profile_picture_url. Failures fall back to
+    // null and the UI shows a placeholder avatar.
+    const capped = picLookups.slice(0, 80)
+    await Promise.all(capped.map(async (l) => {
+      try {
+        const field = l.platform === 'instagram' ? 'profile_picture_url' : 'profile_pic'
+        const r = await fbGet(l.psid, l.accessToken, { fields: field })
+        const url = l.platform === 'instagram' ? r.profile_picture_url : r.profile_pic
+        if (url) picBySender.set(l.psid, url)
+      } catch { /* profile-pic permission isn't guaranteed; ignore */ }
+    }))
+
+    for (const t of threads) {
+      if (t.with_id && picBySender.get(t.with_id)) t.with_avatar = picBySender.get(t.with_id) || null
+    }
+
     res.json({ data: { threads } })
   } catch (err: any) {
     console.error('inbox error:', err)
@@ -454,7 +507,9 @@ router.get('/autoreply/inbox', authenticateToken, requireAdmin, async (_req: Aut
 
 // GET /api/social/autoreply/inbox/:thread_id/messages
 // Fetches the full message history of one conversation. account_id is needed
-// to look up the right page token.
+// to look up the right page token. Includes attachments (images, stickers,
+// files) so the UI can render them in-line and so the draft agent knows
+// when the inbound is a photo it should acknowledge.
 router.get('/autoreply/inbox/:thread_id/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { thread_id } = req.params
@@ -465,10 +520,26 @@ router.get('/autoreply/inbox/:thread_id/messages', authenticateToken, requireAdm
     if (!r) return res.status(404).json({ error: 'Account not found' })
 
     const msgs = await fbGet(`${thread_id}/messages`, r.access_token, {
-      fields: 'id,message,from,to,created_time',
+      fields: 'id,message,from,to,created_time,attachments{mime_type,name,file_url,image_data}',
       limit: '50',
     })
-    res.json({ data: { messages: (msgs.data || []).reverse(), account_psid: r.platform_user_id } })
+    // Normalise attachments down to { type, url } so the UI doesn't have
+    // to care about FB vs IG's slightly different envelopes.
+    const messages = (msgs.data || []).map((m: any) => {
+      const raws = m.attachments?.data || []
+      const attachments = raws.map((a: any) => {
+        const mime = a.mime_type || ''
+        const url = a.image_data?.url || a.image_data?.preview_url || a.file_url || null
+        return {
+          type: mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : 'file',
+          url,
+          name: a.name || null,
+          mime,
+        }
+      }).filter((a: any) => a.url)
+      return { ...m, attachments }
+    }).reverse()
+    res.json({ data: { messages, account_psid: r.platform_user_id } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
@@ -478,12 +549,15 @@ router.get('/autoreply/inbox/:thread_id/messages', authenticateToken, requireAdm
 // Sends a text reply on the conversation. The Messenger Platform requires
 // the recipient PSID, not the conversation id — we look it up by fetching
 // the conversation's participants and picking the one that isn't our page.
+// Accepts an optional `image_url` to send as an image attachment; Meta's
+// Send API supports one attachment per call so when both message and image
+// are present we send two messages (text first, then image).
 router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { thread_id } = req.params
-    const { account_id, message } = req.body || {}
+    const { account_id, message, image_url } = req.body || {}
     if (!account_id) return res.status(400).json({ error: 'account_id is required' })
-    if (!message?.trim()) return res.status(400).json({ error: 'message is required' })
+    if (!message?.trim() && !image_url) return res.status(400).json({ error: 'message or image_url is required' })
 
     const acc = (await query(
       `SELECT access_token, platform_user_id, platform, metadata FROM social_accounts WHERE id = $1`,
@@ -491,7 +565,6 @@ router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin
     )).rows[0]
     if (!acc) return res.status(404).json({ error: 'Account not found' })
 
-    // Pull participants to learn the recipient PSID/IGSID.
     const conv = await fbGet(`${thread_id}`, acc.access_token, { fields: 'participants{id}' })
     const otherId = (conv.participants?.data || [])
       .map((p: any) => p.id)
@@ -499,12 +572,48 @@ router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin
     if (!otherId) return res.status(400).json({ error: 'Could not determine recipient' })
 
     const sendFromPageId = acc.platform === 'instagram' ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
-    const j = await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
-      recipient: { id: otherId },
-      message: { text: message },
-      messaging_type: 'RESPONSE',
-    })
-    res.json({ data: { message_id: j.message_id || null } })
+
+    // Human feel: turn on Meta's native typing indicator before posting,
+    // wait a beat scaled to message length (max 3s), then send. The
+    // recipient sees the "Mika is typing…" dots just like a person.
+    try {
+      await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
+        recipient: { id: otherId },
+        sender_action: 'typing_on',
+      })
+    } catch { /* typing_on is a UX nicety — never block the actual send */ }
+
+    const typingMs = Math.min(3000, 600 + (message?.trim().length || 0) * 25)
+    await new Promise((r) => setTimeout(r, typingMs))
+
+    const sentIds: string[] = []
+    if (message?.trim()) {
+      const j = await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
+        recipient: { id: otherId },
+        message: { text: message.trim() },
+        messaging_type: 'RESPONSE',
+      })
+      if (j.message_id) sentIds.push(j.message_id)
+    }
+    if (image_url) {
+      const j = await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
+        recipient: { id: otherId },
+        message: { attachment: { type: 'image', payload: { url: image_url, is_reusable: true } } },
+        messaging_type: 'RESPONSE',
+      })
+      if (j.message_id) sentIds.push(j.message_id)
+    }
+
+    // Best-effort: turn typing OFF after the send so the indicator
+    // doesn't linger on the user's screen.
+    try {
+      await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
+        recipient: { id: otherId },
+        sender_action: 'typing_off',
+      })
+    } catch { /* same as above — never block the response */ }
+
+    res.json({ data: { message_ids: sentIds } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
@@ -523,12 +632,20 @@ router.get('/autoreply/comments', authenticateToken, requireAdmin, async (_req: 
     await Promise.all(accounts.map(async (acc) => {
       try {
         if (acc.platform === 'facebook') {
+          // attachment{media,type,url} surfaces images / videos / shared
+          // links attached to a comment; the UI renders thumbnails for
+          // images so Kuya Jay can acknowledge the photo in his reply.
           const posts = await fbGet(`${acc.platform_user_id}/posts`, acc.access_token, {
-            fields: 'id,message,permalink_url,comments.limit(10){id,from{id,name,picture{url}},message,created_time,parent}',
+            fields: 'id,message,permalink_url,full_picture,comments.limit(10){id,from{id,name,picture{url}},message,created_time,parent,attachment{type,media{image{src}},url}}',
             limit: '15',
           })
           for (const post of posts.data || []) {
             for (const c of post.comments?.data || []) {
+              const att = c.attachment
+              const attachment = att?.media?.image?.src
+                ? { type: 'image', url: att.media.image.src }
+                : att?.url ? { type: att.type || 'link', url: att.url }
+                : null
               comments.push({
                 id: c.id,
                 account_id: acc.id,
@@ -537,11 +654,13 @@ router.get('/autoreply/comments', authenticateToken, requireAdmin, async (_req: 
                 from_name: c.from?.name || 'Unknown',
                 from_avatar: c.from?.picture?.data?.url || null,
                 message: c.message || '',
+                attachment,
                 created_at: c.created_time,
                 post: {
                   id: post.id,
                   permalink: post.permalink_url || null,
                   message: (post.message || '').slice(0, 140),
+                  thumbnail: post.full_picture || null,
                 },
                 is_own: c.from?.id === acc.platform_user_id,
               })
@@ -549,11 +668,14 @@ router.get('/autoreply/comments', authenticateToken, requireAdmin, async (_req: 
           }
         } else {
           const media = await fbGet(`${acc.platform_user_id}/media`, acc.access_token, {
-            fields: 'id,caption,permalink,comments.limit(10){id,from{id,username},text,timestamp,user{username,profile_picture_url}}',
+            fields: 'id,caption,permalink,media_url,comments.limit(10){id,from{id,username},text,timestamp,user{username,profile_picture_url}}',
             limit: '15',
           })
           for (const m of media.data || []) {
             for (const c of m.comments?.data || []) {
+              // IG comments don't carry attached media via Graph (only
+              // GIFs/stickers come through as text). We still surface
+              // the parent post's image so the operator has visual ctx.
               comments.push({
                 id: c.id,
                 account_id: acc.id,
@@ -562,11 +684,13 @@ router.get('/autoreply/comments', authenticateToken, requireAdmin, async (_req: 
                 from_name: c.from?.username || c.user?.username || 'someone',
                 from_avatar: c.user?.profile_picture_url || null,
                 message: c.text || '',
+                attachment: null,
                 created_at: c.timestamp,
                 post: {
                   id: m.id,
                   permalink: m.permalink || null,
                   message: (m.caption || '').slice(0, 140),
+                  thumbnail: m.media_url || null,
                 },
                 is_own: false,
               })
@@ -587,23 +711,31 @@ router.get('/autoreply/comments', authenticateToken, requireAdmin, async (_req: 
 })
 
 // POST /api/social/autoreply/comments/:comment_id/reply
-// Replies to a single comment on either platform.
+// Replies to a single comment. Accepts optional `image_url`; FB supports
+// `attachment_url` directly on the comment, IG doesn't (text-only replies
+// to comments per Graph API limits) so we drop the image with a warning
+// instead of failing.
 router.post('/autoreply/comments/:comment_id/reply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { comment_id } = req.params
-    const { account_id, message } = req.body || {}
+    const { account_id, message, image_url } = req.body || {}
     if (!account_id) return res.status(400).json({ error: 'account_id is required' })
-    if (!message?.trim()) return res.status(400).json({ error: 'message is required' })
+    if (!message?.trim() && !image_url) return res.status(400).json({ error: 'message or image_url is required' })
 
     const acc = (await query(`SELECT access_token, platform FROM social_accounts WHERE id = $1`, [account_id])).rows[0]
     if (!acc) return res.status(404).json({ error: 'Account not found' })
 
-    // Both FB and IG accept POST /{comment-id}/comments with `message` (FB)
-    // or `message` (IG — Meta normalized the field). For IG legacy compat
-    // we send both `message` and `text` so it works on either surface.
-    const body = acc.platform === 'instagram' ? { message } : { message }
+    const body: Record<string, any> = { message: message?.trim() || '' }
+    let note: string | null = null
+    if (image_url) {
+      if (acc.platform === 'facebook') {
+        body.attachment_url = image_url
+      } else {
+        note = 'Instagram comments can\'t carry image attachments via Graph API — sent text only.'
+      }
+    }
     const j = await fbPost(`${comment_id}/comments`, acc.access_token, body)
-    res.json({ data: { reply_id: j.id } })
+    res.json({ data: { reply_id: j.id, note } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
@@ -619,8 +751,10 @@ router.post('/autoreply/draft', authenticateToken, requireAdmin, async (req: Aut
   try {
     const apiKey = OPENAI_KEY()
     if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
-    const { context_kind, message, post_caption } = req.body || {}
-    if (!message?.trim()) return res.status(400).json({ error: 'message is required' })
+    const { context_kind, message, post_caption, has_inbound_image } = req.body || {}
+    // We accept empty message ONLY when there's an inbound image (image-only
+    // comment / DM). Without either we have nothing for the agent to react to.
+    if (!message?.trim() && !has_inbound_image) return res.status(400).json({ error: 'message or has_inbound_image is required' })
 
     const isComment = context_kind === 'comment'
     const agentName = isComment ? AGENT_NAMES.comments : AGENT_NAMES.inbox
@@ -632,6 +766,12 @@ router.post('/autoreply/draft', authenticateToken, requireAdmin, async (req: Aut
     const kuyaJaySystem = `${agentHeader('Kuya Jay', 'the public-comments specialist')}
 
 YOU ARE KUYA JAY — replying in public, on a Page or IG post, where everyone can see.
+
+CORE RULE — answer ONLY what was asked:
+- Read the comment carefully. Identify the SINGLE thing they're asking. Answer that one thing. Nothing more.
+- If they asked one specific question, give one specific answer. Don't add "btw we also offer X..." or volunteer extra info.
+- If a relevant official URL helps (https://www.gritsync.com/, /quote, /faqs), include EXACTLY ONE link in the reply. Otherwise no link.
+- "Concise" means: 1-2 short sentences whenever possible. Never more than 3.
 
 LANGUAGE — Taglish by default:
 - Default style is natural Taglish (Tagalog + English mixed the way Filipinos actually text). Sample feel:
@@ -681,42 +821,44 @@ Reply: "Typically 6-9 months po from complete application to ATT. NYSED review u
     // more precisely, and use slightly more direct language than Kuya Jay.
     const mikaSystem = `${agentHeader('Mika', 'the DM/Inbox concierge')}
 
-YOU ARE MIKA — replying privately in a one-on-one chat. The person reached out directly, so you can ask follow-up questions, share exact numbers from the KB, and walk them through specifics.
+YOU ARE MIKA — replying privately in a one-on-one chat.
+
+CORE RULE — answer ONLY what was asked:
+- Read the message carefully. Identify the SPECIFIC question. Answer THAT.
+- Do NOT volunteer extra info, do NOT explain things they didn't ask about, do NOT add upsells.
+- If a relevant official URL is useful, include EXACTLY ONE: https://www.gritsync.com/ (overview), https://www.gritsync.com/quote (pricing/apply), or https://www.gritsync.com/faqs (general questions). Otherwise no link.
+- "Concise" means: 1-2 short sentences whenever possible. Max 3.
 
 LANGUAGE:
-- Mirror the inbound message's language. If they wrote Tagalog/Taglish, reply Taglish with "po"/"opo". If they wrote English, reply English (warm + concrete, never stiff).
+- Mirror the inbound's language. Taglish for Filipino, English for English. Always warm, never stiff.
 
 TONE:
-- Warm, helpful, gets to the point fast.
-- One short paragraph, max ~3 sentences. Long enough to actually help, short enough to feel like a human typing.
-- Use the person's first name once if you have it.
-- 0-1 emoji max.
+- Helpful, direct, human. One short paragraph. 0-1 emoji.
 
-REPLY SHAPE:
-1. Brief acknowledgment ("Hi <name>, salamat sa pag-message po!").
-2. Direct answer to what they asked, using GROUND TRUTH facts only.
-3. One concrete next step — usually either: "kindly share <X> para makapagsimula" OR "punta po sa https://www.gritsync.com/quote for the exact plan" OR a question that unblocks the next step.
-
-WHAT YOU CAN DO IN DMS (vs in public comments):
-- Quote exact pricing ranges from the KB.
-- Ask for their PRC license status, target timeline, or which step they're on.
-- Walk them through the 13-stage tracker.
-- Offer to escalate to a human ("Let me loop in our team and we'll follow up via email").
+WHAT YOU CAN DO IN DMS (vs public comments):
+- Quote exact pricing ranges from KB when ASKED about price.
+- Ask one targeted follow-up if their question is too vague to answer.
+- Walk them through a specific step in the 13-stage tracker if they ask about it.
 
 WHAT YOU STILL CAN'T DO:
 - Never share another client's status or info.
 - Never promise pass rates, visa outcomes, or specific dates beyond KB ranges.
-- Never collect payment info, passport numbers, or sensitive data over Messenger — direct them to the secure flow on the site.
+- Never collect payment info, passport numbers, or sensitive data over Messenger — point to the secure flow on the site.
+- Never claim PRC license is required for NCLEX (BSN graduation + nursing diploma is enough through GritSync).
 
-LENGTH: 1-3 sentences. Under 320 characters if possible.`
+LENGTH HARD CAP: under 280 characters whenever possible. Long answers feel like a robot reading a brochure.`
 
     const system = isComment ? kuyaJaySystem : mikaSystem
 
+    const imageNote = has_inbound_image
+      ? `\n\nNote: the inbound ALSO contains an attached image. Acknowledge it briefly and naturally — Filipino-style ("Ay, salamat sa pic po!" / "Naku, na-receive po namin yung image" / "Thanks for the screenshot!"). Don't describe the image; you can't see it. If the person is clearly asking you to review/check it, route them to DM the Page so a human can look at it.`
+      : ''
+
     const user = `Inbound ${isComment ? 'public comment on one of our posts' : 'direct message'}:
 """
-${message}
-"""
-${post_caption ? `Original post the comment is on (for context — do not re-quote it):\n"""\n${post_caption}\n"""` : ''}
+${message?.trim() || '(no text — image only)'}
+"""${imageNote}
+${post_caption ? `\nOriginal post the comment is on (for context — do not re-quote it):\n"""\n${post_caption}\n"""` : ''}
 
 Return JSON: { "reply": "<the reply text — no surrounding quotes, no leading 'Reply:' label>" }`
 
@@ -741,6 +883,220 @@ Return JSON: { "reply": "<the reply text — no surrounding quotes, no leading '
     try { reply = JSON.parse(text).reply || '' } catch { reply = text.trim() }
     res.json({ data: { reply, agent: agentName } })
   } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Internal helper used by both /autoreply/draft and the autorun endpoints
+// below. Returns the agent's reply text. Throws on hard failures so the
+// caller can decide whether to skip + continue or abort the whole batch.
+async function draftReply(args: {
+  agent: 'inbox' | 'comments'
+  message: string
+  post_caption?: string | null
+  has_inbound_image?: boolean
+}): Promise<string> {
+  const apiKey = OPENAI_KEY()
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
+
+  const isComment = args.agent === 'comments'
+
+  // We rebuild the same system + user prompts the public /draft endpoint
+  // uses, so autorun and manual-suggest produce identical voices. If you
+  // tune one, mirror the change here.
+  const systemKuyaJay = `${agentHeader('Kuya Jay', 'the public-comments specialist')}
+
+YOU ARE KUYA JAY — public-facing Taglish replies. Answer ONLY what was asked, in 1-2 short sentences (<240 chars). "po"/"opo" tone. Include exactly ONE official URL when it actually helps (https://www.gritsync.com/, /quote, /faqs); otherwise no link. Never argue. Never volunteer extra info they didn't ask for.`
+
+  const systemMika = `${agentHeader('Mika', 'the DM/Inbox concierge')}
+
+YOU ARE MIKA — private DM concierge. Answer ONLY the specific question they asked, in 1-2 short sentences (<280 chars). Mirror their language (Taglish/English). Include exactly ONE official URL when useful (https://www.gritsync.com/, /quote, /faqs); otherwise no link. Quote pricing ranges from KB only when asked. Never volunteer extra info.`
+
+  const system = isComment ? systemKuyaJay : systemMika
+
+  const imageNote = args.has_inbound_image
+    ? `\n\nNote: the inbound ALSO contains an attached image. Acknowledge it naturally in Filipino style. Don't describe the image; you can't see it.`
+    : ''
+
+  const userBody = `Inbound ${isComment ? 'public comment' : 'direct message'}:
+"""
+${args.message?.trim() || '(no text — image only)'}
+"""${imageNote}
+${args.post_caption ? `\nOriginal post (context — don't re-quote):\n"""\n${args.post_caption}\n"""` : ''}
+
+Return JSON: { "reply": "<the reply text>" }`
+
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      temperature: 0.7,
+      max_tokens: 500,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userBody },
+      ],
+    }),
+  })
+  const j: any = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j?.error?.message || `OpenAI HTTP ${r.status}`)
+  const text = j.choices?.[0]?.message?.content || '{}'
+  try { return (JSON.parse(text).reply || '').trim() } catch { return String(text).trim() }
+}
+
+// POST /api/social/autoreply/inbox/autorun
+// Mika autopilot. Walks every UNREAD thread across connected FB+IG inboxes,
+// drafts a reply, and sends it (with the real Messenger typing indicator).
+// Bounded by `max` (default 8) so a runaway thread count can't burn budget.
+router.post('/autoreply/inbox/autorun', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const max = Math.min(20, Math.max(1, Number(req.body?.max) || 8))
+    const accounts = await listMetaAccounts()
+
+    type Result = { thread_id: string; account_name: string; with_name: string; reply: string; sent: boolean; error?: string }
+    const results: Result[] = []
+
+    for (const acc of accounts) {
+      if (results.length >= max) break
+      try {
+        const isIg = acc.platform === 'instagram'
+        const baseId = isIg ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
+        const params: Record<string, string> = {
+          fields: 'id,updated_time,unread_count,participants{name,id},messages.limit(1){message,from,attachments{mime_type,image_data}}',
+          limit: '25',
+        }
+        if (isIg) params.platform = 'instagram'
+        const conv = await fbGet(`${baseId}/conversations`, acc.access_token, params)
+
+        for (const c of conv.data || []) {
+          if (results.length >= max) break
+          if (!c.unread_count || c.unread_count === 0) continue
+
+          const lastMsg = c.messages?.data?.[0]
+          // Don't reply if our last action WAS already a reply from us.
+          if (lastMsg?.from?.id === acc.platform_user_id) continue
+          const text = String(lastMsg?.message || '').trim()
+          const atts = lastMsg?.attachments?.data || []
+          const hasImage = atts.some((a: any) => String(a.mime_type || '').startsWith('image/'))
+          if (!text && !hasImage) continue
+
+          const participants = (c.participants?.data || []).filter((p: any) => p.id !== acc.platform_user_id)
+          const otherId = participants[0]?.id
+          if (!otherId) continue
+
+          try {
+            const reply = await draftReply({ agent: 'inbox', message: text, has_inbound_image: hasImage })
+            if (!reply) continue
+
+            // Typing on → pause → send → typing off (real human feel).
+            try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: otherId }, sender_action: 'typing_on' }) } catch {}
+            await new Promise((r) => setTimeout(r, Math.min(3000, 600 + reply.length * 25)))
+            await fbPost(`${baseId}/messages`, acc.access_token, {
+              recipient: { id: otherId },
+              message: { text: reply },
+              messaging_type: 'RESPONSE',
+            })
+            try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: otherId }, sender_action: 'typing_off' }) } catch {}
+
+            results.push({ thread_id: c.id, account_name: acc.display_name, with_name: participants[0]?.name || 'Unknown', reply, sent: true })
+          } catch (sendErr: any) {
+            results.push({ thread_id: c.id, account_name: acc.display_name, with_name: participants[0]?.name || 'Unknown', reply: '', sent: false, error: sendErr.message })
+          }
+        }
+      } catch (err: any) {
+        console.warn(`Mika autorun failed for ${acc.platform}:${acc.display_name}:`, err.message)
+      }
+    }
+
+    res.json({ data: { agent: 'Mika', sent_count: results.filter((r) => r.sent).length, results } })
+  } catch (err: any) {
+    console.error('inbox autorun error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/social/autoreply/comments/autorun
+// Kuya Jay autopilot. Walks recent comments across all connected FB+IG
+// accounts; for each that isn't from our own Page/IG and doesn't already
+// have a Page reply nested under it, drafts a Taglish reply and posts it.
+router.post('/autoreply/comments/autorun', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const max = Math.min(30, Math.max(1, Number(req.body?.max) || 12))
+    const accounts = await listMetaAccounts()
+    type Result = { comment_id: string; account_name: string; from_name: string; reply: string; sent: boolean; error?: string }
+    const results: Result[] = []
+
+    for (const acc of accounts) {
+      if (results.length >= max) break
+      try {
+        if (acc.platform === 'facebook') {
+          // comment_count on each child reply tells us if we already replied.
+          const posts = await fbGet(`${acc.platform_user_id}/posts`, acc.access_token, {
+            fields: 'id,message,comments.limit(10){id,from{id,name},message,comment_count,attachment{type,media{image{src}}}}',
+            limit: '10',
+          })
+          for (const post of posts.data || []) {
+            for (const c of post.comments?.data || []) {
+              if (results.length >= max) break
+              if (c.from?.id === acc.platform_user_id) continue
+              // Skip if we've already replied to this comment (Page-level
+              // replies are nested as a child comment with comment_count>0
+              // when they exist). This isn't perfect — Meta doesn't tell us
+              // who authored the child — but it stops obvious double-replies.
+              if (c.comment_count && c.comment_count > 0) continue
+              const text = String(c.message || '').trim()
+              const att = c.attachment?.media?.image?.src ? true : false
+              if (!text && !att) continue
+              try {
+                const reply = await draftReply({
+                  agent: 'comments',
+                  message: text,
+                  post_caption: (post.message || '').slice(0, 240),
+                  has_inbound_image: att,
+                })
+                if (!reply) continue
+                await fbPost(`${c.id}/comments`, acc.access_token, { message: reply })
+                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.name || 'Unknown', reply, sent: true })
+              } catch (sendErr: any) {
+                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.name || 'Unknown', reply: '', sent: false, error: sendErr.message })
+              }
+            }
+          }
+        } else {
+          const media = await fbGet(`${acc.platform_user_id}/media`, acc.access_token, {
+            fields: 'id,caption,comments.limit(10){id,from{id,username},text,user{username}}',
+            limit: '10',
+          })
+          for (const m of media.data || []) {
+            for (const c of m.comments?.data || []) {
+              if (results.length >= max) break
+              const text = String(c.text || '').trim()
+              if (!text) continue
+              try {
+                const reply = await draftReply({
+                  agent: 'comments',
+                  message: text,
+                  post_caption: (m.caption || '').slice(0, 240),
+                })
+                if (!reply) continue
+                await fbPost(`${c.id}/comments`, acc.access_token, { message: reply })
+                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.username || c.user?.username || 'someone', reply, sent: true })
+              } catch (sendErr: any) {
+                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.username || 'someone', reply: '', sent: false, error: sendErr.message })
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`Kuya Jay autorun failed for ${acc.platform}:${acc.display_name}:`, err.message)
+      }
+    }
+
+    res.json({ data: { agent: 'Kuya Jay', sent_count: results.filter((r) => r.sent).length, results } })
+  } catch (err: any) {
+    console.error('comments autorun error:', err)
     res.status(500).json({ error: err.message })
   }
 })

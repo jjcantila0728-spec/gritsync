@@ -17,7 +17,7 @@ export const GRITSYNC_KB = `GROUND-TRUTH FACTS ABOUT GRITSYNC (use these — nev
 WHO WE ARE
 - GritSync is an NCLEX application processing platform for Filipino nurses pursuing the US Registered Nurse (USRN) path.
 - We handle the paperwork end-to-end so clients can focus on studying.
-- Eligibility: any Filipino nurse with a valid PRC Nursing License.
+- Eligibility for NCLEX via GritSync: any Filipino BSN graduate with a nursing diploma. A PRC (Philippine) RN license is NOT required to take NCLEX through us — only graduation from a BSN program + diploma. If the operator-facing materials say "PRC required", that is OUT OF DATE — do not repeat it.
 
 WHAT WE ACTUALLY DO (the service)
 - We file NCLEX-RN applications with the New York State Board of Nursing (NYSBON). New York is the ONLY state we currently process.
@@ -47,7 +47,7 @@ TIMELINE (use ONLY these ranges — never fabricate tighter specifics)
 NCLEX SPONSORSHIP PROGRAM (real product, separate page)
 - Connects qualified Filipino nurses with US healthcare employers who cover all or part of the processing fees, in exchange for a work commitment after license issuance.
 - Not a loan — tied to employment, not repayment.
-- Eligibility typically: valid PRC RN license, 1-2 years clinical experience, willingness to work for the sponsoring employer.
+- Sponsorship eligibility varies by employer. Don't quote a fixed checklist (PRC, years of experience, etc.) in replies — direct interested people to https://www.gritsync.com/ or DM the Page so the team can match them to current sponsor requirements.
 
 SUPPORT
 - support@gritsync.com

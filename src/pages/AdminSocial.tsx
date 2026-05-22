@@ -5619,6 +5619,8 @@ interface InboxThread {
   account_platform: 'facebook' | 'instagram'
   account_name: string
   with_name: string
+  with_id?: string | null
+  with_avatar?: string | null
   snippet: string
   updated_at: string
   unread: number
@@ -5629,6 +5631,7 @@ interface InboxMessage {
   from: { id: string; name?: string }
   to?: { data?: Array<{ id: string; name?: string }> }
   created_time: string
+  attachments?: Array<{ type: 'image' | 'video' | 'file'; url: string; name?: string | null; mime?: string }>
 }
 
 function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
@@ -5639,8 +5642,23 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
   const [accountPsid, setAccountPsid] = useState('')
   const [msgsLoading, setMsgsLoading] = useState(false)
   const [reply, setReply] = useState('')
+  const [replyImage, setReplyImage] = useState('')
   const [sending, setSending] = useState(false)
   const [drafting, setDrafting] = useState(false)
+  const [search, setSearch] = useState('')
+  // Mika autopilot — bulk-process unread threads in one click.
+  const [autorunning, setAutorunning] = useState(false)
+  const [autorunResults, setAutorunResults] = useState<Array<{ thread_id: string; account_name: string; with_name: string; reply: string; sent: boolean; error?: string }> | null>(null)
+
+  const filteredThreads = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return threads
+    return threads.filter((t) =>
+      t.with_name.toLowerCase().includes(q) ||
+      t.snippet.toLowerCase().includes(q) ||
+      t.account_name.toLowerCase().includes(q)
+    )
+  }, [threads, search])
 
   async function load() {
     setLoading(true)
@@ -5673,16 +5691,23 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
 
   async function suggest() {
     if (!activeThread) return
+    // Take the last INBOUND message — text + flag whether it has an image
+    // so Mika can acknowledge a photo naturally.
     const lastInbound = [...messages].reverse().find((m) => m.from?.id !== accountPsid)
-    if (!lastInbound?.message) {
+    if (!lastInbound) {
       showToast('No inbound message to draft from', 'info')
+      return
+    }
+    const hasImage = (lastInbound.attachments || []).some((a) => a.type === 'image')
+    if (!lastInbound.message?.trim() && !hasImage) {
+      showToast('Nothing to react to in the latest message', 'info')
       return
     }
     setDrafting(true)
     try {
       const r = await api<{ reply: string }>('/autoreply/draft', {
         method: 'POST',
-        body: JSON.stringify({ context_kind: 'inbox', message: lastInbound.message }),
+        body: JSON.stringify({ context_kind: 'inbox', message: lastInbound.message || '', has_inbound_image: hasImage }),
       })
       setReply(r.reply)
     } catch (err: any) {
@@ -5693,16 +5718,21 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
   }
 
   async function send() {
-    if (!activeThread || !reply.trim()) return
+    if (!activeThread) return
+    if (!reply.trim() && !replyImage.trim()) return
     setSending(true)
     try {
       await api(`/autoreply/inbox/${activeThread.id}/reply`, {
         method: 'POST',
-        body: JSON.stringify({ account_id: activeThread.account_id, message: reply.trim() }),
+        body: JSON.stringify({
+          account_id: activeThread.account_id,
+          message: reply.trim(),
+          image_url: replyImage.trim() || undefined,
+        }),
       })
       setReply('')
+      setReplyImage('')
       showToast('Reply sent', 'success')
-      // Refresh the thread so the new message shows.
       openThread(activeThread)
     } catch (err: any) {
       showToast(err.message || 'Failed to send', 'error')
@@ -5711,14 +5741,58 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
     }
   }
 
+  // Mika autopilot — walks every UNREAD thread and replies in one go.
+  // Server respects max=8 by default to stay under serverless time budgets.
+  async function runMika() {
+    if (!confirm('Mika will reply to up to 8 unread conversations now. Continue?')) return
+    setAutorunning(true)
+    setAutorunResults(null)
+    try {
+      const r = await api<{ sent_count: number; results: any[] }>('/autoreply/inbox/autorun', {
+        method: 'POST', body: JSON.stringify({ max: 8 }),
+      })
+      setAutorunResults(r.results || [])
+      showToast(`Mika sent ${r.sent_count} repl${r.sent_count === 1 ? 'y' : 'ies'}`, 'success')
+      load()
+    } catch (err: any) {
+      showToast(err.message || 'Mika autopilot failed', 'error')
+    } finally {
+      setAutorunning(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[500px]">
       <Card className="p-0 overflow-hidden lg:col-span-1">
-        <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-gray-800">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Conversations</div>
-          <button onClick={load} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 inline-flex items-center gap-1">
-            <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} /> Refresh
-          </button>
+        <div className="p-3 border-b border-gray-100 dark:border-gray-800 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Conversations <span className="text-xs font-normal text-gray-500 dark:text-gray-400">· {filteredThreads.length}{search ? ` of ${threads.length}` : ''}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={runMika} loading={autorunning} disabled={autorunning} title="Mika autoreplies to every unread thread now">
+                <Zap className="h-3 w-3 mr-1" /> Mika autopilot
+              </Button>
+              <button onClick={load} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 inline-flex items-center gap-1">
+                <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} /> Refresh
+              </button>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, account, or message…"
+              className="w-full text-xs pl-7 pr-7 py-1.5 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[600px] overflow-y-auto">
           {loading && threads.length === 0 && <div className="p-6"><Loading text="Loading…" /></div>}
@@ -5727,26 +5801,40 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
               No conversations. Replies to your Pages/IG will show up here.
             </div>
           )}
-          {threads.map((t) => (
+          {!loading && threads.length > 0 && filteredThreads.length === 0 && (
+            <div className="p-6 text-center text-xs text-gray-500 dark:text-gray-400">
+              No matches for "{search}".
+            </div>
+          )}
+          {filteredThreads.map((t) => (
             <button
               key={t.id}
               onClick={() => openThread(t)}
               className={cn(
-                'block w-full text-left p-3 transition-colors',
+                'flex items-start gap-2.5 w-full text-left p-3 transition-colors',
                 activeThread?.id === t.id ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
               )}
             >
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  {t.account_platform === 'facebook' ? <Facebook className="h-3 w-3 text-blue-600 flex-shrink-0" /> : <Instagram className="h-3 w-3 text-pink-500 flex-shrink-0" />}
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.with_name}</span>
+              {t.with_avatar ? (
+                <img src={t.with_avatar} alt="" className="h-9 w-9 rounded-full flex-shrink-0 object-cover" />
+              ) : (
+                <div className="h-9 w-9 rounded-full flex-shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-500">
+                  {(t.with_name || '?').charAt(0).toUpperCase()}
                 </div>
-                {t.unread > 0 && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{t.unread}</span>
-                )}
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {t.account_platform === 'facebook' ? <Facebook className="h-3 w-3 text-blue-600 flex-shrink-0" /> : <Instagram className="h-3 w-3 text-pink-500 flex-shrink-0" />}
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{t.with_name}</span>
+                  </div>
+                  {t.unread > 0 && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{t.unread}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.snippet}</div>
+                <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{new Date(t.updated_at).toLocaleString()} · via {t.account_name}</div>
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.snippet}</div>
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{new Date(t.updated_at).toLocaleString()} · via {t.account_name}</div>
             </button>
           ))}
         </div>
@@ -5769,13 +5857,29 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
               {msgsLoading && <Loading text="Loading messages…" />}
               {messages.map((m) => {
                 const own = m.from?.id === accountPsid
+                const images = (m.attachments || []).filter((a) => a.type === 'image')
+                const otherAtts = (m.attachments || []).filter((a) => a.type !== 'image')
                 return (
                   <div key={m.id} className={cn('flex', own ? 'justify-end' : 'justify-start')}>
                     <div className={cn(
                       'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
                       own ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
                     )}>
-                      <div className="whitespace-pre-wrap">{m.message}</div>
+                      {images.length > 0 && (
+                        <div className={cn('grid gap-1 mb-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
+                          {images.map((a, i) => (
+                            <a key={i} href={a.url} target="_blank" rel="noreferrer noopener" className="block overflow-hidden rounded-lg">
+                              <img src={a.url} alt={a.name || 'attachment'} className="w-full max-h-60 object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {otherAtts.map((a, i) => (
+                        <a key={i} href={a.url} target="_blank" rel="noreferrer noopener" className={cn('block text-xs underline mb-1', own ? 'text-white/90' : 'text-primary-700 dark:text-primary-300')}>
+                          {a.type === 'video' ? '🎬 ' : '📎 '}{a.name || a.url.split('/').pop()}
+                        </a>
+                      ))}
+                      {m.message && <div className="whitespace-pre-wrap">{m.message}</div>}
                       <div className={cn('text-[10px] mt-0.5', own ? 'text-white/70' : 'text-gray-400 dark:text-gray-500')}>
                         {new Date(m.created_time).toLocaleString()}
                       </div>
@@ -5783,6 +5887,18 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
                   </div>
                 )
               })}
+              {(sending || drafting) && (
+                <div className="flex justify-end">
+                  <div className="rounded-2xl px-3 py-2 bg-primary-600/80 text-white flex items-center gap-1.5">
+                    <span className="text-xs italic">{drafting ? 'Mika is thinking' : 'Mika is typing'}</span>
+                    <span className="flex gap-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="border-t border-gray-100 dark:border-gray-800 p-3 space-y-2">
               <Textarea
@@ -5790,12 +5906,22 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
                 onChange={(e) => setReply(e.target.value)}
                 rows={3}
                 placeholder="Type your reply…"
+                disabled={sending}
               />
+              <div className="flex items-center gap-2">
+                <Input
+                  value={replyImage}
+                  onChange={(e) => setReplyImage(e.target.value)}
+                  placeholder="Optional image URL to attach (jpg/png)"
+                  disabled={sending}
+                  className="text-xs"
+                />
+              </div>
               <div className="flex items-center justify-between gap-2">
-                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting} title="Mika drafts a private, on-brand DM reply">
+                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting || sending} title="Mika drafts a private, on-brand DM reply">
                   <Sparkles className="h-3.5 w-3.5 mr-1" /> Ask Mika
                 </Button>
-                <Button size="sm" onClick={send} loading={sending} disabled={sending || !reply.trim()}>
+                <Button size="sm" onClick={send} loading={sending} disabled={sending || (!reply.trim() && !replyImage.trim())}>
                   <Send className="h-3.5 w-3.5 mr-1" /> Send
                 </Button>
               </div>
@@ -5803,10 +5929,63 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
           </>
         )}
       </Card>
+
+      <AutorunResultsModal
+        open={autorunResults !== null}
+        onClose={() => setAutorunResults(null)}
+        agent="Mika"
+        results={(autorunResults || []).map((r) => ({ id: r.thread_id, label: `${r.with_name} · ${r.account_name}`, reply: r.reply, sent: r.sent, error: r.error }))}
+      />
     </div>
   )
 }
 
+// Compact modal that lists what an autopilot run actually did. Helps the
+// operator audit the agent's output without scrolling each thread.
+function AutorunResultsModal({
+  open,
+  onClose,
+  agent,
+  results,
+}: {
+  open: boolean
+  onClose: () => void
+  agent: 'Mika' | 'Kuya Jay'
+  results: Array<{ id: string; label: string; reply: string; sent: boolean; error?: string }>
+}) {
+  if (!open) return null
+  const sent = results.filter((r) => r.sent).length
+  return (
+    <Modal isOpen={open} onClose={onClose} title={`${agent} autopilot results`} size="lg">
+      <div className="space-y-3">
+        <div className="text-sm text-gray-700 dark:text-gray-200">
+          <strong>{agent}</strong> sent <strong>{sent}</strong> repl{sent === 1 ? 'y' : 'ies'} across {results.length} candidate{results.length === 1 ? '' : 's'}.
+        </div>
+        {results.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400 italic">Nothing eligible. Empty inbox + comments? Nice work.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
+            {results.map((r) => (
+              <li key={r.id} className="py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</span>
+                  <span className={cn(
+                    'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full',
+                    r.sent ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                  )}>{r.sent ? 'sent' : 'failed'}</span>
+                </div>
+                {r.reply && <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap">{r.reply}</p>}
+                {r.error && <p className="text-[11px] text-red-600 dark:text-red-400 mt-1">{r.error}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+interface CommentAttachment { type: string; url: string }
 interface CommentItem {
   id: string
   account_id: string
@@ -5815,8 +5994,9 @@ interface CommentItem {
   from_name: string
   from_avatar: string | null
   message: string
+  attachment?: CommentAttachment | null
   created_at: string
-  post: { id: string; permalink: string | null; message: string }
+  post: { id: string; permalink: string | null; message: string; thumbnail?: string | null }
   is_own: boolean
 }
 
@@ -5825,7 +6005,10 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<'all' | 'unanswered'>('unanswered')
   const [replies, setReplies] = useState<Record<string, string>>({})
+  const [replyImages, setReplyImages] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const [autorunning, setAutorunning] = useState(false)
+  const [autorunResults, setAutorunResults] = useState<Array<{ comment_id: string; account_name: string; from_name: string; reply: string; sent: boolean; error?: string }> | null>(null)
 
   async function load() {
     setLoading(true)
@@ -5843,9 +6026,15 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
   async function suggest(c: CommentItem) {
     setBusy((b) => ({ ...b, [`draft:${c.id}`]: true }))
     try {
+      const hasImage = c.attachment?.type === 'image'
       const r = await api<{ reply: string }>('/autoreply/draft', {
         method: 'POST',
-        body: JSON.stringify({ context_kind: 'comment', message: c.message, post_caption: c.post.message }),
+        body: JSON.stringify({
+          context_kind: 'comment',
+          message: c.message,
+          post_caption: c.post.message,
+          has_inbound_image: hasImage,
+        }),
       })
       setReplies((cur) => ({ ...cur, [c.id]: r.reply }))
     } catch (err: any) {
@@ -5856,19 +6045,42 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
   }
   async function send(c: CommentItem) {
     const text = (replies[c.id] || '').trim()
-    if (!text) return
+    const img = (replyImages[c.id] || '').trim()
+    if (!text && !img) return
     setBusy((b) => ({ ...b, [`send:${c.id}`]: true }))
     try {
       await api(`/autoreply/comments/${c.id}/reply`, {
         method: 'POST',
-        body: JSON.stringify({ account_id: c.account_id, message: text }),
+        body: JSON.stringify({ account_id: c.account_id, message: text, image_url: img || undefined }),
       })
       setReplies((cur) => ({ ...cur, [c.id]: '' }))
+      setReplyImages((cur) => ({ ...cur, [c.id]: '' }))
       showToast('Reply posted', 'success')
     } catch (err: any) {
       showToast(err.message || 'Reply failed', 'error')
     } finally {
       setBusy((b) => ({ ...b, [`send:${c.id}`]: false }))
+    }
+  }
+
+  // Kuya Jay autopilot — Taglish replies to every unanswered comment in one
+  // pass. Bounded server-side (max 12). Surfaces results so the operator
+  // can audit what went out without scrolling each row.
+  async function runKuyaJay() {
+    if (!confirm('Kuya Jay will reply to up to 12 unanswered comments now (Taglish, public-comment voice). Continue?')) return
+    setAutorunning(true)
+    setAutorunResults(null)
+    try {
+      const r = await api<{ sent_count: number; results: any[] }>('/autoreply/comments/autorun', {
+        method: 'POST', body: JSON.stringify({ max: 12 }),
+      })
+      setAutorunResults(r.results || [])
+      showToast(`Kuya Jay sent ${r.sent_count} repl${r.sent_count === 1 ? 'y' : 'ies'}`, 'success')
+      load()
+    } catch (err: any) {
+      showToast(err.message || 'Kuya Jay autopilot failed', 'error')
+    } finally {
+      setAutorunning(false)
     }
   }
 
@@ -5893,9 +6105,14 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={runKuyaJay} loading={autorunning} disabled={autorunning} title="Kuya Jay replies in Taglish to every unanswered comment (max 12)">
+            <Zap className="h-3.5 w-3.5 mr-1" /> Kuya Jay autopilot
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {loading && comments.length === 0 && <div className="py-8"><Loading text="Loading comments…" /></div>}
@@ -5925,7 +6142,12 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
                       : <Instagram className="h-3 w-3 text-pink-500" />}
                     <span className="text-[10px] text-gray-500 dark:text-gray-400">{c.account_name} · {new Date(c.created_at).toLocaleString()}</span>
                   </div>
-                  <p className="text-sm text-gray-800 dark:text-gray-200 mt-0.5 whitespace-pre-wrap">{c.message}</p>
+                  {c.message && <p className="text-sm text-gray-800 dark:text-gray-200 mt-0.5 whitespace-pre-wrap">{c.message}</p>}
+                  {c.attachment?.type === 'image' && c.attachment.url && (
+                    <a href={c.attachment.url} target="_blank" rel="noreferrer noopener" className="block mt-1.5">
+                      <img src={c.attachment.url} alt="attached" className="max-h-48 rounded-lg border border-gray-200 dark:border-gray-700" />
+                    </a>
+                  )}
                   {c.post.permalink && (
                     <a
                       href={c.post.permalink}
@@ -5947,12 +6169,32 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
                 rows={2}
                 placeholder="Reply to this comment…"
                 className="text-sm"
+                disabled={!!busy[`send:${c.id}`]}
               />
+              {c.account_platform === 'facebook' && (
+                <Input
+                  value={replyImages[c.id] || ''}
+                  onChange={(e) => setReplyImages((cur) => ({ ...cur, [c.id]: e.target.value }))}
+                  placeholder="Optional image URL to attach (FB only — IG comments are text)"
+                  className="text-xs"
+                  disabled={!!busy[`send:${c.id}`]}
+                />
+              )}
               <div className="flex items-center justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={() => suggest(c)} loading={!!busy[`draft:${c.id}`]} disabled={!!busy[`draft:${c.id}`]} title="Kuya Jay drafts a public-comment reply in Taglish (the GritSync way)">
+                {busy[`draft:${c.id}`] && (
+                  <span className="text-[11px] italic text-primary-700 dark:text-primary-300 mr-auto inline-flex items-center gap-1">
+                    Kuya Jay is thinking
+                    <span className="flex gap-0.5">
+                      <span className="h-1 w-1 rounded-full bg-primary-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="h-1 w-1 rounded-full bg-primary-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="h-1 w-1 rounded-full bg-primary-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  </span>
+                )}
+                <Button size="sm" variant="outline" onClick={() => suggest(c)} loading={!!busy[`draft:${c.id}`]} disabled={!!busy[`draft:${c.id}`] || !!busy[`send:${c.id}`]} title="Kuya Jay drafts a public-comment reply in Taglish">
                   <Sparkles className="h-3 w-3 mr-1" /> Ask Kuya Jay
                 </Button>
-                <Button size="sm" onClick={() => send(c)} loading={!!busy[`send:${c.id}`]} disabled={!!busy[`send:${c.id}`] || !(replies[c.id] || '').trim()}>
+                <Button size="sm" onClick={() => send(c)} loading={!!busy[`send:${c.id}`]} disabled={!!busy[`send:${c.id}`] || (!(replies[c.id] || '').trim() && !(replyImages[c.id] || '').trim())}>
                   <Send className="h-3 w-3 mr-1" /> Reply
                 </Button>
               </div>
@@ -5960,6 +6202,13 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
           </div>
         ))}
       </div>
+
+      <AutorunResultsModal
+        open={autorunResults !== null}
+        onClose={() => setAutorunResults(null)}
+        agent="Kuya Jay"
+        results={(autorunResults || []).map((r) => ({ id: r.comment_id, label: `${r.from_name} · ${r.account_name}`, reply: r.reply, sent: r.sent, error: r.error }))}
+      />
     </Card>
   )
 }
