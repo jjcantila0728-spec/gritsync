@@ -5972,12 +5972,52 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
 //  3) "Discover" — Meta killed public group search via Graph for new apps,
 //     so we use gpt-4o-mini to surface group archetypes + facebook.com
 //     search URLs, plus a manual "save candidate" workflow for tracking.
-interface GroupRow { id: string; name: string; member_count?: number; description?: string; icon?: string; privacy?: string }
+interface GroupRow {
+  id: string
+  name: string
+  member_count?: number
+  description?: string
+  icon?: string
+  privacy?: string
+  // Populated by the server-side split. When 'page_joined', via_page tells
+  // us which Page can post (Page token, not user token).
+  source?: 'user_admin' | 'page_joined'
+  via_page?: { id: string; name: string }
+}
+
+// Shared card for both group sections. Same layout; "via Page X" footnote
+// only appears for page_joined rows so the operator knows which Page will
+// post the share.
+function GroupCard({ group, onShare }: { group: GroupRow; onShare: () => void }) {
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          {group.icon ? <img src={group.icon} alt="" className="h-6 w-6 rounded" /> : <Users className="h-4 w-4 text-gray-400" />}
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{group.name}</span>
+        </div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+          {group.member_count != null ? `${group.member_count.toLocaleString()} members` : 'members count unavailable'} · {group.privacy || 'unknown'}
+        </div>
+        {group.via_page && (
+          <div className="text-[11px] text-primary-700 dark:text-primary-300 mt-0.5">
+            via Page: <strong>{group.via_page.name}</strong>
+          </div>
+        )}
+        {group.description && <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{group.description}</p>}
+      </div>
+      <Button size="sm" variant="outline" onClick={onShare}>
+        <Send className="h-3 w-3 mr-1" /> Share
+      </Button>
+    </div>
+  )
+}
 interface GroupCandidate { id: string; group_id: string | null; name: string; url: string | null; notes: string | null; status: string; created_at: string }
 interface DiscoverSuggestion { name_pattern: string; why: string; search_url: string; engagement_strategy: string }
 
 function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
-  const [groups, setGroups] = useState<GroupRow[]>([])
+  const [userGroups, setUserGroups] = useState<GroupRow[]>([])
+  const [pageGroups, setPageGroups] = useState<GroupRow[]>([])
   const [candidates, setCandidates] = useState<GroupCandidate[]>([])
   const [note, setNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -5999,10 +6039,15 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
     setLoading(true)
     try {
       const [g, p] = await Promise.all([
-        api<{ groups: GroupRow[]; candidates: GroupCandidate[]; note: string | null }>('/groups'),
+        api<{ user_groups?: GroupRow[]; page_groups?: GroupRow[]; groups?: GroupRow[]; candidates: GroupCandidate[]; note: string | null }>('/groups'),
         api<SocialPost[]>('/posts').catch(() => []),
       ])
-      setGroups(g.groups || [])
+      // Prefer the new split shape, fall back to the legacy union for
+      // backwards compat with older server deploys.
+      const ug = g.user_groups ?? (g.groups || []).filter((x) => x.source === 'user_admin' || !x.source)
+      const pg = g.page_groups ?? (g.groups || []).filter((x) => x.source === 'page_joined')
+      setUserGroups(ug)
+      setPageGroups(pg)
       setCandidates(g.candidates || [])
       setNote(g.note || null)
       setPosts(Array.isArray(p) ? p : [])
@@ -6067,18 +6112,20 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
     }
   }
 
+  const totalGroups = userGroups.length + pageGroups.length
+
   return (
     <div className="space-y-4">
-      {/* Your groups */}
+      {/* Section 1: groups the USER admins (post as user). */}
       <Card className="p-4">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <div>
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your groups</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Groups you admin</h3>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Facebook groups you administer. Share a recent post into any group with one click.
+              Facebook groups your connected user administers. Posts go out as <strong>you</strong>.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -6086,37 +6133,53 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
           </Button>
         </div>
 
-        {loading && groups.length === 0 && <div className="py-6"><Loading text="Loading groups…" /></div>}
-        {!loading && groups.length === 0 && (
+        {loading && totalGroups === 0 && <div className="py-6"><Loading text="Loading groups…" /></div>}
+        {!loading && userGroups.length === 0 && (
           <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            {note || 'No groups linked yet.'}
+            No admin'd groups returned. Meta requires <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 rounded">user_managed_groups</code> + app review for non-developer users.
           </div>
         )}
-        {groups.length > 0 && (
+        {userGroups.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {groups.map((g) => (
-              <div key={g.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {g.icon ? <img src={g.icon} alt="" className="h-6 w-6 rounded" /> : <Users className="h-4 w-4 text-gray-400" />}
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{g.name}</span>
-                  </div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {g.member_count != null ? `${g.member_count.toLocaleString()} members` : 'members count unavailable'} · {g.privacy || 'unknown'}
-                  </div>
-                  {g.description && <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{g.description}</p>}
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setShareModal({ group: g })}>
-                  <Send className="h-3 w-3 mr-1" /> Share
-                </Button>
-              </div>
+            {userGroups.map((g) => (
+              <GroupCard key={g.id} group={g} onShare={() => setShareModal({ group: g })} />
             ))}
           </div>
         )}
-        {note && groups.length > 0 && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-2">{note}</p>
+      </Card>
+
+      {/* Section 2: groups any PAGE has joined as a member (post as Page). */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Groups your Pages joined</h3>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Communities your Pages are members of (you don't need to admin them). Posts go out <strong>as the Page</strong>.
+            </p>
+          </div>
+        </div>
+
+        {loading && totalGroups === 0 && <div className="py-6"><Loading text="Loading groups…" /></div>}
+        {!loading && pageGroups.length === 0 && (
+          <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            None of your connected Pages are members of any groups. Join a group from a Page on facebook.com, then refresh.
+          </div>
+        )}
+        {pageGroups.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {pageGroups.map((g) => (
+              <GroupCard key={`${g.via_page?.id || ''}:${g.id}`} group={g} onShare={() => setShareModal({ group: g })} />
+            ))}
+          </div>
         )}
       </Card>
+
+      {note && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">{note}</p>
+      )}
 
       {/* Discover */}
       <Card className="p-4">
@@ -6267,9 +6330,16 @@ function ShareToGroupModal({
     }
     setSubmitting(true)
     try {
+      // Page-joined groups must post AS THE PAGE — send as_page_id so the
+      // server uses the Page token instead of the user token.
       await api('/groups/share', {
         method: 'POST',
-        body: JSON.stringify({ group_id: group.id, message: message.trim(), link: link.trim() || undefined }),
+        body: JSON.stringify({
+          group_id: group.id,
+          message: message.trim(),
+          link: link.trim() || undefined,
+          as_page_id: group.source === 'page_joined' ? group.via_page?.id : undefined,
+        }),
       })
       onShared()
     } catch (err: any) {
@@ -6280,7 +6350,12 @@ function ShareToGroupModal({
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Share to ${group.name}`} size="lg">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`Share to ${group.name}${group.source === 'page_joined' && group.via_page ? ` (as ${group.via_page.name})` : ''}`}
+      size="lg"
+    >
       <div className="space-y-3">
         {posts.length > 0 && (
           <div>

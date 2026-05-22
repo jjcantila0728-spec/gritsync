@@ -765,68 +765,148 @@ Return JSON: { "reply": "<the reply text — no surrounding quotes, no leading '
 router.get('/groups', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
     const fbUser = (await query(
-      `SELECT access_token FROM social_accounts
+      `SELECT access_token, scopes FROM social_accounts
         WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
           AND status = 'connected'
         ORDER BY connected_at DESC LIMIT 1`
     )).rows[0]
 
     if (!fbUser) {
-      return res.json({ data: { groups: [], note: 'Connect Facebook to see groups you manage' } })
+      return res.json({ data: { groups: [], note: 'Connect Facebook (Accounts tab) to see groups you can post to.' } })
     }
 
-    // user_managed_groups returns groups the user is admin of. If the scope
-    // wasn't granted (older OAuth), Meta returns an empty data array, not
-    // an error — so we surface a helpful note in that case.
-    let groups: any[] = []
-    let note: string | null = null
+    type GroupBase = {
+      id: string
+      name: string
+      member_count?: number
+      description?: string
+      icon?: string
+      privacy?: string
+    }
+    type UserGroup = GroupBase & { source: 'user_admin' }
+    type PageGroup = GroupBase & { source: 'page_joined'; via_page: { id: string; name: string } }
+
+    const userGroups: UserGroup[] = []
+    const pageGroups: PageGroup[] = []
+    const notes: string[] = []
+
+    // ── Source 1: /me/groups (groups the connected USER admins).
+    // Requires `user_managed_groups` AND Meta app review for non-dev users.
+    const tokenScopes = String(fbUser.scopes || '').toLowerCase()
+    const hasUserManagedGroupsScope = tokenScopes.includes('user_managed_groups')
+    if (!hasUserManagedGroupsScope) {
+      notes.push('Your Facebook token is missing the user_managed_groups scope — disconnect & reconnect in the Accounts tab to grant it.')
+    }
     try {
       const r = await fbGet(`me/groups`, fbUser.access_token, {
         fields: 'id,name,member_count,description,icon,privacy',
         limit: '100',
       })
-      groups = r.data || []
-      if (groups.length === 0) {
-        note = 'No groups returned. Reconnect Facebook and grant "Manage your groups" so we can list them.'
-      }
+      for (const g of r.data || []) userGroups.push({ ...g, source: 'user_admin' })
     } catch (err: any) {
-      note = err.message
+      notes.push(`/me/groups failed: ${err.message}`)
     }
 
-    // Layer in saved candidates from our own table so the UI shows both
-    // sources in one list.
+    // ── Source 2: per-Page /{page_id}/groups (groups each connected Page
+    // is a MEMBER of, regardless of whether the personal user admins
+    // them). Posts to these groups must go through the PAGE token, not
+    // the user token — /groups/share honors via_page.id for that path.
+    const pages = (await query(
+      `SELECT platform_user_id AS id, display_name AS name, access_token
+         FROM social_accounts
+        WHERE platform = 'facebook'
+          AND platform_user_id NOT LIKE 'fbuser:%'
+          AND status = 'connected'`
+    )).rows as Array<{ id: string; name: string; access_token: string }>
+
+    await Promise.all(pages.map(async (page) => {
+      try {
+        const r = await fbGet(`${page.id}/groups`, page.access_token, {
+          fields: 'id,name,member_count,description,icon,privacy',
+          limit: '100',
+        })
+        for (const g of r.data || []) {
+          pageGroups.push({ ...g, source: 'page_joined', via_page: { id: page.id, name: page.name } })
+        }
+      } catch (err: any) {
+        // Per-Page failures are expected (most Pages don't join groups
+        // and the /groups edge requires the Page itself to be a member).
+        console.warn(`groups for page ${page.name}:`, err.message)
+      }
+    }))
+
+    // Sort both lists alphabetically for stable rendering.
+    userGroups.sort((a, b) => a.name.localeCompare(b.name))
+    pageGroups.sort((a, b) => a.name.localeCompare(b.name))
+
+    if (userGroups.length === 0 && pageGroups.length === 0 && notes.length === 0) {
+      notes.push(
+        'No groups returned. Common reasons: (a) Meta requires App Review for user_managed_groups before non-dev users see results, ' +
+        '(b) the connected user doesn\'t admin any groups, (c) the Pages aren\'t members of any groups. Add candidates below to track groups manually.'
+      )
+    }
+
     const candidates = (await query(
       `SELECT id, group_id, name, url, notes, status, created_at
          FROM social_group_candidates
         ORDER BY created_at DESC`
     ).catch(() => ({ rows: [] }))).rows
 
-    res.json({ data: { groups, candidates, note } })
+    res.json({
+      data: {
+        user_groups: userGroups,
+        page_groups: pageGroups,
+        // Backwards-compat: keep `groups` populated with the union for
+        // any frontend code that hasn't migrated to the split shape yet.
+        groups: [...userGroups, ...pageGroups],
+        candidates,
+        note: notes.join(' · ') || null,
+      },
+    })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // POST /api/social/groups/share
-// Posts a link or text into a group as the connected user. Body:
-//   { group_id, message, link? }
+// Posts a link or text into a group. Body:
+//   { group_id, message, link?, as_page_id? }
+// When as_page_id is set we post AS THAT PAGE using its Page token (works
+// for groups the Page is a member of, even when the personal user isn't
+// admin). Without it we fall back to the connected user's token (works for
+// groups the user admins).
 router.post('/groups/share', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const { group_id, message, link } = req.body || {}
+    const { group_id, message, link, as_page_id } = req.body || {}
     if (!group_id) return res.status(400).json({ error: 'group_id is required' })
     if (!message?.trim() && !link) return res.status(400).json({ error: 'message or link is required' })
 
-    const fbUser = (await query(
-      `SELECT access_token FROM social_accounts
-        WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
-          AND status = 'connected' ORDER BY connected_at DESC LIMIT 1`
-    )).rows[0]
-    if (!fbUser) return res.status(400).json({ error: 'Connect Facebook first' })
+    let token: string | null = null
+    let posting_as: 'page' | 'user' = 'user'
+    if (as_page_id) {
+      const page = (await query(
+        `SELECT access_token FROM social_accounts
+          WHERE platform = 'facebook' AND platform_user_id = $1
+            AND status = 'connected' LIMIT 1`,
+        [as_page_id]
+      )).rows[0]
+      if (!page) return res.status(404).json({ error: 'Page not found or not connected' })
+      token = page.access_token
+      posting_as = 'page'
+    } else {
+      const fbUser = (await query(
+        `SELECT access_token FROM social_accounts
+          WHERE platform = 'facebook' AND platform_user_id LIKE 'fbuser:%'
+            AND status = 'connected' ORDER BY connected_at DESC LIMIT 1`
+      )).rows[0]
+      if (!fbUser) return res.status(400).json({ error: 'Connect Facebook first' })
+      token = fbUser.access_token
+    }
 
     const body: Record<string, any> = { message: message || '' }
     if (link) body.link = link
-    const j = await fbPost(`${group_id}/feed`, fbUser.access_token, body)
-    res.json({ data: { post_id: j.id } })
+    const j = await fbPost(`${group_id}/feed`, token!, body)
+    res.json({ data: { post_id: j.id, posting_as } })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

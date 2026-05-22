@@ -69,6 +69,11 @@ const PLATFORM_CONFIG: Record<Platform, {
       'instagram_manage_comments',
       'instagram_manage_insights',
       'instagram_manage_messages',
+      // Groups tab. user_managed_groups is the only scope Meta still
+      // grants for listing groups the user admins; it requires app review
+      // for non-dev users but works immediately for the app's developers /
+      // admins / testers.
+      'user_managed_groups',
       'ads_management',
       'ads_read',
       'business_management',
