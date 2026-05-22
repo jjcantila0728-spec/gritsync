@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import jwt from 'jsonwebtoken'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
 import pool from '../db'
 import { isDriveConnected, uploadToDrive } from '../lib/google-drive'
@@ -11,8 +12,11 @@ const GOOGLE_KEY = () => process.env.GOOGLE_API_KEY
 const XAI_KEY = () => process.env.XAI_API_KEY
 const REPLICATE_KEY = () => process.env.REPLICATE_API_TOKEN
 const REPLICATE_VIDEO_MODEL = () => process.env.REPLICATE_VIDEO_MODEL || 'luma/ray-flash-2-540p'
+const KLING_ACCESS_KEY = () => process.env.KLING_ACCESS_KEY
+const KLING_SECRET_KEY = () => process.env.KLING_SECRET_KEY
+const KLING_HOST = () => process.env.KLING_HOST || 'https://api-singapore.klingai.com'
 
-type ImageProvider = 'openai' | 'nano-banana' | 'grok'
+type ImageProvider = 'openai' | 'nano-banana' | 'grok' | 'kling'
 
 const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')
 
@@ -502,6 +506,161 @@ router.post('/image-templates/:id/regenerate', authenticateToken, requireAdmin, 
   } catch (err: any) {
     console.error('image-template regenerate error:', err)
     res.status(500).json({ error: err.message || 'Failed to regenerate preview' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/social/ai/image-templates/orchestrate
+//
+// Lensa — the image-template research / orchestrate / build agent.
+//
+// Three phases in one call:
+//   1. RESEARCH — read the existing template library + recent bank captions
+//      to learn what styles we've already shipped and what audiences are
+//      seeing right now. This grounds Lensa so she creates a complementary
+//      template instead of duplicating an existing look.
+//   2. ORCHESTRATE — feed the brief + research + GRITSYNC_KB into
+//      gpt-4o-mini, ask for a structured template { name, prompt,
+//      reasoning }.
+//   3. BUILD — render a preview via generateImage(provider, prompt) so the
+//      operator sees the look before committing. Branding guards
+//      (applyImageTextGuards) apply automatically.
+//
+// Returns { name, prompt, preview_url, reasoning, provider } — does NOT
+// persist. The client decides whether to save via POST /image-templates.
+// ---------------------------------------------------------------------------
+router.post('/image-templates/orchestrate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const apiKey = OPENAI_KEY()
+    if (!apiKey) return res.status(400).json({ error: 'OPENAI_API_KEY is not set on the server' })
+
+    const { brief = '', provider, skip_preview } = req.body || {}
+    const cleanBrief = String(brief || '').trim()
+    const useProvider: ImageProvider =
+      provider === 'nano-banana' || provider === 'grok' || provider === 'kling' || provider === 'openai'
+        ? provider
+        : 'openai'
+    const skipPreview = !!skip_preview
+
+    // ── RESEARCH ──────────────────────────────────────────────────────
+    // Existing templates: name + a 220-char prompt excerpt is enough for
+    // Lensa to spot patterns ("we already have a hero-shot template — go
+    // for a candid documentary feel instead").
+    const existingTemplates = await safeQueryImageTemplates(
+      `SELECT name, prompt, is_default FROM social_image_templates ORDER BY created_at DESC LIMIT 12`
+    ).catch(() => ({ rows: [] }))
+
+    // Recent bank captions: shows what topics + tones have been shipping,
+    // so Lensa can build a template that fits the editorial direction.
+    const recentBank = await pool.query(
+      `SELECT caption, source_topic FROM social_content_bank
+        WHERE status = 'available' OR status = 'used'
+        ORDER BY created_at DESC LIMIT 8`
+    ).catch(() => ({ rows: [] as any[] }))
+
+    const templateSummaries = (existingTemplates?.rows || []).map((t: any) => ({
+      name: t.name,
+      is_default: !!t.is_default,
+      prompt_excerpt: String(t.prompt || '').replace(/\s+/g, ' ').slice(0, 220),
+    }))
+    const captionSummaries = (recentBank.rows || []).map((b: any) => ({
+      topic: b.source_topic || '(none)',
+      excerpt: String(b.caption || '').replace(/\s+/g, ' ').slice(0, 160),
+    }))
+
+    // ── ORCHESTRATE ───────────────────────────────────────────────────
+    const system = `You are Lensa, GritSync's art-director agent. You research the existing image-template library and recent post topics, then design a NEW template that fits the brand and complements what's already shipping.
+
+GROUND TRUTH about GritSync — your template must be consistent with these facts. Never invent claims that contradict them:
+
+${GRITSYNC_KB}
+
+YOUR JOB — three phases:
+  1. READ the existing templates and recent post captions in the user message. Identify gaps in style/mood/composition.
+  2. DECIDE on ONE distinct visual direction that fills a gap. Examples of distinct directions: editorial portrait, candid documentary, golden-hour cinematic, minimalist studio, narrative dual-frame, congratulatory celebration moment, before/after, calm focused study scene.
+  3. PRODUCE a structured image-template prompt the image renderer can use repeatedly across many captions. The prompt must be a GUIDE (inspirational), not a literal scene description.
+
+PROMPT STRUCTURE — produce a multi-paragraph prompt with these labelled sections IN THIS ORDER:
+   Subject: <who's in frame, age range, scrubs/clothing typical for this template>
+   Action: <the kind of moment this template captures across many posts>
+   Setting: <where + when, lighting style, palette>
+   Composition: <framing language, depth of field, focal point, negative space rules>
+   Brand elements: <where the "GritSync" wordmark goes, where "gritsync.com" goes, palette anchors>
+   Style: <photoreal/cinematic descriptors that make this template distinct>
+   Negative prompt: <anti-artifact terms — distorted hands, garbled text, etc.>
+
+BRAND GUARDRAILS:
+  - Subjects must be Filipino healthcare professionals (nurses, RNs). Never non-Filipino ethnicities.
+  - Brand palette: deep red, white, soft black, restrained warm gold accents.
+  - The "GritSync" wordmark and "gritsync.com" URL MUST be specified in Brand elements (placement, color, size).
+  - No fabricated claims, no named hospitals/schools, no US landmarks the brand hasn't endorsed.
+  - Photoreal + cinematic — never illustrative, never stock-photo flat.
+
+NAMING:
+  - Template name: 2-4 words, evocative, no jargon. Example shapes: "Golden Hour Pass", "Quiet Study Scene", "Newsroom Documentary", "ATT Inbox Moment".
+
+Return JSON only.`
+
+    const userPayload = `OPERATOR BRIEF (optional creative direction): ${cleanBrief || '(none — pick a fresh direction that fills a gap)'}
+
+EXISTING TEMPLATES IN THE LIBRARY (research — identify gaps, do NOT duplicate):
+${JSON.stringify(templateSummaries, null, 2)}
+
+RECENT POST CAPTIONS (shows what topics the team is shipping — choose a template that complements them):
+${JSON.stringify(captionSummaries, null, 2)}
+
+Return ONLY this JSON object — no surrounding text, no markdown fence:
+{
+  "name": "<2-4 word template name>",
+  "prompt": "<the full multi-paragraph structured template prompt as a single string with \\n line breaks>",
+  "reasoning": "<one sentence: what gap this fills and why it'll work for this audience>"
+}`
+
+    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 2200,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userPayload },
+        ],
+      }),
+    })
+    const aiJson: any = await aiRes.json().catch(() => ({}))
+    if (!aiRes.ok) return res.status(502).json({ error: aiJson.error?.message || `OpenAI HTTP ${aiRes.status}` })
+
+    const text = aiJson.choices?.[0]?.message?.content || '{}'
+    let parsed: { name?: string; prompt?: string; reasoning?: string } = {}
+    try { parsed = JSON.parse(text) } catch {}
+    const name = (parsed.name || '').trim()
+    const prompt = (parsed.prompt || '').trim()
+    const reasoning = (parsed.reasoning || '').trim()
+    if (!name || !prompt) return res.status(502).json({ error: 'Lensa returned an incomplete template' })
+
+    // ── BUILD ─────────────────────────────────────────────────────────
+    // Render a preview with the chosen provider. applyImageTextGuards is
+    // applied inside the provider funcs, so branding stays mandatory.
+    // skip_preview lets the modal's inline "Ask Lensa to draft" finish in
+    // one LLM call — the operator will see the preview when they hit
+    // "Create + render preview" on save anyway.
+    let preview_url: string | null = null
+    let preview_error: string | null = null
+    if (!skipPreview) {
+      try {
+        preview_url = await generateImage(useProvider, prompt)
+      } catch (err: any) {
+        preview_error = err.message || 'Preview render failed'
+      }
+    }
+
+    res.json({ data: { name, prompt, reasoning, preview_url, preview_error, provider: useProvider } })
+  } catch (err: any) {
+    console.error('image-templates orchestrate error:', err)
+    res.status(500).json({ error: err.message || 'Lensa failed to orchestrate a template' })
   }
 })
 
@@ -1423,9 +1582,81 @@ async function generateImageGrok(prompt: string): Promise<string> {
   return persistImage(buf, ct)
 }
 
+// Kling AI (Kuaishou). Auth is JWT signed with HS256 over { iss: access_key,
+// exp: now+1800s, nbf: now-5s }. Image gen lives at /v1/images/generations
+// with `kling-v1-5` as the modern default. Like every other provider we
+// route through applyImageTextGuards so GritSync branding stays mandatory.
+function klingJwt(): string {
+  const accessKey = KLING_ACCESS_KEY()
+  const secretKey = KLING_SECRET_KEY()
+  if (!accessKey || !secretKey) {
+    throw new Error('KLING_ACCESS_KEY / KLING_SECRET_KEY not set on the server')
+  }
+  const now = Math.floor(Date.now() / 1000)
+  return jwt.sign(
+    { iss: accessKey, exp: now + 1800, nbf: now - 5 },
+    secretKey,
+    { algorithm: 'HS256', header: { alg: 'HS256', typ: 'JWT' } }
+  )
+}
+
+async function klingPoll(host: string, taskId: string, kind: 'images' | 'videos/text2video' | 'videos/image2video'): Promise<any> {
+  // Kling jobs are async — submit returns a task_id, then poll
+  // /{kind}/{task_id} until status === 'succeed' or 'failed'.
+  const deadline = Date.now() + 4 * 60 * 1000 // 4-minute budget per gen
+  while (Date.now() < deadline) {
+    const r = await fetch(`${host}/v1/${kind}/${taskId}`, {
+      headers: { Authorization: `Bearer ${klingJwt()}` },
+    })
+    const j: any = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j?.message || `Kling poll HTTP ${r.status}`)
+    const status = j?.data?.task_status
+    if (status === 'succeed') return j.data
+    if (status === 'failed') throw new Error(j?.data?.task_status_msg || 'Kling task failed')
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+  throw new Error('Kling task timed out after 4 minutes')
+}
+
+async function generateImageKling(prompt: string, aspect_ratio: string = '1:1'): Promise<string> {
+  const host = KLING_HOST()
+  const guardedPrompt = applyImageTextGuards(prompt)
+  // Kling accepts ratios as their own enum — map common values, default 1:1.
+  const klingRatio =
+    aspect_ratio === '16:9' ? '16:9'
+    : aspect_ratio === '9:16' ? '9:16'
+    : aspect_ratio === '4:5' || aspect_ratio === '3:4' ? '3:4'
+    : '1:1'
+
+  const submit = await fetch(`${host}/v1/images/generations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${klingJwt()}` },
+    body: JSON.stringify({
+      model_name: 'kling-v1-5',
+      prompt: guardedPrompt,
+      n: 1,
+      aspect_ratio: klingRatio,
+    }),
+  })
+  const submitJson: any = await submit.json().catch(() => ({}))
+  if (!submit.ok) throw new Error(submitJson?.message || `Kling submit HTTP ${submit.status}`)
+  const taskId = submitJson?.data?.task_id
+  if (!taskId) throw new Error('Kling did not return a task_id')
+
+  const done = await klingPoll(host, taskId, 'images')
+  const url: string | undefined = done?.task_result?.images?.[0]?.url
+  if (!url) throw new Error('Kling task succeeded but returned no image URL')
+  const dl = await fetch(url)
+  if (!dl.ok) throw new Error(`Failed to download Kling image (HTTP ${dl.status})`)
+  const buf = Buffer.from(await dl.arrayBuffer())
+  const ct = dl.headers.get('content-type') || 'image/png'
+  return persistImage(buf, ct)
+}
+
 async function generateImage(provider: ImageProvider, prompt: string): Promise<string> {
   if (provider === 'nano-banana') return generateImageGemini(prompt)
   if (provider === 'grok') return generateImageGrok(prompt)
+  if (provider === 'kling') return generateImageKling(prompt)
   return generateImageOpenAI(prompt)
 }
 
@@ -1486,7 +1717,7 @@ router.post('/generate-batch', authenticateToken, requireAdmin, async (req: Auth
     const n = Math.max(1, Math.min(6, Number(count) || 3))
     const ct: 'image' | 'video' = content_type === 'video' ? 'video' : 'image'
     const provider: ImageProvider =
-      image_provider === 'nano-banana' || image_provider === 'grok' ? image_provider : 'openai'
+      image_provider === 'nano-banana' || image_provider === 'grok' || image_provider === 'kling' ? image_provider : 'openai'
 
     // Step 1: strategic plan (the "agentic" enhancer).
     const brief = await enhanceBrief({
@@ -1657,9 +1888,10 @@ router.post('/content-bank/:id/regenerate-image', authenticateToken, requireAdmi
     const existingProvider: ImageProvider =
       row.generation_settings?.image_provider === 'nano-banana' ? 'nano-banana'
       : row.generation_settings?.image_provider === 'grok' ? 'grok'
+      : row.generation_settings?.image_provider === 'kling' ? 'kling'
       : 'openai'
     const nextProvider: ImageProvider =
-      provider === 'nano-banana' || provider === 'grok' || provider === 'openai'
+      provider === 'nano-banana' || provider === 'grok' || provider === 'kling' || provider === 'openai'
         ? provider
         : existingProvider
 

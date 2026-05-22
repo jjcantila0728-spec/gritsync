@@ -1051,7 +1051,7 @@ export function AdminSocial() {
   async function regenerateBankItemImage(
     id: string,
     image_prompt: string,
-    provider?: 'openai' | 'nano-banana' | 'grok'
+    provider?: 'openai' | 'nano-banana' | 'grok' | 'kling'
   ): Promise<BankItem> {
     const updated = await api<BankItem>(`/ai/content-bank/${id}/regenerate-image`, {
       method: 'POST',
@@ -3121,6 +3121,40 @@ function GeneratorView({
   const [templateModalOpen, setTemplateModalOpen] = useState<{ mode: 'new' } | { mode: 'edit'; template: ImageTemplate } | null>(null)
   const [templateDraft, setTemplateDraft] = useState<{ name: string; prompt: string }>({ name: '', prompt: '' })
   const [templateSubmitting, setTemplateSubmitting] = useState(false)
+  const [templateAiDrafting, setTemplateAiDrafting] = useState(false)
+  const [lensaOpen, setLensaOpen] = useState(false)
+
+  // Lensa-assist inside the manual New/Edit template modal. Uses the
+  // typed name as a brief (or the existing prompt as creative direction
+  // when editing). Skips the orchestrator's preview render so the
+  // operator stays inside the modal — they'll see the preview when they
+  // hit "Create + render preview".
+  async function draftTemplateWithLensa() {
+    setTemplateAiDrafting(true)
+    try {
+      // For edit mode, treat the current prompt as the brief so Lensa
+      // refines instead of starting from zero. For new mode, the typed
+      // name (if any) is the creative direction; empty falls back to
+      // "fill a gap" mode on the server.
+      const brief = templateModalOpen?.mode === 'edit'
+        ? `Refine this template, keeping its identity: ${templateDraft.prompt.slice(0, 600)}`
+        : templateDraft.name.trim()
+      const r = await api<{ name: string; prompt: string; reasoning: string }>('/ai/image-templates/orchestrate', {
+        method: 'POST',
+        body: JSON.stringify({ brief: brief || undefined, provider: imageAi, skip_preview: true }),
+      })
+      setTemplateDraft((d) => ({
+        // Don't clobber the user's typed name unless the field was empty.
+        name: d.name.trim() ? d.name : r.name,
+        prompt: r.prompt,
+      }))
+      showToast(`Lensa drafted: ${r.reasoning}`, 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Lensa draft failed', 'error')
+    } finally {
+      setTemplateAiDrafting(false)
+    }
+  }
   // Master caption format — 11-section structural template every caption
   // follows. Parallel to the image-prompt editor: read/write helpers
   // persist overrides in localStorage; refinements via AI come back into
@@ -3143,7 +3177,7 @@ function GeneratorView({
   // to 3 for A/B comparison.
   const [resultCount, setResultCount] = useState(1)
   const [contentType, setContentType] = useState<'image' | 'video'>('image')
-  const [imageAi, setImageAi] = useState<'openai' | 'nano-banana' | 'grok'>('openai')
+  const [imageAi, setImageAi] = useState<'openai' | 'nano-banana' | 'grok' | 'kling'>('openai')
   const [additionalDetails, setAdditionalDetails] = useState('')
   const [generating, setGenerating] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'planning' | 'writing' | 'rendering'>('idle')
@@ -3731,11 +3765,12 @@ function GeneratorView({
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
               {contentType === 'video' ? 'Image AI (starting frame)' : 'Image AI'}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {([
                 { id: 'openai',      label: 'OpenAI',      sub: 'dall-e-3 hd + natural' },
                 { id: 'nano-banana', label: 'Nano Banana', sub: 'Gemini 2.5 Flash Image' },
                 { id: 'grok',        label: 'Grok',        sub: 'grok-2-image' },
+                { id: 'kling',       label: 'Kling',       sub: 'Kuaishou kling-v1-5' },
               ] as const).map((opt) => (
                 <button
                   key={opt.id}
@@ -3776,9 +3811,19 @@ function GeneratorView({
                     image generated below. Click <strong>+ New template</strong> to design your own.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={openNewTemplate}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> New template
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLensaOpen(true)}
+                    title="Lensa researches your library + recent posts, then designs a new template + previews it"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 mr-1" /> Ask Lensa
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={openNewTemplate}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> New template
+                  </Button>
+                </div>
               </div>
 
               {templatesLoading && imageTemplates.length === 0 ? (
@@ -3949,18 +3994,33 @@ function GeneratorView({
             onChange={(e) => setTemplateDraft((d) => ({ ...d, name: e.target.value }))}
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Image prompt
-              <span className="text-gray-400 dark:text-gray-500 font-normal text-xs ml-2">
-                ({templateDraft.prompt.length.toLocaleString()} chars · {templateDraft.prompt.trim() ? templateDraft.prompt.trim().split(/\s+/).length.toLocaleString() : 0} words)
-              </span>
-            </label>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Image prompt
+                <span className="text-gray-400 dark:text-gray-500 font-normal text-xs ml-2">
+                  ({templateDraft.prompt.length.toLocaleString()} chars · {templateDraft.prompt.trim() ? templateDraft.prompt.trim().split(/\s+/).length.toLocaleString() : 0} words)
+                </span>
+              </label>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={draftTemplateWithLensa}
+                loading={templateAiDrafting}
+                disabled={templateAiDrafting || templateSubmitting}
+                title={templateModalOpen?.mode === 'edit'
+                  ? 'Lensa refines the current prompt while keeping its identity'
+                  : 'Lensa drafts a brand-aligned prompt (uses the template name as the brief)'}
+              >
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                {templateModalOpen?.mode === 'edit' ? 'Refine with Lensa' : 'Ask Lensa to draft'}
+              </Button>
+            </div>
             <Textarea
               rows={16}
               value={templateDraft.prompt}
               onChange={(e) => setTemplateDraft((d) => ({ ...d, prompt: e.target.value }))}
               className="font-mono text-xs"
-              placeholder="Describe the visual style: subject, setting, brand elements, palette, composition, negative-prompt block…"
+              placeholder='Describe the visual style: subject, setting, brand elements, palette, composition, negative-prompt block… or click "Ask Lensa to draft" to start from a structured template.'
             />
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
@@ -3983,7 +4043,214 @@ function GeneratorView({
           </div>
         </div>
       </Modal>
+
+      <LensaTemplateModal
+        open={lensaOpen}
+        onClose={() => setLensaOpen(false)}
+        defaultProvider={imageAi}
+        showToast={showToast}
+        onSaved={(t) => {
+          setImageTemplates((cur) => [t, ...cur])
+          setSelectedImageTemplateIdRaw(t.id)
+          try { localStorage.setItem(SELECTED_IMAGE_TEMPLATE_ID_KEY, t.id) } catch {}
+          setLensaOpen(false)
+          showToast(`Lensa shipped "${t.name}" — selected for this batch`, 'success')
+        }}
+      />
     </div>
+  )
+}
+
+// Lensa — the image-template research + orchestrate + build agent. The
+// operator types an optional brief, picks a renderer, hits Generate. The
+// server pulls the template library + recent bank captions as research,
+// orchestrates a complementary direction, and renders a preview. The
+// operator can iterate (Generate again) or save as a new template.
+interface LensaResult {
+  name: string
+  prompt: string
+  reasoning: string
+  preview_url: string | null
+  preview_error: string | null
+  provider: 'openai' | 'nano-banana' | 'grok' | 'kling'
+}
+function LensaTemplateModal({
+  open,
+  onClose,
+  defaultProvider,
+  onSaved,
+  showToast,
+}: {
+  open: boolean
+  onClose: () => void
+  defaultProvider: 'openai' | 'nano-banana' | 'grok' | 'kling'
+  onSaved: (template: ImageTemplate) => void
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const [brief, setBrief] = useState('')
+  const [provider, setProvider] = useState<'openai' | 'nano-banana' | 'grok' | 'kling'>(defaultProvider)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<LensaResult | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) { setProvider(defaultProvider); setResult(null); setBrief('') }
+  }, [open, defaultProvider])
+
+  async function orchestrate() {
+    setBusy(true)
+    try {
+      const r = await api<LensaResult>('/ai/image-templates/orchestrate', {
+        method: 'POST',
+        body: JSON.stringify({ brief: brief.trim() || undefined, provider }),
+      })
+      setResult(r)
+      if (r.preview_error) showToast(`Preview note: ${r.preview_error}`, 'info')
+    } catch (err: any) {
+      showToast(err.message || 'Lensa failed', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function save() {
+    if (!result) return
+    setSaving(true)
+    try {
+      const created = await api<ImageTemplate>('/ai/image-templates', {
+        method: 'POST',
+        body: JSON.stringify({ name: result.name, prompt: result.prompt }),
+      })
+      onSaved(created)
+    } catch (err: any) {
+      showToast(err.message || 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) return null
+  return (
+    <Modal isOpen={open} onClose={() => !busy && !saving && onClose()} title="Ask Lensa — design a new image template" size="xl">
+      <div className="space-y-4">
+        <div className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-primary-50/60 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/40">
+          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="h-3.5 w-3.5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs">
+              <span className="font-semibold text-primary-700 dark:text-primary-300">Lensa</span>{' '}
+              <span className="text-gray-500 dark:text-gray-400">· art-director agent</span>
+            </div>
+            <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug mt-0.5">
+              Reads your existing templates + recent post topics, finds a stylistic gap, designs a structured template prompt, and renders a preview with the chosen image AI. You approve before it saves.
+            </div>
+          </div>
+        </div>
+
+        {!result && (
+          <>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                Creative direction (optional)
+              </label>
+              <Textarea
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                rows={3}
+                placeholder='e.g. "Candid documentary feel of Filipino nurses during a study break"  or  "Celebratory ATT-received moments"'
+              />
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                Leave blank to let Lensa pick a fresh direction that fills a gap in your library.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                Preview renderer
+              </label>
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as 'openai' | 'nano-banana' | 'grok' | 'kling')}
+                disabled={busy}
+                className="w-full text-sm px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+              >
+                <option value="openai">OpenAI (gpt-image)</option>
+                <option value="nano-banana">Gemini (nano-banana)</option>
+                <option value="grok">Grok</option>
+                <option value="kling">Kling (kling-v1-5)</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+              <Button onClick={orchestrate} loading={busy} disabled={busy}>
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> Generate template
+              </Button>
+            </div>
+          </>
+        )}
+
+        {result && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="md:col-span-2">
+                <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 aspect-square bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  {result.preview_url ? (
+                    <img src={result.preview_url} alt={result.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-center text-xs text-amber-700 dark:text-amber-300 p-4">
+                      <AlertCircle className="h-5 w-5 mx-auto mb-1" />
+                      {result.preview_error || 'Preview failed'}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 text-center">
+                  Rendered with {result.provider}
+                </p>
+              </div>
+              <div className="md:col-span-3 space-y-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Template name
+                  </label>
+                  <Input
+                    value={result.name}
+                    onChange={(e) => setResult({ ...result, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Why this template (Lensa's reasoning)
+                  </label>
+                  <p className="text-xs text-primary-700 dark:text-primary-300 italic">{result.reasoning}</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Template prompt (edit before saving if you want)
+                  </label>
+                  <Textarea
+                    value={result.prompt}
+                    onChange={(e) => setResult({ ...result, prompt: e.target.value })}
+                    rows={10}
+                    className="text-[11px] font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <Button variant="outline" onClick={() => setResult(null)} disabled={saving}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Try again
+              </Button>
+              <Button onClick={save} loading={saving} disabled={saving || !result.name.trim() || !result.prompt.trim()}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Save as template
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -4005,7 +4272,7 @@ function ContentBankView({
   onRefresh: () => void
   onRefreshItem: (id: string) => void
   onDelete: (id: string) => void
-  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok') => Promise<BankItem>
+  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok' | 'kling') => Promise<BankItem>
   onSchedule: (item: BankItem) => void
   onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
@@ -4293,19 +4560,19 @@ function BankItemModal({
   onPostNow: (item: BankItem) => void
   onUseInAd: (item: BankItem) => void
   onDelete: (id: string) => void
-  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok') => Promise<BankItem>
+  onRegenerateImage: (id: string, image_prompt: string, provider?: 'openai' | 'nano-banana' | 'grok' | 'kling') => Promise<BankItem>
   hasAccounts: boolean
 }) {
   const { showToast } = useToast()
   const [promptDraft, setPromptDraft] = useState('')
-  const [regenProvider, setRegenProvider] = useState<'openai' | 'nano-banana' | 'grok'>('openai')
+  const [regenProvider, setRegenProvider] = useState<'openai' | 'nano-banana' | 'grok' | 'kling'>('openai')
   const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
     if (item) {
       setPromptDraft(item.image_prompt || '')
       const p = item.generation_settings?.image_provider
-      setRegenProvider(p === 'nano-banana' || p === 'grok' ? p : 'openai')
+      setRegenProvider(p === 'nano-banana' || p === 'grok' || p === 'kling' ? p : 'openai')
     }
   }, [item?.id, item?.image_prompt])
 
@@ -4439,13 +4706,14 @@ function BankItemModal({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <select
                   value={regenProvider}
-                  onChange={(e) => setRegenProvider(e.target.value as 'openai' | 'nano-banana' | 'grok')}
+                  onChange={(e) => setRegenProvider(e.target.value as 'openai' | 'nano-banana' | 'grok' | 'kling')}
                   disabled={regenerating}
                   className="text-xs px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
                 >
                   <option value="openai">OpenAI (gpt-image)</option>
                   <option value="nano-banana">Gemini (nano-banana)</option>
                   <option value="grok">Grok</option>
+                  <option value="kling">Kling (kling-v1-5)</option>
                 </select>
                 <Button
                   size="sm"
