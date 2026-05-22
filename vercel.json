@@ -3,6 +3,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cron/tick",
+      "schedule": "* * * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/health", "destination": "/api/health" },
     { "source": "/api/(.*)", "destination": "/api/index" },

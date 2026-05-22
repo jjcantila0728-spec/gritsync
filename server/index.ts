@@ -16,7 +16,7 @@ import socialRoutes, { processDuePosts } from './routes/social'
 import { pollPushReceipts, pruneStalePushTokens } from './lib/push'
 import socialAiRoutes from './routes/social-ai'
 import socialMetaRoutes from './routes/social-meta'
-import { startSocialAutopilot } from './lib/social-autopilot'
+import { startSocialAutopilot, tickOnce } from './lib/social-autopilot'
 import integrationsRoutes from './routes/integrations'
 import nclexRoutes from './routes/nclex'
 import processingAccountsRoutes from './routes/processing-accounts'
@@ -37,6 +37,37 @@ app.use(urlencoded({ extended: true, limit: '10mb' }))
 // Health check — quick liveness probe (DB health is in api/health.ts)
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// ── Vercel Cron endpoint ─────────────────────────────────────────────────
+// Runs every minute via vercel.json `crons`. Vercel sends
+// `Authorization: Bearer {CRON_SECRET}` so we validate that header.
+// Two jobs in one tick: (1) publish any due scheduled posts,
+// (2) run the social autopilot tick (reads social_autopilot_state
+// so it only fires Mika/Kuya Jay when their interval has elapsed).
+// On self-hosted non-Vercel the setInterval in the listen() callback
+// handles this instead — the cron route is harmless but unused there.
+app.post('/api/cron/tick', async (req, res) => {
+  const secret = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  const expected = process.env.CRON_SECRET
+  if (expected && secret !== expected) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+  const started = Date.now()
+  const log: string[] = []
+  try {
+    await processDuePosts()
+    log.push('processDuePosts ok')
+  } catch (e: any) {
+    log.push(`processDuePosts error: ${e.message}`)
+  }
+  try {
+    await tickOnce()
+    log.push('autopilot tick ok')
+  } catch (e: any) {
+    log.push(`autopilot tick error: ${e.message}`)
+  }
+  res.json({ ok: true, ms: Date.now() - started, log })
 })
 
 // API Routes

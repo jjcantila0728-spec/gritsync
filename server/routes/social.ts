@@ -18,7 +18,7 @@ const router = Router()
 const PLATFORMS = ['facebook', 'instagram', 'threads', 'linkedin', 'youtube', 'tiktok'] as const
 type Platform = (typeof PLATFORMS)[number]
 
-const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')
+const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'https://app.gritsync.com').replace(/\/$/, '')
 
 // Media URLs stored in the bank/posts are RELATIVE (`/api/storage/public/…`)
 // so display survives any deploy environment, but external fetchers (Meta IG

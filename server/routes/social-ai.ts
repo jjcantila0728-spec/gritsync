@@ -41,7 +41,7 @@ const KLING_HOST = () => process.env.KLING_HOST || 'https://api-singapore.klinga
 
 type ImageProvider = 'openai' | 'nano-banana' | 'grok' | 'kling'
 
-const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '')
+const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'https://app.gritsync.com').replace(/\/$/, '')
 
 // ---------------------------------------------------------------------------
 // POST /api/social/ai/caption
