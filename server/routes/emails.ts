@@ -1,4 +1,5 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
+import crypto from 'crypto'
 import { query } from '../db'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { escapeHtml, getResendApiKey } from '../utils/email'
@@ -6,6 +7,148 @@ import { escapeHtml, getResendApiKey } from '../utils/email'
 const esc = (v: unknown): string => (v == null ? '' : escapeHtml(String(v)))
 
 const router = Router()
+
+// ─── Resend webhook ────────────────────────────────────────────────────────
+// Resend delivers webhooks via Svix. Each request carries:
+//   svix-id         — unique id per webhook attempt
+//   svix-timestamp  — unix seconds when Svix signed the payload
+//   svix-signature  — space-separated list of "v1,<base64-hmac-sha256>"
+// Signed content is `${svix-id}.${svix-timestamp}.${raw-body}` HMAC'd with
+// the webhook signing secret (set in the Resend dashboard, copy into the
+// RESEND_WEBHOOK_SECRET env var — value starts with "whsec_").
+//
+// Event types we react to: email.sent, email.delivered, email.bounced,
+// email.complained, email.delivery_delayed, email.opened, email.clicked,
+// email.failed. Each updates the matching email_logs row (matched by
+// provider_message_id) and appends to email_analytics.
+//
+// Path: POST /api/emails/webhook (the public URL is
+//   https://app.gritsync.com/api/emails/webhook — paste that into the
+//   Resend webhook config).
+// ---------------------------------------------------------------------------
+function verifyResendSignature(req: Request): boolean {
+  const secret = process.env.RESEND_WEBHOOK_SECRET
+  if (!secret) {
+    // No secret configured — refuse, but log loudly so the operator notices.
+    console.warn('[resend-webhook] RESEND_WEBHOOK_SECRET not set — rejecting request')
+    return false
+  }
+  const svixId = req.header('svix-id')
+  const svixTimestamp = req.header('svix-timestamp')
+  const svixSignature = req.header('svix-signature')
+  const rawBody = (req as any).rawBody as Buffer | undefined
+  if (!svixId || !svixTimestamp || !svixSignature || !rawBody) return false
+
+  // The Resend dashboard displays the secret as `whsec_<base64>`. Strip the
+  // prefix and decode — the bytes are what we HMAC with.
+  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
+  const signedContent = `${svixId}.${svixTimestamp}.${rawBody.toString('utf8')}`
+  const expected = crypto.createHmac('sha256', secretBytes).update(signedContent).digest('base64')
+
+  // svix-signature is "v1,abc... v2,xyz..." — try each.
+  for (const part of String(svixSignature).split(' ')) {
+    const [version, value] = part.split(',')
+    if (version !== 'v1' || !value) continue
+    // timingSafeEqual requires equal-length buffers; bail safely on mismatch.
+    const a = Buffer.from(value)
+    const b = Buffer.from(expected)
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true
+  }
+  return false
+}
+
+// Maps Resend event types → (logs status, analytics event_type, optional
+// timestamp column to set on email_logs).
+const RESEND_EVENT_MAP: Record<string, { status?: string; analytics: string; tsCol?: 'delivered_at' | 'failed_at' }> = {
+  'email.sent':              { status: 'sent',       analytics: 'sent' },
+  'email.delivered':         { status: 'delivered',  analytics: 'delivered', tsCol: 'delivered_at' },
+  'email.delivery_delayed':  { status: 'delayed',    analytics: 'delayed' },
+  'email.bounced':           { status: 'bounced',    analytics: 'bounced',   tsCol: 'failed_at' },
+  'email.complained':        { status: 'complained', analytics: 'complained' },
+  'email.failed':            { status: 'failed',     analytics: 'failed',    tsCol: 'failed_at' },
+  'email.opened':            { analytics: 'opened' },
+  'email.clicked':           { analytics: 'clicked' },
+}
+
+router.post('/webhook', async (req: Request, res: Response) => {
+  // Resend retries on non-2xx. Always ack 200 once we've actually processed
+  // (or deliberately ignored) the event; only return 4xx for genuine
+  // protocol failures (bad signature, malformed payload).
+  if (!verifyResendSignature(req)) {
+    return res.status(401).json({ error: 'invalid signature' })
+  }
+
+  const event = req.body as { type?: string; created_at?: string; data?: any }
+  const type = event?.type
+  const data = event?.data || {}
+  const emailId: string | undefined = data?.email_id || data?.id
+  if (!type) return res.status(400).json({ error: 'missing event type' })
+
+  const mapped = RESEND_EVENT_MAP[type]
+  if (!mapped) {
+    // Unknown event — ack so Resend stops retrying, but log so we can add
+    // a handler later if it turns out to be useful.
+    console.log('[resend-webhook] unhandled event type', type)
+    return res.json({ ok: true, ignored: true })
+  }
+
+  try {
+    let emailLogId: number | null = null
+    if (emailId) {
+      const row = await query(
+        `SELECT id FROM email_logs WHERE provider_message_id = $1 LIMIT 1`,
+        [emailId]
+      ).catch(() => ({ rows: [] as any[] }))
+      emailLogId = row.rows[0]?.id ?? null
+
+      // Update the matching email_logs row. Only touch the timestamp the
+      // event actually represents — don't clobber a prior delivered_at
+      // with a later opened event.
+      if (emailLogId) {
+        const sets: string[] = [`updated_at = NOW()`]
+        const params: any[] = []
+        let i = 1
+        if (mapped.status) {
+          sets.push(`status = $${i++}`)
+          params.push(mapped.status)
+        }
+        if (mapped.tsCol) {
+          sets.push(`${mapped.tsCol} = NOW()`)
+        }
+        if (type === 'email.failed' || type === 'email.bounced') {
+          // Resend's payload has a `reason` (bounced) or `error` (failed)
+          // field with the diagnostic. Stash it on the row so the
+          // operator UI can show why it didn't land.
+          const errMsg = data?.bounce?.message || data?.failed?.reason || data?.reason || null
+          if (errMsg) {
+            sets.push(`error_message = $${i++}`)
+            params.push(String(errMsg))
+          }
+        }
+        params.push(emailLogId)
+        await query(
+          `UPDATE email_logs SET ${sets.join(', ')} WHERE id = $${i}`,
+          params
+        ).catch((err: any) => console.warn('[resend-webhook] email_logs update failed', err?.message))
+      }
+    }
+
+    // Always record the event in analytics, even if we couldn't match an
+    // email_logs row (e.g. email sent outside of our app).
+    await query(
+      `INSERT INTO email_analytics (email_id, event_type, occurred_at)
+       VALUES ($1, $2, COALESCE($3::timestamptz, NOW()))`,
+      [emailLogId, mapped.analytics, event?.created_at || null]
+    ).catch((err: any) => console.warn('[resend-webhook] email_analytics insert failed', err?.message))
+
+    res.json({ ok: true })
+  } catch (err: any) {
+    console.error('[resend-webhook] handler error:', err)
+    // Return 200 anyway — we've at least seen the event. 5xx would make
+    // Resend retry and probably duplicate analytics rows.
+    res.json({ ok: true, warning: err.message })
+  }
+})
 
 router.post('/inbox/list', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {

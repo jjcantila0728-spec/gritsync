@@ -31,7 +31,17 @@ app.use(cors({
   origin: true,
   credentials: true,
 }))
-app.use(json({ limit: '10mb' }))
+// `verify` hook stashes the raw request bytes on the request object for
+// routes that need to recompute a signature (e.g. Svix-signed Resend
+// webhooks). The body is still parsed normally — `req.body` still works.
+app.use(json({
+  limit: '10mb',
+  verify: (req: any, _res, buf) => {
+    if (typeof req.url === 'string' && req.url.startsWith('/api/emails/webhook')) {
+      req.rawBody = buf
+    }
+  },
+}))
 app.use(urlencoded({ extended: true, limit: '10mb' }))
 
 // Health check — quick liveness probe (DB health is in api/health.ts)
