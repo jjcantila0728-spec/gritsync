@@ -43,6 +43,32 @@ type ImageProvider = 'openai' | 'nano-banana' | 'grok' | 'kling'
 const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'https://app.gritsync.com').replace(/\/$/, '')
 
 // ---------------------------------------------------------------------------
+// GET /api/social/ai/providers
+// Reports which AI providers have credentials configured so the UI can hide /
+// disable unavailable image-provider options instead of letting the user pick
+// one that 500s on submit. Read-only, cheap — no provider calls.
+// ---------------------------------------------------------------------------
+router.get('/providers', authenticateToken, requireAdmin, (_req: AuthenticatedRequest, res) => {
+  res.json({
+    data: {
+      text: {
+        openai: !!OPENAI_KEY(),
+      },
+      image: {
+        openai: !!OPENAI_KEY(),
+        'nano-banana': !!GOOGLE_KEY(),
+        grok: !!XAI_KEY(),
+        kling: !!(KLING_ACCESS_KEY() && KLING_SECRET_KEY()),
+      },
+      video: {
+        replicate: !!REPLICATE_KEY(),
+        kling: !!(KLING_ACCESS_KEY() && KLING_SECRET_KEY()),
+      },
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
 // POST /api/social/ai/caption
 // Generates 3 caption variants for the requested platforms.
 // Body: { topic, platforms?: string[], tone?, length?, hashtags?, emojis?, audience? }

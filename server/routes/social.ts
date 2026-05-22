@@ -827,6 +827,65 @@ router.post('/posts/:id/publish', authenticateToken, requireAdmin, async (req, r
 })
 
 // ---------------------------------------------------------------------------
+// POST /api/social/cron/run-now
+// Admin-only manual trigger that runs the same work as the Vercel cron:
+// (1) publish any due scheduled posts, (2) run the autopilot tick.
+// On Vercel Hobby the cron only fires once a day; this lets the admin force
+// a tick from the UI when they don't want to wait.
+// ---------------------------------------------------------------------------
+router.post('/cron/run-now', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  const started = Date.now()
+  const log: string[] = []
+  try {
+    await processDuePosts()
+    log.push('processDuePosts ok')
+  } catch (e: any) {
+    log.push(`processDuePosts error: ${e.message}`)
+  }
+  try {
+    const { tickOnce } = await import('../lib/social-autopilot')
+    await tickOnce()
+    log.push('autopilot tick ok')
+  } catch (e: any) {
+    log.push(`autopilot tick error: ${e.message}`)
+  }
+  res.json({ ok: true, ms: Date.now() - started, log })
+})
+
+// Subscribe a single Page to the webhook fields our receiver consumes.
+// Called from handleFacebookConnect for each Page right after we upsert it.
+// `feed` → posts + comments (Kuya Jay). `messages` + `messaging_postbacks` →
+// inbound Messenger DMs (Mika). `mention` → page being @-mentioned in another
+// post. Subscriptions are scoped to our App, so each Page only triggers
+// callbacks for the gritsync App.
+async function subscribePageToWebhooks(pageId: string, pageAccessToken: string): Promise<void> {
+  const subscribedFields = [
+    'feed',
+    'messages',
+    'messaging_postbacks',
+    'messaging_optins',
+    'message_reactions',
+    'message_deliveries',
+    'message_reads',
+    'mention',
+  ].join(',')
+  const url = `https://graph.facebook.com/v20.0/${encodeURIComponent(pageId)}/subscribed_apps`
+  const body = new URLSearchParams({
+    subscribed_fields: subscribedFields,
+    access_token: pageAccessToken,
+  })
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  const j: any = await r.json().catch(() => ({}))
+  if (!r.ok || j.success === false) {
+    throw new Error(j.error?.message || `subscribed_apps HTTP ${r.status}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Facebook OAuth — long-lived token + page enumeration + ad accounts.
 //
 // The short-lived token Meta returns from the authorization-code exchange
@@ -1007,6 +1066,14 @@ async function handleFacebookConnect(args: {
         pagePicture,
         userId,
       ]
+    )
+
+    // Subscribe this Page to the webhook fields we listen for. Without this
+    // call (or a manual click on Meta App Dashboard → Webhooks → Subscribe),
+    // the receiver at /api/social/webhooks/facebook is verified but receives
+    // zero events. Best-effort: a failure here doesn't break the connect.
+    await subscribePageToWebhooks(page.id, page.access_token).catch((e) =>
+      console.warn(`[meta-webhook] auto-subscribe failed for page ${page.id}:`, e.message)
     )
 
     // If this Page has a linked IG Business account, persist it as an

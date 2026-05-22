@@ -304,6 +304,19 @@ export function AdminEmails() {
         setTotalCount(0)
         setTotalPages(1)
         loadInboxEmails()
+        // Auto-refresh while the inbox tab is visible so new mail shows up
+        // without the admin manually hitting refresh. Pauses when the tab is
+        // hidden to avoid wasting Resend API calls in background tabs.
+        const tick = () => {
+          if (!document.hidden) loadInboxEmails()
+        }
+        const intervalId = window.setInterval(tick, 30_000)
+        const onVisible = () => { if (!document.hidden) loadInboxEmails() }
+        document.addEventListener('visibilitychange', onVisible)
+        return () => {
+          window.clearInterval(intervalId)
+          document.removeEventListener('visibilitychange', onVisible)
+        }
       } else if (activeTab === 'signatures') {
         // Clear both email lists when showing signatures
         setReceivedEmails([])

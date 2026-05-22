@@ -992,6 +992,20 @@ export function AdminSocial() {
     }
   }
 
+  const [runCronBusy, setRunCronBusy] = useState(false)
+  async function runCronNow() {
+    setRunCronBusy(true)
+    try {
+      const r = await api<{ ok: boolean; ms: number; log: string[] }>('/cron/run-now', { method: 'POST' })
+      showToast(`Cron tick done in ${r.ms}ms: ${r.log.join(' | ')}`, 'success')
+      refresh()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to run cron', 'error')
+    } finally {
+      setRunCronBusy(false)
+    }
+  }
+
   function editPost(p: SocialPost) {
     // Editing now flows through the shared schedule modal so the post body +
     // media + accounts + scheduled time all live in one place.
@@ -1226,14 +1240,29 @@ export function AdminSocial() {
               hasAccounts={accounts.length > 0}
             />
           ) : tab === 'scheduled' ? (
-            <PostList
-              posts={scheduledPosts}
-              emptyText="No drafts or scheduled posts yet."
-              onEdit={editPost}
-              onDelete={deletePost}
-              onPublish={publishNow}
-              enableCalendarView
-            />
+            <div className="space-y-4">
+              {/* Vercel Hobby cron only fires once a day (1 AM UTC), so a post
+                  scheduled for noon can sit "scheduled" until the next tick.
+                  This button runs the same cron tick on demand so the admin
+                  doesn't have to wait. Disabled while busy to avoid double-firing. */}
+              <div className="flex items-center justify-between gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                <div className="text-xs sm:text-sm text-amber-900 dark:text-amber-200">
+                  Scheduled posts publish on the Vercel cron tick. On Hobby that's once a day — click to run it now.
+                </div>
+                <Button size="sm" variant="outline" onClick={runCronNow} disabled={runCronBusy}>
+                  {runCronBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+                  Run cron now
+                </Button>
+              </div>
+              <PostList
+                posts={scheduledPosts}
+                emptyText="No drafts or scheduled posts yet."
+                onEdit={editPost}
+                onDelete={deletePost}
+                onPublish={publishNow}
+                enableCalendarView
+              />
+            </div>
           ) : tab === 'history' ? (
             <PostList
               posts={historyPosts}
@@ -3322,6 +3351,19 @@ function GeneratorView({
   const [additionalDetails, setAdditionalDetails] = useState('')
   const [generating, setGenerating] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'planning' | 'writing' | 'rendering'>('idle')
+  // Provider availability — fetched once from /api/social/ai/providers so we
+  // can grey out image providers whose API keys aren't configured on the
+  // server. Default to "everything available" so the UI works during the
+  // brief moment before the fetch resolves; the request blocks selection of
+  // unavailable providers as soon as it returns.
+  const [providerAvail, setProviderAvail] = useState<Record<string, boolean>>({
+    openai: true, 'nano-banana': true, grok: true, kling: true,
+  })
+  useEffect(() => {
+    api<{ image: Record<string, boolean> }>('/ai/providers')
+      .then((d) => setProviderAvail(d.image || {}))
+      .catch(() => { /* leave defaults; selecting a missing provider just 500s */ })
+  }, [])
 
   const template = POST_TEMPLATES.find((t) => t.id === templateId) || null
 
@@ -3912,22 +3954,31 @@ function GeneratorView({
                 { id: 'nano-banana', label: 'Nano Banana', sub: 'Gemini 2.5 Flash Image' },
                 { id: 'grok',        label: 'Grok',        sub: 'grok-2-image' },
                 { id: 'kling',       label: 'Kling',       sub: 'Kuaishou kling-v1-5' },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setImageAi(opt.id)}
-                  className={cn(
-                    'px-3 py-2 rounded-lg border text-left transition-colors',
-                    imageAi === opt.id
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300'
-                  )}
-                >
-                  <div className="text-sm font-medium">{opt.label}</div>
-                  <div className="text-[10px] opacity-70">{opt.sub}</div>
-                </button>
-              ))}
+              ] as const).map((opt) => {
+                const available = providerAvail[opt.id] !== false
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    disabled={!available}
+                    onClick={() => available && setImageAi(opt.id)}
+                    title={available ? '' : 'API key not configured on the server'}
+                    className={cn(
+                      'px-3 py-2 rounded-lg border text-left transition-colors',
+                      !available
+                        ? 'border-gray-200 dark:border-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
+                        : imageAi === opt.id
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                          : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300'
+                    )}
+                  >
+                    <div className="text-sm font-medium">
+                      {opt.label}{!available && <span className="ml-1 text-[10px]">(no key)</span>}
+                    </div>
+                    <div className="text-[10px] opacity-70">{opt.sub}</div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
