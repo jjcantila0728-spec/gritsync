@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
@@ -51,6 +52,7 @@ import {
   Users,
   Link2,
   ArrowUpRight,
+  Paperclip,
 } from 'lucide-react'
 import { AdsGenerator, type AdVariant } from './AdminAds'
 
@@ -1102,7 +1104,7 @@ export function AdminSocial() {
       <Header />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-4 md:p-8 w-full min-w-0">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Social</h1>
@@ -5565,6 +5567,7 @@ function AutoReplyView({
 
   return (
     <div className="space-y-4">
+      <AutopilotControlPanel showToast={showToast} />
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
         {([
           { id: 'inbox' as const, label: 'Inbox', icon: MessageSquare },
@@ -5590,6 +5593,220 @@ function AutoReplyView({
       <AgentBadge name={activeAgent.name} role={activeAgent.role} desc={activeAgent.desc} />
       {sub === 'inbox' ? <InboxView showToast={showToast} /> : <CommentsView showToast={showToast} />}
     </div>
+  )
+}
+
+// 24/7 autopilot controls. The scheduler runs server-side and ticks every
+// 60s based on `social_autopilot_state`. This card lets the operator flip
+// each agent on/off, tune the interval, and see what the scheduler has
+// been doing while they were away. Continuous learning happens automatically
+// — every sent reply is logged; thumbs-up promotes it into the few-shot set
+// the agent sees on the next draft.
+interface AutopilotStateRow {
+  agent: 'inbox' | 'comments'
+  enabled: boolean
+  interval_minutes: number
+  max_per_run: number
+  last_run_at: string | null
+  last_run_summary: any
+  consecutive_errors: number
+  next_run_at: string | null
+}
+function AutopilotControlPanel({ showToast }: { showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
+  const [rows, setRows] = useState<AutopilotStateRow[] | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const load = async () => {
+    try {
+      const r = await api<AutopilotStateRow[]>('/autopilot/state')
+      setRows(r)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load autopilot state', 'error')
+    }
+  }
+
+  useEffect(() => { load() }, [])
+  // Refresh every 30s while panel is mounted so "last run / next run" stays
+  // honest without the operator clicking refresh.
+  useEffect(() => {
+    const t = setInterval(() => { load() }, 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  async function update(agent: 'inbox' | 'comments', patch: Partial<AutopilotStateRow>) {
+    setSaving(agent)
+    try {
+      await api(`/autopilot/state/${agent}`, { method: 'PUT', body: JSON.stringify(patch) })
+      await load()
+    } catch (err: any) {
+      showToast(err.message || 'Update failed', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  if (!rows) return null
+
+  return (
+    <Card className="p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-xs font-semibold text-gray-900 dark:text-gray-100">24/7 Autopilot</div>
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">Mika + Kuya Jay tick on a configurable interval. Replies you thumbs-up are reused + fed back as the agent's voice.</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        {rows.map((row) => {
+          const agentName = row.agent === 'inbox' ? 'Mika' : 'Kuya Jay'
+          const summary = row.last_run_summary || {}
+          const lastSent = typeof summary.sent_count === 'number' ? summary.sent_count : null
+          const lastCand = typeof summary.candidates === 'number' ? summary.candidates : null
+          const lastErr = summary.error as string | undefined
+          const nextLabel = row.enabled
+            ? (row.next_run_at ? new Date(row.next_run_at).toLocaleTimeString() : 'next tick')
+            : 'paused'
+          const backedOff = (row.consecutive_errors || 0) > 0
+          return (
+            <div key={row.agent} className={cn(
+              'rounded-lg border p-2.5 text-xs',
+              row.enabled
+                ? 'border-primary-200 bg-primary-50/40 dark:border-primary-800/40 dark:bg-primary-900/10'
+                : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40'
+            )}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="font-semibold text-gray-900 dark:text-gray-100">{agentName} <span className="text-[10px] text-gray-500 font-normal">({row.agent})</span></div>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    disabled={saving === row.agent}
+                    onChange={(e) => update(row.agent, { enabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-[11px] text-gray-700 dark:text-gray-300">{row.enabled ? 'on' : 'off'}</span>
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600 dark:text-gray-400">
+                <label className="inline-flex items-center gap-1">
+                  every
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={row.interval_minutes}
+                    disabled={saving === row.agent}
+                    onChange={(e) => update(row.agent, { interval_minutes: Number(e.target.value) || 5 })}
+                    className="w-14 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+                  />
+                  min
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  max
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={row.max_per_run}
+                    disabled={saving === row.agent}
+                    onChange={(e) => update(row.agent, { max_per_run: Number(e.target.value) || 8 })}
+                    className="w-14 px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+                  />
+                  /tick
+                </label>
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                <span>last run: {row.last_run_at ? new Date(row.last_run_at).toLocaleTimeString() : '—'}</span>
+                {lastSent !== null && lastCand !== null && (
+                  <span>sent {lastSent}/{lastCand}</span>
+                )}
+                <span>next: {nextLabel}</span>
+                {backedOff && <span className="text-amber-600 dark:text-amber-400">backoff ×{Math.pow(2, Math.min(row.consecutive_errors, 5))}</span>}
+              </div>
+              {lastErr && <div className="text-[11px] text-red-600 dark:text-red-400 mt-1 truncate" title={lastErr}>error: {lastErr}</div>}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
+// Compact on/off switch — drops into a row of header buttons next to "Refresh"
+// in the Inbox + Comments views. Reads + writes the same /autopilot/state
+// endpoint the panel above uses, so flipping the switch immediately tells the
+// server-side scheduler to start/stop ticking this agent.
+function AutopilotSwitch({
+  agent,
+  showToast,
+}: {
+  agent: 'inbox' | 'comments'
+  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const label = agent === 'inbox' ? 'Mika' : 'Kuya Jay'
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    try {
+      const rows = await api<Array<{ agent: 'inbox' | 'comments'; enabled: boolean }>>('/autopilot/state')
+      const row = rows.find((r) => r.agent === agent)
+      setEnabled(row ? row.enabled : false)
+    } catch {
+      setEnabled(false)
+    }
+  }
+  useEffect(() => { load() }, [agent])
+  // Re-pull every 30s so a flip from another tab/device propagates without a
+  // hard refresh.
+  useEffect(() => {
+    const t = setInterval(() => { load() }, 30_000)
+    return () => clearInterval(t)
+  }, [agent])
+
+  async function toggle() {
+    if (enabled === null) return
+    const next = !enabled
+    setBusy(true)
+    try {
+      await api(`/autopilot/state/${agent}`, { method: 'PUT', body: JSON.stringify({ enabled: next }) })
+      setEnabled(next)
+      showToast(`${label} autopilot ${next ? 'on' : 'off'}`, 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Toggle failed', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isOn = enabled === true
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy || enabled === null}
+      title={`${label} autopilot is ${isOn ? 'ON' : 'OFF'} — click to toggle`}
+      className={cn(
+        'inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+        isOn
+          ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-800/60 dark:bg-green-900/30 dark:text-green-300'
+          : 'border-gray-300 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+        busy && 'opacity-60 cursor-wait'
+      )}
+    >
+      <span
+        className={cn(
+          'relative inline-block h-4 w-7 rounded-full transition-colors flex-shrink-0',
+          isOn ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all',
+            isOn ? 'left-3.5' : 'left-0.5'
+          )}
+        />
+      </span>
+      <span className="whitespace-nowrap">{label} autopilot · {isOn ? 'on' : 'off'}</span>
+    </button>
   )
 }
 
@@ -5646,9 +5863,6 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
   const [sending, setSending] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [search, setSearch] = useState('')
-  // Mika autopilot — bulk-process unread threads in one click.
-  const [autorunning, setAutorunning] = useState(false)
-  const [autorunResults, setAutorunResults] = useState<Array<{ thread_id: string; account_name: string; with_name: string; reply: string; sent: boolean; error?: string }> | null>(null)
 
   const filteredThreads = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -5741,25 +5955,6 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
     }
   }
 
-  // Mika autopilot — walks every UNREAD thread and replies in one go.
-  // Server respects max=8 by default to stay under serverless time budgets.
-  async function runMika() {
-    if (!confirm('Mika will reply to up to 8 unread conversations now. Continue?')) return
-    setAutorunning(true)
-    setAutorunResults(null)
-    try {
-      const r = await api<{ sent_count: number; results: any[] }>('/autoreply/inbox/autorun', {
-        method: 'POST', body: JSON.stringify({ max: 8 }),
-      })
-      setAutorunResults(r.results || [])
-      showToast(`Mika sent ${r.sent_count} repl${r.sent_count === 1 ? 'y' : 'ies'}`, 'success')
-      load()
-    } catch (err: any) {
-      showToast(err.message || 'Mika autopilot failed', 'error')
-    } finally {
-      setAutorunning(false)
-    }
-  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[500px]">
@@ -5770,9 +5965,7 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
               Conversations <span className="text-xs font-normal text-gray-500 dark:text-gray-400">· {filteredThreads.length}{search ? ` of ${threads.length}` : ''}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={runMika} loading={autorunning} disabled={autorunning} title="Mika autoreplies to every unread thread now">
-                <Zap className="h-3 w-3 mr-1" /> Mika autopilot
-              </Button>
+              <AutopilotSwitch agent="inbox" showToast={showToast} />
               <button onClick={load} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 inline-flex items-center gap-1">
                 <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} /> Refresh
               </button>
@@ -5815,13 +6008,13 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
                 activeThread?.id === t.id ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
               )}
             >
-              {t.with_avatar ? (
-                <img src={t.with_avatar} alt="" className="h-9 w-9 rounded-full flex-shrink-0 object-cover" />
-              ) : (
-                <div className="h-9 w-9 rounded-full flex-shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-500">
-                  {(t.with_name || '?').charAt(0).toUpperCase()}
-                </div>
-              )}
+              <MessengerAvatar
+                url={t.with_avatar}
+                accountId={t.account_id}
+                psid={t.with_id || null}
+                name={t.with_name}
+                size={36}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2 mb-0.5">
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -5846,142 +6039,389 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
             Select a conversation to view messages and reply.
           </div>
         ) : (
-          <>
-            <div className="p-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{activeThread.with_name}</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">{activeThread.account_platform} · {activeThread.account_name}</div>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[500px] bg-gray-50 dark:bg-gray-900/30">
-              {msgsLoading && <Loading text="Loading messages…" />}
-              {messages.map((m) => {
-                const own = m.from?.id === accountPsid
-                const images = (m.attachments || []).filter((a) => a.type === 'image')
-                const otherAtts = (m.attachments || []).filter((a) => a.type !== 'image')
-                return (
-                  <div key={m.id} className={cn('flex', own ? 'justify-end' : 'justify-start')}>
-                    <div className={cn(
-                      'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
-                      own ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
-                    )}>
-                      {images.length > 0 && (
-                        <div className={cn('grid gap-1 mb-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
-                          {images.map((a, i) => (
-                            <a key={i} href={a.url} target="_blank" rel="noreferrer noopener" className="block overflow-hidden rounded-lg">
-                              <img src={a.url} alt={a.name || 'attachment'} className="w-full max-h-60 object-cover" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      {otherAtts.map((a, i) => (
-                        <a key={i} href={a.url} target="_blank" rel="noreferrer noopener" className={cn('block text-xs underline mb-1', own ? 'text-white/90' : 'text-primary-700 dark:text-primary-300')}>
-                          {a.type === 'video' ? '🎬 ' : '📎 '}{a.name || a.url.split('/').pop()}
-                        </a>
-                      ))}
-                      {m.message && <div className="whitespace-pre-wrap">{m.message}</div>}
-                      <div className={cn('text-[10px] mt-0.5', own ? 'text-white/70' : 'text-gray-400 dark:text-gray-500')}>
-                        {new Date(m.created_time).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-              {(sending || drafting) && (
-                <div className="flex justify-end">
-                  <div className="rounded-2xl px-3 py-2 bg-primary-600/80 text-white flex items-center gap-1.5">
-                    <span className="text-xs italic">{drafting ? 'Mika is thinking' : 'Mika is typing'}</span>
-                    <span className="flex gap-0.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="border-t border-gray-100 dark:border-gray-800 p-3 space-y-2">
-              <Textarea
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                rows={3}
-                placeholder="Type your reply…"
-                disabled={sending}
-              />
-              <div className="flex items-center gap-2">
-                <Input
-                  value={replyImage}
-                  onChange={(e) => setReplyImage(e.target.value)}
-                  placeholder="Optional image URL to attach (jpg/png)"
-                  disabled={sending}
-                  className="text-xs"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Button size="sm" variant="outline" onClick={suggest} loading={drafting} disabled={drafting || sending} title="Mika drafts a private, on-brand DM reply">
-                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Ask Mika
-                </Button>
-                <Button size="sm" onClick={send} loading={sending} disabled={sending || (!reply.trim() && !replyImage.trim())}>
-                  <Send className="h-3.5 w-3.5 mr-1" /> Send
-                </Button>
-              </div>
-            </div>
-          </>
+          <MessengerChat
+            activeThread={activeThread}
+            messages={messages}
+            msgsLoading={msgsLoading}
+            accountPsid={accountPsid}
+            reply={reply}
+            setReply={setReply}
+            replyImage={replyImage}
+            setReplyImage={setReplyImage}
+            sending={sending}
+            drafting={drafting}
+            onSend={send}
+            onSuggest={suggest}
+          />
         )}
       </Card>
 
-      <AutorunResultsModal
-        open={autorunResults !== null}
-        onClose={() => setAutorunResults(null)}
-        agent="Mika"
-        results={(autorunResults || []).map((r) => ({ id: r.thread_id, label: `${r.with_name} · ${r.account_name}`, reply: r.reply, sent: r.sent, error: r.error }))}
-      />
     </div>
   )
 }
 
-// Compact modal that lists what an autopilot run actually did. Helps the
-// operator audit the agent's output without scrolling each thread.
-function AutorunResultsModal({
-  open,
-  onClose,
-  agent,
-  results,
+// Messenger-style avatar. Meta's profile_pic CDN URLs are short-lived
+// (~1h) so a stale URL silently 403s and the browser renders a broken
+// image icon. This component:
+//   - Tries the direct URL first if we have it (fast path, works for the
+//     first ~hour after the inbox fetch).
+//   - Falls back to our `/api/social/avatar` proxy which re-resolves a
+//     fresh CDN URL from Meta on demand using the stored access token.
+//   - Falls back again to a colored name-initial chip if everything fails.
+// The chip always renders synchronously so layout doesn't shift.
+function MessengerAvatar({
+  url,
+  accountId,
+  psid,
+  name,
+  size = 32,
 }: {
-  open: boolean
-  onClose: () => void
-  agent: 'Mika' | 'Kuya Jay'
-  results: Array<{ id: string; label: string; reply: string; sent: boolean; error?: string }>
+  url?: string | null
+  accountId?: string | null
+  psid?: string | null
+  name: string
+  size?: number
 }) {
-  if (!open) return null
-  const sent = results.filter((r) => r.sent).length
+  const [src, setSrc] = useState<string | null>(url || null)
+  const [errored, setErrored] = useState(false)
+
+  useEffect(() => {
+    setSrc(url || null)
+    setErrored(false)
+  }, [url, accountId, psid])
+
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?'
+  const px = `${size}px`
+
+  if (errored || !src) {
+    // If we have account_id + psid we can ask the server for a fresh URL.
+    // The proxy redirects to Meta's current CDN URL so the browser still
+    // makes only one HTTP request per render.
+    const proxyUrl = !errored && accountId && psid
+      ? `/api/social/avatar?account_id=${encodeURIComponent(accountId)}&psid=${encodeURIComponent(psid)}`
+      : null
+    if (proxyUrl && !src) {
+      // First render after url=null — kick the proxy.
+      return (
+        <img
+          src={proxyUrl}
+          alt={name}
+          width={size}
+          height={size}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setErrored(true)}
+          className="rounded-full object-cover flex-shrink-0 bg-gray-200 dark:bg-gray-700"
+          style={{ width: px, height: px }}
+        />
+      )
+    }
+    // Final fallback: name-initial chip with a deterministic color based
+    // on the name so the operator can visually distinguish threads.
+    const palette = ['bg-blue-500', 'bg-rose-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-cyan-500', 'bg-pink-500']
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff
+    const color = palette[hash % palette.length]
+    return (
+      <div
+        className={cn('rounded-full flex-shrink-0 flex items-center justify-center text-white font-semibold', color)}
+        style={{ width: px, height: px, fontSize: size <= 24 ? '10px' : '12px' }}
+      >
+        {initial}
+      </div>
+    )
+  }
+
   return (
-    <Modal isOpen={open} onClose={onClose} title={`${agent} autopilot results`} size="lg">
-      <div className="space-y-3">
-        <div className="text-sm text-gray-700 dark:text-gray-200">
-          <strong>{agent}</strong> sent <strong>{sent}</strong> repl{sent === 1 ? 'y' : 'ies'} across {results.length} candidate{results.length === 1 ? '' : 's'}.
+    <img
+      src={src}
+      alt={name}
+      width={size}
+      height={size}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => {
+        // Bump to proxy fallback. If we never had account_id we'll skip to
+        // the name-initial chip on the next render via the errored branch.
+        setSrc(null)
+        setErrored(false)
+      }}
+      className="rounded-full object-cover flex-shrink-0 bg-gray-200 dark:bg-gray-700"
+      style={{ width: px, height: px }}
+    />
+  )
+}
+
+// Messenger-style chat panel. Layout cues match facebook.com/messages:
+//   - Sender (us / Mika) bubbles: Messenger blue (#0084FF), right-aligned,
+//     tighter top-right corner so the bubble "points" toward our column.
+//   - Receiver bubbles: light gray (#F0F0F0 / dark gray in dark mode), left-
+//     aligned with a small circular avatar that only renders on the LAST
+//     bubble of a sender's group (Messenger pattern that saves space).
+//   - Day separators ("Today" / "Yesterday" / date) when a date boundary
+//     crosses between messages.
+//   - Enter sends, Shift+Enter newlines. Image-URL field collapses into a
+//     paperclip toggle so the input stays clean by default.
+function MessengerChat({
+  activeThread,
+  messages,
+  msgsLoading,
+  accountPsid,
+  reply,
+  setReply,
+  replyImage,
+  setReplyImage,
+  sending,
+  drafting,
+  onSend,
+  onSuggest,
+}: {
+  activeThread: InboxThread
+  messages: InboxMessage[]
+  msgsLoading: boolean
+  accountPsid: string
+  reply: string
+  setReply: (v: string) => void
+  replyImage: string
+  setReplyImage: (v: string) => void
+  sending: boolean
+  drafting: boolean
+  onSend: () => void
+  onSuggest: () => void
+}) {
+  const [showImageField, setShowImageField] = useState(false)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+
+  // Auto-scroll to bottom when the message list changes (new send, new
+  // inbound, thread switch). Messenger behavior.
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages.length, activeThread.id])
+
+  function fmtDayLabel(d: Date): string {
+    const now = new Date()
+    const sameDay = d.toDateString() === now.toDateString()
+    if (sameDay) return 'Today'
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  }
+  function fmtTime(d: Date): string {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  }
+
+  function onKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!sending && (reply.trim() || replyImage.trim())) onSend()
+    }
+  }
+
+  // Pre-compute per-message layout flags: is the previous/next message
+  // from the same sender? Used for grouped bubble corner rounding +
+  // showing the avatar only on the last of a group.
+  const rows = messages.map((m, i) => {
+    const own = m.from?.id === accountPsid
+    const prev = messages[i - 1]
+    const next = messages[i + 1]
+    const sameAsPrev = prev && (prev.from?.id === m.from?.id)
+    const sameAsNext = next && (next.from?.id === m.from?.id)
+    const dayBoundary = !prev || new Date(prev.created_time).toDateString() !== new Date(m.created_time).toDateString()
+    return { m, own, sameAsPrev, sameAsNext, dayBoundary }
+  })
+
+  return (
+    <>
+      {/* Header — avatar + name + platform chip */}
+      <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-white dark:bg-gray-900">
+        <MessengerAvatar
+          url={activeThread.with_avatar}
+          accountId={activeThread.account_id}
+          psid={activeThread.with_id || null}
+          name={activeThread.with_name}
+          size={36}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
+            {activeThread.with_name}
+            {activeThread.account_platform === 'facebook'
+              ? <Facebook className="h-3 w-3 text-[#0084FF]" />
+              : <Instagram className="h-3 w-3 text-pink-500" />}
+          </div>
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">Active on {activeThread.account_name}</div>
         </div>
-        {results.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-gray-400 italic">Nothing eligible. Empty inbox + comments? Nice work.</p>
-        ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
-            {results.map((r) => (
-              <li key={r.id} className="py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</span>
-                  <span className={cn(
-                    'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full',
-                    r.sent ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                  )}>{r.sent ? 'sent' : 'failed'}</span>
+      </div>
+
+      {/* Messages */}
+      <div
+        ref={scrollerRef}
+        className="flex-1 overflow-y-auto px-3 py-3 max-h-[520px] bg-white dark:bg-gray-900"
+      >
+        {msgsLoading && <div className="py-8"><Loading text="Loading messages…" /></div>}
+        {!msgsLoading && messages.length === 0 && (
+          <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-12">No messages yet.</div>
+        )}
+        {rows.map(({ m, own, sameAsPrev, sameAsNext, dayBoundary }) => {
+          const images = (m.attachments || []).filter((a) => a.type === 'image')
+          const otherAtts = (m.attachments || []).filter((a) => a.type !== 'image')
+          // Grouped-bubble corners: round corners are "open" at the start
+          // and end of a group, tight in the middle. Tail corner toward
+          // own/other column stays tight throughout (Messenger pattern).
+          const cornerOwn = cn(
+            'rounded-2xl',
+            sameAsPrev && 'rounded-tr-md',
+            sameAsNext && 'rounded-br-md'
+          )
+          const cornerOther = cn(
+            'rounded-2xl',
+            sameAsPrev && 'rounded-tl-md',
+            sameAsNext && 'rounded-bl-md'
+          )
+          return (
+            <div key={m.id}>
+              {dayBoundary && (
+                <div className="flex items-center justify-center my-3">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 dark:text-gray-500 px-2 py-0.5">
+                    {fmtDayLabel(new Date(m.created_time))} · {fmtTime(new Date(m.created_time))}
+                  </span>
                 </div>
-                {r.reply && <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap">{r.reply}</p>}
-                {r.error && <p className="text-[11px] text-red-600 dark:text-red-400 mt-1">{r.error}</p>}
-              </li>
-            ))}
-          </ul>
+              )}
+              <div className={cn('flex items-end gap-1.5', own ? 'justify-end' : 'justify-start', sameAsPrev ? 'mt-0.5' : 'mt-2')}>
+                {/* Avatar slot on the receiver side, only on the last of a
+                    sender's group (Messenger pattern). 28px placeholder
+                    keeps bubbles aligned across the group. */}
+                {!own && (
+                  sameAsNext
+                    ? <div style={{ width: 28 }} />
+                    : <MessengerAvatar
+                        url={activeThread.with_avatar}
+                        accountId={activeThread.account_id}
+                        psid={activeThread.with_id || null}
+                        name={activeThread.with_name}
+                        size={28}
+                      />
+                )}
+                <div
+                  className={cn(
+                    'max-w-[72%] px-3 py-2 text-[14px] leading-snug shadow-sm',
+                    own ? cornerOwn : cornerOther,
+                    own
+                      ? 'bg-[#0084FF] text-white'
+                      : 'bg-[#F0F0F0] dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                  )}
+                  title={new Date(m.created_time).toLocaleString()}
+                >
+                  {images.length > 0 && (
+                    <div className={cn('grid gap-1 mb-1 -mx-1 -mt-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
+                      {images.map((a, i) => (
+                        <a key={i} href={a.url} target="_blank" rel="noreferrer noopener" className="block overflow-hidden rounded-xl">
+                          <img src={a.url} alt={a.name || 'attachment'} className="w-full max-h-72 object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {otherAtts.map((a, i) => (
+                    <a
+                      key={i}
+                      href={a.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className={cn('block text-xs underline mb-0.5', own ? 'text-white/90' : 'text-[#0084FF] dark:text-blue-400')}
+                    >
+                      {a.type === 'video' ? '🎬 ' : '📎 '}{a.name || a.url.split('/').pop()}
+                    </a>
+                  ))}
+                  {m.message && <div className="whitespace-pre-wrap break-words">{m.message}</div>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {(sending || drafting) && (
+          <div className="flex items-end gap-1.5 justify-end mt-2">
+            <div className="rounded-2xl px-3 py-2 bg-[#0084FF]/85 text-white flex items-center gap-1.5 shadow-sm">
+              <span className="text-xs italic">{drafting ? 'Mika is thinking' : 'Mika is typing'}</span>
+              <span className="flex gap-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-white/85 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/85 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/85 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+            </div>
+          </div>
         )}
       </div>
-    </Modal>
+
+      {/* Composer */}
+      <div className="border-t border-gray-200 dark:border-gray-800 px-3 py-2.5 bg-white dark:bg-gray-900">
+        {showImageField && (
+          <Input
+            value={replyImage}
+            onChange={(e) => setReplyImage(e.target.value)}
+            placeholder="Paste an image URL (jpg/png)…"
+            disabled={sending}
+            className="text-xs mb-2"
+          />
+        )}
+        <div className="flex items-end gap-2">
+          <button
+            onClick={() => setShowImageField((v) => !v)}
+            disabled={sending}
+            title={showImageField ? 'Hide image field' : 'Attach an image URL'}
+            className={cn(
+              'flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center transition-colors',
+              showImageField
+                ? 'bg-[#0084FF] text-white'
+                : 'text-[#0084FF] hover:bg-[#0084FF]/10'
+            )}
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onSuggest}
+            disabled={drafting || sending}
+            title="Mika drafts a private, on-brand DM reply"
+            className={cn(
+              'flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center transition-colors',
+              drafting
+                ? 'bg-[#0084FF]/30 text-[#0084FF]'
+                : 'text-[#0084FF] hover:bg-[#0084FF]/10'
+            )}
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+          <div className="flex-1 bg-[#F0F0F0] dark:bg-gray-800 rounded-2xl px-3 py-1.5">
+            <textarea
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Aa"
+              disabled={sending}
+              className="w-full bg-transparent border-0 outline-none resize-none text-sm placeholder:text-gray-500 dark:placeholder:text-gray-400 text-gray-900 dark:text-gray-100 max-h-32"
+              style={{ minHeight: 28 }}
+            />
+          </div>
+          <button
+            onClick={onSend}
+            disabled={sending || (!reply.trim() && !replyImage.trim())}
+            title="Send (Enter)"
+            className={cn(
+              'flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center transition-colors',
+              reply.trim() || replyImage.trim()
+                ? 'bg-[#0084FF] text-white hover:bg-[#0073e0]'
+                : 'text-[#0084FF]/50 cursor-not-allowed'
+            )}
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 px-1">
+          Press Enter to send · Shift+Enter for a new line
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -6007,8 +6447,6 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
   const [replies, setReplies] = useState<Record<string, string>>({})
   const [replyImages, setReplyImages] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<Record<string, boolean>>({})
-  const [autorunning, setAutorunning] = useState(false)
-  const [autorunResults, setAutorunResults] = useState<Array<{ comment_id: string; account_name: string; from_name: string; reply: string; sent: boolean; error?: string }> | null>(null)
 
   async function load() {
     setLoading(true)
@@ -6063,26 +6501,6 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
     }
   }
 
-  // Kuya Jay autopilot — Taglish replies to every unanswered comment in one
-  // pass. Bounded server-side (max 12). Surfaces results so the operator
-  // can audit what went out without scrolling each row.
-  async function runKuyaJay() {
-    if (!confirm('Kuya Jay will reply to up to 12 unanswered comments now (Taglish, public-comment voice). Continue?')) return
-    setAutorunning(true)
-    setAutorunResults(null)
-    try {
-      const r = await api<{ sent_count: number; results: any[] }>('/autoreply/comments/autorun', {
-        method: 'POST', body: JSON.stringify({ max: 12 }),
-      })
-      setAutorunResults(r.results || [])
-      showToast(`Kuya Jay sent ${r.sent_count} repl${r.sent_count === 1 ? 'y' : 'ies'}`, 'success')
-      load()
-    } catch (err: any) {
-      showToast(err.message || 'Kuya Jay autopilot failed', 'error')
-    } finally {
-      setAutorunning(false)
-    }
-  }
 
   const filtered = filter === 'unanswered' ? comments.filter((c) => !c.is_own) : comments
 
@@ -6106,9 +6524,7 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={runKuyaJay} loading={autorunning} disabled={autorunning} title="Kuya Jay replies in Taglish to every unanswered comment (max 12)">
-            <Zap className="h-3.5 w-3.5 mr-1" /> Kuya Jay autopilot
-          </Button>
+          <AutopilotSwitch agent="comments" showToast={showToast} />
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loading && 'animate-spin')} /> Refresh
           </Button>
@@ -6202,13 +6618,6 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
           </div>
         ))}
       </div>
-
-      <AutorunResultsModal
-        open={autorunResults !== null}
-        onClose={() => setAutorunResults(null)}
-        agent="Kuya Jay"
-        results={(autorunResults || []).map((r) => ({ id: r.comment_id, label: `${r.from_name} · ${r.account_name}`, reply: r.reply, sent: r.sent, error: r.error }))}
-      />
     </Card>
   )
 }

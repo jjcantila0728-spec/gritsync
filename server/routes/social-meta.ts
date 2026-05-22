@@ -72,7 +72,7 @@ GUARDRAILS that apply to every reply you write:
 // is stale — each per-Page row carries its own page token, which is what
 // all Page-scoped Graph API calls (insights, comments, conversations, groups)
 // require.
-async function listMetaAccounts() {
+export async function listMetaAccounts() {
   const r = await query(
     `SELECT id, platform, display_name, platform_user_id, access_token, metadata
        FROM social_accounts
@@ -90,7 +90,7 @@ async function listMetaAccounts() {
   }>
 }
 
-async function fbGet(path: string, accessToken: string, params: Record<string, string> = {}): Promise<any> {
+export async function fbGet(path: string, accessToken: string, params: Record<string, string> = {}): Promise<any> {
   const qs = new URLSearchParams({ ...params, access_token: accessToken }).toString()
   const r = await fetch(`${GRAPH}/${path}?${qs}`)
   const j: any = await r.json().catch(() => ({}))
@@ -101,7 +101,7 @@ async function fbGet(path: string, accessToken: string, params: Record<string, s
   return j
 }
 
-async function fbPost(path: string, accessToken: string, body: Record<string, any>): Promise<any> {
+export async function fbPost(path: string, accessToken: string, body: Record<string, any>): Promise<any> {
   const form = new URLSearchParams()
   for (const [k, v] of Object.entries(body)) form.set(k, typeof v === 'string' ? v : JSON.stringify(v))
   form.set('access_token', accessToken)
@@ -505,6 +505,56 @@ router.get('/autoreply/inbox', authenticateToken, requireAdmin, async (_req: Aut
   }
 })
 
+// GET /api/social/avatar?account_id=...&psid=...
+// Profile-pic proxy. Meta's `profile_pic` / `profile_picture_url` URLs are
+// short-lived CDN links (~1h) that silently 403 after expiry. The frontend
+// caches the URL on the inbox listing, but if the operator stays on the
+// page past the TTL the avatars break. This endpoint re-resolves a fresh
+// CDN URL on demand and redirects, so the browser sees one HTTP request
+// per render and the image always loads.
+//
+// In-memory cache shaves repeat lookups within the URL's lifetime. We
+// don't bother persisting it — restarting the server just re-fetches.
+const _avatarCache = new Map<string, { url: string; expiresAt: number }>()
+const _AVATAR_TTL_MS = 50 * 60 * 1000  // 50 min — under Meta's ~1h CDN TTL
+router.get('/avatar', async (req, res) => {
+  try {
+    const accountId = String(req.query.account_id || '')
+    const psid = String(req.query.psid || '')
+    if (!accountId || !psid) return res.status(400).send('account_id and psid required')
+
+    const cacheKey = `${accountId}:${psid}`
+    const cached = _avatarCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.redirect(302, cached.url)
+    }
+
+    const acc = (await query(
+      `SELECT access_token, platform FROM social_accounts WHERE id = $1`,
+      [accountId]
+    )).rows[0]
+    if (!acc) return res.status(404).send('account not found')
+
+    const field = acc.platform === 'instagram' ? 'profile_picture_url' : 'profile_pic'
+    const r = await fbGet(psid, acc.access_token, { fields: field }).catch(() => null)
+    const url = acc.platform === 'instagram' ? r?.profile_picture_url : r?.profile_pic
+    if (!url) {
+      // No permission / not visible. Send a 1x1 transparent gif so the
+      // <img onError> branch on the frontend fires cleanly and shows the
+      // name-initial chip.
+      const transparentGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+      res.set('Content-Type', 'image/gif')
+      res.set('Cache-Control', 'public, max-age=300')
+      return res.send(transparentGif)
+    }
+    _avatarCache.set(cacheKey, { url, expiresAt: Date.now() + _AVATAR_TTL_MS })
+    res.redirect(302, url)
+  } catch (err: any) {
+    console.warn('avatar proxy failed:', err.message)
+    res.status(500).send('avatar lookup failed')
+  }
+})
+
 // GET /api/social/autoreply/inbox/:thread_id/messages
 // Fetches the full message history of one conversation. account_id is needed
 // to look up the right page token. Includes attachments (images, stickers,
@@ -545,6 +595,26 @@ router.get('/autoreply/inbox/:thread_id/messages', authenticateToken, requireAdm
   }
 })
 
+// Messenger Platform 24-hour standard messaging policy
+// (https://developers.facebook.com/docs/messenger-platform/policy-overview):
+// a Page can only freely send `messaging_type: RESPONSE` within 24 hours of
+// the user's last inbound message. Past that window the Send API returns
+// error (#10) "This message is sent outside of allowed window" and the
+// message is dropped. To stay compliant Mika checks this window before
+// every send — manual or autopilot. We don't auto-escalate to MESSAGE_TAG
+// because the only general-purpose tag (HUMAN_AGENT) requires a real human
+// behind the reply and is capped at 7 days; an automated agent doesn't
+// qualify. If the window has lapsed we surface a clear refusal instead of
+// burning the API call.
+export const STANDARD_MESSAGING_WINDOW_HOURS = 24
+
+export function hoursSince(iso: string | undefined | null): number {
+  if (!iso) return Infinity
+  const ts = new Date(iso).getTime()
+  if (!Number.isFinite(ts)) return Infinity
+  return (Date.now() - ts) / 36e5
+}
+
 // POST /api/social/autoreply/inbox/:thread_id/reply
 // Sends a text reply on the conversation. The Messenger Platform requires
 // the recipient PSID, not the conversation id — we look it up by fetching
@@ -552,6 +622,11 @@ router.get('/autoreply/inbox/:thread_id/messages', authenticateToken, requireAdm
 // Accepts an optional `image_url` to send as an image attachment; Meta's
 // Send API supports one attachment per call so when both message and image
 // are present we send two messages (text first, then image).
+//
+// Before sending we verify the user has messaged us inside the 24-hour
+// standard messaging window. Outside that window we refuse with a 409 so
+// the operator UI can show "user hasn't messaged in 24h" instead of
+// silently triggering Meta's (#10) outside-allowed-window error.
 router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { thread_id } = req.params
@@ -565,11 +640,26 @@ router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin
     )).rows[0]
     if (!acc) return res.status(404).json({ error: 'Account not found' })
 
-    const conv = await fbGet(`${thread_id}`, acc.access_token, { fields: 'participants{id}' })
+    // Pull the last few messages so we can find the most recent INBOUND
+    // (i.e. from the user, not us) and check the 24h window.
+    const conv = await fbGet(`${thread_id}`, acc.access_token, {
+      fields: 'participants{id},messages.limit(5){from,created_time}',
+    })
     const otherId = (conv.participants?.data || [])
       .map((p: any) => p.id)
       .find((id: string) => id !== acc.platform_user_id)
     if (!otherId) return res.status(400).json({ error: 'Could not determine recipient' })
+
+    const lastInbound = (conv.messages?.data || []).find((m: any) => m.from?.id && m.from.id !== acc.platform_user_id)
+    const hrs = hoursSince(lastInbound?.created_time)
+    if (hrs > STANDARD_MESSAGING_WINDOW_HOURS) {
+      const ago = Number.isFinite(hrs) ? `${hrs.toFixed(1)}h ago` : 'never in the recent history'
+      return res.status(409).json({
+        error: `Messenger 24h policy: this user last messaged ${ago}. Pages can only send RESPONSE messages within ${STANDARD_MESSAGING_WINDOW_HOURS}h of the user's last inbound (Meta error #10). Wait for them to message again before replying.`,
+        code: 'outside_24h_window',
+        hours_since_last_inbound: Number.isFinite(hrs) ? Number(hrs.toFixed(2)) : null,
+      })
+    }
 
     const sendFromPageId = acc.platform === 'instagram' ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
 
@@ -890,11 +980,16 @@ Return JSON: { "reply": "<the reply text — no surrounding quotes, no leading '
 // Internal helper used by both /autoreply/draft and the autorun endpoints
 // below. Returns the agent's reply text. Throws on hard failures so the
 // caller can decide whether to skip + continue or abort the whole batch.
-async function draftReply(args: {
+//
+// `few_shot_examples` is the continuous-learning channel: the autopilot
+// passes the most recent operator-approved (score=+1) examples so the
+// agent's voice progressively matches what was approved. Empty by default.
+export async function draftReply(args: {
   agent: 'inbox' | 'comments'
   message: string
   post_caption?: string | null
   has_inbound_image?: boolean
+  few_shot_examples?: Array<{ inbound: string; reply: string }>
 }): Promise<string> {
   const apiKey = OPENAI_KEY()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set on the server')
@@ -918,11 +1013,21 @@ YOU ARE MIKA — private DM concierge. Answer ONLY the specific question they as
     ? `\n\nNote: the inbound ALSO contains an attached image. Acknowledge it naturally in Filipino style. Don't describe the image; you can't see it.`
     : ''
 
+  // Continuous-learning channel: when the autopilot calls us with recent
+  // operator-approved (score=+1) examples we inject them as few-shot. The
+  // agent's voice progressively matches what the operator has thumbed-up.
+  const fewShot = (args.few_shot_examples || []).slice(0, 5)
+  const fewShotBlock = fewShot.length
+    ? `\n\nRECENT OPERATOR-APPROVED REPLIES (your voice should match these — Filipino tone, length, structure):\n${fewShot.map((e, i) =>
+        `Example ${i + 1}\nInbound: "${(e.inbound || '').replace(/"/g, "'").slice(0, 240)}"\nReply: "${(e.reply || '').replace(/"/g, "'").slice(0, 320)}"`
+      ).join('\n\n')}`
+    : ''
+
   const userBody = `Inbound ${isComment ? 'public comment' : 'direct message'}:
 """
 ${args.message?.trim() || '(no text — image only)'}
 """${imageNote}
-${args.post_caption ? `\nOriginal post (context — don't re-quote):\n"""\n${args.post_caption}\n"""` : ''}
+${args.post_caption ? `\nOriginal post (context — don't re-quote):\n"""\n${args.post_caption}\n"""` : ''}${fewShotBlock}
 
 Return JSON: { "reply": "<the reply text>" }`
 
@@ -946,71 +1051,81 @@ Return JSON: { "reply": "<the reply text>" }`
   try { return (JSON.parse(text).reply || '').trim() } catch { return String(text).trim() }
 }
 
-// POST /api/social/autoreply/inbox/autorun
-// Mika autopilot. Walks every UNREAD thread across connected FB+IG inboxes,
-// drafts a reply, and sends it (with the real Messenger typing indicator).
-// Bounded by `max` (default 8) so a runaway thread count can't burn budget.
-router.post('/autoreply/inbox/autorun', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+// POST /api/social/autoreply/inbox/:thread_id/quote-turn
+// Single-thread Mika turn — pulls the latest messages, runs the quote-
+// aware decision tree, sends the reply via Messenger. Used by the operator
+// UI to manually trigger Mika on a specific thread (e.g. "kick Mika to
+// follow up on this lead now"). The autopilot already calls the same
+// `handleMikaQuoteTurn` lib function on every tick.
+router.post('/autoreply/inbox/:thread_id/quote-turn', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const max = Math.min(20, Math.max(1, Number(req.body?.max) || 8))
-    const accounts = await listMetaAccounts()
+    const { thread_id } = req.params
+    const { account_id } = req.body || {}
+    if (!account_id) return res.status(400).json({ error: 'account_id is required' })
 
-    type Result = { thread_id: string; account_name: string; with_name: string; reply: string; sent: boolean; error?: string }
-    const results: Result[] = []
+    const acc = (await query(
+      `SELECT id, access_token, platform_user_id, platform, metadata
+         FROM social_accounts WHERE id = $1`,
+      [account_id]
+    )).rows[0]
+    if (!acc) return res.status(404).json({ error: 'Account not found' })
 
-    for (const acc of accounts) {
-      if (results.length >= max) break
-      try {
-        const isIg = acc.platform === 'instagram'
-        const baseId = isIg ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
-        const params: Record<string, string> = {
-          fields: 'id,updated_time,unread_count,participants{name,id},messages.limit(1){message,from,attachments{mime_type,image_data}}',
-          limit: '25',
-        }
-        if (isIg) params.platform = 'instagram'
-        const conv = await fbGet(`${baseId}/conversations`, acc.access_token, params)
+    // Pull conversation + identify recipient + 24h window check (same rules
+    // as the regular /reply route).
+    const conv = await fbGet(`${thread_id}`, acc.access_token, {
+      fields: 'participants{id,name},messages.limit(15){id,from,message,created_time}',
+    })
+    const otherParticipant = (conv.participants?.data || [])
+      .find((p: any) => p.id !== acc.platform_user_id)
+    const otherId = otherParticipant?.id
+    if (!otherId) return res.status(400).json({ error: 'Could not determine recipient' })
 
-        for (const c of conv.data || []) {
-          if (results.length >= max) break
-          if (!c.unread_count || c.unread_count === 0) continue
+    const msgs = (conv.messages?.data || []) as Array<any>
+    const lastInbound = msgs.find((m) => m.from?.id && m.from.id !== acc.platform_user_id)
+    if (!lastInbound) return res.status(400).json({ error: 'No inbound message in this thread to respond to' })
 
-          const lastMsg = c.messages?.data?.[0]
-          // Don't reply if our last action WAS already a reply from us.
-          if (lastMsg?.from?.id === acc.platform_user_id) continue
-          const text = String(lastMsg?.message || '').trim()
-          const atts = lastMsg?.attachments?.data || []
-          const hasImage = atts.some((a: any) => String(a.mime_type || '').startsWith('image/'))
-          if (!text && !hasImage) continue
-
-          const participants = (c.participants?.data || []).filter((p: any) => p.id !== acc.platform_user_id)
-          const otherId = participants[0]?.id
-          if (!otherId) continue
-
-          try {
-            const reply = await draftReply({ agent: 'inbox', message: text, has_inbound_image: hasImage })
-            if (!reply) continue
-
-            // Typing on → pause → send → typing off (real human feel).
-            try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: otherId }, sender_action: 'typing_on' }) } catch {}
-            await new Promise((r) => setTimeout(r, Math.min(3000, 600 + reply.length * 25)))
-            await fbPost(`${baseId}/messages`, acc.access_token, {
-              recipient: { id: otherId },
-              message: { text: reply },
-              messaging_type: 'RESPONSE',
-            })
-            try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: otherId }, sender_action: 'typing_off' }) } catch {}
-
-            results.push({ thread_id: c.id, account_name: acc.display_name, with_name: participants[0]?.name || 'Unknown', reply, sent: true })
-          } catch (sendErr: any) {
-            results.push({ thread_id: c.id, account_name: acc.display_name, with_name: participants[0]?.name || 'Unknown', reply: '', sent: false, error: sendErr.message })
-          }
-        }
-      } catch (err: any) {
-        console.warn(`Mika autorun failed for ${acc.platform}:${acc.display_name}:`, err.message)
-      }
+    const hrs = hoursSince(lastInbound.created_time)
+    if (hrs > STANDARD_MESSAGING_WINDOW_HOURS) {
+      const ago = Number.isFinite(hrs) ? `${hrs.toFixed(1)}h ago` : 'long ago'
+      return res.status(409).json({
+        error: `Messenger 24h policy: last user message was ${ago}. Can't auto-send (Meta error #10). Wait for them to message again.`,
+        code: 'outside_24h_window',
+      })
     }
 
-    res.json({ data: { agent: 'Mika', sent_count: results.filter((r) => r.sent).length, results } })
+    const conversation = msgs.map((m) => ({
+      from: (m.from?.id === acc.platform_user_id ? 'mika' : 'user') as 'mika' | 'user',
+      text: String(m.message || ''),
+    })).reverse()
+
+    const { handleMikaQuoteTurn, sendMikaReply } = await import('../lib/mika-quote')
+    const turn = await handleMikaQuoteTurn({
+      thread_id,
+      account_id: acc.id,
+      conversation,
+      inbound: String(lastInbound.message || ''),
+      inbound_message_id: lastInbound.id || null,
+    })
+    await sendMikaReply({ account: acc, recipient_psid: otherId, reply: turn.reply })
+
+    res.json({ data: { reply: turn.reply, status: turn.status, created: turn.created || null } })
+  } catch (err: any) {
+    console.error('quote-turn error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/social/autoreply/inbox/autorun
+// Mika autopilot. Thin wrapper around the shared `runInboxAutopilot()` in
+// server/lib/social-autopilot.ts — the same code path the 24/7 scheduler
+// uses. Bounded by `max` (default 8) so one manual click can't burn the
+// budget. The lib handles caching, 24h policy, learning, and backoff.
+router.post('/autoreply/inbox/autorun', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { runInboxAutopilot } = await import('../lib/social-autopilot')
+    const max = Number(req.body?.max) || 8
+    const r = await runInboxAutopilot(max)
+    res.json({ data: { agent: 'Mika', sent_count: r.sent_count, results: r.results } })
   } catch (err: any) {
     console.error('inbox autorun error:', err)
     res.status(500).json({ error: err.message })
@@ -1018,83 +1133,13 @@ router.post('/autoreply/inbox/autorun', authenticateToken, requireAdmin, async (
 })
 
 // POST /api/social/autoreply/comments/autorun
-// Kuya Jay autopilot. Walks recent comments across all connected FB+IG
-// accounts; for each that isn't from our own Page/IG and doesn't already
-// have a Page reply nested under it, drafts a Taglish reply and posts it.
+// Kuya Jay autopilot. Thin wrapper around `runCommentsAutopilot()`.
 router.post('/autoreply/comments/autorun', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const max = Math.min(30, Math.max(1, Number(req.body?.max) || 12))
-    const accounts = await listMetaAccounts()
-    type Result = { comment_id: string; account_name: string; from_name: string; reply: string; sent: boolean; error?: string }
-    const results: Result[] = []
-
-    for (const acc of accounts) {
-      if (results.length >= max) break
-      try {
-        if (acc.platform === 'facebook') {
-          // comment_count on each child reply tells us if we already replied.
-          const posts = await fbGet(`${acc.platform_user_id}/posts`, acc.access_token, {
-            fields: 'id,message,comments.limit(10){id,from{id,name},message,comment_count,attachment{type,media{image{src}}}}',
-            limit: '10',
-          })
-          for (const post of posts.data || []) {
-            for (const c of post.comments?.data || []) {
-              if (results.length >= max) break
-              if (c.from?.id === acc.platform_user_id) continue
-              // Skip if we've already replied to this comment (Page-level
-              // replies are nested as a child comment with comment_count>0
-              // when they exist). This isn't perfect — Meta doesn't tell us
-              // who authored the child — but it stops obvious double-replies.
-              if (c.comment_count && c.comment_count > 0) continue
-              const text = String(c.message || '').trim()
-              const att = c.attachment?.media?.image?.src ? true : false
-              if (!text && !att) continue
-              try {
-                const reply = await draftReply({
-                  agent: 'comments',
-                  message: text,
-                  post_caption: (post.message || '').slice(0, 240),
-                  has_inbound_image: att,
-                })
-                if (!reply) continue
-                await fbPost(`${c.id}/comments`, acc.access_token, { message: reply })
-                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.name || 'Unknown', reply, sent: true })
-              } catch (sendErr: any) {
-                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.name || 'Unknown', reply: '', sent: false, error: sendErr.message })
-              }
-            }
-          }
-        } else {
-          const media = await fbGet(`${acc.platform_user_id}/media`, acc.access_token, {
-            fields: 'id,caption,comments.limit(10){id,from{id,username},text,user{username}}',
-            limit: '10',
-          })
-          for (const m of media.data || []) {
-            for (const c of m.comments?.data || []) {
-              if (results.length >= max) break
-              const text = String(c.text || '').trim()
-              if (!text) continue
-              try {
-                const reply = await draftReply({
-                  agent: 'comments',
-                  message: text,
-                  post_caption: (m.caption || '').slice(0, 240),
-                })
-                if (!reply) continue
-                await fbPost(`${c.id}/comments`, acc.access_token, { message: reply })
-                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.username || c.user?.username || 'someone', reply, sent: true })
-              } catch (sendErr: any) {
-                results.push({ comment_id: c.id, account_name: acc.display_name, from_name: c.from?.username || 'someone', reply: '', sent: false, error: sendErr.message })
-              }
-            }
-          }
-        }
-      } catch (err: any) {
-        console.warn(`Kuya Jay autorun failed for ${acc.platform}:${acc.display_name}:`, err.message)
-      }
-    }
-
-    res.json({ data: { agent: 'Kuya Jay', sent_count: results.filter((r) => r.sent).length, results } })
+    const { runCommentsAutopilot } = await import('../lib/social-autopilot')
+    const max = Number(req.body?.max) || 12
+    const r = await runCommentsAutopilot(max)
+    res.json({ data: { agent: 'Kuya Jay', sent_count: r.sent_count, results: r.results } })
   } catch (err: any) {
     console.error('comments autorun error:', err)
     res.status(500).json({ error: err.message })
@@ -1382,6 +1427,149 @@ Return: { "suggestions": [ { "name_pattern": "…", "why": "…", "search_url": 
     let suggestions: any[] = []
     try { suggestions = JSON.parse(text).suggestions || [] } catch {}
     res.json({ data: { suggestions } })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── 24/7 Autopilot controls ──────────────────────────────────────────────
+//
+// The scheduler lives in server/lib/social-autopilot.ts and ticks every 60s
+// against the `social_autopilot_state` table. These endpoints are the
+// operator UI surface: read state + recent run log, toggle agents on/off,
+// adjust interval, and score replies for the continuous-learning loop.
+
+// GET /api/social/autopilot/state
+// Returns the per-agent state row plus the next-allowed-run timestamp so
+// the UI can render "next tick in 2m 14s" without doing the math.
+router.get('/autopilot/state', authenticateToken, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const r = await query(
+      `SELECT agent, enabled, interval_minutes, max_per_run, last_run_at,
+              last_run_summary, consecutive_errors, updated_at
+         FROM social_autopilot_state
+        ORDER BY agent`
+    )
+    const data = r.rows.map((row: any) => {
+      const backoff = Math.pow(2, Math.min(row.consecutive_errors || 0, 5))
+      const nextAt = row.last_run_at
+        ? new Date(new Date(row.last_run_at).getTime() + row.interval_minutes * backoff * 60_000).toISOString()
+        : null
+      return { ...row, next_run_at: nextAt }
+    })
+    res.json({ data })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/social/autopilot/state/:agent
+// Toggle enabled / adjust interval / adjust max_per_run. Validation is
+// strict — bad values get clamped to safe bounds rather than rejected so
+// the UI never has to deal with edit-form error states.
+router.put('/autopilot/state/:agent', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const agent = String(req.params.agent || '')
+    if (agent !== 'inbox' && agent !== 'comments') {
+      return res.status(400).json({ error: 'agent must be "inbox" or "comments"' })
+    }
+    const { enabled, interval_minutes, max_per_run } = req.body || {}
+    const interval = Math.min(60, Math.max(1, Number(interval_minutes) || 5))
+    const maxRun = Math.min(50, Math.max(1, Number(max_per_run) || 8))
+
+    const r = await query(
+      `UPDATE social_autopilot_state
+          SET enabled = COALESCE($2, enabled),
+              interval_minutes = $3,
+              max_per_run = $4,
+              consecutive_errors = CASE WHEN $2 = TRUE THEN 0 ELSE consecutive_errors END,
+              updated_at = NOW()
+        WHERE agent = $1
+       RETURNING *`,
+      [agent, typeof enabled === 'boolean' ? enabled : null, interval, maxRun]
+    )
+    if (!r.rows.length) return res.status(404).json({ error: 'agent state row missing — re-run migration' })
+    res.json({ data: r.rows[0] })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/social/autopilot/log?agent=inbox&limit=20
+// Recent runs across both agents. Operator audits this to see what the
+// scheduler has been doing while they were away. We don't expose the full
+// per-thread results array in the listing — it's heavy — but each row
+// includes the sent/candidate counts and any top-level error.
+router.get('/autopilot/log', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const agent = req.query.agent ? String(req.query.agent) : null
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30))
+    const args: any[] = []
+    let where = ''
+    if (agent) { args.push(agent); where = `WHERE agent = $1` }
+    const r = await query(
+      `SELECT id, agent, ran_at, sent_count, candidates, results, error, duration_ms
+         FROM social_autopilot_log
+         ${where}
+        ORDER BY ran_at DESC
+        LIMIT ${limit}`,
+      args
+    )
+    res.json({ data: r.rows })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/social/autopilot/examples?agent=inbox&score=0&limit=50
+// Browse the learning store. Default returns recent unscored examples so
+// the operator can rate them.
+router.get('/autopilot/examples', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const agent = req.query.agent ? String(req.query.agent) : null
+    const score = req.query.score !== undefined ? Number(req.query.score) : null
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50))
+    const conds: string[] = []
+    const args: any[] = []
+    if (agent) { args.push(agent); conds.push(`agent = $${args.length}`) }
+    if (score !== null && Number.isFinite(score)) { args.push(score); conds.push(`score = $${args.length}`) }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+    const r = await query(
+      `SELECT id, agent, account_id, thread_or_post, inbound_text, reply_text,
+              score, scored_at, created_at
+         FROM social_autopilot_examples
+         ${where}
+        ORDER BY created_at DESC
+        LIMIT ${limit}`,
+      args
+    )
+    res.json({ data: r.rows })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/social/autopilot/examples/:id/score
+// Operator thumbs-up (+1) / thumbs-down (-1) on a specific reply. Score=+1
+// promotes the example into the few-shot set the agent sees on next draft;
+// score=-1 hides it from the cached-reply reuse path so we don't re-send a
+// bad reply when the same inbound shows up again.
+router.post('/autopilot/examples/:id/score', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id || '')
+    const raw = Number(req.body?.score)
+    if (!Number.isInteger(raw) || raw < -1 || raw > 1) {
+      return res.status(400).json({ error: 'score must be -1, 0, or 1' })
+    }
+    const r = await query(
+      `UPDATE social_autopilot_examples
+          SET score = $2, scored_by = $3, scored_at = NOW()
+        WHERE id = $1
+       RETURNING id, agent, inbound_text, reply_text, score`,
+      [id, raw, req.user?.id || null]
+    )
+    if (!r.rows.length) return res.status(404).json({ error: 'example not found' })
+    res.json({ data: r.rows[0] })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

@@ -16,6 +16,7 @@ import socialRoutes, { processDuePosts } from './routes/social'
 import { pollPushReceipts, pruneStalePushTokens } from './lib/push'
 import socialAiRoutes from './routes/social-ai'
 import socialMetaRoutes from './routes/social-meta'
+import { startSocialAutopilot } from './lib/social-autopilot'
 import integrationsRoutes from './routes/integrations'
 import nclexRoutes from './routes/nclex'
 import processingAccountsRoutes from './routes/processing-accounts'
@@ -108,6 +109,12 @@ if (!process.env.VERCEL) {
     }, 24 * 60 * 60_000)
     // Also run once on boot so a fresh deploy clears junk immediately.
     pruneStalePushTokens().catch((err) => console.error('Push token prune (boot) failed:', err))
+
+    // 24/7 social autopilot — Mika + Kuya Jay. The lib has its own 60s
+    // master tick; this just kicks it off. Each agent is gated by the
+    // `social_autopilot_state` table (enabled flag + per-agent interval),
+    // so the operator controls cadence + on/off from the AutoReply UI.
+    startSocialAutopilot()
   })
 }
 

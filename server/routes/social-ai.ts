@@ -1,9 +1,32 @@
 import { Router } from 'express'
+import { readFileSync } from 'fs'
+import path from 'path'
 import jwt from 'jsonwebtoken'
+import sharp from 'sharp'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
 import pool from '../db'
 import { isDriveConnected, uploadToDrive } from '../lib/google-drive'
-import { GRITSYNC_KB } from '../lib/gritsync-knowledge'
+import { GRITSYNC_KB, LENSA_IMAGE_CRAFT_KB } from '../lib/gritsync-knowledge'
+
+// Brand mark — the official square GritSync logo (red background, white
+// "GS" glyph). Loaded once at module init so we don't pay disk I/O on
+// every generation. Resolved from a few candidate paths because the same
+// build runs in dev (process.cwd = repo root) and prod (server compiled
+// to a subdirectory). If none resolve we leave the buffer null and fall
+// back to a text-only SVG wordmark in applyBrandWatermark.
+const BRAND_LOGO_BUF: Buffer | null = (() => {
+  const candidates = [
+    path.resolve(process.cwd(), 'gritsync_logo.png'),
+    path.resolve(process.cwd(), 'public/gritsync_logo.png'),
+    path.resolve(__dirname, '../../gritsync_logo.png'),
+    path.resolve(__dirname, '../../public/gritsync_logo.png'),
+  ]
+  for (const p of candidates) {
+    try { return readFileSync(p) } catch { /* try the next path */ }
+  }
+  console.warn('[brand-watermark] gritsync_logo.png not found — falling back to SVG wordmark')
+  return null
+})()
 
 const router = Router()
 
@@ -162,7 +185,7 @@ router.post('/refine-master-prompt', authenticateToken, requireAdmin, async (req
       return res.status(400).json({ error: 'current_prompt is required' })
     }
 
-    const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. The renderer is DALL·E 3 (hd + natural style), so your refinements should lean into what DALL·E 3 does best — photorealism, cinematic lighting, layered compositions, accurate fabric and skin textures. Avoid prompt patterns that only gpt-image-1 reliably renders (e.g. long arbitrary text strings, perfect typography).
+    const system = `You are a senior creative director who specialises in writing image-generation prompts for premium social-media advertisements. The renderer is OpenAI gpt-image-1 (quality: high), which has industry-leading text rendering, accepts long structured multi-paragraph prompts (~32K input tokens), and produces photoreal subjects + cinematic lighting in one call. Lean into what gpt-image-1 does well — quoted on-canvas text strings ("GritSync", short headlines), layered compositions, perfect typography, layered branding, and detailed multi-section directions.
 
 You're refining a "master image prompt" for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The master prompt is a GUIDE, not a contract — you have license to restructure, drop sections, or add new ones if the brief reads better that way. Use these ground-truth facts so the refined prompt stays brand-aligned:
 
@@ -569,32 +592,90 @@ router.post('/image-templates/orchestrate', authenticateToken, requireAdmin, asy
     }))
 
     // ── ORCHESTRATE ───────────────────────────────────────────────────
-    const system = `You are Lensa, GritSync's art-director agent. You research the existing image-template library and recent post topics, then design a NEW template that fits the brand and complements what's already shipping.
+    // Infer an aspect-ratio hint from the operator brief so Lensa anchors
+    // the template to one safe-zone-aware format. Default 4:5 — Meta's
+    // preferred portrait, occupies ~33% more mobile screen than 1:1.
+    const briefLower = cleanBrief.toLowerCase()
+    const aspectHint =
+      /\b(reel|story|stories|9:16|vertical)\b/.test(briefLower) ? '9:16'
+      : /\b(banner|cover|youtube|16:9|landscape)\b/.test(briefLower) ? '16:9'
+      : /\b(square|1:1|feed)\b/.test(briefLower) ? '1:1'
+      : '4:5'
 
-GROUND TRUTH about GritSync — your template must be consistent with these facts. Never invent claims that contradict them:
+    // Per-renderer tuning notes — surface the right tradeoffs for whichever
+    // provider the operator picked, so Lensa writes a prompt the renderer
+    // can actually execute (e.g., minimal on-canvas text for Kling/Grok).
+    const rendererNote =
+      useProvider === 'nano-banana'
+        ? 'Renderer: Gemini "nano-banana". Prefer short, sharply labelled prompts. Strong at preserving quoted strings — still spell "GritSync" letter-by-letter.'
+        : useProvider === 'grok'
+        ? 'Renderer: Grok image. Weak at fine typography — keep on-canvas copy minimal (wordmark + URL only, NO headline). Lean on photoreal subject + lighting.'
+        : useProvider === 'kling'
+        ? 'Renderer: Kling v1-5. Cinematic skin tones, weak at small text. Keep typography big and bold (≤4 words) or omit the headline entirely and let the caption do the talking.'
+        : 'Renderer: OpenAI gpt-image-1 (quality: high). Best text + photoreal subjects in one call, accepts ~32K input tokens so write a detailed multi-paragraph structured prompt — don\'t hold back. Spell "GritSync" letter-by-letter and wrap every literal on-canvas word in straight double quotes.'
+
+    const system = `You are Lensa, GritSync's senior art director. You research the existing image-template library and recent post topics, then design a NEW template that fills a gap, looks like a brand asset (not a stock-photo cliché), and renders cleanly on the operator's chosen renderer.
 
 ${GRITSYNC_KB}
 
+${LENSA_IMAGE_CRAFT_KB}
+
 YOUR JOB — three phases:
-  1. READ the existing templates and recent post captions in the user message. Identify gaps in style/mood/composition.
-  2. DECIDE on ONE distinct visual direction that fills a gap. Examples of distinct directions: editorial portrait, candid documentary, golden-hour cinematic, minimalist studio, narrative dual-frame, congratulatory celebration moment, before/after, calm focused study scene.
-  3. PRODUCE a structured image-template prompt the image renderer can use repeatedly across many captions. The prompt must be a GUIDE (inspirational), not a literal scene description.
+  1. READ the existing templates and recent captions in the user message. Identify gaps in style / mood / composition / aspect-ratio.
+  2. DECIDE on ONE distinct visual direction that fills a gap. Examples: editorial portrait, candid documentary, golden-hour cinematic, minimalist studio, narrative dual-frame, congratulatory celebration moment, before/after, calm focused study scene, hero banner with bold headline lockup.
+  3. PRODUCE a reusable image-template prompt — a GUIDE that holds up across many different captions, not a single literal scene.
 
-PROMPT STRUCTURE — produce a multi-paragraph prompt with these labelled sections IN THIS ORDER:
-   Subject: <who's in frame, age range, scrubs/clothing typical for this template>
-   Action: <the kind of moment this template captures across many posts>
-   Setting: <where + when, lighting style, palette>
-   Composition: <framing language, depth of field, focal point, negative space rules>
-   Brand elements: <where the "GritSync" wordmark goes, where "gritsync.com" goes, palette anchors>
-   Style: <photoreal/cinematic descriptors that make this template distinct>
-   Negative prompt: <anti-artifact terms — distorted hands, garbled text, etc.>
+PROMPT STRUCTURE — produce a multi-paragraph prompt with these labelled sections IN THIS EXACT ORDER. Be DETAILED — multiple sentences per section is correct. The prompt should read like a designer's spec sheet, not a tweet:
 
-BRAND GUARDRAILS:
-  - Subjects must be Filipino healthcare professionals (nurses, RNs). Never non-Filipino ethnicities.
-  - Brand palette: deep red, white, soft black, restrained warm gold accents.
-  - The "GritSync" wordmark and "gritsync.com" URL MUST be specified in Brand elements (placement, color, size).
+   Subject: <one Filipina healthcare professional category, age range, build, hair, makeup ("light natural, no glam"), wardrobe specifics (scrub color from navy/teal/burgundy/ceil-blue/soft-black palette, fit, drawstring waist, V-neck), accessories (thin watch, simple stud earrings, ID lanyard with face turned away), pose direction (three-quarter turn / direct frontal / over-the-shoulder), gaze direction (camera / down at work / off-frame mid-distance), single emotion vocabulary word from the KB ("quiet determination" / "joyful relief" / "tender support" / etc.)>
+
+   Action: <the CATEGORY of moment this template captures across many posts — not a one-shot. e.g. "handwriting prep notes at a desk", "reading good news on a phone", "calm direct-to-camera authority pose">
+
+   Setting: <named background category from the KB ("clean studio" / "environmental context" / "editorial blurred backdrop" / "narrative dual-frame" / "gradient + texture overlay" / "hero banner backdrop" / "top-down flat-lay"), dominant background hue with hex code, environment specifics, three depth layers (foreground anchor, midground subject, background field), atmosphere touches (soft window haze / dust motes / bokeh balls / lens flare — pick at most 2)>
+
+   Composition: <framing keyword (portrait headshot / medium close-up / environmental wide / over-the-shoulder / top-down flat-lay / hero centered), focal point on a named rule-of-thirds intersection ("subject's eyes on the upper-third line"), depth-of-field with explicit f-stop, named negative-space zone reserved for caption overlay ("clean upper-right third reserved for headline")>
+
+   Lighting: <ONE named lighting setup from the KB ("soft window light from frame-left" / "golden hour rim with warm front fill" / "studio softbox key 45° left + bounce fill 60% right" / "single-source dramatic 45° front-left" / "practical interior glow" / "top-down soft diffuse"), key-to-fill ratio, color temperature in Kelvin, sub-surface skin glow note for portraits>
+
+   Style: <named color grade / film stock from the KB ("Kodak Portra 400 grade" / "Fujifilm Pro 400H" / "Cinestill 800T tungsten" / "modern editorial grade" / "warm documentary grade"), film grain level, contrast direction (lifted blacks / crushed blacks / clean true neutrals), overall mood adjective>
+
+   Camera: <body + lens + shutter feel, e.g. "shot on Sony A7 IV, 50mm f/1.8, 1/250s, shallow depth of field" or "Fujifilm X-T5, 35mm f/2, environmental focus">
+
+   Props & set dressing: <at least 3 props from the appropriate KB toolkit ("study scene" / "USRN journey" / "celebration" / etc.), with placement notes ("highlighter capped, lying parallel to notebook spine"), realism details (slight asymmetry, subtle wear, visible cable management, a small live plant out-of-focus in the corner)>
+
+   Typography: <pick ONE type system from the KB ("editorial sans-serif" default, OR "display serif" for premium, OR "mono accent"), name the weight + hierarchy (e.g. "bold 700 headline, regular 400 subhead, mono 500 microcopy"), name the text layout pattern ("left-aligned stack" / "centered axial lockup" / "anchor + tag" / "window caption" / "in-scene placement"), tracking direction (tight for headlines, +5-8% for ALL CAPS), case treatment (Title Case / ALL CAPS / lowercase), literal headline string if the template fixes one (wrapped in straight double quotes ≤6 words), text legibility strategy ("subtle gradient scrim" / "frosted glass band" / "knockout block" / "outline + drop" / "in-scene placement"), color of text + scrim>
+
+   Brand elements: <the GritSync brand mark is supplied as a reference image (the official square red icon with the stylized GS glyph). NATURALLY INTEGRATE it into the scene as a real-world object — embroidered patch on a scrub chest, ID-card badge clipped to a lanyard, printed on a notebook spine, sticker on a laptop lid, signage in the background, lockup on a hero banner. Specify which integration this template uses. Then specify how "gritsync.com" appears in-scene (printed on a poster, on the spine of a notebook, on signage, on a lanyard tag — NOT a floating watermark). Palette anchors with hex codes #B81D24 deep red / #FFFFFF white / #1A1A1A soft black / #C8A24C warm gold accents (≤10% of frame).>
+
+   Aspect ratio & safe zones: <primary aspect ratio for this template, where critical content must stay so it survives platform crops + UI chrome, with explicit pixel margins>
+
+   Negative prompt: <anti-artifact terms PLUS brand misspellings to forbid ("never 'GritSink', 'GritSinc', 'Grit Sync', 'gritsync com'"), garbled text, distorted hands, warped fingers, plastic skin, stock-photo flatness, cluttered background, low contrast, off-brand palette, fake bokeh, oversaturated colors, non-Filipino subject, decorative scripts unless template requires, heavy contour makeup, branded chain logos, recognizable real-world UI strings>
+
+BRAND GUARDRAILS (non-negotiable):
+  - Subjects: Filipino healthcare professionals (nurses, RNs). Never non-Filipino ethnicities.
+  - Palette anchored by deep red #B81D24 + white + soft black + restrained warm gold. Accents ≤10% of frame.
+  - The official GritSync brand mark MUST be NATURALLY INTEGRATED into the scene (badge / lanyard / embroidery / signage / sticker / lockup) — NOT a corner watermark. The mark is supplied to the renderer as a reference image; do not invent a different wordmark.
+  - "gritsync.com" appears once as printed text in a natural location, not floating.
   - No fabricated claims, no named hospitals/schools, no US landmarks the brand hasn't endorsed.
   - Photoreal + cinematic — never illustrative, never stock-photo flat.
+
+PROMPT QUALITY CHECKLIST — review your draft against this list before returning. If any item is missing, rewrite that section:
+  ☐ Subject has wardrobe specifics, pose direction, gaze direction, and a single emotion-vocabulary word.
+  ☐ Setting names a background category + dominant hue (hex) + three depth layers + at-most-2 atmosphere touches.
+  ☐ Composition names framing keyword + rule-of-thirds anchor + explicit f-stop + a named negative-space zone.
+  ☐ Lighting names a setup from the KB vocabulary with key-to-fill ratio + Kelvin temperature.
+  ☐ Style names a film-stock grade.
+  ☐ Camera names body + lens + aperture.
+  ☐ Props lists ≥3 KB-appropriate items with placement notes.
+  ☐ Typography names a type system + weight hierarchy + layout pattern + tracking + case + legibility strategy + color.
+  ☐ Brand elements name a specific natural-integration site for the GritSync mark (badge / lanyard / sticker / signage / embroidery / lockup).
+  ☐ Aspect ratio & safe zones include explicit pixel margins.
+  ☐ Negative prompt includes brand-misspelling guards + ≥6 anti-artifact terms.
+  ☐ No one-shot specifics that won't generalize across many captions.
+
+PRIMARY ASPECT RATIO FOR THIS TEMPLATE: ${aspectHint} (write the Composition + Brand elements + safe-zone notes around this ratio).
+
+${rendererNote}
 
 NAMING:
   - Template name: 2-4 words, evocative, no jargon. Example shapes: "Golden Hour Pass", "Quiet Study Scene", "Newsroom Documentary", "ATT Inbox Moment".
@@ -602,6 +683,10 @@ NAMING:
 Return JSON only.`
 
     const userPayload = `OPERATOR BRIEF (optional creative direction): ${cleanBrief || '(none — pick a fresh direction that fills a gap)'}
+
+PRIMARY ASPECT RATIO (inferred from brief, or 4:5 default): ${aspectHint}
+
+TARGET RENDERER: ${useProvider}
 
 EXISTING TEMPLATES IN THE LIBRARY (research — identify gaps, do NOT duplicate):
 ${JSON.stringify(templateSummaries, null, 2)}
@@ -612,8 +697,8 @@ ${JSON.stringify(captionSummaries, null, 2)}
 Return ONLY this JSON object — no surrounding text, no markdown fence:
 {
   "name": "<2-4 word template name>",
-  "prompt": "<the full multi-paragraph structured template prompt as a single string with \\n line breaks>",
-  "reasoning": "<one sentence: what gap this fills and why it'll work for this audience>"
+  "prompt": "<the full multi-paragraph structured template prompt as a single string with \\n line breaks. Must contain all 12 labelled sections IN THIS EXACT ORDER: Subject / Action / Setting / Composition / Lighting / Style / Camera / Props & set dressing / Typography / Brand elements / Aspect ratio & safe zones / Negative prompt. Each section should be DETAILED — multiple sentences. Read like a designer's spec sheet, not a tweet.>",
+  "reasoning": "<one sentence: what gap this fills and why it'll work for this audience on the ${useProvider} renderer at ${aspectHint}>"
 }`
 
     const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -622,8 +707,8 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
-        temperature: 0.7,
-        max_tokens: 2200,
+        temperature: 0.75,
+        max_tokens: 5000,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: userPayload },
@@ -1205,7 +1290,7 @@ async function deriveImagePromptForCaption(args: {
   const apiKey = OPENAI_KEY()
   if (!apiKey) return fallback
 
-  const system = `You are a senior creative director who turns social-media captions into image prompts for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The renderer is OpenAI's gpt-image-2 (with gpt-image-1 / DALL·E fallbacks) at the "high" quality tier — it does photoreal subjects, cinematic light, and short on-image text strings well. The brand facts below are ground truth — every image you specify must be consistent with them.
+  const system = `You are a senior creative director who turns social-media captions into image prompts for GritSync, an NCLEX-processing agency that helps Filipino-trained nurses become USRNs. The renderer is OpenAI gpt-image-1 at the "high" quality tier — it does photoreal subjects, cinematic light, and short on-image text strings extremely well, and accepts long multi-paragraph structured prompts (~32K input tokens) so you can be detailed without truncation. The brand facts below are ground truth — every image you specify must be consistent with them.
 
 ${GRITSYNC_KB}
 
@@ -1406,7 +1491,31 @@ function toAbsoluteUrl(maybeRelative: string): string {
 // Try one OpenAI image model. Returns the persisted URL on success, or a
 // detail object with a structured error so the caller can decide whether
 // to fall back to a different model.
-type OpenAIImageModel = 'gpt-image-2' | 'gpt-image-1' | 'gpt-image-1-mini' | 'dall-e-3' | 'dall-e-2'
+type OpenAIImageModel = 'gpt-image-1' | 'gpt-image-1-mini' | 'dall-e-3' | 'dall-e-2'
+
+// DALL·E-3 has a hard ~4000-char prompt limit; DALL·E-2 is tighter (~1000).
+// gpt-image-1 accepts ~32K input tokens (≈ 100K+ characters in practice),
+// so we pass complex multi-paragraph prompts to it without truncation. For
+// the DALL·E fallbacks we keep the core composition + drop the longer
+// brand-guard preamble so the request fits.
+const DALLE3_MAX_CHARS = 3800
+const DALLE2_MAX_CHARS = 950
+
+function trimPromptForModel(prompt: string, model: OpenAIImageModel): string {
+  if (model === 'dall-e-3' && prompt.length > DALLE3_MAX_CHARS) {
+    // Keep the brand mandate + the FIRST paragraph of the user prompt + the
+    // negative-text suffix. Multi-paragraph structured prompts have the
+    // subject in para 1; later paragraphs are typography/composition which
+    // DALL·E-3 handles weakly anyway.
+    const head = prompt.slice(0, DALLE3_MAX_CHARS - 400)
+    const tail = prompt.slice(-380)
+    return `${head}\n\n…[trimmed for DALL·E-3]…\n\n${tail}`
+  }
+  if (model === 'dall-e-2' && prompt.length > DALLE2_MAX_CHARS) {
+    return prompt.slice(0, DALLE2_MAX_CHARS - 4) + '…'
+  }
+  return prompt
+}
 
 async function tryOpenAIImage(
   apiKey: string,
@@ -1414,34 +1523,91 @@ async function tryOpenAIImage(
   model: OpenAIImageModel,
   size: string = '1024x1024'
 ): Promise<{ url?: string; error?: string; shouldFallback?: boolean }> {
-  // Build the minimal valid body per model. The Images API rejects unknown
-  // parameters, so we send only what each model accepts.
+  const finalPrompt = trimPromptForModel(prompt, model)
+
+  // For gpt-image-1, when we have the brand logo buffer loaded, route
+  // through /v1/images/edits with the logo as a reference image. The
+  // model then composes the GritSync mark naturally INTO the scene —
+  // embroidered on a scrub badge, printed on a notebook, on signage, on
+  // a coffee cup, etc. — instead of hallucinating its own wordmark or
+  // having one stamped on top later. This is the "designed in, not
+  // watermark" guarantee.
+  if ((model === 'gpt-image-1' || model === 'gpt-image-1-mini') && BRAND_LOGO_BUF) {
+    return await tryOpenAIImageWithLogo(apiKey, finalPrompt, model, size)
+  }
+
+  // Plain text-to-image path: gpt-image-1 without the reference logo,
+  // or DALL·E fallbacks. The prompt-side brand mandate handles wordmark
+  // placement on these paths.
+  const r = await openaiImagesGenerationsRequest(apiKey, finalPrompt, model, size)
+  return await handleOpenAIImageResponse(r)
+}
+
+// Helper: text-to-image POST (no reference images). Pulled out so the
+// edit path and the plain path share response handling.
+async function openaiImagesGenerationsRequest(
+  apiKey: string,
+  prompt: string,
+  model: OpenAIImageModel,
+  size: string,
+): Promise<Response> {
   const body: Record<string, any> = { model, prompt, n: 1, size }
-  if (model === 'gpt-image-2' || model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
-    // gpt-image-* family shares the same `quality` parameter shape. High
-    // is the right call for the brand — text rendering + photoreal subject
-    // come out much cleaner than `medium` and the latency overhead is
-    // acceptable for ad-style generations.
+  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
     body.quality = 'high'
+    body.moderation = 'low'
+    body.output_format = 'png'
   } else if (model === 'dall-e-3') {
-    // DALL·E-3: HD + natural matches the brand palette best (`vivid`
-    // oversaturates the deep-red / white / soft-black system).
     body.quality = 'hd'
     body.style = 'natural'
   }
-  // dall-e-2: just model + prompt + n + size.
-
-  const r = await fetch('https://api.openai.com/v1/images/generations', {
+  return await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
   })
+}
+
+// /v1/images/edits path — gpt-image-1 with the GritSync logo as a reference
+// image. The model treats the reference as visual context: it doesn't have
+// to COPY the logo, but it knows the brand mark to compose into the design.
+// Multipart form body (JSON isn't accepted on /edits).
+async function tryOpenAIImageWithLogo(
+  apiKey: string,
+  prompt: string,
+  model: OpenAIImageModel,
+  size: string,
+): Promise<{ url?: string; error?: string; shouldFallback?: boolean }> {
+  if (!BRAND_LOGO_BUF) {
+    // Shouldn't reach here (caller checks BRAND_LOGO_BUF) but be safe.
+    return { error: 'brand logo not loaded', shouldFallback: true }
+  }
+  const form = new FormData()
+  form.append('model', model)
+  form.append('prompt', prompt)
+  form.append('n', '1')
+  form.append('size', size)
+  form.append('quality', 'high')
+  form.append('output_format', 'png')
+  // `image[]` — reference image. The OpenAI client accepts repeated
+  // `image[]` keys for multiple references; we ship just the GritSync
+  // logo so the design composes around that single visual anchor.
+  form.append(
+    'image[]',
+    new Blob([new Uint8Array(BRAND_LOGO_BUF)], { type: 'image/png' }),
+    'gritsync_logo.png',
+  )
+  const r = await fetch('https://api.openai.com/v1/images/edits', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+  return await handleOpenAIImageResponse(r)
+}
+
+async function handleOpenAIImageResponse(r: Response): Promise<{ url?: string; error?: string; shouldFallback?: boolean }> {
   const j: any = await r.json().catch(() => ({}))
   if (!r.ok) {
     const msg = j.error?.message || `OpenAI HTTP ${r.status}`
-    // Fall back on access / model-shape / unknown-parameter errors. Any of
-    // these mean "try a different model" rather than "give up" — leaves
-    // real failures (auth, rate limit, content policy) to bubble up.
     const shouldFallback =
       /does not have access to model|model_not_found|model `[^`]+`|unknown parameter|invalid request|unsupported|not supported|invalid model/i.test(msg) ||
       j.error?.code === 'model_not_found' ||
@@ -1465,7 +1631,7 @@ async function tryOpenAIImage(
 }
 
 // Sizes each OpenAI image model accepts. We pick the closest match per
-// requested aspect ratio. dall-e-2 only does square sizes; the gpt-image
+// requested aspect ratio. dall-e-2 only does square sizes; the gpt-image-1
 // family accepts 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape).
 function sizeFor(model: OpenAIImageModel, aspect: string): string {
   if (model === 'dall-e-2') return '1024x1024'
@@ -1474,7 +1640,7 @@ function sizeFor(model: OpenAIImageModel, aspect: string): string {
     if (aspect === '9:16' || aspect === '4:5') return '1024x1792'
     return '1024x1024'
   }
-  // gpt-image-2 / gpt-image-1 / gpt-image-1-mini share the size set.
+  // gpt-image-1 / gpt-image-1-mini share the size set.
   if (aspect === '16:9') return '1536x1024'
   if (aspect === '9:16' || aspect === '4:5') return '1024x1536'
   return '1024x1024'
@@ -1487,11 +1653,12 @@ function sizeFor(model: OpenAIImageModel, aspect: string): string {
 // brand strings legible — image renderers garble copy when it's vague
 // or unquoted.
 const IMAGE_BRAND_MANDATE =
-  'MANDATORY GRITSYNC BRANDING — every generated image MUST include the GritSync brand identity, even if the source prompt below does not mention it. These elements are NON-NEGOTIABLE:\n' +
-  '  • The "GritSync" wordmark (one word, capital G and capital S) rendered clearly in the composition. Preferred placement: top-right corner, clean white sans-serif on a darker area, roughly 6-8% of the frame height.\n' +
-  '  • The URL "gritsync.com" (all lowercase, no spaces) rendered as a small footer mark. Preferred placement: bottom-center or bottom-right, soft gray sans-serif, roughly 3-4% of the frame height.\n' +
+  'MANDATORY GRITSYNC BRANDING — every generated image MUST include the GritSync brand identity NATURALLY INTEGRATED into the scene (NOT as a corner watermark). These elements are NON-NEGOTIABLE:\n' +
+  '  • The official GritSync brand mark — a square red icon with a stylized "GS" glyph — has been provided as a reference image. INTEGRATE it into the design as a real-world object visible in the scene: embroidered patch on a scrub uniform, ID-card badge clipped to a lanyard, printed on a notebook cover, sticker on a laptop, signage on a wall behind the subject, lockup on a hero banner, etc. It must look like part of the scene — same lighting, same perspective, same shadow as everything else.\n' +
+  '  • The brand mark must be CLEARLY VISIBLE and IDENTIFIABLE — not hidden, not heavily cropped, not blurred out. Size it like a real-world brand mark in that context (chest-patch sized on a uniform, business-card sized on signage).\n' +
+  '  • The URL "gritsync.com" (all lowercase, no spaces) appears once as small printed text in a natural location — printed at the bottom of a poster, on the spine of a notebook, on signage, on a lanyard tag. Not a floating watermark.\n' +
   '  • Brand color palette anchored to deep red, clean white, soft black, with restrained warm-gold accents.\n' +
-  '  • If the source prompt suggests a placement that would hide these elements, override it — the wordmark and URL must remain visible and legible.\n\n'
+  '  • Do NOT invent a different GritSync wordmark or alter the provided brand mark. Reproduce it faithfully — colors, glyph proportions, spelling — as it appears in the reference.\n\n'
 
 const IMAGE_TEXT_CORRECTNESS_PREAMBLE =
   IMAGE_BRAND_MANDATE +
@@ -1513,12 +1680,19 @@ async function generateImageOpenAI(prompt: string, aspect_ratio: string = '1:1')
   // the fallback path where no per-caption LLM derivation happened.
   const guardedPrompt = applyImageTextGuards(prompt)
 
-  // Cascade ordering: GPT image 2 is the primary (best text rendering +
-  // photoreal subjects on the same call), then gpt-image-1 / mini for
-  // projects that haven't been granted access to the v2 series, then
-  // DALL·E-3 / DALL·E-2 as the final fallback. If OpenAI returns
-  // `model_not_found` for any step the chain quietly tries the next.
-  const chain: OpenAIImageModel[] = ['gpt-image-2', 'gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2']
+  // Cascade ordering — gpt-image-1 is the primary:
+  //   1. gpt-image-1       — best text + photoreal subjects on one call,
+  //                          accepts ~32K input tokens so complex
+  //                          multi-paragraph structured prompts pass
+  //                          through verbatim.
+  //   2. gpt-image-1-mini  — cheaper / faster fallback (same family,
+  //                          same prompt shape, slightly weaker text).
+  //   3. dall-e-3          — last-resort photoreal; prompt is trimmed
+  //                          to ~3800 chars to fit its hard limit.
+  //   4. dall-e-2          — emergency fallback. Prompt trimmed to ~950.
+  // If OpenAI returns `model_not_found` for any step the chain quietly
+  // tries the next.
+  const chain: OpenAIImageModel[] = ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2']
   let lastError = 'OpenAI image generation failed'
   for (const model of chain) {
     const r = await tryOpenAIImage(apiKey, guardedPrompt, model, sizeFor(model, aspect_ratio))
