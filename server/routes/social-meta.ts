@@ -663,18 +663,18 @@ router.post('/autoreply/inbox/:thread_id/reply', authenticateToken, requireAdmin
 
     const sendFromPageId = acc.platform === 'instagram' ? (acc.metadata?.linked_page_id || acc.platform_user_id) : acc.platform_user_id
 
-    // Human feel: turn on Meta's native typing indicator before posting,
-    // wait a beat scaled to message length (max 3s), then send. The
-    // recipient sees the "Mika is typing…" dots just like a person.
+    // Show the typing indicator just long enough for it to render on the
+    // recipient's side, then send immediately. ~350ms is the sweet spot —
+    // the "is typing…" pip appears so the reply feels alive, but nobody
+    // waits around for it. (Previously the wait scaled with reply length
+    // and felt sluggish; the operator asked for instant-after-typing.)
     try {
       await fbPost(`${sendFromPageId}/messages`, acc.access_token, {
         recipient: { id: otherId },
         sender_action: 'typing_on',
       })
     } catch { /* typing_on is a UX nicety — never block the actual send */ }
-
-    const typingMs = Math.min(3000, 600 + (message?.trim().length || 0) * 25)
-    await new Promise((r) => setTimeout(r, typingMs))
+    await new Promise((r) => setTimeout(r, 350))
 
     const sentIds: string[] = []
     if (message?.trim()) {

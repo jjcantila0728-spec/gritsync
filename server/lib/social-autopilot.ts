@@ -352,7 +352,8 @@ export async function runInboxAutopilot(maxPerRun: number): Promise<{ sent_count
           if (!reply) continue
 
           try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: otherId }, sender_action: 'typing_on' }) } catch {}
-          await new Promise((r) => setTimeout(r, Math.min(3000, 600 + reply.length * 25)))
+          // Just enough for the "is typing…" pip to register, then send.
+          await new Promise((r) => setTimeout(r, 350))
           await fbPost(`${baseId}/messages`, acc.access_token, {
             recipient: { id: otherId },
             message: { text: reply },
@@ -588,7 +589,7 @@ function shouldRunNow(row: AutopilotStateRow): boolean {
   return elapsedMin >= effectiveMin
 }
 
-async function tickOnce() {
+export async function tickOnce() {
   if (tickInFlight) return
   tickInFlight = true
   try {
