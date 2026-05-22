@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
+import { fbGet, fbPost, hoursSince, STANDARD_MESSAGING_WINDOW_HOURS } from './social-meta'
 
 const router = Router()
 
@@ -260,13 +261,137 @@ router.get('/webhooks/:platform', (req, res) => {
 })
 
 router.post('/webhooks/:platform', (req, res) => {
-  // Ack within Meta's ~20-second budget. We don't have specific handlers
-  // wired up yet — just log the incoming payload so we can see what's
-  // arriving while we build out reactions (DM replies, comment alerts,
-  // story-mention surfacing, etc.).
-  console.log('[meta-webhook]', req.params.platform, JSON.stringify(req.body))
+  // ACK immediately — Meta drops the webhook if we don't respond within 20s.
+  // On Vercel Fluid Compute the function stays alive after res.sendStatus()
+  // so all the async processing below completes even though the HTTP response
+  // is already sent.
   res.sendStatus(200)
+  const platform = req.params.platform as 'facebook' | 'instagram'
+  const body = req.body
+  if (!body?.entry) return
+  processWebhookEntries(platform, body.entry).catch((err) =>
+    console.error('[meta-webhook] processing error:', err)
+  )
 })
+
+// ── Real-time webhook processor ───────────────────────────────────────────
+// Called after we ack the webhook. Handles inbound DMs (Mika) and new
+// comments (Kuya Jay). Uses the same logic as the autopilot runners but
+// fires per-event instead of in batch so responses land within seconds.
+async function processWebhookEntries(platform: 'facebook' | 'instagram', entries: any[]) {
+  const { handleMikaQuoteTurn } = await import('../lib/mika-quote')
+  const { findCachedReply } = await import('../lib/social-autopilot')
+  const { draftReply } = await import('./social-meta')
+
+  for (const entry of entries) {
+    const pageId = String(entry.id || '')
+
+    // Look up the connected account for this page once per entry.
+    const acc = await query(
+      `SELECT id, access_token, platform, platform_user_id, metadata
+         FROM social_accounts
+        WHERE platform_user_id = $1
+          AND status = 'connected'
+        LIMIT 1`,
+      [pageId]
+    ).then((r) => r.rows[0] || null).catch(() => null)
+
+    // ── Inbound DMs (Facebook & Instagram messaging events) ─────────────
+    for (const evt of entry.messaging || []) {
+      if (!evt.message || evt.message.is_echo) continue   // skip our own sent msgs
+      const senderId: string = evt.sender?.id || ''
+      const text = String(evt.message?.text || '').trim()
+      const hasImage = !!(evt.message?.attachments?.data?.some(
+        (a: any) => a.type === 'image'
+      ))
+      if (!senderId || senderId === pageId) continue
+      if (!acc) continue
+
+      // 24h window check using the event timestamp
+      const eventIso = evt.timestamp ? new Date(evt.timestamp).toISOString() : null
+      if (hoursSince(eventIso) > STANDARD_MESSAGING_WINDOW_HOURS) continue
+
+      // Fetch the full conversation thread so the quote-turn LLM has context.
+      let threadId: string | null = null
+      let recent: Array<{ from: 'user' | 'mika'; text: string }> = []
+      try {
+        const convRes = await fbGet(`${pageId}/conversations`, acc.access_token, {
+          user_id: senderId,
+          fields: 'id,messages{from,message,created_time}',
+          limit: '1',
+        })
+        const thread = convRes.data?.[0]
+        if (thread) {
+          threadId = thread.id
+          recent = (thread.messages?.data || []).map((m: any) => ({
+            from: (m.from?.id === pageId ? 'mika' : 'user') as 'user' | 'mika',
+            text: String(m.message || ''),
+          })).reverse()
+        }
+      } catch { /* use empty history if the fetch fails */ }
+
+      try {
+        const turn = await handleMikaQuoteTurn({
+          thread_id: threadId || `psid:${senderId}`,
+          account_id: acc.id,
+          conversation: recent,
+          inbound: text || '(image)',
+          inbound_message_id: evt.message?.mid || null,
+        }).catch(async () => {
+          // Fall back to simple cached/drafted reply on quote-turn failure.
+          const cached = await findCachedReply('inbox', text).catch(() => null)
+          const reply = cached?.reply || await draftReply({
+            agent: 'inbox', message: text, has_inbound_image: hasImage,
+          })
+          return { reply, status: 'chat' as const }
+        })
+
+        if (!turn?.reply) continue
+        const baseId = acc.platform === 'instagram'
+          ? (acc.metadata?.linked_page_id || pageId) : pageId
+
+        try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: senderId }, sender_action: 'typing_on' }) } catch {}
+        await new Promise((r) => setTimeout(r, Math.min(2500, 500 + turn.reply.length * 20)))
+        await fbPost(`${baseId}/messages`, acc.access_token, {
+          recipient: { id: senderId },
+          message: { text: turn.reply },
+          messaging_type: 'RESPONSE',
+        })
+        try { await fbPost(`${baseId}/messages`, acc.access_token, { recipient: { id: senderId }, sender_action: 'typing_off' }) } catch {}
+
+        console.log(`[meta-webhook] Mika replied to ${senderId} on page ${pageId}`)
+      } catch (err: any) {
+        console.error(`[meta-webhook] Mika reply error for ${senderId}:`, err.message)
+      }
+    }
+
+    // ── Facebook Page comment events ─────────────────────────────────────
+    for (const change of entry.changes || []) {
+      if (change.field !== 'feed') continue
+      const val = change.value || {}
+      if (val.item !== 'comment' || val.verb !== 'add') continue
+      if (val.from?.id === pageId) continue  // skip our own comments
+      if (!acc || acc.platform !== 'facebook') continue
+
+      const commentId: string = val.comment_id || ''
+      const text = String(val.message || '').trim()
+      const postCaption = String(val.post?.message || '').slice(0, 240)
+      if (!commentId || !text) continue
+
+      try {
+        const cached = await findCachedReply('comments', text).catch(() => null)
+        const reply = cached?.reply || await draftReply({
+          agent: 'comments', message: text, post_caption: postCaption,
+        })
+        if (!reply) continue
+        await fbPost(`${commentId}/comments`, acc.access_token, { message: reply })
+        console.log(`[meta-webhook] Kuya Jay replied to comment ${commentId}`)
+      } catch (err: any) {
+        console.error(`[meta-webhook] Kuya Jay reply error for ${commentId}:`, err.message)
+      }
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/social/oauth/:platform/start
