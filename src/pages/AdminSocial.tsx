@@ -4265,6 +4265,12 @@ interface LensaResult {
   preview_url: string | null
   preview_error: string | null
   provider: 'openai' | 'nano-banana' | 'grok' | 'kling'
+  // Added by the orchestrate agent's REVIEW + VISUAL QA phases. All
+  // optional so the modal stays resilient against a server response that
+  // predates them.
+  aspect_ratio?: string
+  critique?: { rounds: number; verdict: 'pass' | 'revised' | 'unreviewed'; notes: string[] }
+  qa?: { verdict: 'pass' | 'warn' | 'fail'; issues: string[]; summary: string } | null
 }
 function LensaTemplateModal({
   open,
@@ -4335,7 +4341,7 @@ function LensaTemplateModal({
               <span className="text-gray-500 dark:text-gray-400">· art-director agent</span>
             </div>
             <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug mt-0.5">
-              Reads your existing templates + recent post topics, finds a stylistic gap, designs a structured template prompt, and renders a preview with the chosen image AI. You approve before it saves.
+              Reads your existing templates + recent post topics, finds a stylistic gap, designs a structured template prompt, reviews her own draft against the brand checklist, renders a preview, then visually QA-checks the result. You approve before it saves.
             </div>
           </div>
         </div>
@@ -4387,9 +4393,14 @@ function LensaTemplateModal({
           <>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2">
-                <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 aspect-square bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <div className={`rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center ${
+                  result.aspect_ratio === '9:16' ? 'aspect-[9/16]'
+                  : result.aspect_ratio === '4:5' ? 'aspect-[4/5]'
+                  : result.aspect_ratio === '16:9' ? 'aspect-video'
+                  : 'aspect-square'
+                }`}>
                   {result.preview_url ? (
-                    <img src={result.preview_url} alt={result.name} className="w-full h-full object-cover" />
+                    <img src={result.preview_url} alt={result.name} className="w-full h-full object-contain" />
                   ) : (
                     <div className="text-center text-xs text-amber-700 dark:text-amber-300 p-4">
                       <AlertCircle className="h-5 w-5 mx-auto mb-1" />
@@ -4398,7 +4409,7 @@ function LensaTemplateModal({
                   )}
                 </div>
                 <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 text-center">
-                  Rendered with {result.provider}
+                  Rendered with {result.provider}{result.aspect_ratio ? ` · ${result.aspect_ratio}` : ''}
                 </p>
               </div>
               <div className="md:col-span-3 space-y-3">
@@ -4430,6 +4441,52 @@ function LensaTemplateModal({
                 </div>
               </div>
             </div>
+
+            {((result.critique && result.critique.verdict !== 'unreviewed') || result.qa) && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 px-3 py-2.5 space-y-2">
+                {result.critique && result.critique.verdict !== 'unreviewed' && (
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-px inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide whitespace-nowrap ${
+                      result.critique.verdict === 'revised'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    }`}>
+                      {result.critique.verdict === 'revised'
+                        ? `Self-revised ×${result.critique.rounds}`
+                        : 'Self-review passed'}
+                    </span>
+                    {result.critique.notes.length > 0 && (
+                      <span className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                        {result.critique.notes[result.critique.notes.length - 1]}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {result.qa && (
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-px inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide whitespace-nowrap ${
+                      result.qa.verdict === 'fail'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        : result.qa.verdict === 'warn'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    }`}>
+                      Visual QA: {result.qa.verdict}
+                    </span>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                      {result.qa.summary}
+                      {result.qa.issues.length > 0 && (
+                        <span className="block mt-1">
+                          {result.qa.issues.map((issue, i) => (
+                            <span key={i} className="block text-gray-500 dark:text-gray-500">• {issue}</span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
               <Button variant="outline" onClick={() => setResult(null)} disabled={saving}>

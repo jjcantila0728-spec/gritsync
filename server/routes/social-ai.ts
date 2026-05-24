@@ -558,24 +558,267 @@ router.post('/image-templates/:id/regenerate', authenticateToken, requireAdmin, 
 })
 
 // ---------------------------------------------------------------------------
+// Lensa self-review helpers
+//
+// These power the REVIEW (phase 2.5) and VISUAL QA (phase 4) steps of the
+// /image-templates/orchestrate agent below. Both are best-effort: any
+// failure degrades silently so a usable draft template is still returned.
+// ---------------------------------------------------------------------------
+
+// Max self-critique rounds. One round is the common case — the reviewer
+// either approves the draft or hands back a single corrected prompt. A
+// second round confirms a revision actually held. Kept low: the text-only
+// QA passes are cheap, but there's no value in spinning forever.
+const LENSA_MAX_CRITIQUE_ROUNDS = 2
+
+interface LensaCritique {
+  /** How many review passes actually ran (0 = the pass was skipped/failed). */
+  rounds: number
+  /** 'pass' = draft approved as-is, 'revised' = Lensa rewrote it,
+   *  'unreviewed' = the review pass could not run. */
+  verdict: 'pass' | 'revised' | 'unreviewed'
+  /** Human-readable one-liners — what each round changed or confirmed. */
+  notes: string[]
+}
+
+interface LensaQa {
+  verdict: 'pass' | 'warn' | 'fail'
+  issues: string[]
+  summary: string
+}
+
+// Phase 2.5 — REVIEW. After Lensa drafts a template prompt, a strict QA
+// art-director pass grades the draft against the 12-point PROMPT QUALITY
+// CHECKLIST and rewrites any weak sections BEFORE we spend an image-render
+// call on it. This turns Lensa from a one-shot generator into an agent
+// that verifies its own work. Best-effort: on any failure the original
+// draft is returned untouched with verdict 'unreviewed'.
+async function critiqueAndReviseTemplate(args: {
+  apiKey: string
+  draftName: string
+  draftPrompt: string
+  aspectHint: string
+  rendererNote: string
+}): Promise<{ name: string; prompt: string; critique: LensaCritique }> {
+  const { apiKey, draftName, draftPrompt, aspectHint, rendererNote } = args
+  let currentName = draftName
+  let currentPrompt = draftPrompt
+  const notes: string[] = []
+  let rounds = 0
+  let wasRevised = false
+
+  const system = `You are Lensa's QA art-director — a strict reviewer who grades GritSync image-template prompts before they reach a renderer. You know the brand and the image-craft rules cold.
+
+${GRITSYNC_KB}
+
+${LENSA_IMAGE_CRAFT_KB}
+
+${rendererNote}
+
+PRIMARY ASPECT RATIO FOR THIS TEMPLATE: ${aspectHint}
+
+YOUR JOB: grade the candidate template prompt against the 12-point PROMPT QUALITY CHECKLIST above. For every checklist item that is missing, vague, or off-brand, REWRITE that section. Leave sections that already pass untouched — do not restyle a prompt that is already strong. Always keep the 12 labelled sections, in this exact order: Subject / Action / Setting / Composition / Lighting / Style / Camera / Props & set dressing / Typography / Brand elements / Aspect ratio & safe zones / Negative prompt.
+
+HARD CHECKS — these must always hold; if any fails, the verdict is "revise":
+  - Filipino healthcare subject only (or an intentional no-human flat-lay).
+  - The GritSync brand mark is NATURALLY INTEGRATED into the scene (badge / lanyard / embroidery / signage / sticker / lockup) — never a floating corner watermark.
+  - "gritsync.com" appears once as in-scene printed text, not a watermark.
+  - The Negative prompt forbids brand misspellings ("GritSink", "GritSinc", "Grit Sync", "gritsync com") and lists at least 6 anti-artifact terms.
+  - Composition + Aspect ratio & safe zones are written around the ${aspectHint} ratio with explicit pixel margins.
+  - No fabricated claims, no named hospitals/schools, no US landmarks the brand has not endorsed.
+  - The prompt is a reusable GUIDE — no one-shot specifics that won't generalise across many captions.
+
+Return JSON only.`
+
+  for (let round = 0; round < LENSA_MAX_CRITIQUE_ROUNDS; round++) {
+    const user = `CANDIDATE TEMPLATE NAME: ${currentName}
+
+CANDIDATE TEMPLATE PROMPT:
+"""
+${currentPrompt}
+"""
+
+Grade it against the 12-point checklist and the hard checks. Return ONLY this JSON object — no surrounding text, no markdown fence:
+{
+  "verdict": "pass" | "revise",
+  "failed_checks": ["<short label for each checklist item or hard check that failed; [] if none>"],
+  "revised_prompt": "<if verdict is 'revise': the FULL corrected template prompt as a single string with \\n line breaks, all 12 sections in order. If verdict is 'pass': null>",
+  "revised_name": "<an improved 2-4 word name, or the current name if it is already good>",
+  "summary": "<one sentence: what you fixed, or why the draft already passes>"
+}`
+
+    let parsed: any = {}
+    try {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
+          temperature: 0.4,
+          max_tokens: 5000,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      })
+      if (!r.ok) break
+      const j: any = await r.json().catch(() => ({}))
+      const respText = j.choices?.[0]?.message?.content || '{}'
+      parsed = JSON.parse(respText)
+    } catch {
+      break // network error or malformed JSON — keep what we have; review is best-effort
+    }
+    rounds = round + 1
+
+    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+    if (summary) notes.push(summary)
+
+    // Approved — nothing more to do.
+    if (parsed.verdict === 'pass') break
+    // 'revise' verdict but no usable rewrite — stop, don't loop emptily.
+    const revised = String(parsed.revised_prompt || '').trim()
+    if (!revised || revised.length < 200) break
+
+    // Adopt the revision and loop once more so the next round can confirm
+    // the fix held (or catch a section the first pass missed).
+    currentPrompt = revised
+    wasRevised = true
+    const revisedName = typeof parsed.revised_name === 'string' ? parsed.revised_name.trim() : ''
+    if (revisedName) currentName = revisedName
+  }
+
+  const verdict: LensaCritique['verdict'] =
+    rounds === 0 ? 'unreviewed' : wasRevised ? 'revised' : 'pass'
+
+  return {
+    name: currentName,
+    prompt: currentPrompt,
+    critique: { rounds, verdict, notes: notes.slice(0, 6) },
+  }
+}
+
+// Phase 4 — VISUAL QA. Lensa renders one preview, then a vision-capable
+// pass actually LOOKS at the rendered pixels and judges them against the
+// brand bar: is a Filipino healthcare subject in frame, is the GritSync
+// mark integrated as a real object (not a stuck-on watermark), is
+// "gritsync.com" spelled right, is any on-canvas text legible, does the
+// framing match the intended aspect ratio. Advisory only — it never
+// blocks and never auto-re-renders (a second render is the slow path);
+// the operator sees the verdict and can hit Generate again.
+async function visionQaPreview(args: {
+  apiKey: string
+  previewUrl: string
+  aspectHint: string
+}): Promise<LensaQa | null> {
+  const { apiKey, previewUrl, aspectHint } = args
+
+  // Inline the rendered preview as a base64 data URL so the vision model
+  // never has to reach back into our storage host (the stored value may
+  // be a relative path or a Drive link).
+  let dataUrl: string
+  try {
+    const dl = await fetch(toAbsoluteUrl(previewUrl))
+    if (!dl.ok) return null
+    const buf = Buffer.from(await dl.arrayBuffer())
+    if (!buf.length) return null
+    const ct = dl.headers.get('content-type') || 'image/png'
+    dataUrl = `data:${ct};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+
+  const system = `You are Lensa's visual QA reviewer. You are shown ONE rendered preview of a GritSync social-media image template. Judge whether it meets the brand bar by looking at the actual pixels.
+
+${GRITSYNC_KB}
+
+CHECK:
+  1. SUBJECT — a Filipino healthcare professional (nurse / RN) is in frame, unless the template is an intentional no-human flat-lay.
+  2. BRAND MARK — the square red GritSync "GS" mark appears NATURALLY INTEGRATED as a real object in the scene (embroidered patch, ID badge, sticker, signage, notebook, lockup) — NOT a flat stuck-on corner watermark, NOT missing, NOT garbled into a different logo.
+  3. URL — if "gritsync.com" is visible it is spelled exactly right (never "gritsink", "grit sync", "gritsync com").
+  4. TEXT LEGIBILITY — any on-canvas words are cleanly rendered and correctly spelled, with no warped, doubled, or invented glyphs.
+  5. PALETTE — deep red, white and soft black dominate; warm gold is a restrained accent only.
+  6. CRAFT — photoreal and cinematic, not flat stock-photo or illustration; hands and faces are not distorted.
+  7. ASPECT — the framing reads as ${aspectHint} (or close), with the subject and any text inside safe margins.
+
+Be specific and honest. A clean image gets "pass". Minor brand nits get "warn". A missing or garbled brand mark, wrong subject ethnicity, misspelled brand text, or obvious artifacts get "fail".
+
+Return JSON only.`
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 700,
+        messages: [
+          { role: 'system', content: system },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Review this rendered preview. Return ONLY this JSON object — no markdown fence:
+{
+  "verdict": "pass" | "warn" | "fail",
+  "issues": ["<each concrete problem you can see; [] if none>"],
+  "summary": "<one sentence overall judgement>"
+}`,
+              },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!r.ok) return null
+    const j: any = await r.json().catch(() => ({}))
+    const text = j.choices?.[0]?.message?.content || '{}'
+    let parsed: any = {}
+    try { parsed = JSON.parse(text) } catch { return null }
+    const verdict: LensaQa['verdict'] =
+      parsed.verdict === 'fail' ? 'fail' : parsed.verdict === 'warn' ? 'warn' : 'pass'
+    const issues = Array.isArray(parsed.issues)
+      ? parsed.issues.filter((i: any) => typeof i === 'string' && i.trim()).slice(0, 8)
+      : []
+    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+    return { verdict, issues, summary }
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/social/ai/image-templates/orchestrate
 //
-// Lensa — the image-template research / orchestrate / build agent.
+// Lensa — the image-template research / orchestrate / review / build agent.
 //
-// Three phases in one call:
+// Five phases in one call:
 //   1. RESEARCH — read the existing template library + recent bank captions
 //      to learn what styles we've already shipped and what audiences are
 //      seeing right now. This grounds Lensa so she creates a complementary
 //      template instead of duplicating an existing look.
 //   2. ORCHESTRATE — feed the brief + research + GRITSYNC_KB into
-//      gpt-4o-mini, ask for a structured template { name, prompt,
+//      gpt-4o-mini, ask for a structured DRAFT template { name, prompt,
 //      reasoning }.
-//   3. BUILD — render a preview via generateImage(provider, prompt) so the
-//      operator sees the look before committing. Branding guards
+//   3. REVIEW — critiqueAndReviseTemplate() grades the draft against the
+//      12-point quality checklist and rewrites weak sections before any
+//      render call is spent. Lensa verifies her own work.
+//   4. BUILD — render a preview via generateImage(provider, prompt, ratio)
+//      so the operator sees the look before committing. The preview is now
+//      anchored to the template's intended aspect ratio. Branding guards
 //      (applyImageTextGuards) apply automatically.
+//   5. VISUAL QA — visionQaPreview() inspects the rendered pixels against
+//      the brand bar and returns an advisory verdict.
 //
-// Returns { name, prompt, preview_url, reasoning, provider } — does NOT
-// persist. The client decides whether to save via POST /image-templates.
+// Returns { name, prompt, reasoning, preview_url, preview_error, provider,
+// aspect_ratio, critique, qa } — does NOT persist. The client decides
+// whether to save via POST /image-templates. The critique / qa /
+// aspect_ratio fields are additive; older clients simply ignore them.
 // ---------------------------------------------------------------------------
 router.post('/image-templates/orchestrate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
@@ -746,28 +989,69 @@ Return ONLY this JSON object — no surrounding text, no markdown fence:
     const text = aiJson.choices?.[0]?.message?.content || '{}'
     let parsed: { name?: string; prompt?: string; reasoning?: string } = {}
     try { parsed = JSON.parse(text) } catch {}
-    const name = (parsed.name || '').trim()
-    const prompt = (parsed.prompt || '').trim()
+    const draftName = (parsed.name || '').trim()
+    const draftPrompt = (parsed.prompt || '').trim()
     const reasoning = (parsed.reasoning || '').trim()
-    if (!name || !prompt) return res.status(502).json({ error: 'Lensa returned an incomplete template' })
+    if (!draftName || !draftPrompt) return res.status(502).json({ error: 'Lensa returned an incomplete template' })
+
+    // ── REVIEW ────────────────────────────────────────────────────────
+    // Self-critique pass: grade the draft against the 12-point quality
+    // checklist and rewrite weak sections before a render call is spent.
+    // Best-effort — a failure here falls back to the untouched draft.
+    let name = draftName
+    let prompt = draftPrompt
+    let critique: LensaCritique = { rounds: 0, verdict: 'unreviewed', notes: [] }
+    try {
+      const reviewed = await critiqueAndReviseTemplate({
+        apiKey,
+        draftName,
+        draftPrompt,
+        aspectHint,
+        rendererNote,
+      })
+      name = reviewed.name
+      prompt = reviewed.prompt
+      critique = reviewed.critique
+    } catch (err: any) {
+      console.warn('Lensa critique pass failed, using draft as-is:', err?.message)
+    }
 
     // ── BUILD ─────────────────────────────────────────────────────────
-    // Render a preview with the chosen provider. applyImageTextGuards is
+    // Render a preview with the chosen provider, anchored to the
+    // template's intended aspect ratio (previously every preview rendered
+    // square regardless of the inferred ratio). applyImageTextGuards is
     // applied inside the provider funcs, so branding stays mandatory.
-    // skip_preview lets the modal's inline "Ask Lensa to draft" finish in
-    // one LLM call — the operator will see the preview when they hit
-    // "Create + render preview" on save anyway.
+    // skip_preview lets the modal's inline "Ask Lensa to draft" finish
+    // without a render — the operator will see the preview when they hit
+    // "Create + render preview" on save anyway. The REVIEW pass above
+    // still runs, so the inline draft is QA-improved regardless.
     let preview_url: string | null = null
     let preview_error: string | null = null
     if (!skipPreview) {
       try {
-        preview_url = await generateImage(useProvider, prompt)
+        preview_url = await generateImage(useProvider, prompt, aspectHint)
       } catch (err: any) {
         preview_error = err.message || 'Preview render failed'
       }
     }
 
-    res.json({ data: { name, prompt, reasoning, preview_url, preview_error, provider: useProvider } })
+    // ── VISUAL QA ─────────────────────────────────────────────────────
+    // When a preview rendered, a vision pass inspects the actual pixels
+    // against the brand bar. Advisory only — best-effort, never blocks.
+    let qa: LensaQa | null = null
+    if (preview_url) {
+      qa = await visionQaPreview({ apiKey, previewUrl: preview_url, aspectHint })
+    }
+
+    res.json({
+      data: {
+        name, prompt, reasoning,
+        preview_url, preview_error,
+        provider: useProvider,
+        aspect_ratio: aspectHint,
+        critique, qa,
+      },
+    })
   } catch (err: any) {
     console.error('image-templates orchestrate error:', err)
     res.status(500).json({ error: err.message || 'Lensa failed to orchestrate a template' })
@@ -1852,11 +2136,22 @@ async function generateImageKling(prompt: string, aspect_ratio: string = '1:1'):
   return persistImage(buf, ct)
 }
 
-async function generateImage(provider: ImageProvider, prompt: string): Promise<string> {
+// `aspectRatio` is forwarded to the renderers that accept an explicit
+// ratio (OpenAI picks the closest canvas size via sizeFor(); Kling maps
+// it onto its own enum). Gemini and Grok have no clean ratio parameter
+// on their current surfaces — they stay prompt-driven, so the template
+// prompt's own "Aspect ratio & safe zones" section carries the intent.
+// Defaults to '1:1' so existing callers (generate-batch, regenerate)
+// keep their prior behaviour unchanged.
+async function generateImage(
+  provider: ImageProvider,
+  prompt: string,
+  aspectRatio: string = '1:1',
+): Promise<string> {
   if (provider === 'nano-banana') return generateImageGemini(prompt)
   if (provider === 'grok') return generateImageGrok(prompt)
-  if (provider === 'kling') return generateImageKling(prompt)
-  return generateImageOpenAI(prompt)
+  if (provider === 'kling') return generateImageKling(prompt, aspectRatio)
+  return generateImageOpenAI(prompt, aspectRatio)
 }
 
 // Helper: kick off a Replicate video prediction. If `startImageUrl` is set
