@@ -1,8 +1,13 @@
-import { Router, Response } from 'express'
+import { Router, Request, Response } from 'express'
 import Stripe from 'stripe'
 import { query } from '../db'
 import { optionalAuth, authenticateToken, AuthenticatedRequest } from '../middleware/auth'
 import { grantNclexPremiumOnPayment } from './nclex'
+import {
+  applyNclexSubscriptionPayment,
+  revokeNclexSubscriptionByPaymentReference,
+  isNclexPlan,
+} from './questions'
 import { pushNotifyUser } from '../lib/push'
 
 const router = Router()
@@ -21,6 +26,280 @@ function getStripe(): Stripe | null {
   if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key)) return null
   return new Stripe(key, { apiVersion: '2023-10-16' as any })
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Shared "apply successful payment" logic.
+// These functions are the single way a Stripe payment is recorded server-side.
+// They are used by the webhook (reliable backstop) and mirror exactly what the
+// existing client-driven flows write (same tables, same columns, same receipt
+// row), so client-confirm and webhook never diverge. Every function is
+// idempotent — keyed on the payment-intent id plus the row's current status —
+// so a Stripe event delivered twice never double-applies.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Mark a quotation paid (mirrors quotationsAPI.updateStatus(id, 'paid')). */
+async function applyQuotationPaid(quotationId: string, paymentIntentId: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE quotations
+        SET status = 'paid',
+            paid_at = COALESCE(paid_at, NOW()),
+            stripe_intent_id = COALESCE(stripe_intent_id, $2),
+            updated_at = NOW()
+      WHERE id::text = $1
+        AND status NOT IN ('paid', 'refunded')
+      RETURNING id`,
+    [String(quotationId), paymentIntentId]
+  )
+  return (result.rowCount || 0) > 0
+}
+
+/**
+ * Mark an application payment paid + ensure its receipt row exists
+ * (mirrors applicationPaymentsAPI markCompleted for payment_method 'stripe':
+ * status='paid' + payment_method + intent id, then a receipts insert).
+ * Receipt PDFs/emails are a client-side nicety and explicitly non-fatal in the
+ * existing flow, so the webhook backstop only guarantees the DB records.
+ */
+async function applyApplicationPaymentPaid(paymentId: string, paymentIntentId: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE application_payments
+        SET status = 'paid',
+            payment_method = COALESCE(payment_method, 'stripe'),
+            stripe_intent_id = COALESCE(stripe_intent_id, $2),
+            paid_at = COALESCE(paid_at, NOW()),
+            updated_at = NOW()
+      WHERE id::text = $1
+        AND status NOT IN ('paid', 'refunded')
+      RETURNING id`,
+    [String(paymentId), paymentIntentId]
+  )
+  const applied = (result.rowCount || 0) > 0
+
+  // Ensure a receipt exists for this payment (same shape as the client flow's
+  // default receipt: one line item, RCP-<ts>-<rand> number). NOT EXISTS guard
+  // makes redelivery + client/webhook races safe.
+  const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+  await query(
+    `INSERT INTO receipts (payment_id, application_id, user_id, receipt_number, amount, payment_type, items, payment_method)
+     SELECT ap.id, ap.application_id, a.user_id, $2, COALESCE(ap.amount, 0), ap.payment_type,
+            jsonb_build_array(jsonb_build_object(
+              'name', 'NCLEX Application Processing (' || COALESCE(ap.payment_type, 'payment') || ')',
+              'amount', COALESCE(ap.amount, 0)
+            )),
+            'stripe'
+       FROM application_payments ap
+       LEFT JOIN applications a ON a.id = ap.application_id
+      WHERE ap.id::text = $1
+        AND ap.status = 'paid'
+        AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.payment_id = ap.id)`,
+    [String(paymentId), receiptNumber]
+  )
+  return applied
+}
+
+/** Mark a donation completed (mirrors donationsAPI.updateStatus(id, 'completed')). */
+async function applyDonationPaid(donationId: string, paymentIntentId: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE donations
+        SET status = 'completed',
+            donated_at = COALESCE(donated_at, NOW()),
+            stripe_payment_intent_id = COALESCE(stripe_payment_intent_id, $2),
+            stripe_intent_id = COALESCE(stripe_intent_id, $2),
+            payment_method = COALESCE(payment_method, 'stripe'),
+            updated_at = NOW()
+      WHERE id::text = $1
+        AND status NOT IN ('completed', 'refunded')
+      RETURNING id`,
+    [String(donationId), paymentIntentId]
+  )
+  return (result.rowCount || 0) > 0
+}
+
+type IntentMetadata = Record<string, string | undefined>
+
+/**
+ * Route a succeeded payment intent to the right "apply" function based on the
+ * metadata each create-intent endpoint stamps on it:
+ *   quotations    → { quotation_id }
+ *   applications  → { payment_id, application_id, user_id }
+ *   donations     → { donation_id }
+ *   NCLEX subs    → { user_id, plan } (questions.ts create-payment-intent)
+ */
+async function applySuccessfulPaymentIntent(intentId: string, md: IntentMetadata): Promise<void> {
+  if (md.quotation_id) {
+    const applied = await applyQuotationPaid(md.quotation_id, intentId)
+    console.log(`[payments webhook] quotation ${md.quotation_id} ${applied ? 'marked paid' : 'already paid (no-op)'} (pi ${intentId})`)
+  } else if (md.payment_id) {
+    const applied = await applyApplicationPaymentPaid(md.payment_id, intentId)
+    console.log(`[payments webhook] application payment ${md.payment_id} ${applied ? 'marked paid' : 'already paid (no-op)'} (pi ${intentId})`)
+  } else if (md.donation_id) {
+    const applied = await applyDonationPaid(md.donation_id, intentId)
+    console.log(`[payments webhook] donation ${md.donation_id} ${applied ? 'marked completed' : 'already completed (no-op)'} (pi ${intentId})`)
+  } else if (md.user_id && isNclexPlan(md.plan)) {
+    const { alreadyApplied } = await applyNclexSubscriptionPayment(md.user_id, md.plan, intentId)
+    console.log(`[payments webhook] NCLEX ${md.plan} subscription for user ${md.user_id} ${alreadyApplied ? 'already granted (no-op)' : 'granted'} (pi ${intentId})`)
+  } else {
+    console.warn(`[payments webhook] payment_intent ${intentId} succeeded but has no recognized metadata — nothing to apply`)
+  }
+}
+
+/**
+ * Mark whichever record a refunded/disputed payment intent paid for as
+ * refunded, and revoke any NCLEX subscription the intent granted.
+ */
+async function applyRefundOrDispute(intentId: string, md: IntentMetadata, reason: string): Promise<void> {
+  if (md.quotation_id) {
+    const r = await query(
+      `UPDATE quotations SET status = 'refunded', updated_at = NOW()
+        WHERE id::text = $1 AND status <> 'refunded' RETURNING id`,
+      [String(md.quotation_id)]
+    )
+    if (r.rowCount) console.error(`[payments webhook] quotation ${md.quotation_id} marked refunded (${reason}, pi ${intentId})`)
+  } else if (md.payment_id) {
+    const r = await query(
+      `UPDATE application_payments SET status = 'refunded', updated_at = NOW()
+        WHERE id::text = $1 AND status <> 'refunded' RETURNING id`,
+      [String(md.payment_id)]
+    )
+    if (r.rowCount) console.error(`[payments webhook] application payment ${md.payment_id} marked refunded (${reason}, pi ${intentId})`)
+  } else if (md.donation_id) {
+    const r = await query(
+      `UPDATE donations SET status = 'refunded', updated_at = NOW()
+        WHERE id::text = $1 AND status <> 'refunded' RETURNING id`,
+      [String(md.donation_id)]
+    )
+    if (r.rowCount) console.error(`[payments webhook] donation ${md.donation_id} marked refunded (${reason}, pi ${intentId})`)
+  }
+  // Always attempt subscription revocation by payment_reference — covers both
+  // metadata-routed subscription intents and any edge case where metadata was
+  // lost but the grant recorded the intent id.
+  await revokeNclexSubscriptionByPaymentReference(intentId, reason)
+}
+
+/**
+ * Resolve the payment-intent id + metadata for a charge-level event. Charges
+ * inherit metadata from their PaymentIntent in the normal confirm flow, but if
+ * the charge carries none of our known keys we fall back to retrieving the
+ * intent itself.
+ */
+async function resolveChargeIntent(
+  stripe: Stripe,
+  charge: { payment_intent?: string | Stripe.PaymentIntent | null; metadata?: Stripe.Metadata | null }
+): Promise<{ intentId: string; metadata: IntentMetadata } | null> {
+  const pi = charge.payment_intent
+  const intentId = typeof pi === 'string' ? pi : pi?.id
+  if (!intentId) return null
+  const KNOWN_KEYS = ['quotation_id', 'payment_id', 'donation_id', 'plan'] as const
+  const chargeMd = (charge.metadata || {}) as IntentMetadata
+  if (KNOWN_KEYS.some((k) => chargeMd[k])) return { intentId, metadata: chargeMd }
+  if (typeof pi === 'object' && pi?.metadata) return { intentId, metadata: pi.metadata as IntentMetadata }
+  const intent = await stripe.paymentIntents.retrieve(intentId)
+  return { intentId, metadata: (intent.metadata || {}) as IntentMetadata }
+}
+
+/** Transient infra errors should make Stripe retry (HTTP 500); data errors should not (HTTP 200 + log). */
+function isTransientInfraError(err: any): boolean {
+  const code = String(err?.code || '')
+  if (/^(ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE)$/.test(code)) return true
+  // Postgres SQLSTATE classes: 08 connection, 53 insufficient resources,
+  // 57 operator intervention (e.g. shutdown), 40 transaction rollback (deadlock).
+  if (/^(08|53|57|40)/.test(code)) return true
+  if (err?.message && /connect|timeout|terminat/i.test(String(err.message)) && !code) return true
+  return false
+}
+
+// POST /api/payments/webhook — Stripe webhook endpoint.
+// Signature-verified against the raw request bytes (stashed on req.rawBody by
+// the json `verify` hook in server/index.ts). This is the authoritative,
+// server-to-server confirmation of payment outcomes — the client-driven
+// confirm flows remain, but this backstop means a closed browser tab can no
+// longer leave a paid record unpaid, and refunds/disputes revoke access.
+router.post('/webhook', async (req: Request, res: Response) => {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim()
+  if (!webhookSecret) {
+    return res.status(503).json({ error: 'STRIPE_WEBHOOK_SECRET is not configured' })
+  }
+  const stripe = getStripe()
+  if (!stripe) {
+    return res.status(503).json({ error: 'Stripe is not configured (STRIPE_SECRET_KEY missing or placeholder)' })
+  }
+
+  const signature = req.headers['stripe-signature']
+  const rawBody = (req as any).rawBody as Buffer | undefined
+  if (!signature || !rawBody) {
+    return res.status(400).json({ error: 'Missing Stripe signature or raw request body' })
+  }
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature as string, webhookSecret)
+  } catch (err: any) {
+    console.error('[payments webhook] signature verification failed:', err?.message)
+    return res.status(400).json({ error: `Webhook signature verification failed` })
+  }
+
+  try {
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const intent = event.data.object as Stripe.PaymentIntent
+        await applySuccessfulPaymentIntent(intent.id, (intent.metadata || {}) as IntentMetadata)
+        break
+      }
+
+      case 'payment_intent.payment_failed': {
+        const intent = event.data.object as Stripe.PaymentIntent
+        const md = (intent.metadata || {}) as IntentMetadata
+        const lastError = intent.last_payment_error?.message || 'unknown error'
+        console.warn(`[payments webhook] payment_intent ${intent.id} failed (${lastError}); metadata:`, md)
+        // Only donations have a 'failed' state in the app's status vocabulary;
+        // quotations/application payments stay 'pending' so they can be retried.
+        if (md.donation_id) {
+          await query(
+            `UPDATE donations SET status = 'failed', updated_at = NOW()
+              WHERE id::text = $1 AND status = 'pending'`,
+            [String(md.donation_id)]
+          )
+        }
+        break
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge
+        const resolved = await resolveChargeIntent(stripe, charge)
+        if (resolved) {
+          await applyRefundOrDispute(resolved.intentId, resolved.metadata, 'charge.refunded')
+        } else {
+          console.warn(`[payments webhook] charge.refunded ${charge.id} has no payment_intent — skipping`)
+        }
+        break
+      }
+
+      case 'charge.dispute.created': {
+        const dispute = event.data.object as Stripe.Dispute
+        console.error(`[payments webhook] DISPUTE created: ${dispute.id} (charge ${typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id}, amount ${dispute.amount} ${dispute.currency}, reason ${dispute.reason})`)
+        const resolved = await resolveChargeIntent(stripe, dispute as any)
+        if (resolved) {
+          await applyRefundOrDispute(resolved.intentId, resolved.metadata, 'charge.dispute.created')
+        }
+        break
+      }
+
+      default:
+        // Unhandled event types are acknowledged so Stripe doesn't retry them.
+        break
+    }
+    return res.json({ received: true })
+  } catch (err: any) {
+    console.error(`[payments webhook] error handling ${event.type} (${event.id}):`, err)
+    if (isTransientInfraError(err)) {
+      // Let Stripe retry — the DB hiccupped, not the data.
+      return res.status(500).json({ error: 'Transient error, please retry' })
+    }
+    // Permanent data error (bad row, missing record): acknowledge so Stripe
+    // doesn't retry forever; the console.error above surfaces it in logs.
+    return res.json({ received: true, warning: 'handler error logged' })
+  }
+})
 
 // POST /api/payments/create-intent — quotation payment intent
 router.post('/create-intent', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {

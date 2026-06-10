@@ -59,12 +59,14 @@ app.use(cors({
   credentials: true,
 }))
 // `verify` hook stashes the raw request bytes on the request object for
-// routes that need to recompute a signature (e.g. Svix-signed Resend
-// webhooks). The body is still parsed normally — `req.body` still works.
+// routes that need to recompute a signature (Svix-signed Resend webhooks,
+// Stripe-signed payment webhooks). The body is still parsed normally —
+// `req.body` still works.
+const RAW_BODY_PATHS = ['/api/emails/webhook', '/api/payments/webhook']
 app.use(json({
   limit: '10mb',
   verify: (req: any, _res, buf) => {
-    if (typeof req.url === 'string' && req.url.startsWith('/api/emails/webhook')) {
+    if (typeof req.url === 'string' && RAW_BODY_PATHS.some((p) => req.url.startsWith(p))) {
       req.rawBody = buf
     }
   },

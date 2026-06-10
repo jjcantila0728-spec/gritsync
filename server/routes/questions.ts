@@ -24,6 +24,96 @@ function isAdmin(req: AuthenticatedRequest): boolean {
   return req.user?.role === 'admin'
 }
 
+// ─── NCLEX subscription pricing (canonical, server-side) ─────────────────────
+// Single source of truth for what each plan costs. Used by:
+//   * POST /subscription/create-payment-intent (creates the Stripe intent)
+//   * POST /subscription/stripe-complete       (verifies the intent amount)
+//   * the Stripe webhook in routes/payments.ts (backstop grant)
+export const NCLEX_PLAN_PRICING: Record<'premium' | 'vip', {
+  amountCents: number   // Stripe amount (centavos)
+  amount: number        // whole-unit amount stored on nclex_subscriptions.payment_amount
+  currency: 'php'
+  months: number
+  label: string
+}> = {
+  premium: { amountCents: 25000, amount: 250, currency: 'php', months: 2, label: 'Premium (2 months)' },
+  vip:     { amountCents: 50000, amount: 500, currency: 'php', months: 6, label: 'VIP (6 months)' },
+}
+
+export function isNclexPlan(plan: any): plan is 'premium' | 'vip' {
+  return plan === 'premium' || plan === 'vip'
+}
+
+/**
+ * Idempotently grant an NCLEX subscription for a succeeded Stripe payment.
+ *
+ * nclex_subscriptions has no UNIQUE constraint on payment_reference (and we
+ * can't add one without a migration), so uniqueness is enforced with a
+ * transaction-scoped advisory lock keyed on the payment intent id followed by
+ * an existence check. If a subscription already exists for this intent, it is
+ * returned as-is — no double grant. Safe to call from both
+ * /subscription/stripe-complete and the payments webhook.
+ */
+export async function applyNclexSubscriptionPayment(
+  userId: string,
+  plan: 'premium' | 'vip',
+  paymentIntentId: string
+): Promise<{ subscription: any; alreadyApplied: boolean }> {
+  const pricing = NCLEX_PLAN_PRICING[plan]
+  return withTransaction(async (q) => {
+    // Serialize concurrent grant attempts for the same intent (webhook vs
+    // client confirm racing each other).
+    await q(`SELECT pg_advisory_xact_lock(hashtext($1))`, [paymentIntentId])
+
+    const existing = await q(
+      `SELECT id, plan, expires_at FROM nclex_subscriptions WHERE payment_reference = $1 LIMIT 1`,
+      [paymentIntentId]
+    )
+    if (existing.rows[0]) {
+      return { subscription: existing.rows[0], alreadyApplied: true }
+    }
+
+    // Expire existing active subscription (same behavior as the original
+    // client-driven flow).
+    await q(
+      `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+      [String(userId)]
+    )
+
+    const result = await q(
+      `INSERT INTO nclex_subscriptions
+         (user_id, plan, status, expires_at, payment_amount, payment_currency, payment_method, payment_reference, activated_by)
+       VALUES ($1, $2, 'active', NOW() + ($3 || ' months')::INTERVAL, $4, 'PHP', 'stripe', $5, 'stripe')
+       RETURNING id, plan, expires_at`,
+      [String(userId), plan, String(pricing.months), pricing.amount, paymentIntentId]
+    )
+    return { subscription: result.rows[0], alreadyApplied: false }
+  })
+}
+
+/**
+ * Revoke (cancel) any active NCLEX subscription granted by the given Stripe
+ * payment intent. Used by the payments webhook on charge.refunded /
+ * charge.dispute.created. Idempotent — only flips rows still 'active'.
+ */
+export async function revokeNclexSubscriptionByPaymentReference(
+  paymentIntentId: string,
+  reason: string
+): Promise<number> {
+  const result = await query(
+    `UPDATE nclex_subscriptions
+        SET status = 'cancelled', updated_at = NOW()
+      WHERE payment_reference = $1 AND status = 'active'
+      RETURNING id, user_id, plan`,
+    [paymentIntentId]
+  )
+  const count = result.rowCount || 0
+  if (count > 0) {
+    console.error(`[nclex] Revoked ${count} subscription(s) for payment intent ${paymentIntentId} (${reason}):`, result.rows)
+  }
+  return count
+}
+
 async function getUserPlanAndUsage(userId: string): Promise<{ plan: string; questionsToday: number; dailyLimit: number | null; canAnswer: boolean }> {
   const today = new Date().toISOString().split('T')[0]
   const subResult = await query(
@@ -93,7 +183,7 @@ router.post('/subscription/create-payment-intent', authenticateToken, async (req
 
   try {
     const { plan } = req.body
-    if (!plan || !['premium', 'vip'].includes(plan)) {
+    if (!isNclexPlan(plan)) {
       return res.status(400).json({ error: 'plan must be premium or vip' })
     }
 
@@ -109,11 +199,11 @@ router.post('/subscription/create-payment-intent', authenticateToken, async (req
     const Stripe = require('stripe')
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2023-10-16' })
 
-    const amountCents = plan === 'vip' ? 50000 : 25000 // ₱500 or ₱250 in centavos
+    const pricing = NCLEX_PLAN_PRICING[plan] // ₱500 or ₱250 in centavos
     const intent = await stripe.paymentIntents.create({
-      amount: amountCents,
-      currency: 'php',
-      description: `GritSync NCLEX ${plan === 'vip' ? 'VIP (6 months)' : 'Premium (2 months)'}`,
+      amount: pricing.amountCents,
+      currency: pricing.currency,
+      description: `GritSync NCLEX ${pricing.label}`,
       metadata: { user_id: String(userId), plan },
     })
 
@@ -131,6 +221,19 @@ router.post('/subscription/stripe-complete', authenticateToken, async (req: Auth
   try {
     const { paymentIntentId, plan } = req.body
     if (!paymentIntentId || !plan) return res.status(400).json({ error: 'paymentIntentId and plan are required' })
+    if (!isNclexPlan(plan)) return res.status(400).json({ error: 'plan must be premium or vip' })
+    const pricing = NCLEX_PLAN_PRICING[plan]
+
+    // Idempotency: if this payment intent already produced a subscription
+    // (e.g. the webhook beat us to it, or the client retried), return success
+    // without granting again.
+    const existing = await query(
+      `SELECT id, plan, expires_at FROM nclex_subscriptions WHERE payment_reference = $1 LIMIT 1`,
+      [String(paymentIntentId)]
+    )
+    if (existing.rows[0]) {
+      return res.json({ success: true, subscription: existing.rows[0], alreadyApplied: true })
+    }
 
     // Verify intent with Stripe
     let stripeSecretKey = process.env.STRIPE_SECRET_KEY || ''
@@ -148,24 +251,22 @@ router.post('/subscription/stripe-complete', authenticateToken, async (req: Auth
     if (intent.status !== 'succeeded') {
       return res.status(400).json({ error: `Payment not completed (status: ${intent.status})` })
     }
+    // The intent must have been created by /subscription/create-payment-intent
+    // with the exact canonical price for the claimed plan — a $1 intent can't
+    // buy a VIP subscription, and someone else's intent can't be replayed here.
+    if (String(intent.currency).toLowerCase() !== pricing.currency || intent.amount !== pricing.amountCents) {
+      return res.status(400).json({ error: 'Payment amount does not match the selected plan' })
+    }
+    const intentMeta = (intent.metadata || {}) as Record<string, string | undefined>
+    if (intentMeta.plan && intentMeta.plan !== plan) {
+      return res.status(400).json({ error: 'Payment was made for a different plan' })
+    }
+    if (intentMeta.user_id && intentMeta.user_id !== String(userId)) {
+      return res.status(403).json({ error: 'This payment belongs to a different account' })
+    }
 
-    // Expire existing active subscription
-    await query(
-      `UPDATE nclex_subscriptions SET status = 'expired', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
-      [String(userId)]
-    )
-
-    const months = plan === 'vip' ? 6 : 2
-    const amount = plan === 'vip' ? 500 : 250
-    const result = await query(
-      `INSERT INTO nclex_subscriptions
-         (user_id, plan, status, expires_at, payment_amount, payment_currency, payment_method, payment_reference, activated_by)
-       VALUES ($1, $2, 'active', NOW() + ($3 || ' months')::INTERVAL, $4, 'PHP', 'stripe', $5, 'stripe')
-       RETURNING id, plan, expires_at`,
-      [String(userId), plan, String(months), amount, paymentIntentId]
-    )
-
-    res.json({ success: true, subscription: result.rows[0] })
+    const { subscription, alreadyApplied } = await applyNclexSubscriptionPayment(String(userId), plan, String(paymentIntentId))
+    res.json({ success: true, subscription, ...(alreadyApplied ? { alreadyApplied: true } : {}) })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
