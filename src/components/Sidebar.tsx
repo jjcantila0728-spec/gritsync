@@ -57,8 +57,8 @@ import {
   Link2,
   ArrowUpRight,
   Share2,
+  AlertCircle,
 } from 'lucide-react'
-import { AlertCircleSolid } from './icons/AlertCircleSolid'
 
 interface NavItem {
   label: string
@@ -543,34 +543,36 @@ export function Sidebar() {
               key={item.path}
               to={item.path}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                // border-l-4 is reserved on both states (transparent when
+                // inactive) so the text never shifts; pl-3 + 4px border = px-4.
+                'flex items-center gap-3 border-l-4 pl-3 pr-4 py-3 rounded-lg transition-colors',
                 isActive
-                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
               )}
             >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              <span className="flex-1 min-w-0">{item.label}</span>
+              <Icon className={cn('h-5 w-5 flex-shrink-0', isActive && 'text-primary-600 dark:text-primary-400')} />
+              <span className={cn('flex-1 min-w-0', isActive && 'font-semibold')}>{item.label}</span>
               {showQuotesCounter && (
-                <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
                 </span>
               )}
               {showEmailsCounter && (
-                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
                 </span>
               )}
               {showMessagesCounter && (
-                <span className="flex-shrink-0 bg-green-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                 </span>
               )}
               {showDocumentsStop && (
-                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-500" aria-hidden="true" />
               )}
               {showApplicationsStop && (
-                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-500" aria-hidden="true" />
               )}
             </Link>
           )
@@ -580,7 +582,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); openReviewWithSso() }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="w-full flex items-center gap-3 border-l-4 border-transparent pl-3 pr-4 py-3 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />
             <span className="flex-1 min-w-0 text-left">NCLEX Review</span>
@@ -1008,35 +1010,37 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
               to={item.path}
               onClick={onNavigate}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full',
+                // border-l-4 is reserved on both states (transparent when
+                // inactive) so the text never shifts; pl-3 + 4px border = px-4.
+                'flex items-center gap-3 border-l-4 pl-3 pr-4 py-3 rounded-lg transition-colors w-full',
                 isActive
-                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
               )}
               style={{ visibility: 'visible', display: 'flex' }}
             >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              <span className="flex-1 min-w-0 block">{item.label}</span>
+              <Icon className={cn('h-5 w-5 flex-shrink-0', isActive && 'text-primary-600 dark:text-primary-400')} />
+              <span className={cn('flex-1 min-w-0 block', isActive && 'font-semibold')}>{item.label}</span>
               {showQuotesCounter && (
-                <span className="flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unopenedQuotesCount > 99 ? '99+' : unopenedQuotesCount}
                 </span>
               )}
               {showEmailsCounter && (
-                <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadEmailsCount > 99 ? '99+' : unreadEmailsCount}
                 </span>
               )}
               {showMessagesCounter && (
-                <span className="flex-shrink-0 bg-green-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                <span className="flex-shrink-0 bg-primary-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
                   {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                 </span>
               )}
               {showDocumentsStop && (
-                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-500" aria-hidden="true" />
               )}
               {showApplicationsStop && (
-                <AlertCircleSolid className="h-4 w-4 flex-shrink-0" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-500" aria-hidden="true" />
               )}
             </Link>
           )
@@ -1046,7 +1050,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); onNavigate?.(); openReviewWithSso() }}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="flex items-center gap-3 border-l-4 border-transparent pl-3 pr-4 py-3 rounded-lg transition-colors w-full text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             style={{ visibility: 'visible', display: 'flex' }}
           >
             <BookOpen className="h-5 w-5 flex-shrink-0" />

@@ -18,6 +18,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
+    // mobile-e2e holds Playwright specs — they crash if vitest collects them.
+    exclude: ['**/node_modules/**', '**/dist/**', 'mobile-e2e/**', 'mobile/**', 'review/**'],
   },
   server: {
     port: 5000,

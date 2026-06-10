@@ -12,9 +12,10 @@ import { NotificationModal } from './NotificationModal'
 import type { NotificationItem } from './NotificationModal'
 import { Moon, Sun, LogOut, Menu, X, ChevronDown, Settings, UserCircle, ArrowLeft, AlertTriangle } from 'lucide-react'
 import { Button } from './ui/Button'
+import { AvatarCircle } from './ui/AvatarCircle'
 import { MobileSidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
-import { getInitials, getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
+import { getAvatarColor, getAvatarColorDark, getAvatarTextColor, getAvatarTextColorDark } from '@/lib/avatar'
 import { userDetailsAPI, notificationsAPI } from '@/lib/api'
 import { getSignedFileUrl } from '@/lib/storage-urls'
 import { db } from '@/lib/api-client'
@@ -37,7 +38,6 @@ export function Header() {
   const notificationChannelRef = useRef<RealtimeChannel | null>(null)
   const avatarPathRef = useRef<string | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
-  const avatarImageRef = useRef<HTMLImageElement | null>(null)
   const isFetchingAvatarRef = useRef(false)
   const persistedFirstNameRef = useRef<string | null>(null)
 
@@ -995,8 +995,13 @@ export function Header() {
                     }}
                   />
 
-                  {/* Notifications Dropdown */}
+                  {/* Notifications Dropdown. The scale-in animation (same
+                      keyframes as .anim-scale-in) is applied at sm+ only: the
+                      dropdown panel is position:fixed on mobile, and a
+                      transformed ancestor would become its containing block
+                      and break the full-width mobile placement. */}
                   {notificationsOpen && (
+                    <div className="sm:origin-top-right sm:[animation:gs-scale-in_0.2s_cubic-bezier(0.22,1,0.36,1)_both]">
                     <NotificationDropdown
                       notifications={notifications}
                       loading={loadingNotifications}
@@ -1008,6 +1013,7 @@ export function Header() {
                       onViewAll={handleViewAll}
                       onClose={() => setNotificationsOpen(false)}
                     />
+                    </div>
                   )}
                 </div>
 
@@ -1020,35 +1026,21 @@ export function Header() {
                     aria-expanded={userMenuOpen}
                     aria-haspopup="true"
                   >
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold overflow-hidden shadow-lg",
-                      !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
-                      !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
-                      !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
-                      !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
-                    )}>
-                      {avatarUrl ? (
-                        <img 
-                          ref={avatarImageRef}
-                          src={avatarUrl} 
-                          alt="Profile" 
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          decoding="async"
-                          onError={(_e) => {
-                            // If image fails to load, clear cache and reset to initials
-                            const cachedAvatarKey = `avatar_${user?.id}`
-                            const cachedAvatarPathKey = `avatar_path_${user?.id}`
-                            localStorage.removeItem(cachedAvatarKey)
-                            localStorage.removeItem(cachedAvatarPathKey)
-                            setAvatarUrl(null)
-                            avatarPathRef.current = null
-                          }}
-                        />
-                      ) : (
-                        getInitials(avatarName)
+                    {/* Shared avatar component; the user's chosen avatar
+                        design colors (from getCurrentDesign cache) override
+                        AvatarCircle's default fallback palette. */}
+                    <AvatarCircle
+                      src={avatarUrl}
+                      name={avatarName}
+                      size="sm"
+                      className={cn(
+                        'shadow-lg',
+                        !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
+                        !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
+                        !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
+                        !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
                       )}
-                    </div>
+                    />
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       {displayFirstName || user?.email?.split('@')[0] || 'User'}
                     </span>
@@ -1060,41 +1052,25 @@ export function Header() {
 
                   {/* Dropdown Menu */}
                   {userMenuOpen && (
-                    <div 
-                      className="absolute right-0 mt-2 w-56 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg py-2"
+                    <div
+                      className="absolute right-0 mt-2 w-56 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg py-2 anim-scale-in origin-top-right"
                       role="menu"
                       aria-label="User menu"
                     >
                       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                         <div className="flex items-center gap-3 mb-2">
-                          <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 overflow-hidden shadow-lg",
-                            !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
-                            !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
-                            !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
-                            !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
-                          )}>
-                            {avatarUrl ? (
-                              <img 
-                                src={avatarUrl} 
-                                alt="Profile" 
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                                decoding="async"
-                                onError={(_e) => {
-                                  // If image fails to load, clear cache and reset to initials
-                                  const cachedAvatarKey = `avatar_${user?.id}`
-                                  const cachedAvatarPathKey = `avatar_path_${user?.id}`
-                                  localStorage.removeItem(cachedAvatarKey)
-                                  localStorage.removeItem(cachedAvatarPathKey)
-                                  setAvatarUrl(null)
-                                  avatarPathRef.current = null
-                                }}
-                              />
-                            ) : (
-                              getInitials(avatarName)
+                          <AvatarCircle
+                            src={avatarUrl}
+                            name={avatarName}
+                            size="md"
+                            className={cn(
+                              'shadow-lg',
+                              !avatarUrl && getAvatarColor(avatarName, getCurrentDesign()),
+                              !avatarUrl && getAvatarColorDark(avatarName, getCurrentDesign()),
+                              !avatarUrl && getAvatarTextColor(avatarName, getCurrentDesign()),
+                              !avatarUrl && getAvatarTextColorDark(avatarName, getCurrentDesign())
                             )}
-                          </div>
+                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                               {displayFullName || gritsyncEmail || user.email}
@@ -1244,11 +1220,11 @@ export function Header() {
       {/* Mobile Sidebar (Authenticated) */}
       {user && mobileMenuOpen && (
         <>
-          <div 
-            className="md:hidden fixed inset-0 z-30 bg-black/50"
+          <div
+            className="md:hidden fixed inset-0 z-30 bg-black/50 anim-fade-in"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="md:hidden fixed top-[var(--app-header-h,4rem)] bottom-0 left-0 z-40 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 w-64 overflow-y-auto">
+          <div className="md:hidden fixed top-[var(--app-header-h,4rem)] bottom-0 left-0 z-40 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 w-64 overflow-y-auto anim-slide-in-left">
             <MobileSidebar onNavigate={() => setMobileMenuOpen(false)} />
           </div>
         </>

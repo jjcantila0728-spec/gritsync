@@ -5,6 +5,8 @@ import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { StatCard } from '@/components/ui/StatCard'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { Loading } from '@/components/ui/Loading'
 import { NewClientButton } from '@/components/NewClientButton'
@@ -87,12 +89,12 @@ async function apiFetch(path: string) {
 const money = (n: number | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  processing: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  completed: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  approved: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  pending: 'bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-700/60 dark:text-gray-300 dark:border-gray-600',
+  in_progress: 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
+  processing: 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
+  completed: 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+  approved: 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+  rejected: 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30',
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'approved', 'rejected'])
@@ -228,35 +230,39 @@ export function AdvisorPanel() {
 
           {/* KPI strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <KpiCard
+            <StatCard
               icon={UserCheck}
               label="Assigned clients"
               value={String(data?.stats.assignedClients ?? 0)}
-              tint="violet"
+              accent="violet"
               onClick={isAdvisor ? () => navigate('/advisor/clients') : undefined}
-              hint={isAdvisor ? 'Manage clients' : undefined}
+              className={isAdvisor ? 'cursor-pointer' : undefined}
+              role={isAdvisor ? 'button' : undefined}
+              sub={isAdvisor ? 'Manage clients' : undefined}
             />
-            <KpiCard
+            <StatCard
               icon={ClipboardList}
               label="Active applications"
               value={String(activeApps)}
-              tint="blue"
+              accent="blue"
               onClick={isAdvisor ? () => navigate('/advisor/applications') : undefined}
-              hint={isAdvisor ? `${apps.length} total` : undefined}
+              className={isAdvisor ? 'cursor-pointer' : undefined}
+              role={isAdvisor ? 'button' : undefined}
+              sub={isAdvisor ? `${apps.length} total` : undefined}
             />
-            <KpiCard
+            <StatCard
               icon={TrendingUp}
               label="Referred volume"
               value={money(data?.stats.totalPaidVolume ?? 0)}
-              tint="amber"
-              hint={`${data?.stats.totalConverted ?? 0} converted`}
+              accent="amber"
+              sub={`${data?.stats.totalConverted ?? 0} converted`}
             />
-            <KpiCard
+            <StatCard
               icon={DollarSign}
               label={`Your earnings (${data?.bonusPercent ?? 10}%)`}
               value={money(data?.stats.totalEarnings ?? 0)}
-              tint="emerald"
-              hint={`${data?.stats.totalReferred ?? 0} referred`}
+              accent="green"
+              sub={`${data?.stats.totalReferred ?? 0} referred`}
             />
           </div>
 
@@ -268,7 +274,7 @@ export function AdvisorPanel() {
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" /> Needs attention
+                      <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" /> Needs attention
                     </h2>
                     {needsAttention.length > 0 && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -277,14 +283,21 @@ export function AdvisorPanel() {
                     )}
                   </div>
                   {needsAttention.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      <CheckCircle className="h-9 w-9 mx-auto mb-2 text-emerald-500 opacity-70" />
-                      <p className="text-sm">
-                        {apps.length === 0
-                          ? 'No applications yet — add a client or share your link to get started.'
-                          : 'Everything looks current. No stalled or pending applications.'}
-                      </p>
-                    </div>
+                    apps.length === 0 ? (
+                      <EmptyState
+                        icon={FileText}
+                        title="No applications yet"
+                        description="Add a client or share your link to get started."
+                        className="py-8"
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={CheckCircle}
+                        title="Everything looks current"
+                        description="No stalled or pending applications."
+                        className="py-8"
+                      />
+                    )
                   ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {needsAttention.map(({ app, stale }) => (
@@ -293,7 +306,7 @@ export function AdvisorPanel() {
                           app={app}
                           onOpen={() => navigate(`/applications/${app.id}/timeline`)}
                           right={
-                            <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30 px-2 py-0.5 whitespace-nowrap">
                               <Clock className="h-3 w-3" />
                               {Number.isFinite(stale) ? `${stale}d stale` : 'pending'}
                             </span>
@@ -319,10 +332,12 @@ export function AdvisorPanel() {
                     </button>
                   </div>
                   {recentApps.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      <FileText className="h-9 w-9 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">No applications across your clients yet.</p>
-                    </div>
+                    <EmptyState
+                      icon={FileText}
+                      title="No applications yet"
+                      description="No applications across your clients yet."
+                      className="py-8"
+                    />
                   ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {recentApps.map((app) => (
@@ -344,7 +359,28 @@ export function AdvisorPanel() {
                   <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary-500" /> People you referred
                   </h2>
-                  <div className="overflow-x-auto -mx-6 px-6">
+                  {/* Mobile: stacked cards (same data as the table below md). */}
+                  <div className="md:hidden space-y-3">
+                    {data.referred.slice(0, 8).map((r) => (
+                      <div key={r.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{getFullName(r.first_name, r.last_name, 'No name')}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Joined {formatDate(r.created_at)}</p>
+                          </div>
+                          {r.converted
+                            ? <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 px-2 py-0.5 flex-shrink-0"><CheckCircle className="h-3 w-3" /> Converted</span>
+                            : <span className="text-xs font-medium rounded-full bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700/60 dark:text-gray-300 dark:border-gray-600 px-2 py-0.5 flex-shrink-0">Pending</span>}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">Paid <span className="text-gray-900 dark:text-gray-100 tabular-nums">{money(r.paid_total)}</span></span>
+                          <span className="text-gray-600 dark:text-gray-400">Your bonus <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{money(r.bonus_earned)}</span></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table — hidden below md (use the card list above). */}
+                  <div className="hidden md:block overflow-x-auto -mx-6 px-6">
                     <table className="w-full min-w-[560px]">
                       <thead>
                         <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
@@ -364,19 +400,19 @@ export function AdvisorPanel() {
                             <td className="py-2.5 px-2 sm:px-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{money(r.bonus_earned)}</td>
                             <td className="py-2.5 px-2 sm:px-3">
                               {r.converted
-                                ? <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5"><CheckCircle className="h-3 w-3" /> Converted</span>
-                                : <span className="text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 px-2 py-0.5">Pending</span>}
+                                ? <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 px-2 py-0.5"><CheckCircle className="h-3 w-3" /> Converted</span>
+                                : <span className="text-xs font-medium rounded-full bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700/60 dark:text-gray-300 dark:border-gray-600 px-2 py-0.5">Pending</span>}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {data.referred.length > 8 && (
-                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        Showing 8 of {data.referred.length}.
-                      </p>
-                    )}
                   </div>
+                  {data.referred.length > 8 && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Showing 8 of {data.referred.length}.
+                    </p>
+                  )}
                 </Card>
               )}
             </div>
@@ -523,41 +559,5 @@ function QuickLink({ icon: Icon, label, hint, onClick }: { icon: React.Component
       </div>
       <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-violet-500" />
     </button>
-  )
-}
-
-function KpiCard({
-  icon: Icon, label, value, tint, hint, onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  tint: 'violet' | 'blue' | 'amber' | 'emerald'
-  hint?: string
-  onClick?: () => void
-}) {
-  const tintMap: Record<string, string> = {
-    violet: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
-    blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-    amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
-    emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
-  }
-  const clickable = !!onClick
-  return (
-    <Card
-      className={cn('p-4 transition-all', clickable && 'cursor-pointer hover:shadow-md hover:-translate-y-0.5')}
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 truncate">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
-          {hint && <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 truncate">{hint}</p>}
-        </div>
-        <div className={cn('p-2 rounded-lg flex-shrink-0', tintMap[tint])}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-    </Card>
   )
 }

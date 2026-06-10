@@ -3,11 +3,15 @@
  * Comprehensive analytics and reporting dashboard
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, ReactNode } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import { useToast } from '@/components/ui/Toast'
 import { Loading } from '@/components/ui/Loading'
+import { StatCard } from '@/components/ui/StatCard'
 import { SEO } from '@/components/SEO'
+import { cn } from '@/lib/utils'
+import type { LucideIcon } from 'lucide-react'
 import {
   BarChart,
   LineChart,
@@ -32,15 +36,84 @@ import {
   DollarSign,
   RefreshCw,
   BarChart3,
+  PieChart as PieChartIcon,
 } from 'lucide-react'
 import { analyticsAPI, ApplicationAnalytics, FinancialAnalytics, UserAnalytics, DocumentAnalytics } from '@/lib/analytics-api'
 import { format, subDays, parseISO } from 'date-fns'
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#00D4FF', '#FF6B9D']
+// Single semantic chart palette used by every chart on this page.
+// Order is intentional: brand primary (red) first, then blue, emerald,
+// amber, violet, cyan, rose, gray for additional series/segments.
+const CHART_PALETTE = [
+  '#dc2626', // primary red (matches tailwind primary-600)
+  '#3b82f6', // blue
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#06b6d4', // cyan
+  '#f43f5e', // rose
+  '#6b7280', // gray
+]
+
+// Local wrapper so every chart shares the same padding, border, title and
+// subtitle treatment. `primary` bumps the title size for the lead chart.
+function ChartCard({
+  title,
+  subtitle,
+  icon: Icon,
+  primary = false,
+  className,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  icon?: LucideIcon
+  primary?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-6',
+        className
+      )}
+    >
+      <div className="mb-4">
+        <h3
+          className={cn(
+            'font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2',
+            primary ? 'text-lg' : 'text-base'
+          )}
+        >
+          {Icon && <Icon className={cn(primary ? 'h-5 w-5' : 'h-4 w-4', 'text-primary-500')} />}
+          {title}
+        </h3>
+        {subtitle && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
 
 export function AdminAnalytics() {
   const { isAdmin } = useAuth()
+  const { theme } = useTheme()
   const { showToast } = useToast()
+
+  // Recharts tooltips can't use Tailwind's dark: variants, so derive concrete
+  // colors from ThemeContext (which toggles the `dark` class on <html>).
+  const isDark = theme === 'dark'
+  const tooltipProps = {
+    contentStyle: {
+      backgroundColor: isDark ? '#1f2937' : '#ffffff', // gray-800 / white
+      border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`, // gray-700 / gray-200
+      borderRadius: '8px',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    },
+    labelStyle: { color: isDark ? '#f9fafb' : '#111827', fontWeight: 600 }, // gray-50 / gray-900
+    itemStyle: { color: isDark ? '#d1d5db' : '#4b5563' }, // gray-300 / gray-600
+  }
 
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState(30) // days
@@ -184,98 +257,58 @@ export function AdminAnalytics() {
           <div className="space-y-6">
             {/* Key Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Applications */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Applications</span>
-                  <FileText className="h-5 w-5 text-blue-500" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{applicationData?.total || 0}</p>
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Approval Rate:</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400">
-                    {applicationData?.approval_rate || 0}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Revenue */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Revenue</span>
-                  <DollarSign className="h-5 w-5 text-green-500" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                  ${(financialData?.total_revenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Transactions:</span>
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">
-                    {financialData?.total_transactions || 0}
-                  </span>
-                </div>
-              </div>
-
-              {/* Users */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Users</span>
-                  <Users className="h-5 w-5 text-purple-500" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{userData?.total_users || 0}</p>
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Active:</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400">
-                    {userData?.active_users || 0}
-                  </span>
-                </div>
-              </div>
-
-              {/* Documents */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Documents</span>
-                  <FileText className="h-5 w-5 text-orange-500" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{documentData?.total_documents || 0}</p>
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Approval Rate:</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400">
-                    {documentData?.approval_rate || 0}%
-                  </span>
-                </div>
-              </div>
+              <StatCard
+                label="Total Applications"
+                value={applicationData?.total || 0}
+                icon={FileText}
+                accent="primary"
+                sub={`Approval rate ${applicationData?.approval_rate || 0}%`}
+              />
+              <StatCard
+                label="Total Revenue"
+                value={`$${(financialData?.total_revenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                icon={DollarSign}
+                accent="green"
+                sub={`${financialData?.total_transactions || 0} transactions`}
+              />
+              <StatCard
+                label="Total Users"
+                value={userData?.total_users || 0}
+                icon={Users}
+                accent="violet"
+                sub={`${userData?.active_users || 0} active`}
+              />
+              <StatCard
+                label="Total Documents"
+                value={documentData?.total_documents || 0}
+                icon={FileText}
+                accent="amber"
+                sub={`Approval rate ${documentData?.approval_rate || 0}%`}
+              />
             </div>
 
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Application Trends */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary-500" />
-                  Application Trends
-                </h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={applicationChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                    <XAxis dataKey="date" stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
-                    <Area type="monotone" dataKey="Applications" stroke="#0088FE" fill="#0088FE" fillOpacity={0.6} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+            {/* Primary chart — full width for visual primacy */}
+            <ChartCard
+              title="Application Trends"
+              subtitle={`Daily applications over the last ${dateRange} days`}
+              icon={TrendingUp}
+              primary
+            >
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={applicationChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                  <XAxis dataKey="date" stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                  <YAxis stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                  <Tooltip {...tooltipProps} />
+                  <Area type="monotone" dataKey="Applications" stroke={CHART_PALETTE[0]} fill={CHART_PALETTE[0]} fillOpacity={0.25} strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
+            {/* Secondary charts grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Application Status Distribution */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-primary-500" />
-                  Application Status
-                </h3>
+              <ChartCard title="Application Status" subtitle="Distribution by current status" icon={PieChartIcon}>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -284,98 +317,66 @@ export function AdminAnalytics() {
                       cy="50%"
                       labelLine={false}
                       outerRadius={100}
-                      fill="#8884d8"
+                      fill={CHART_PALETTE[0]}
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {applicationStatusData.map((_entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
+                    <Tooltip {...tooltipProps} />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartCard>
 
               {/* Revenue Trends */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-500" />
-                  Revenue Trends
-                </h3>
+              <ChartCard title="Revenue Trends" subtitle="Daily revenue and transaction counts" icon={DollarSign}>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={financialChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                    <XAxis dataKey="date" stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                    <XAxis dataKey="date" stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <YAxis stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <Tooltip {...tooltipProps} />
                     <Legend />
-                    <Line type="monotone" dataKey="Revenue" stroke="#00C49F" strokeWidth={2} />
-                    <Line type="monotone" dataKey="Transactions" stroke="#0088FE" strokeWidth={2} />
+                    <Line type="monotone" dataKey="Revenue" stroke={CHART_PALETTE[2]} strokeWidth={2} />
+                    <Line type="monotone" dataKey="Transactions" stroke={CHART_PALETTE[1]} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartCard>
 
               {/* Payment Types */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-primary-500" />
-                  Revenue by Payment Type
-                </h3>
+              <ChartCard title="Revenue by Payment Type" subtitle="Totals per payment type" icon={BarChart3}>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={paymentTypeData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                    <XAxis dataKey="name" stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
-                    <Bar dataKey="value" fill="#8884d8">
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                    <XAxis dataKey="name" stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <YAxis stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <Tooltip {...tooltipProps} />
+                    <Bar dataKey="value" fill={CHART_PALETTE[0]}>
                       {paymentTypeData.map((_entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartCard>
 
               {/* User Growth */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <Users className="h-5 w-5 text-purple-500" />
-                  User Growth
-                </h3>
+              <ChartCard title="User Growth" subtitle="New user signups per day" icon={Users}>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={userChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                    <XAxis dataKey="date" stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
-                    <Area type="monotone" dataKey="New Users" stroke="#AF19FF" fill="#AF19FF" fillOpacity={0.6} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
+                    <XAxis dataKey="date" stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <YAxis stroke={isDark ? '#9ca3af' : '#6b7280'} />
+                    <Tooltip {...tooltipProps} />
+                    <Area type="monotone" dataKey="New Users" stroke={CHART_PALETTE[4]} fill={CHART_PALETTE[4]} fillOpacity={0.25} strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartCard>
 
               {/* Document Status */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-orange-500" />
-                  Document Status
-                </h3>
+              <ChartCard title="Document Status" subtitle="Distribution by review status" icon={FileText}>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -384,22 +385,18 @@ export function AdminAnalytics() {
                       cy="50%"
                       labelLine={false}
                       outerRadius={100}
-                      fill="#8884d8"
+                      fill={CHART_PALETTE[0]}
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {documentStatusData.map((_entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                      labelStyle={{ color: 'var(--text-primary)' }}
-                      itemStyle={{ color: 'var(--text-secondary)' }}
-                    />
+                    <Tooltip {...tooltipProps} />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartCard>
             </div>
 
             {/* Additional Stats */}
@@ -409,13 +406,13 @@ export function AdminAnalytics() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Avg Processing Time</span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                       {applicationData?.avg_processing_days?.toFixed(1) || 0} days
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Rejection Rate</span>
-                    <span className="font-semibold text-red-600 dark:text-red-400">
+                    <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">
                       {applicationData?.rejection_rate || 0}%
                     </span>
                   </div>
@@ -427,13 +424,13 @@ export function AdminAnalytics() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Avg Transaction</span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                       ${(financialData?.avg_transaction_value || 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Outstanding</span>
-                    <span className="font-semibold text-orange-600 dark:text-orange-400">
+                    <span className="font-semibold tabular-nums text-orange-600 dark:text-orange-400">
                       ${(financialData?.outstanding_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -445,13 +442,13 @@ export function AdminAnalytics() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Avg Processing Time</span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                       {documentData?.avg_processing_days?.toFixed(1) || 0} days
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Rejection Rate</span>
-                    <span className="font-semibold text-red-600 dark:text-red-400">
+                    <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">
                       {documentData?.rejection_rate || 0}%
                     </span>
                   </div>

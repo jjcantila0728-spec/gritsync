@@ -270,3 +270,55 @@
   opacity: 1;
 }
 
+/* ===== Motion system =====
+   Shared entrance/feedback animations. Transform + opacity only (GPU-safe).
+   Pair JS-driven motion (parallax, count-ups, autoplay) with the
+   useReducedMotion hook; CSS animation is neutralised globally below. */
+
+@keyframes gs-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gs-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes gs-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes gs-slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+.anim-fade-up   { animation: gs-fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.anim-fade-in   { animation: gs-fade-in 0.25s ease-out both; }
+.anim-scale-in  { animation: gs-scale-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.anim-slide-in-left { animation: gs-slide-in-left 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Stagger helpers for short lists (keep total ≤ ~0.4s). */
+.anim-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.anim-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.anim-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.anim-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.anim-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.anim-stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+/* Respect prefers-reduced-motion everywhere: finish animations immediately
+   and collapse transitions. JS motion must additionally check the
+   useReducedMotion hook. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

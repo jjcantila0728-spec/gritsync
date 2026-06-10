@@ -28,7 +28,13 @@ import {
   Globe,
   HeartHandshake,
   ChevronRight,
-  Play
+  Play,
+  GraduationCap,
+  Landmark,
+  CalendarDays,
+  Ticket,
+  PenLine,
+  Trophy
 } from 'lucide-react'
 
 function useCountUp(target: number, duration: number = 1800, started: boolean = false) {
@@ -61,14 +67,14 @@ function useInView(ref: React.RefObject<Element>, threshold = 0.2) {
 }
 
 const timelineSteps = [
-  { step: 1, title: 'Application Submission', desc: 'Upload documents & pay initial fee', icon: '📋', color: '#ef4444' },
-  { step: 2, title: 'Credentialing', desc: 'Foreign education evaluation', icon: '🎓', color: '#f97316' },
-  { step: 3, title: 'BON Application', desc: 'Board of Nursing review', icon: '🏛️', color: '#eab308' },
-  { step: 4, title: 'NCLEX Eligibility', desc: 'Approval to test granted', icon: '✅', color: '#22c55e' },
-  { step: 5, title: 'Pearson Vue', desc: 'Register & schedule exam', icon: '📅', color: '#06b6d4' },
-  { step: 6, title: 'ATT Received', desc: 'Authorization to Test issued', icon: '🎫', color: '#3b82f6' },
-  { step: 7, title: 'NCLEX Exam', desc: 'Take the licensure exam', icon: '📝', color: '#6366f1' },
-  { step: 8, title: 'Results', desc: 'Quick results in 72 hours', icon: '🏆', color: '#8b5cf6' },
+  { step: 1, title: 'Application Submission', desc: 'Upload documents & pay initial fee', icon: ClipboardList },
+  { step: 2, title: 'Credentialing', desc: 'Foreign education evaluation', icon: GraduationCap },
+  { step: 3, title: 'BON Application', desc: 'Board of Nursing review', icon: Landmark },
+  { step: 4, title: 'NCLEX Eligibility', desc: 'Approval to test granted', icon: CheckCircle },
+  { step: 5, title: 'Pearson Vue', desc: 'Register & schedule exam', icon: CalendarDays },
+  { step: 6, title: 'ATT Received', desc: 'Authorization to Test issued', icon: Ticket },
+  { step: 7, title: 'NCLEX Exam', desc: 'Take the licensure exam', icon: PenLine },
+  { step: 8, title: 'Results', desc: 'Quick results in 72 hours', icon: Trophy },
 ]
 
 const testimonials = [
@@ -104,8 +110,12 @@ export function Home() {
   const statsRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const dashboardRef = useRef<HTMLDivElement>(null)
+  const featuresRef = useRef<HTMLDivElement>(null)
+  const testimonialsRef = useRef<HTMLDivElement>(null)
   const timelineInView = useInView(timelineRef)
   const dashboardInView = useInView(dashboardRef)
+  const featuresInView = useInView(featuresRef, 0.1)
+  const testimonialsInView = useInView(testimonialsRef, 0.1)
   const count500 = useCountUp(500, 1800, statsStarted)
   const count98 = useCountUp(98, 1600, statsStarted)
   const count50 = useCountUp(50, 1500, statsStarted)
@@ -253,9 +263,9 @@ export function Home() {
       </div>
 
       {/* Features Section */}
-      <section id="features" className="py-24 bg-white dark:bg-gray-900 scroll-mt-16 overflow-hidden">
+      <section id="features" className="py-24 bg-gray-50 dark:bg-gray-900 scroll-mt-16 overflow-hidden">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
+          <div className="mb-14 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-4">
               <Zap className="h-4 w-4" />
               <span>Platform Features</span>
@@ -263,67 +273,81 @@ export function Home() {
             <h2 className="text-3xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
               Everything You Need to Succeed
             </h2>
-            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl">
               Comprehensive tools built specifically for Filipino nurses navigating the NCLEX journey
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 mb-6">
-            {[
-              {
-                icon: FileText, color: 'from-primary-500 to-red-600',
-                title: 'Application Processing',
-                desc: 'Step-by-step guided application flow with automated validation. All required documents collected and verified in one place.',
-                badge: null
-              },
-              {
-                icon: DollarSign, color: 'from-blue-500 to-blue-700',
-                title: 'Instant Quotations',
-                desc: 'Get transparent, itemized quotes instantly. No hidden fees — clear pricing for staggered or full payment options.',
-                badge: null
-              },
-              {
-                icon: ClipboardList, color: 'from-green-500 to-emerald-700',
-                title: 'Real-Time Tracking',
-                desc: 'Monitor every step of your application. Get notifications when your status changes — from submission to ATT.',
-                badge: null
-              },
-            ].map(({ icon: Icon, color, title, desc, badge }) => (
-              <div key={title} className="group relative p-8 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform`}>
-                  <Icon className="h-7 w-7 text-white" />
+          <div ref={featuresRef}>
+            <div className="grid md:grid-cols-3 gap-6 mb-6">
+              {[
+                {
+                  icon: FileText, color: 'from-primary-500 to-primary-700',
+                  title: 'Application Processing',
+                  desc: 'Step-by-step guided application flow with automated validation. All required documents collected and verified in one place.',
+                  badge: null
+                },
+                {
+                  icon: DollarSign, color: 'from-blue-500 to-blue-700',
+                  title: 'Instant Quotations',
+                  desc: 'Get transparent, itemized quotes instantly. No hidden fees — clear pricing for staggered or full payment options.',
+                  badge: null
+                },
+                {
+                  icon: ClipboardList, color: 'from-emerald-500 to-emerald-700',
+                  title: 'Real-Time Tracking',
+                  desc: 'Monitor every step of your application. Get notifications when your status changes — from submission to ATT.',
+                  badge: null
+                },
+              ].map(({ icon: Icon, color, title, desc, badge }, i) => (
+                <div
+                  key={title}
+                  className={`transition-all duration-700 motion-reduce:transform-none ${featuresInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                  style={{ transitionDelay: `${i * 80}ms` }}
+                >
+                  <div className="group relative h-full p-8 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 motion-reduce:transform-none">
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 motion-reduce:transform-none transition-transform`}>
+                      <Icon className="h-7 w-7 text-white" />
+                    </div>
+                    {badge && <span className="absolute top-6 right-6 px-2.5 py-1 rounded-full text-xs font-bold bg-primary-600 text-white uppercase">{badge}</span>}
+                    <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{title}</h3>
+                    <p className="text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                  </div>
                 </div>
-                {badge && <span className="absolute top-6 right-6 px-2.5 py-1 rounded-full text-xs font-bold bg-primary-600 text-white uppercase">{badge}</span>}
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{title}</h3>
-                <p className="text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {[
-              {
-                icon: Shield, color: 'from-purple-500 to-purple-700',
-                title: 'Secure & Compliant',
-                desc: 'Enterprise-grade security protecting your sensitive documents and personal information. Fully compliant with healthcare data regulations.',
-                badge: null
-              },
-              {
-                icon: AtSign, color: 'from-primary-500 to-primary-700',
-                title: 'Free Business Email',
-                desc: 'Every account includes a dedicated @gritsync.com email address — keeping your NCLEX correspondence professional and organized.',
-                badge: 'Free'
-              },
-            ].map(({ icon: Icon, color, title, desc, badge }) => (
-              <div key={title} className="group relative p-8 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform`}>
-                  <Icon className="h-7 w-7 text-white" />
+            <div className="grid md:grid-cols-2 gap-6">
+              {[
+                {
+                  icon: Shield, color: 'from-blue-500 to-blue-700',
+                  title: 'Secure & Compliant',
+                  desc: 'Enterprise-grade security protecting your sensitive documents and personal information. Fully compliant with healthcare data regulations.',
+                  badge: null
+                },
+                {
+                  icon: AtSign, color: 'from-primary-500 to-primary-700',
+                  title: 'Free Business Email',
+                  desc: 'Every account includes a dedicated @gritsync.com email address — keeping your NCLEX correspondence professional and organized.',
+                  badge: 'Free'
+                },
+              ].map(({ icon: Icon, color, title, desc, badge }, i) => (
+                <div
+                  key={title}
+                  className={`transition-all duration-700 motion-reduce:transform-none ${featuresInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                  style={{ transitionDelay: `${(i + 3) * 80}ms` }}
+                >
+                  <div className="group relative h-full p-8 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 motion-reduce:transform-none">
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 motion-reduce:transform-none transition-transform`}>
+                      <Icon className="h-7 w-7 text-white" />
+                    </div>
+                    {badge && <span className="absolute top-6 right-6 px-2.5 py-1 rounded-full text-xs font-bold bg-primary-600 text-white uppercase">{badge}</span>}
+                    <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{title}</h3>
+                    <p className="text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                  </div>
                 </div>
-                {badge && <span className="absolute top-6 right-6 px-2.5 py-1 rounded-full text-xs font-bold bg-primary-600 text-white uppercase">{badge}</span>}
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{title}</h3>
-                <p className="text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -414,9 +438,9 @@ export function Home() {
       </section>
 
       {/* NCLEX Timeline Section */}
-      <section className="py-24 bg-white dark:bg-gray-900 overflow-hidden">
+      <section className="py-24 bg-gray-50 dark:bg-gray-900 overflow-hidden">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
+          <div className="mb-14 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-4">
               <Clock className="h-4 w-4" />
               <span>Application Journey</span>
@@ -424,53 +448,80 @@ export function Home() {
             <h2 className="text-3xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">
               Your NCLEX Roadmap
             </h2>
-            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl">
               8 structured steps from application to passing — GritSync guides you through every milestone
             </p>
           </div>
 
           <div ref={timelineRef} className="relative">
-            {/* Connection line */}
-            <div className="hidden lg:block absolute top-10 left-[6.25%] right-[6.25%] h-0.5 bg-gradient-to-r from-primary-200 via-primary-400 to-purple-400 dark:from-primary-900 dark:via-primary-700 dark:to-purple-800" />
+            {/* Connection line — row 1 */}
+            <div className="hidden lg:block absolute top-10 left-[6.25%] right-[6.25%] h-0.5 bg-gradient-to-r from-primary-200 via-primary-400 to-primary-600 dark:from-primary-900/60 dark:via-primary-700 dark:to-primary-500" />
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {timelineSteps.slice(0, 4).map((s, i) => (
-                <div
-                  key={s.step}
-                  className={`relative text-center transition-all duration-700 ${timelineInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-                  style={{ transitionDelay: `${i * 100}ms` }}
-                >
-                  <div className="relative inline-flex mb-4">
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 border-2 border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center shadow-md hover:shadow-lg hover:-translate-y-1 transition-all cursor-default">
-                      <span className="text-2xl mb-1">{s.icon}</span>
-                      <span className="text-xs font-bold text-gray-400">Step {s.step}</span>
-                    </div>
-                  </div>
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-1 text-sm">{s.title}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{s.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="relative mt-10">
-              <div className="hidden lg:block absolute top-10 left-[6.25%] right-[6.25%] h-0.5 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 dark:from-cyan-800 dark:via-blue-800 dark:to-purple-800" />
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                {timelineSteps.slice(4).map((s, i) => (
+              {timelineSteps.slice(0, 4).map((s, i) => {
+                const Icon = s.icon
+                return (
                   <div
                     key={s.step}
-                    className={`relative text-center transition-all duration-700 ${timelineInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-                    style={{ transitionDelay: `${(i + 4) * 100}ms` }}
+                    className={`relative text-center transition-all duration-700 motion-reduce:transform-none ${timelineInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                    style={{ transitionDelay: `${i * 100}ms` }}
                   >
                     <div className="relative inline-flex mb-4">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 border-2 border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center shadow-md hover:shadow-lg hover:-translate-y-1 transition-all cursor-default">
-                        <span className="text-2xl mb-1">{s.icon}</span>
-                        <span className="text-xs font-bold text-gray-400">Step {s.step}</span>
+                      <div className="relative w-20 h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 shadow-md hover:shadow-lg hover:-translate-y-1 motion-reduce:transform-none transition-all cursor-default">
+                        <span className="absolute inset-0 flex items-center justify-center rounded-2xl text-gray-400 dark:text-gray-500">
+                          <Icon className="h-8 w-8" />
+                        </span>
+                        <span
+                          className={`absolute inset-0 flex items-center justify-center rounded-2xl bg-primary-600 text-white shadow-lg shadow-primary-600/25 transition-opacity duration-700 ${timelineInView ? 'opacity-100' : 'opacity-0'}`}
+                          style={{ transitionDelay: `${i * 100 + 200}ms` }}
+                        >
+                          <Icon className="h-8 w-8" />
+                        </span>
+                        <span className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-white dark:bg-gray-900 ring-1 ring-gray-200 dark:ring-gray-700 shadow text-[11px] font-bold text-primary-600 dark:text-primary-400 flex items-center justify-center">
+                          {s.step}
+                        </span>
                       </div>
                     </div>
                     <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-1 text-sm">{s.title}</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{s.desc}</p>
                   </div>
-                ))}
+                )
+              })}
+            </div>
+
+            <div className="relative mt-10">
+              {/* Connection line — row 2 (matches row 1) */}
+              <div className="hidden lg:block absolute top-10 left-[6.25%] right-[6.25%] h-0.5 bg-gradient-to-r from-primary-200 via-primary-400 to-primary-600 dark:from-primary-900/60 dark:via-primary-700 dark:to-primary-500" />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                {timelineSteps.slice(4).map((s, i) => {
+                  const Icon = s.icon
+                  return (
+                    <div
+                      key={s.step}
+                      className={`relative text-center transition-all duration-700 motion-reduce:transform-none ${timelineInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                      style={{ transitionDelay: `${(i + 4) * 100}ms` }}
+                    >
+                      <div className="relative inline-flex mb-4">
+                        <div className="relative w-20 h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 shadow-md hover:shadow-lg hover:-translate-y-1 motion-reduce:transform-none transition-all cursor-default">
+                          <span className="absolute inset-0 flex items-center justify-center rounded-2xl text-gray-400 dark:text-gray-500">
+                            <Icon className="h-8 w-8" />
+                          </span>
+                          <span
+                            className={`absolute inset-0 flex items-center justify-center rounded-2xl bg-primary-600 text-white shadow-lg shadow-primary-600/25 transition-opacity duration-700 ${timelineInView ? 'opacity-100' : 'opacity-0'}`}
+                            style={{ transitionDelay: `${(i + 4) * 100 + 200}ms` }}
+                          >
+                            <Icon className="h-8 w-8" />
+                          </span>
+                          <span className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-white dark:bg-gray-900 ring-1 ring-gray-200 dark:ring-gray-700 shadow text-[11px] font-bold text-primary-600 dark:text-primary-400 flex items-center justify-center">
+                            {s.step}
+                          </span>
+                        </div>
+                      </div>
+                      <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-1 text-sm">{s.title}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{s.desc}</p>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -522,9 +573,14 @@ export function Home() {
               </div>
             </div>
 
-            <div className="space-y-5">
+            <div ref={testimonialsRef} className="space-y-5">
               {testimonials.map((t, i) => (
-                <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-shadow">
+                <div
+                  key={i}
+                  className={`transition-all duration-700 motion-reduce:transform-none ${testimonialsInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                  style={{ transitionDelay: `${i * 100}ms` }}
+                >
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-shadow">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-600 to-primary-400 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
@@ -542,6 +598,7 @@ export function Home() {
                     </div>
                   </div>
                   <p className="text-gray-600 dark:text-gray-300 italic leading-relaxed">"{t.quote}"</p>
+                </div>
                 </div>
               ))}
 

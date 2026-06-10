@@ -2,6 +2,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Header } from '@/components/Header'
 import { Sidebar } from '@/components/Sidebar'
 import { Card } from '@/components/ui/Card'
+import { StatCard } from '@/components/ui/StatCard'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { Button } from '@/components/ui/Button'
 import { SEO } from '@/components/SEO'
@@ -782,133 +784,36 @@ export function Dashboard() {
         <div className="flex">
           <Sidebar />
           <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
-            {/* Welcome Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-                    {greeting}, {firstName || user?.first_name || 'Admin'} 👋
-                  </h1>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    System overview and management dashboard
-                  </p>
-                </div>
-                <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
-                  <BarChart3 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                  <span className="text-sm font-medium text-primary-700 dark:text-primary-300">Admin Panel</span>
-                </div>
+            {/* Welcome Section — single-line header, content leads */}
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 min-w-0">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {greeting}, {firstName || user?.first_name || 'Admin'}
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  System overview · {formatDate(new Date().toISOString())}
+                </p>
+              </div>
+              <div className="hidden md:flex flex-shrink-0 items-center gap-2 px-3 py-1.5 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
+                <BarChart3 className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                <span className="text-sm font-medium text-primary-700 dark:text-primary-300">Admin Panel</span>
               </div>
             </div>
 
             {/* Main Stats Grid - 6 cards for admin */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 md:gap-6 mb-8">
-              {/* Total Clients */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-1">Total Clients</p>
-                    <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{stats.totalClients || 0}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-purple-600 dark:text-purple-400">
-                      <Users className="h-3 w-3" />
-                      <span>Registered</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-purple-500/10 dark:bg-purple-400/20">
-                    <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Total Applications */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
-                    <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications || 0}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs text-primary-600 dark:text-primary-400">
-                      <span>NCLEX: {stats.nclexApplications || 0}</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-primary-500/10 dark:bg-primary-400/20">
-                    <FileText className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Pending Applications */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-1">Pending</p>
-                    <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{stats.pendingApplications || stats.pending || 0}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-yellow-600 dark:text-yellow-400">
-                      <Clock className="h-3 w-3" />
-                      <span>Needs review</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-yellow-500/10 dark:bg-yellow-400/20">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Completed Applications */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
-                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
-                      <CheckCircle className="h-3 w-3" />
-                      <span>Completed</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-green-500/10 dark:bg-green-400/20">
-                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Total Quotations */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Quotations</p>
-                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.quotations || 0}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-blue-600 dark:text-blue-400">
-                      <DollarSign className="h-3 w-3" />
-                      <span>Total quotes</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-400/20">
-                    <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Revenue */}
-              <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1">Revenue</p>
-                    <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">{formatCurrency(stats.revenue || 0)}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-emerald-600 dark:text-emerald-400">
-                      <TrendingUp className="h-3 w-3" />
-                      <span>Total paid</span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-emerald-500/10 dark:bg-emerald-400/20">
-                    <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                </div>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8 anim-stagger">
+              <StatCard className="anim-fade-up" label="Total Clients" value={stats.totalClients || 0} icon={Users} accent="violet" sub="Registered" />
+              <StatCard className="anim-fade-up" label="Applications" value={stats.applications || 0} icon={FileText} accent="primary" sub={`NCLEX: ${stats.nclexApplications || 0}`} />
+              <StatCard className="anim-fade-up" label="Pending" value={stats.pendingApplications || stats.pending || 0} icon={Clock} accent="amber" sub="Needs review" />
+              <StatCard className="anim-fade-up" label="Completed" value={stats.completedApplications || stats.completed || 0} icon={CheckCircle} accent="green" sub="All steps done" />
+              <StatCard className="anim-fade-up" label="Quotations" value={stats.quotations || 0} icon={DollarSign} accent="blue" sub="Total quotes" />
+              <StatCard className="anim-fade-up" label="Revenue" value={formatCurrency(stats.revenue || 0)} icon={TrendingUp} accent="cyan" sub="Total paid" />
             </div>
 
             {/* Main Content Grid */}
             <div className="grid lg:grid-cols-3 gap-6 mb-6">
-              {/* Pending Items - Takes 1 column */}
-              {pendingItems.length > 0 && (
-                <Card className="lg:col-span-1 border-0 shadow-md">
+              {/* Pending Items - Takes 1 column (always rendered for stable grid) */}
+              <Card className="lg:col-span-1 border-0 shadow-md">
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2">
                       <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
@@ -916,16 +821,23 @@ export function Dashboard() {
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Pending Review</h2>
                     </div>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-yellow-500 text-white">
+                    <span className="px-2 py-1 rounded-full text-xs font-bold tabular-nums bg-yellow-500 text-white">
                       {pendingItems.length}
                     </span>
                   </div>
+                  {pendingItems.length === 0 ? (
+                    <EmptyState
+                      icon={CheckCircle}
+                      title="Nothing pending review"
+                      description="New applications that need attention will appear here."
+                    />
+                  ) : (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {pendingItems.map((item) => (
                       <Link
                         key={item.id}
                         to={item.link}
-                        className="group block p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 hover:border-yellow-400 dark:hover:border-yellow-600 hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-all duration-200"
+                        className="group block px-3 py-2.5 rounded-lg border border-yellow-200 dark:border-yellow-800 hover:border-yellow-400 dark:hover:border-yellow-600 hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-all duration-200"
                       >
                         <div className="flex items-center gap-3">
                           <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -954,6 +866,7 @@ export function Dashboard() {
                       </Link>
                     ))}
                   </div>
+                  )}
                   <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <Link to="/admin/applications">
                       <Button variant="ghost" size="sm" className="w-full text-xs">
@@ -962,11 +875,10 @@ export function Dashboard() {
                       </Button>
                     </Link>
                   </div>
-                </Card>
-              )}
+              </Card>
 
               {/* Quick Actions - Takes 1 column */}
-              <Card className={`border-0 shadow-md ${pendingItems.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
+              <Card className="border-0 shadow-md lg:col-span-1">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30">
                     <Zap className="h-5 w-5 text-primary-600 dark:text-primary-400" />
@@ -1049,9 +961,8 @@ export function Dashboard() {
                 </div>
               </Card>
 
-              {/* Pending Payment Approvals */}
-              {pendingPayments.length > 0 && (
-                <Card className="lg:col-span-1 border-0 shadow-md">
+              {/* Pending Payment Approvals (always rendered for stable grid) */}
+              <Card className="lg:col-span-1 border-0 shadow-md">
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2">
                       <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
@@ -1059,17 +970,24 @@ export function Dashboard() {
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Payment Approvals</h2>
                     </div>
-                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-500 text-white">
+                    <span className="px-2 py-1 rounded-full text-xs font-bold tabular-nums bg-blue-500 text-white">
                       {pendingPayments.length}
                     </span>
                   </div>
+                  {pendingPayments.length === 0 ? (
+                    <EmptyState
+                      icon={DollarSign}
+                      title="No payments awaiting approval"
+                      description="Client payment proofs land here for review."
+                    />
+                  ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {pendingPayments.map((payment: any) => {
                       const app = payment.applications
                       return (
                         <div
                           key={payment.id}
-                          className="p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
+                          className="px-3 py-2.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1">
@@ -1080,7 +998,7 @@ export function Dashboard() {
                                 {app?.grit_app_id || app?.id}
                               </p>
                             </div>
-                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                            <span className="text-sm font-bold tabular-nums text-blue-600 dark:text-blue-400">
                               {formatCurrency(payment.amount)}
                             </span>
                           </div>
@@ -1129,11 +1047,11 @@ export function Dashboard() {
                       )
                     })}
                   </div>
-                </Card>
-              )}
+                  )}
+              </Card>
 
-              {/* Recent Activity - Takes remaining columns */}
-              <Card className={`border-0 shadow-md ${pendingItems.length > 0 && pendingPayments.length > 0 ? 'lg:col-span-1' : pendingItems.length > 0 || pendingPayments.length > 0 ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
+              {/* Recent Activity - full row below for stable dimensions */}
+              <Card className="border-0 shadow-md lg:col-span-3">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -1149,22 +1067,18 @@ export function Dashboard() {
                   </Link>
                 </div>
                 {recentActivity.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-                      <Activity className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">No recent activity</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-500">
-                      System activity will appear here
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={Activity}
+                    title="No recent activity"
+                    description="System activity will appear here."
+                  />
                 ) : (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {recentActivity.map((activity) => (
                       <Link
                         key={activity.id}
                         to={activity.link}
-                        className="group block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 hover:shadow-sm transition-all duration-200"
+                        className="group block px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 hover:shadow-sm transition-all duration-200"
                       >
                         <div className="flex items-center gap-3">
                           <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -1288,24 +1202,21 @@ export function Dashboard() {
         <Sidebar />
         <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
 
-          {/* Hero Greeting */}
-          <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-primary-600 dark:text-primary-400 mb-1 uppercase tracking-wide">
-                {greeting}
-              </p>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">
-                {firstName || user?.first_name || 'there'} 👋
+          {/* Greeting — single line, content leads */}
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 min-w-0">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {greeting}, {firstName || user?.first_name || 'there'} 👋
               </h1>
-              <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm md:text-base">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {onboardingDone
-                  ? 'Your profile is complete — your NCLEX journey is in good hands.'
-                  : 'Complete the steps below to start your NCLEX application processing.'}
+                  ? 'Profile complete — your NCLEX journey is in good hands.'
+                  : 'Finish the steps below to start your NCLEX application.'}
               </p>
             </div>
             {stats.applications > 0 && (
-              <Link to="/tracking">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors cursor-pointer">
+              <Link to="/tracking" className="flex-shrink-0">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors cursor-pointer">
                   <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
                   <span className="text-sm font-medium text-primary-700 dark:text-primary-300">Track My Applications</span>
                   <ArrowRight className="h-4 w-4 text-primary-500" />
@@ -1516,13 +1427,12 @@ export function Dashboard() {
                     </span>
                   </div>
                   {hasActiveApplication && clientTodos.length === 0 && (
-                    <div className="p-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-900/10 text-center">
-                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 mx-auto mb-1.5" />
-                      <p className="text-xs font-semibold text-green-800 dark:text-green-300">All caught up!</p>
-                      <p className="text-[11px] text-green-700/80 dark:text-green-400/80 mt-0.5">
-                        Nothing's waiting on you right now. We'll let you know when the next step is ready.
-                      </p>
-                    </div>
+                    <EmptyState
+                      icon={CheckCircle}
+                      title="All caught up!"
+                      description="Nothing's waiting on you right now. We'll let you know when the next step is ready."
+                      className="py-6"
+                    />
                   )}
                   {clientTodos.length > 0 && (
                   <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
@@ -1573,31 +1483,10 @@ export function Dashboard() {
             {/* Right side: Stats + Quick Actions */}
             <div className="lg:col-span-2 flex flex-col gap-6">
               {/* Stats row */}
-              <div className="grid grid-cols-3 gap-4">
-                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10 p-4">
-                  <p className="text-xs font-medium text-primary-700 dark:text-primary-300 mb-1">Applications</p>
-                  <p className="text-2xl font-bold text-primary-900 dark:text-primary-100">{stats.applications}</p>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-primary-600 dark:text-primary-400">
-                    <FileText className="h-3 w-3" />
-                    <span>NCLEX: {stats.nclexApplications || 0}</span>
-                  </div>
-                </Card>
-                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/10 p-4">
-                  <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-1">In Progress</p>
-                  <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{stats.pending || 0}</p>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600 dark:text-yellow-400">
-                    <Clock className="h-3 w-3" />
-                    <span>Being processed</span>
-                  </div>
-                </Card>
-                <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 p-4">
-                  <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Completed</p>
-                  <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.completedApplications || stats.completed || 0}</p>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-green-600 dark:text-green-400">
-                    <CheckCircle className="h-3 w-3" />
-                    <span>Licensed</span>
-                  </div>
-                </Card>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 anim-stagger">
+                <StatCard className="anim-fade-up" label="Applications" value={stats.applications} icon={FileText} accent="primary" sub={`NCLEX: ${stats.nclexApplications || 0}`} />
+                <StatCard className="anim-fade-up" label="In Progress" value={stats.pending || 0} icon={Clock} accent="amber" sub="Being processed" />
+                <StatCard className="anim-fade-up" label="Completed" value={stats.completedApplications || stats.completed || 0} icon={CheckCircle} accent="green" sub="Licensed" />
               </div>
 
               {/* Quick Actions */}

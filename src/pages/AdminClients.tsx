@@ -17,7 +17,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
-import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, EyeOff, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare, Briefcase, Shield, Link2, UserPlus, X, RefreshCcw, AlertTriangle } from 'lucide-react'
+import { Users, Search, Mail, RefreshCw, ChevronLeft, ChevronRight, FileText, Eye, EyeOff, Award, School, Download, User, MapPin, UserX, Trash2, MessageSquare, Briefcase, Shield, Link2, UserPlus, X, RefreshCcw, AlertTriangle, LogIn } from 'lucide-react'
 import { subscribeToAllClients, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { Modal } from '@/components/ui/Modal'
@@ -153,6 +153,17 @@ export function AdminClients() {
   const [creatingUser, setCreatingUser] = useState(false)
   const [showCreatePassword, setShowCreatePassword] = useState(false)
   const [createdCredentials, setCreatedCredentials] = useState<CreatedAccountCredentials | null>(null)
+  // Entrance motion plays once on the first rendered page of results, then is
+  // disabled so pagination / tab / search changes don't re-trigger it.
+  const entrancePlayedRef = useRef(false)
+  const entrance = !entrancePlayedRef.current
+  useEffect(() => {
+    if (loading) return
+    // Wait for the longest stagger (0.35s anim + 300ms max delay) to finish
+    // before turning the classes off on the next render.
+    const t = setTimeout(() => { entrancePlayedRef.current = true }, 700)
+    return () => clearTimeout(t)
+  }, [loading])
 
   const openCreateModal = (role: RoleTab) => {
     setCreateForm({ ...emptyCreateForm, role, password: generatePassword(14) })
@@ -808,7 +819,7 @@ export function AdminClients() {
 
             {/* Role tabs */}
             <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
-              <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="User roles">
+              <nav className={cn('-mb-px flex gap-1 overflow-x-auto', entrance && 'anim-stagger')} aria-label="User roles">
                 {ROLE_TABS.map((tab) => {
                   const Icon = tab.icon
                   const isActive = activeTab === tab.id
@@ -818,6 +829,7 @@ export function AdminClients() {
                       onClick={() => { setActiveTab(tab.id); setSearchQuery('') }}
                       className={cn(
                         'group inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
+                        entrance && 'anim-fade-up',
                         isActive
                           ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
@@ -836,26 +848,6 @@ export function AdminClients() {
                   )
                 })}
               </nav>
-            </div>
-
-            {/* Stats Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              {ROLE_TABS.map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <Card key={tab.id} className={cn('p-4 cursor-pointer transition-colors', activeTab === tab.id && 'ring-2 ring-primary-500')} onClick={() => { setActiveTab(tab.id); setSearchQuery('') }}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">{tab.label}</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{roleCounts[tab.id]}</p>
-                      </div>
-                      <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800">
-                        <Icon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })}
             </div>
 
             {/* Search */}
@@ -912,13 +904,13 @@ export function AdminClients() {
               {/* Mobile card list — replaces the table below md. Same data, but
                   laid out vertically so the role dropdown and the three action
                   buttons stop colliding with each other on narrow phones. */}
-              <div className="md:hidden space-y-3 mb-4">
+              <div className={cn('md:hidden space-y-3 mb-4', entrance && 'anim-stagger')}>
                 {paginatedClients.data.map((client, index) => {
                   const fullName = getFullName(client.first_name, client.last_name, 'No name')
                   const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                   const rowNumber = (currentPage - 1) * pageSize + index + 1
                   return (
-                    <Card key={client.id} className="p-4">
+                    <Card key={client.id} className={cn('p-4', entrance && 'anim-fade-up')}>
                       <button
                         onClick={() => handleViewClient(client)}
                         className="flex items-center gap-3 w-full text-left mb-3"
@@ -947,7 +939,7 @@ export function AdminClients() {
                       <div className="flex items-center justify-between gap-2 mb-3">
                         <RoleBadge role={client.role} />
                         {(client.role === 'affiliate' || client.role === 'advisor') && (
-                          <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate" title="Referral code">
+                          <span className="font-mono text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/60 px-1.5 py-0.5 rounded truncate" title="Referral code">
                             {client.referral_code || 'no code'}
                           </span>
                         )}
@@ -957,7 +949,8 @@ export function AdminClients() {
                         <Button
                           size="sm"
                           title="Login as this user"
-                          className="text-xs whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0 w-full"
+                          aria-label="Login as this user"
+                          className="h-11 text-xs whitespace-nowrap bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white border-0 w-full"
                           disabled={actioningClientId === client.id}
                           onClick={async () => {
                             try {
@@ -982,27 +975,30 @@ export function AdminClients() {
                             }
                           }}
                         >
-                          Login
+                          <LogIn className="h-4 w-4 min-[360px]:mr-1" />
+                          <span className="hidden min-[360px]:inline">Login</span>
                         </Button>
                         <Button
                           size="sm"
                           title={client.is_active !== false ? 'Deactivate account' : 'Reactivate account'}
+                          aria-label={client.is_active !== false ? 'Deactivate account' : 'Reactivate account'}
                           disabled={actioningClientId === client.id}
-                          className={`text-xs whitespace-nowrap border-0 w-full ${client.is_active !== false ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400' : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400'}`}
+                          className={`h-11 text-xs whitespace-nowrap border-0 w-full ${client.is_active !== false ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400' : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400'}`}
                           onClick={() => handleDeactivateClient(client)}
                         >
-                          <UserX className="h-3.5 w-3.5 mr-1" />
-                          {client.is_active !== false ? 'Deact.' : 'Activate'}
+                          <UserX className="h-4 w-4 min-[360px]:mr-1" />
+                          <span className="hidden min-[360px]:inline">{client.is_active !== false ? 'Deact.' : 'Activate'}</span>
                         </Button>
                         <Button
                           size="sm"
                           title="Delete account permanently"
+                          aria-label="Delete account permanently"
                           disabled={actioningClientId === client.id}
-                          className="text-xs whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 border-0 w-full"
+                          className="h-11 text-xs whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 border-0 w-full"
                           onClick={() => handleDeleteClient(client)}
                         >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" />
-                          Delete
+                          <Trash2 className="h-4 w-4 min-[360px]:mr-1" />
+                          <span className="hidden min-[360px]:inline">Delete</span>
                         </Button>
                       </div>
                     </Card>
@@ -1026,7 +1022,7 @@ export function AdminClients() {
                           <th className="text-right py-3 px-2 sm:px-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className={cn(entrance && 'anim-stagger')}>
                         {paginatedClients.data.map((client, index) => {
                           const fullName = getFullName(client.first_name, client.last_name, 'No name')
                           const initials = fullName
@@ -1038,9 +1034,9 @@ export function AdminClients() {
                           const rowNumber = (currentPage - 1) * pageSize + index + 1
                           
                           return (
-                            <tr 
-                              key={client.id} 
-                              className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                            <tr
+                              key={client.id}
+                              className={cn('border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors', entrance && 'anim-fade-up')}
                             >
                               <td className="hidden sm:table-cell py-3 px-2 sm:px-4 text-sm text-gray-500 dark:text-gray-400 text-center">
                                 {rowNumber}
@@ -1099,7 +1095,7 @@ export function AdminClients() {
                                     <RoleBadge role={client.role} />
                                   </div>
                                   {(client.role === 'affiliate' || client.role === 'advisor') && (
-                                    <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400" title="Referral code">
+                                    <span className="self-start font-mono text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/60 px-1.5 py-0.5 rounded" title="Referral code">
                                       {client.referral_code || 'no code'}
                                     </span>
                                   )}
