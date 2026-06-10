@@ -152,9 +152,17 @@ if (!process.env.VERCEL) {
 // serve the compiled frontend from dist/.
 if (isProd && !process.env.VERCEL) {
   const distPath = path.join(__dirname, '..', 'dist')
+  const indexHtml = path.join(distPath, 'index.html')
   app.use(express.static(distPath))
   app.get(/.*/, (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'))
+    // sendFile on a missing file 500s every request — including the platform
+    // health probe on '/'. Degrade to a 200 so the API stays reachable even
+    // when the image was built without the frontend bundle.
+    res.sendFile(indexHtml, (err) => {
+      if (err && !res.headersSent) {
+        res.status(200).json({ ok: true, note: 'frontend bundle not present; API only' })
+      }
+    })
   })
 } else if (!isProd) {
   app.use((_req, res) => {
@@ -170,7 +178,9 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 // Start local server (Vercel uses the exported app instead)
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
+  // Explicit IPv4 any-address bind: some container platforms' health probes
+  // only reach 0.0.0.0, and Node defaults to :: when available.
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`API Server running on port ${PORT} (${isProd ? 'production' : 'development'})`)
     // Poll for due scheduled social posts every minute (local/self-hosted only).
     setInterval(() => {
