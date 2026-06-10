@@ -2762,49 +2762,6 @@ export const timelineStepsAPI = {
 // GritSync email generation is now handled server-side via database functions
 // Removed client-side generation logic
 
-// Helper function to generate security question answers
-function generateSecurityAnswers(
-  elementarySchool: string | null,
-  gender: string | null,
-  middleName: string | null,
-  _maritalStatus: string | null
-): { question1: string; question2: string; question3: string } {
-  // Question 1: What was the name of the first school you attended?
-  // Answer: First name of elementary school (lowercase, one word)
-  let question1 = 'unknown'
-  if (elementarySchool) {
-    const firstWord = elementarySchool.trim().split(/\s+/)[0].toLowerCase()
-    question1 = firstWord
-  }
-  
-  // Question 2: Who was your childhood hero?
-  // Answer: superman (male) or darna (female), lowercase
-  let question2 = 'superman' // default
-  if (gender) {
-    const genderLower = gender.toLowerCase()
-    if (genderLower === 'female') {
-      question2 = 'darna'
-    } else if (genderLower === 'male') {
-      question2 = 'superman'
-    }
-  }
-  
-  // Question 3: What is your oldest sibling's middle name?
-  // Answer: user's middle name (lowercase, one word)
-  // If married and previous not available, use user's middle name
-  let question3 = 'none'
-  if (middleName) {
-    const firstWord = middleName.trim().split(/\s+/)[0].toLowerCase()
-    question3 = firstWord
-  }
-  
-  return {
-    question1,
-    question2,
-    question3
-  }
-}
-
 // Processing Accounts API
 export const processingAccountsAPI = {
   // Activate a system-managed inactive account. Admin-only; the server enforces

@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import html2canvas from 'html2canvas'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { useSearchParams, useParams, useLocation, useNavigate } from 'react-router-dom'
@@ -665,6 +664,7 @@ export function Tracking() {
       const rect = trackingResultRef.current.getBoundingClientRect()
       
       // Enhanced html2canvas configuration for maximum quality
+      const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(trackingResultRef.current, {
         backgroundColor: null, // Use transparent to preserve gradients and actual background
         scale: 3, // Increased scale for higher quality (3x for crisp text and images)

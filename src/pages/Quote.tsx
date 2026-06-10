@@ -14,7 +14,6 @@ import { formatDate, formatCurrency } from '@/lib/utils'
 import { SEO, generateBreadcrumbSchema, generateServiceSchema } from '@/components/SEO'
 import { DollarSign, Plus, CheckCircle, Loader2, Download, FileText, Building2, User, Mail, Phone, Calendar, X, Info, ChevronRight, Copy, Check, ArrowLeft } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import jsPDF from 'jspdf'
 import type { Quotation, QuoteLineItem, QuoteFormData, ServiceConfig } from './Quote/types'
 import { TAX_RATE, DEFAULT_NCLEX_SERVICES } from './Quote/constants'
 
@@ -675,6 +674,7 @@ export function Quote() {
       }
 
       // Create PDF
+      const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF({
         orientation: 'portrait',
         format: 'letter'

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react'
 import { db } from '@/lib/api-client'
 import { User, UserRole } from '@/lib/types'
 import type { Session } from '@db/db-js'
@@ -26,43 +26,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
 
-  useEffect(() => {
-    // SIMPLE: Get session and load user immediately
-    db.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Error getting session:', error)
-        setLoading(false)
-        return
-      }
-      setSession(session)
-      if (session) {
-        loadUserProfile()
-      } else {
-        setLoading(false)
-      }
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = db.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (session) {
-        loadUserProfile()
-      } else {
-        setUser(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  async function loadUserProfile() {
+  const loadUserProfile = useCallback(async () => {
     try {
       // SIMPLE: Just use auth metadata - no database queries, instant loading
       const { data: { user: authUser } } = await db.auth.getUser()
-      
+
       if (authUser) {
         // Extract role from auth metadata
         const role = (authUser.user_metadata?.role || authUser.app_metadata?.role || 'client') as UserRole
@@ -96,9 +64,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  async function signIn(email: string, password: string) {
+  // Keep a ref to the latest loadUserProfile so the empty-dep subscription
+  // effect below never calls a stale closure.
+  const loadUserProfileRef = useRef(loadUserProfile)
+  useEffect(() => {
+    loadUserProfileRef.current = loadUserProfile
+  })
+
+  useEffect(() => {
+    // SIMPLE: Get session and load user immediately
+    db.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error)
+        setLoading(false)
+        return
+      }
+      setSession(session)
+      if (session) {
+        loadUserProfileRef.current()
+      } else {
+        setLoading(false)
+      }
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = db.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session) {
+        loadUserProfileRef.current()
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await db.auth.signInWithPassword({
       email,
       password,
@@ -111,9 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Don't wait for profile load - let onAuthStateChange handle it
     // This makes login faster and more resilient to RLS issues
     // The profile will load automatically via the auth state change listener
-  }
+  }, [])
 
-  async function signUp(firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client', personalEmail?: string, referralCode?: string) {
+  const signUp = useCallback(async (firstName: string, lastName: string, mobile: string, password: string, role: UserRole = 'client', personalEmail?: string, referralCode?: string) => {
     const { data, error } = await db.auth.signUp({
       email: '',
       password,
@@ -140,9 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Return the generated GRIT ID and email so the registration page can display them
     return data?.session?.user?.user_metadata || (data as any)?.user?.user_metadata || null
-  }
+  }, [])
 
-  async function signOut() {
+  const signOut = useCallback(async () => {
     // Clear all client-side caches before signing out so the next user
     // doesn't see stale data from the previous session.
     try {
@@ -163,15 +170,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error((error as { message?: string }).message ?? 'Sign out failed')
     }
     setUser(null)
-  }
+  }, [])
 
-  async function refreshUser() {
+  const refreshUser = useCallback(async () => {
     if (session?.user) {
       await loadUserProfile()
     }
-  }
+  }, [session, loadUserProfile])
 
-  async function requestPasswordReset(email: string) {
+  const requestPasswordReset = useCallback(async (email: string) => {
     const res = await fetch('/api/auth/reset-password-request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -181,9 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.error || 'Failed to send reset email')
     }
-  }
+  }, [])
 
-  async function resetPassword(token: string, newPassword: string) {
+  const resetPassword = useCallback(async (token: string, newPassword: string) => {
     const res = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -193,9 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(data.error || 'Failed to reset password')
     }
-  }
+  }, [])
 
-  async function changePassword(currentPassword: string, newPassword: string) {
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     // Verify current password by attempting to sign in
     if (!session?.user?.email) {
       throw new Error('No user session found')
@@ -219,42 +226,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       throw new Error(error.message)
     }
-  }
+  }, [session])
 
-  function isAdmin() {
+  const isAdmin = useCallback(() => {
     return user?.role === 'admin'
-  }
+  }, [user?.role])
 
-  function isClient() {
+  const isClient = useCallback(() => {
     return user?.role === 'client'
-  }
+  }, [user?.role])
 
-  function isAffiliate() {
+  const isAffiliate = useCallback(() => {
     return user?.role === 'affiliate'
-  }
+  }, [user?.role])
 
-  function isAdvisor() {
+  const isAdvisor = useCallback(() => {
     return user?.role === 'advisor'
-  }
+  }, [user?.role])
+
+  const value = useMemo<AuthContextType>(() => ({
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    refreshUser,
+    requestPasswordReset,
+    resetPassword,
+    changePassword,
+    isAdmin,
+    isClient,
+    isAffiliate,
+    isAdvisor,
+  }), [
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    refreshUser,
+    requestPasswordReset,
+    resetPassword,
+    changePassword,
+    isAdmin,
+    isClient,
+    isAffiliate,
+    isAdvisor,
+  ])
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        refreshUser,
-        requestPasswordReset,
-        resetPassword,
-        changePassword,
-        isAdmin,
-        isClient,
-        isAffiliate,
-        isAdvisor,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

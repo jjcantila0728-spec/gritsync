@@ -30,15 +30,39 @@ router.post('/create-intent', optionalAuth, async (req: AuthenticatedRequest, re
       return res.status(503).json({ error: 'Payment service is not configured. Set STRIPE_SECRET_KEY in your .env file to a real test/live secret key (currently empty or set to the placeholder).' })
     }
 
-    const { quotation_id, amount } = req.body
-    if (!quotation_id || !amount) {
-      return res.status(400).json({ error: 'quotation_id and amount are required' })
+    // The client still sends `amount` (kept for request-contract compatibility)
+    // but it is deliberately IGNORED — the authoritative amount comes from the
+    // quotation row in the DB, so a tampered client can't pay $1 for a $400 quote.
+    const { quotation_id } = req.body
+    if (!quotation_id) {
+      return res.status(400).json({ error: 'quotation_id is required' })
+    }
+
+    const quoteR = await query(
+      `SELECT id, amount, status FROM quotations WHERE id::text = $1 LIMIT 1`,
+      [String(quotation_id)]
+    )
+    const quotation = quoteR.rows[0] as { id: string; amount: string | number | null; status: string | null } | undefined
+    if (!quotation) {
+      return res.status(404).json({ error: 'Quotation not found' })
+    }
+    if (quotation.status === 'paid') {
+      return res.status(400).json({ error: 'Quotation is already paid' })
+    }
+    if (quotation.status === 'cancelled' || quotation.status === 'rejected' || quotation.status === 'expired') {
+      return res.status(400).json({ error: `Quotation is ${quotation.status} and cannot be paid` })
+    }
+
+    // quotations.amount is NUMERIC dollars — convert to cents for Stripe.
+    const amountCents = Math.round(Number(quotation.amount) * 100)
+    if (!Number.isFinite(amountCents) || amountCents < 50) {
+      return res.status(400).json({ error: 'Quotation has an invalid amount' })
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount), // already in cents
+      amount: amountCents,
       currency: 'usd',
-      metadata: { quotation_id },
+      metadata: { quotation_id: String(quotation_id) },
     })
 
     res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
@@ -107,10 +131,32 @@ router.post('/create-donation-intent', async (req: AuthenticatedRequest, res: Re
       return res.status(400).json({ error: 'amount is required' })
     }
 
+    // Only USD is supported (matches the donations UI, which is USD-only).
+    const normalizedCurrency = String(currency).toLowerCase()
+    if (normalizedCurrency !== 'usd') {
+      return res.status(400).json({ error: 'Unsupported currency' })
+    }
+
+    // `amount` arrives in dollars; enforce $1.00 minimum / $10,000 maximum.
+    const amountCents = Math.round(Number(amount) * 100)
+    if (!Number.isFinite(amountCents) || amountCents < 100 || amountCents > 1_000_000) {
+      return res.status(400).json({ error: 'Donation amount must be between $1 and $10,000' })
+    }
+
+    // Only pass through allowlisted metadata keys (the frontend sends
+    // { donation_id }) — never forward arbitrary client-controlled objects.
+    const ALLOWED_METADATA_KEYS = ['donation_id'] as const
+    const safeMetadata: Record<string, string> = {}
+    for (const key of ALLOWED_METADATA_KEYS) {
+      if (metadata && metadata[key] !== undefined && metadata[key] !== null) {
+        safeMetadata[key] = String(metadata[key])
+      }
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(Number(amount) * 100),
-      currency: currency.toLowerCase(),
-      metadata,
+      amount: amountCents,
+      currency: normalizedCurrency,
+      metadata: safeMetadata,
     })
 
     res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })

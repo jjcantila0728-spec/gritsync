@@ -63,6 +63,101 @@ const USERS_PROTECTED_COLUMNS = new Set([
   'email_otp', 'email_otp_expires_at', 'created_at',
 ])
 
+// ---------------------------------------------------------------------------
+// Row-level ownership enforcement
+//
+// Tables holding per-user data. Reads (GET/COUNT) and writes (PATCH/DELETE)
+// require authentication; non-admins get the ownership predicate force-ANDed
+// into every query so they can only ever touch their own rows. Admins are
+// exempt (the admin UI legitimately queries across users).
+//
+// Ownership columns verified against init.sql + scripts/migrations and the
+// dedicated server routes (server/routes/processing-accounts.ts).
+// ---------------------------------------------------------------------------
+
+/** table -> direct ownership column (compared against req.user.id) */
+const OWNED_TABLES: Record<string, string> = {
+  applications: 'user_id',
+  user_details: 'user_id',
+  user_documents: 'user_id',
+  user_preferences: 'user_id',
+  notifications: 'user_id',
+  email_addresses: 'user_id',
+  active_email_addresses: 'user_id', // view: SELECT * FROM email_addresses
+  sessions: 'user_id',
+  receipts: 'user_id',
+}
+
+/**
+ * table -> FK column pointing at applications.id. These tables have no direct
+ * user_id column in the live schema; ownership flows through the application.
+ */
+const APPLICATION_SCOPED_TABLES: Record<string, string> = {
+  processing_accounts: 'application_id',
+}
+
+/** Tables with bespoke ownership shapes handled inline in applyOwnership(). */
+const SPECIAL_OWNERSHIP_TABLES = new Set(['messages', 'conversations'])
+
+const PROTECTED_TABLES = new Set<string>([
+  ...Object.keys(OWNED_TABLES),
+  ...Object.keys(APPLICATION_SCOPED_TABLES),
+  ...SPECIAL_OWNERSHIP_TABLES,
+])
+
+// req.user.id is set server-side from a verified JWT, but validate before
+// interpolating into a PostgREST .or() expression.
+const SAFE_ID = /^[0-9a-zA-Z-]{1,64}$/
+
+async function getOwnedApplicationIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from('applications')
+    .select('id')
+    .eq('user_id', userId)
+  if (error) throw new HttpError(500, error.message || 'Failed to resolve owned applications')
+  return (data || []).map((r: any) => r.id).filter(Boolean)
+}
+
+/**
+ * Enforce auth + ownership on a query against a protected table.
+ *
+ * - 401 when unauthenticated.
+ * - Admins: query passes through untouched.
+ * - Everyone else: the ownership predicate is ANDed onto the query (client
+ *   filters are kept — a spoofed user_id filter simply yields zero rows).
+ *
+ * Returns the constrained query, or `null` when the user cannot match any
+ * row at all (e.g. application-scoped table and the user has no applications);
+ * callers should respond with an empty result.
+ */
+async function applyOwnership(
+  q: any,
+  table: string,
+  req: AuthenticatedRequest
+): Promise<any | null> {
+  if (!PROTECTED_TABLES.has(table)) return q
+  if (!req.user?.id) throw new HttpError(401, 'Authentication required')
+  if (isAdmin(req)) return q
+
+  const uid = String(req.user.id)
+  if (!SAFE_ID.test(uid)) throw new HttpError(403, 'Invalid user id')
+
+  const ownCol = OWNED_TABLES[table]
+  if (ownCol) return q.eq(ownCol, uid)
+
+  if (table === 'messages') return q.or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
+  if (table === 'conversations') return q.contains('participant_ids', [uid])
+
+  const appCol = APPLICATION_SCOPED_TABLES[table]
+  if (appCol) {
+    const ids = await getOwnedApplicationIds(uid)
+    if (ids.length === 0) return null
+    return q.in(appCol, ids)
+  }
+
+  return q
+}
+
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 function isAdmin(req: AuthenticatedRequest): boolean {
@@ -191,6 +286,8 @@ router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Respo
     let q: any = supabaseAdmin.from(table).select(selectStr)
 
     q = applyFilters(q, filters)
+    q = await applyOwnership(q, table, req)
+    if (q === null) return res.json({ data: [], error: null })
 
     if (order) {
       const parts = String(order).split('.')
@@ -306,6 +403,8 @@ router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res
 
     let q: any = supabaseAdmin.from(table).update(updates)
     q = applyFilters(q, _filters)
+    q = await applyOwnership(q, table, req)
+    if (q === null) return res.json({ data: [], error: null })
     q = q.select(selectStr)
 
     const { data, error } = await q
@@ -334,6 +433,8 @@ router.delete('/:table', authenticateToken, async (req: AuthenticatedRequest, re
 
     let q: any = supabaseAdmin.from(table).delete().select('id')
     q = applyFilters(q, filters)
+    q = await applyOwnership(q, table, req)
+    if (q === null) return res.json({ data: [], error: null })
 
     const { data, error } = await q
     if (error) throw error
@@ -354,6 +455,8 @@ router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res
     const filters = req.body || {}
     let q: any = supabaseAdmin.from(table).select('*', { count: 'exact', head: true })
     q = applyFilters(q, filters)
+    q = await applyOwnership(q, table, req)
+    if (q === null) return res.json({ data: '0', error: null })
 
     const { count, error } = await q
     if (error) throw error
@@ -384,6 +487,31 @@ const ALLOWED_RPC_FUNCTIONS = new Set([
   'get_dashboard_stats_inline',
 ])
 
+// RPC functions that return cross-user aggregates or drive admin-only systems
+// (email queue/campaigns, workflows, analytics, bulk reminders). Authenticated
+// admin required. Verified against frontend callers: these are only invoked
+// from Admin* pages / admin-gated libs.
+const ADMIN_ONLY_RPC_FUNCTIONS = new Set([
+  'get_dashboard_stats', 'get_dashboard_stats_inline',
+  'get_application_analytics', 'get_financial_analytics',
+  'get_user_analytics', 'get_document_analytics',
+  'refresh_email_analytics',
+  'get_pending_emails_to_send', 'mark_email_processing', 'mark_email_sent', 'mark_email_failed',
+  'update_campaign_stats',
+  'get_subscriber_count_by_segment', 'get_subscribers_for_segment',
+  'calculate_ab_test_metrics', 'determine_ab_test_winner',
+  'log_workflow_run', 'update_workflow_stats', 'get_active_workflows_for_trigger',
+  'generate_document_reminders', 'generate_payment_reminders',
+  'generate_profile_completion_reminders', 'notify_credentialing_reminder',
+])
+
+// RPC functions that take a target-user argument: non-admins are pinned to
+// their own id regardless of what the client sent.
+const SELF_SCOPED_RPC_ARGS: Record<string, string> = {
+  check_missing_documents: 'p_user_id',
+  check_incomplete_profile: 'p_user_id',
+}
+
 router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const fn = String(req.params.fn)
 
@@ -394,10 +522,30 @@ router.post('/rpc/:fn', optionalAuth, async (req: AuthenticatedRequest, res: Res
   try {
     const args = req.body || {}
 
-    // Special-case: dashboard stats assembled from multiple PostgREST queries
-    if (fn === 'get_dashboard_stats') {
-      const isAdminUser = args.is_admin === true
+    // Never trust client-supplied is_admin — always derive it from the
+    // verified JWT role before the args reach any SQL function.
+    if ('is_admin' in args) args.is_admin = isAdmin(req)
 
+    if (ADMIN_ONLY_RPC_FUNCTIONS.has(fn)) {
+      if (!req.user) {
+        return res.status(401).json({ data: null, error: { message: 'Authentication required' } })
+      }
+      if (!isAdmin(req)) {
+        return res.status(403).json({ data: null, error: { message: 'Admin access required' } })
+      }
+    }
+
+    const selfArg = SELF_SCOPED_RPC_ARGS[fn]
+    if (selfArg && !isAdmin(req)) {
+      if (!req.user?.id) {
+        return res.status(401).json({ data: null, error: { message: 'Authentication required' } })
+      }
+      args[selfArg] = req.user.id
+    }
+
+    // Special-case: dashboard stats assembled from multiple PostgREST queries
+    // (admin-only — enforced above).
+    if (fn === 'get_dashboard_stats') {
       const [appRes, payRes, quoteRes, clientRes] = await Promise.all([
         supabaseAdmin.from('applications').select('status', { count: 'exact' }),
         supabaseAdmin.from('application_payments').select('amount').eq('status', 'paid'),

@@ -46,13 +46,6 @@ interface NextData { question: Question | null; index: number; completed: boolea
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getDiffLabel(d: number): string {
-  if (d < -1) return 'Very Easy';
-  if (d < 0) return 'Easy';
-  if (d < 1) return 'Medium';
-  if (d < 2) return 'Hard';
-  return 'Very Hard';
-}
 function isCorrectOpt(correctAnswer: unknown, id: string): boolean {
   if (Array.isArray(correctAnswer)) return correctAnswer.includes(id);
   if (typeof correctAnswer === 'string') return correctAnswer === id;

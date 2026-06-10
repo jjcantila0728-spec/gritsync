@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'gritsync-jwt-secret-key-2024'
+import { getJwtSecret } from '../utils/jwt-secret'
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,7 +23,7 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
+    const decoded = jwt.verify(token, getJwtSecret()) as any
     // Reject single-use SSO tokens here — they are only accepted by
     // /api/auth/sso/exchange. Smuggling one as a Bearer would otherwise leak
     // an authenticated session with no role/email claims attached.
@@ -44,7 +43,7 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any
+      const decoded = jwt.verify(token, getJwtSecret()) as any
       req.user = decoded
     } catch {
       // ignore invalid tokens for optional auth
@@ -61,11 +60,11 @@ export function requireAdmin(req: AuthenticatedRequest, res: Response, next: Nex
 }
 
 export function signToken(payload: object): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' })
 }
 
 export function signRefreshToken(payload: object): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' })
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '30d' })
 }
 
 // ---------------------------------------------------------------------------
@@ -81,13 +80,13 @@ export const SSO_AUD = 'sso-hop'
 export function signSsoToken(userId: string, targetSubdomain: string): string {
   return jwt.sign(
     { sub: userId, target: targetSubdomain },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '60s', audience: SSO_AUD }
   )
 }
 
 export function verifySsoToken(token: string): { sub: string; target: string } {
-  const decoded = jwt.verify(token, JWT_SECRET, { audience: SSO_AUD }) as any
+  const decoded = jwt.verify(token, getJwtSecret(), { audience: SSO_AUD }) as any
   if (!decoded?.sub || !decoded?.target) {
     throw new Error('Malformed SSO token')
   }

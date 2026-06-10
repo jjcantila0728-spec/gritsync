@@ -15,8 +15,6 @@ import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStep
 import { db } from '@/lib/api-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
-import jsPDF from 'jspdf'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { stripePromise } from '@/lib/stripe'
 import { subscribeToApplicationUpdates, subscribeToApplicationTimelineSteps, subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
@@ -754,8 +752,9 @@ export function ApplicationDetail() {
     }
   }
 
-  function handleDownloadReceipt(receipt: any) {
+  async function handleDownloadReceipt(receipt: any) {
     try {
+      const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF()
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
@@ -1472,19 +1471,20 @@ export function ApplicationDetail() {
         throw new Error(`Failed to fetch G-1145 PDF: ${pdfResponse.status} ${pdfResponse.statusText}`)
       }
       const pdfBytes = await pdfResponse.arrayBuffer()
-      
+
       // Load the PDF
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
       const pdfDoc = await PDFDocument.load(pdfBytes, {
         ignoreEncryption: true,
         updateMetadata: false,
         capNumbers: true
       })
-      
+
       // STEP 1: Locate all fillable fields and record their coordinates
       const form = pdfDoc.getForm()
       const fields = form.getFields()
       const fieldNames = fields.map(f => f.getName())
-      
+
       console.log('=== STEP 1: Scanning for fillable fields ===')
       console.log('G-1145 PDF loaded successfully')
       console.log('G-1145 Form Fields Found:', fieldNames)
@@ -1772,19 +1772,20 @@ export function ApplicationDetail() {
         throw new Error(`Failed to fetch I-765 PDF: ${pdfResponse.status} ${pdfResponse.statusText}`)
       }
       const pdfBytes = await pdfResponse.arrayBuffer()
-      
+
       // Load the PDF
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
       const pdfDoc = await PDFDocument.load(pdfBytes, {
         ignoreEncryption: true,
         updateMetadata: false,
         capNumbers: true
       })
-      
+
       // STEP 1: Locate all fillable fields and record their coordinates
       const form = pdfDoc.getForm()
       const fields = form.getFields()
       const fieldNames = fields.map(f => f.getName())
-      
+
       console.log('=== STEP 1: Scanning for fillable fields ===')
       console.log('I-765 PDF loaded successfully')
       console.log('I-765 Form Fields Found:', fieldNames)

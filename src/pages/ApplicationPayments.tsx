@@ -16,7 +16,6 @@ import { paymentSettings } from '@/lib/settings'
 import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
-import jsPDF from 'jspdf'
 import { subscribeToApplicationPayments, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 import { 
@@ -574,8 +573,9 @@ export function ApplicationPayments() {
 
   // Removed unused _handleViewReceipt function
 
-  function handleDownloadReceipt(receipt: Receipt) {
+  async function handleDownloadReceipt(receipt: Receipt) {
     try {
+      const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF()
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()

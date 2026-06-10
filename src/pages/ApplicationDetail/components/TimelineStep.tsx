@@ -7,9 +7,6 @@ import { formatDate, formatCurrency, sanitizeHTML } from '@/lib/utils'
 import { userDocumentsAPI, getSignedFileUrl, processingAccountsAPI } from '@/lib/api'
 import { db } from '@/lib/api-client'
 import { useErrorHandler } from '@/lib/use-error-handler'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
-import { PDFDocument } from 'pdf-lib'
 import { getRenderedTemplate } from '@/lib/email-template-service'
 import { SignatureModal } from '@/components/SignatureModal'
 import { PDFReviewModal } from '@/components/PDFReviewModal'
@@ -210,6 +207,7 @@ export function TimelineStep({
       const response = await fetch('/nurse2f.pdf')
       if (!response.ok) throw new Error('Failed to fetch Form 2F PDF')
       const pdfBytes = await response.arrayBuffer()
+      const { PDFDocument } = await import('pdf-lib')
       const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
       const form = pdfDoc.getForm()
 
@@ -1336,6 +1334,7 @@ export function TimelineStep({
                                     }
                                     
                                     // 2. Load PDF with pdf-lib
+                                    const { PDFDocument } = await import('pdf-lib')
                                     const pdfDoc = await PDFDocument.load(mergedPdfBytes)
                                     const pages = pdfDoc.getPages()
                                     
@@ -3355,6 +3354,7 @@ export function TimelineStep({
                                     await new Promise(resolve => setTimeout(resolve, 300))
                                     
                                     // Enhanced PDF generation with better quality
+                                    const { default: html2canvas } = await import('html2canvas')
                                     const canvas = await html2canvas(tempDiv, {
                                       backgroundColor: '#ffffff',
                                       scale: 3, // Increased scale for better quality
@@ -3380,6 +3380,7 @@ export function TimelineStep({
                                     const imgData = canvas.toDataURL('image/png', 1.0)
                                     
                                     // Create PDF with proper dimensions (Letter size: 8.5" x 11" = 612pt x 792pt)
+                                    const { default: jsPDF } = await import('jspdf')
                                     const pdf = new jsPDF({
                                       orientation: 'portrait',
                                       unit: 'pt',
@@ -3520,6 +3521,7 @@ export function TimelineStep({
                                     await new Promise(resolve => setTimeout(resolve, 300))
                                     
                                     // Enhanced PDF generation with better quality
+                                    const { default: html2canvas } = await import('html2canvas')
                                     const canvas = await html2canvas(tempDiv, {
                                       backgroundColor: '#ffffff',
                                       scale: 3, // Increased scale for better quality
@@ -3545,6 +3547,7 @@ export function TimelineStep({
                                     const imgData = canvas.toDataURL('image/png', 1.0)
                                     
                                     // Create PDF with proper dimensions (Letter size: 8.5" x 11" = 612pt x 792pt)
+                                    const { default: jsPDF } = await import('jspdf')
                                     const pdf = new jsPDF({
                                       orientation: 'portrait',
                                       unit: 'pt',

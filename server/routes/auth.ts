@@ -2,13 +2,25 @@ import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { query } from '../db'
 import { authenticateToken, signToken, signRefreshToken, signSsoToken, verifySsoToken, AuthenticatedRequest } from '../middleware/auth'
+import { getJwtSecret } from '../utils/jwt-secret'
 import { ensureReferralCode } from './referrals'
 import { sendEmail } from '../utils/email'
 import { pushNotifyUser } from '../lib/push'
 
 const router = Router()
+
+// Brute-force protection for credential/OTP endpoints: 10 requests per 15
+// minutes per IP. Scoped to the sensitive routes below — NOT applied globally.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+})
 
 // --- Dev-only / out-of-band auth configuration -------------------------------
 // In development, skip the "verify your email before logging in" gate so new
@@ -36,7 +48,9 @@ function generateGritId(): string {
 }
 
 function generateOTP(): string {
-  return String(Math.floor(100000 + Math.random() * 900000))
+  // Cryptographically secure 6-digit code — Math.random() is predictable and
+  // must never be used for OTP/token generation.
+  return crypto.randomInt(100000, 1000000).toString()
 }
 
 async function sendVerificationEmail(personalEmail: string, firstName: string, token: string, otp?: string) {
@@ -436,7 +450,7 @@ router.get('/verify-email', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body
 
@@ -603,8 +617,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const { refresh_token } = req.body
     if (!refresh_token) return res.status(400).json({ error: 'Refresh token required' })
 
-    const JWT_SECRET = process.env.JWT_SECRET || 'gritsync-jwt-secret-key-2024'
-    const decoded = jwt.verify(refresh_token, JWT_SECRET) as any
+    const decoded = jwt.verify(refresh_token, getJwtSecret()) as any
 
     const result = await query(
       'SELECT id, email, role, first_name, last_name, grit_id FROM users WHERE id = $1',
@@ -931,7 +944,7 @@ async function sendPasswordResetEmail(personalEmail: string, firstName: string, 
 }
 
 // POST /api/auth/reset-password-request
-router.post('/reset-password-request', async (req: Request, res: Response) => {
+router.post('/reset-password-request', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email is required' })
@@ -970,7 +983,7 @@ router.post('/reset-password-request', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/verify-reset-otp
-router.post('/verify-reset-otp', async (req: Request, res: Response) => {
+router.post('/verify-reset-otp', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, otp } = req.body
     if (!email || !otp) return res.status(400).json({ error: 'Email and code are required' })
@@ -1008,7 +1021,7 @@ router.post('/verify-reset-otp', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/reset-password
-router.post('/reset-password', async (req: Request, res: Response) => {
+router.post('/reset-password', authLimiter, async (req: Request, res: Response) => {
   try {
     const { token, new_password } = req.body
     if (!token || !new_password) return res.status(400).json({ error: 'Token and new password are required' })
@@ -1051,7 +1064,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/verify-otp
-router.post('/verify-otp', async (req: Request, res: Response) => {
+router.post('/verify-otp', authLimiter, async (req: Request, res: Response) => {
   try {
     const { personal_email, otp } = req.body
     if (!personal_email || !otp) {
@@ -1145,7 +1158,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/resend-verification
-router.post('/resend-verification', async (req: Request, res: Response) => {
+router.post('/resend-verification', authLimiter, async (req: Request, res: Response) => {
   try {
     const { personal_email } = req.body
     const emailInput = personal_email?.trim().toLowerCase()

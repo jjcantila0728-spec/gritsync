@@ -19,14 +19,14 @@ interface Session {
   items: SessionItem[];
 }
 
-const formatResponse = (format: string, response: unknown): string => {
+const formatResponse = (_format: string, response: unknown): string => {
   if (response === null || response === undefined) return '(not answered)';
   if (Array.isArray(response)) return response.join(', ') || '(none selected)';
   if (typeof response === 'object') return JSON.stringify(response);
   return String(response);
 };
 
-const formatCorrectAnswer = (format: string, answer: unknown): string => {
+const formatCorrectAnswer = (_format: string, answer: unknown): string => {
   if (Array.isArray(answer)) return answer.join(', ');
   if (typeof answer === 'object' && answer !== null) {
     const obj = answer as Record<string, unknown>;

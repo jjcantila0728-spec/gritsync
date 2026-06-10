@@ -13,6 +13,7 @@
 import { Router, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
+import { getJwtSecret } from '../utils/jwt-secret'
 import { query } from '../db'
 import {
   createJob, getJob, getActiveJobForApp, attachSubscriber, detachSubscriber,
@@ -24,14 +25,13 @@ import { runNyApplication } from '../agents/ny-application/runner'
 import { runPvApplication } from '../agents/pv-application/runner'
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'gritsync-jwt-secret-key-2024'
 
 function authenticateTokenOrQuery(req: AuthenticatedRequest, res: Response, next: any) {
   const authHeader = req.headers['authorization']
   const token = (authHeader && authHeader.split(' ')[1]) || (req.query.t as string)
   if (!token) return res.status(401).json({ error: 'No token provided' })
   try {
-    req.user = jwt.verify(token, JWT_SECRET) as any
+    req.user = jwt.verify(token, getJwtSecret()) as any
     next()
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' })

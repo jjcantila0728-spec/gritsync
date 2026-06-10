@@ -7,7 +7,7 @@
  * receipt number.
  */
 
-import jsPDF from 'jspdf'
+import type { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { formatCurrency } from './utils'
 
@@ -228,6 +228,7 @@ async function drawQrBlock(
 // ─── Receipt ─────────────────────────────────────────────────────────────────
 
 export async function generateReceiptPDF(receipt: ReceiptData): Promise<Uint8Array> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -368,6 +369,7 @@ export async function generateReceiptPDF(receipt: ReceiptData): Promise<Uint8Arr
 // ─── Invoice ─────────────────────────────────────────────────────────────────
 
 export async function generateInvoicePDF(invoice: InvoiceData): Promise<Uint8Array> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()

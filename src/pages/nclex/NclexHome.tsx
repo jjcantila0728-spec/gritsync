@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   BookOpen, Brain, Target, Trophy, Lock, Play, CheckCircle,
   BarChart3, ArrowLeft, Calendar, Users, Star,
@@ -129,17 +129,6 @@ const NCLEX_TOPICS = [
   { name: 'Comprehensive Review & Mock Exams', color: 'bg-emerald-100 text-emerald-800', icon: '📝' },
 ];
 
-const TEST_PLAN_CATEGORIES = [
-  { id: 'mgmt',    label: 'Management of Care',          pct: '15–21%', weight: 18, icon: '📋', accent: '#1e3a8a', topics: ['Leadership & Management', 'NCLEX Strategies & Test-Taking'] },
-  { id: 'safety',  label: 'Safety & Infection Control',  pct: '9–15%',  weight: 12, icon: '🛡️', accent: '#991b1b', topics: ['Safety & Infection Control'] },
-  { id: 'health',  label: 'Health Promotion',            pct: '6–12%',  weight: 9,  icon: '🌱', accent: '#14532d', topics: ['Maternal-Newborn Nursing', 'Pediatric Nursing', 'Community & Transcultural'] },
-  { id: 'psycho',  label: 'Psychosocial Integrity',      pct: '6–12%',  weight: 9,  icon: '🧘', accent: '#5b21b6', topics: ['Mental Health Nursing'] },
-  { id: 'basic',   label: 'Basic Care & Comfort',        pct: '6–12%',  weight: 9,  icon: '💆', accent: '#0f766e', topics: ['Nutrition & Metabolism', 'Musculoskeletal & Integumentary'] },
-  { id: 'pharma',  label: 'Pharmacological Therapies',   pct: '12–18%', weight: 15, icon: '💊', accent: '#581c87', topics: ['Pharmacology Fundamentals'] },
-  { id: 'risk',    label: 'Reduction of Risk Potential', pct: '9–15%',  weight: 12, icon: '🔬', accent: '#134e4a', topics: ['Critical Care & Emergency', 'Hematological & Immunological'] },
-  { id: 'physio',  label: 'Physiological Adaptation',    pct: '11–17%', weight: 14, icon: '❤️', accent: '#92400e', topics: ['Cardiovascular Nursing', 'Respiratory Nursing', 'Neurological Nursing', 'Gastrointestinal Nursing', 'Genitourinary/Renal Nursing', 'Endocrine Nursing'] },
-];
-
 const WEEK_PLANS: Record<string, { label: string; weeks: Array<{ week: number; theme: string; topics: number[]; daily: string[]; qGoal: number }> }> = {
   '12': {
     label: '12-Week Comprehensive',
@@ -233,13 +222,6 @@ const FORMAT_META: Record<string, { label: string; tag: string; tagColor: string
   DROP_DOWN:        { label: 'Drop-Down Cloze',        tag: 'NGN',     tagColor: 'bg-purple-100 text-purple-700' },
   HIGHLIGHT_TEXT:   { label: 'Highlight Text',         tag: 'NGN',     tagColor: 'bg-purple-100 text-purple-700' },
   DRAG_DROP:        { label: 'Drag & Drop',            tag: 'NGN',     tagColor: 'bg-purple-100 text-purple-700' },
-};
-
-const EXAM_TYPE_LABELS: Record<string, string> = {
-  READINESS_ASSESSMENT: 'Readiness Assessment',
-  CAT: 'CAT Adaptive',
-  TUTORIAL: 'Tutorial',
-  EXIT_EXAM: 'Exit Exam',
 };
 
 // ── QBanks sub-tab type ───────────────────────────────────────────────────────
@@ -498,7 +480,7 @@ export const NclexHome = () => {
   const [savingDate, setSavingDate] = useState(false);
 
   // Calendar
-  const [calWeeks, setCalWeeks] = useState<string>('6');
+  const [calWeeks] = useState<string>('6');
   const [showWeekOfExam, setShowWeekOfExam] = useState(false);
 
   // Testimonial form
@@ -596,12 +578,8 @@ export const NclexHome = () => {
   const [ctBank, setCtBank] = useState<string>('');
   const [ctQuestionCount, setCtQuestionCount] = useState<number>(85);
   const [ctTopics, setCtTopics] = useState<string[]>([]);
-  const [ctFormats, setCtFormats] = useState<string[]>([]);
-  const [ctShowTopics, setCtShowTopics] = useState(false);
-  const [ctMode, setCtMode] = useState<'manual' | 'blueprint' | 'ai'>('manual');
-  const [aiSuggesting, setAiSuggesting] = useState(false);
-  const [aiResult, setAiResult] = useState<{ topics: string[]; questionCount: number; formats: string[]; focus: string; reasoning: string } | null>(null);
-  const [aiGoal, setAiGoal] = useState('');
+  const [ctFormats] = useState<string[]>([]);
+  const [, setAiResult] = useState<{ topics: string[]; questionCount: number; formats: string[]; focus: string; reasoning: string } | null>(null);
   const [ctStep, setCtStep] = useState<1|2>(1);
   const [ctQuestionFilter, setCtQuestionFilter] = useState<string>('unused');
   const [ctFormatFilter, setCtFormatFilter] = useState<string>('all');
@@ -765,183 +743,6 @@ export const NclexHome = () => {
   const completedSessions = data?.sessions.filter(s => s.status === 'COMPLETED') ?? [];
 
   // ── Render sections ──────────────────────────────────────────────────────────
-
-  const renderOverview = () => {
-    const totalCompleted = completedSessions.length;
-    const passedCount = completedSessions.filter(s => (s.result as Record<string, unknown>)?.passed).length;
-    const passRate = totalCompleted > 0 ? Math.round((passedCount / totalCompleted) * 100) : 0;
-
-    return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        {/* Welcome banner - full width */}
-        <div className="bg-gradient-to-br from-[#0c1e3c] to-[#1a4080] rounded-2xl p-5 mb-6 text-white flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-blue-200 text-sm mb-0.5">Welcome back,</p>
-            <h1 className="text-2xl font-black truncate">{user?.firstName} {user?.lastName}</h1>
-            <div className="flex items-center flex-wrap gap-2 mt-2">
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${isPremium ? 'bg-amber-500/30 text-amber-300' : 'bg-white/15 text-blue-200'}`}>
-                {isPremium ? '⚡ Premium' : 'Free Plan'}
-              </span>
-              {daysUntilExam !== null && !examPassed && (
-                <span className="text-xs text-blue-200">
-                  <strong className="text-white">{daysUntilExam}</strong> days to exam
-                </span>
-              )}
-              {examPassed && <span className="text-xs text-emerald-300 font-bold">🎉 Exam day passed — great work!</span>}
-            </div>
-          </div>
-          <div className="h-14 w-14 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xl font-black text-white flex-shrink-0">
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
-          </div>
-        </div>
-
-        {/* Stats row - 4 columns */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-black text-gray-900">{totalCompleted}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Sessions Done</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-black text-gray-900">{totalCompleted > 0 ? `${passRate}%` : '—'}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Pass Rate</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <div className="flex items-center justify-center gap-1 mb-0.5">
-              <p className="text-3xl font-black text-gray-900">{questionsToday}</p>
-              {questionsToday > 0 && <Flame className="h-5 w-5 text-orange-400 flex-shrink-0" />}
-            </div>
-            <p className="text-xs text-gray-500">Qs Today</p>
-            {!isPremium && (
-              <div className="mt-1.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${Math.min(100, (questionsToday / 10) * 100)}%` }} />
-              </div>
-            )}
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-black text-gray-900">{classic + ngn}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Questions in Bank</p>
-          </div>
-        </div>
-
-        {/* Two-column layout for main content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Quick start (2/3 width) */}
-          <div className="lg:col-span-2 space-y-5">
-            {/* Free tier nudge */}
-            {!isPremium && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-amber-800">{questionsToday}/25 free questions used today</p>
-                  <p className="text-xs text-amber-700">Upgrade to Premium for unlimited access to all exam types.</p>
-                </div>
-                <button onClick={() => { setActiveSection('subscription'); setUpgradeModal(true); }}
-                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex-shrink-0">
-                  Upgrade
-                </button>
-              </div>
-            )}
-
-            {/* Quick start */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-900">Quick Start</h3>
-                <button onClick={() => setActiveSection('qbanks')} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                  All exams <ChevronRight className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { type: 'CAT', label: 'CAT Adaptive Test', icon: Brain, color: 'from-purple-500 to-fuchsia-600', meta: '85–150 Qs · Adaptive', locked: !isPremium },
-                  { type: 'READINESS_ASSESSMENT', label: 'Readiness Assessment', icon: Target, color: 'from-blue-500 to-indigo-600', meta: '85 Qs · ~2 hrs', locked: !isPremium },
-                  { type: 'TUTORIAL', label: 'Tutorial', icon: Play, color: 'from-emerald-500 to-teal-600', meta: '~15 min · Free', locked: false },
-                  { type: 'EXIT_EXAM', label: 'Exit Exam', icon: Trophy, color: 'from-amber-500 to-orange-600', meta: '150 Qs · Timed', locked: !data?.exitAccess },
-                ].map(item => (
-                  <button
-                    key={item.type}
-                    onClick={() => { if (!item.locked) { setSelectedBank(''); setBankPick(item.type); } }}
-                    disabled={item.locked}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${
-                      item.locked ? 'border-gray-200 bg-white opacity-60 cursor-not-allowed' : 'border-transparent bg-white hover:shadow-md hover:border-blue-100 cursor-pointer'
-                    }`}
-                  >
-                    <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center flex-shrink-0`}>
-                      {item.locked ? <Lock className="h-5 w-5 text-white/80" /> : <item.icon className="h-5 w-5 text-white" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm text-gray-900 truncate">{item.label}</p>
-                      <p className="text-xs text-gray-500">{item.meta}</p>
-                    </div>
-                    {!item.locked && <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Recent activity (1/3 width) */}
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-900">Recent Activity</h3>
-              </div>
-              {completedSessions.length === 0 ? (
-                <div className="bg-white rounded-xl border border-dashed border-gray-200 py-10 text-center">
-                  <BarChart3 className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500 font-medium">No sessions yet</p>
-                  <button onClick={() => setActiveSection('qbanks')} className="mt-2 text-xs text-blue-600 hover:underline">
-                    Take your first exam →
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-                  {completedSessions.slice(0, 5).map(s => {
-                    const r = s.result as Record<string, unknown> | null;
-                    const passed = r?.passed as boolean;
-                    const pct = r?.percentCorrect as number | undefined;
-                    const readiness = r?.readiness as string | undefined;
-                    return (
-                      <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                        <div className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black ${passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                          {passed ? '✓' : '✗'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">
-                            {s.examType === 'READINESS_ASSESSMENT' ? 'Readiness' : s.examType === 'CAT' ? 'CAT Exam' : s.examType === 'EXIT_EXAM' ? 'Exit Exam' : 'Tutorial'}
-                            {readiness && <span className="ml-1 text-xs text-blue-600">{readiness}</span>}
-                            {pct !== undefined && <span className="ml-1 text-xs text-gray-400">{pct.toFixed(0)}%</span>}
-                          </p>
-                          <p className="text-xs text-gray-400">{new Date(s.completedAt ?? s.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</p>
-                        </div>
-                        <button onClick={() => navigate(`/nclex/results/${s.id}`)} className="text-xs text-blue-600 hover:underline flex-shrink-0">
-                          View
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Exam countdown */}
-            {daysUntilExam !== null && !examPassed && (
-              <div className={`rounded-xl p-4 text-center ${
-                urgency === 'critical' ? 'bg-red-50 border-2 border-red-200' :
-                urgency === 'high' ? 'bg-orange-50 border-2 border-orange-200' :
-                urgency === 'medium' ? 'bg-amber-50 border-2 border-amber-200' :
-                'bg-blue-50 border-2 border-blue-100'
-              }`}>
-                <p className="text-xs font-bold text-gray-500 uppercase mb-1">Time to Exam</p>
-                <p className={`text-5xl font-black ${urgency === 'critical' ? 'text-red-600' : urgency === 'high' ? 'text-orange-600' : 'text-blue-700'}`}>{daysUntilExam}</p>
-                <p className="text-sm font-semibold text-gray-600">days remaining</p>
-                {examDate && <p className="text-xs text-gray-400 mt-1">{new Date(examDate).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderLiveLectures = () => {
     const now = new Date();
@@ -2801,9 +2602,6 @@ export const NclexHome = () => {
     const activePlans = planConfig?.plans.filter(p => p.isActive) ?? [];
     const freePlan = activePlans.find(p => p.id === 'free' || p.price === 0);
     const paidPlans = activePlans.filter(p => p.price > 0);
-    const premiumPlan = paidPlans.find(p => p.id === 'premium');
-    const vipPlan = paidPlans.find(p => p.id === 'vip');
-
     const PLAN_ACCENTS: Record<string, { border: string; activeBorder: string; check: string; badge: string; btn: string }> = {
       premium: { border: 'border-[#0c1e3c]', activeBorder: 'border-blue-500', check: 'text-blue-600', badge: 'bg-blue-100 text-blue-800', btn: 'bg-[#0c1e3c] hover:bg-[#1a3058]' },
       vip:     { border: 'border-amber-400', activeBorder: 'border-amber-500', check: 'text-amber-500', badge: 'bg-amber-100 text-amber-800', btn: 'bg-amber-500 hover:bg-amber-600' },
@@ -3267,12 +3065,6 @@ export const NclexHome = () => {
       {/* Create Test modal - Archer Review style */}
       {createTestModal && (() => {
         const isPractice = ctExamType === 'TUTORIAL';
-        const EXAM_OPTS = [
-          { type: 'TUTORIAL',             label: 'Practice Mode',        icon: Play,        color: 'from-emerald-500 to-teal-600',   meta: 'Custom Qs · Free',     locked: false,             desc: 'Fully customizable practice with topics, formats, and question count' },
-          { type: 'READINESS_ASSESSMENT', label: 'Readiness Assessment', icon: Target,      color: 'from-blue-500 to-indigo-600',    meta: '85 Qs · ~2 hrs',       locked: !isPremium,        desc: 'Official NCLEX-style 85-question readiness assessment' },
-          { type: 'CAT',                  label: 'CAT Adaptive',         icon: Brain,       color: 'from-purple-500 to-fuchsia-600', meta: '85–150 Qs · Adaptive', locked: !isPremium,        desc: 'Computerized adaptive test that adjusts to your ability' },
-          { type: 'EXIT_EXAM',            label: 'GritSync Exit Exam',   icon: Trophy,      color: 'from-amber-500 to-orange-600',   meta: '150 Qs · 350 min',     locked: !data?.exitAccess, desc: 'Comprehensive exit exam — contact admin for access' },
-        ];
         const MODE_DESCS: Record<string, string> = {
           TUTORIAL: 'Receive instant explanations after submitting your answers.',
           CAT: 'Computerized Adaptive Testing that adjusts difficulty based on your performance.',
@@ -3336,55 +3128,6 @@ export const NclexHome = () => {
         const unusedN = unusedNgn;
 
         const closeModal = () => { setCreateTestModal(false); setAiResult(null); setCtStep(1); };
-
-        const handleAiGenerate = async () => {
-          setAiSuggesting(true);
-          setAiResult(null);
-          try {
-            const usedByTopic = data?.stats.usedByTopic ?? {};
-            const topicStats = (data?.stats.byTopic ?? []).map(({ topic, count }) => {
-              const used = usedByTopic[topic] ?? 0;
-              return { topic, total: count, used, pct: count > 0 ? Math.round((used / count) * 100) : 0 };
-            }).sort((a, b) => a.pct - b.pct);
-            const res = await nclexApi.suggestTest({ topicStats, studyGoal: aiGoal || undefined, examDate: examDate || null });
-            setAiResult(res.data.data);
-          } catch {
-            toast.error('AI suggestion failed. Please try again.');
-          } finally {
-            setAiSuggesting(false);
-          }
-        };
-
-        const applyAiSuggestion = () => {
-          if (!aiResult) return;
-          setCtTopics(aiResult.topics);
-          setCtQuestionCount(aiResult.questionCount);
-          setCtFormats(aiResult.formats);
-          setCtMode('manual');
-          setAiResult(null);
-        };
-
-        // Blueprint: toggle all topics for a category
-        const toggleBpCategory = (catTopics: string[]) => {
-          const allSelected = catTopics.every(t => ctTopics.includes(t));
-          if (allSelected) setCtTopics(prev => prev.filter(t => !catTopics.includes(t)));
-          else setCtTopics(prev => [...new Set([...prev, ...catTopics])]);
-        };
-
-        // Blueprint: select balanced set proportional to test plan
-        const applyBlueprint = () => {
-          const totalWeight = TEST_PLAN_CATEGORIES.reduce((s, c) => s + c.weight, 0);
-          const target = 40;
-          const topics: string[] = [];
-          TEST_PLAN_CATEGORIES.forEach(cat => {
-            const n = Math.max(1, Math.round((cat.weight / totalWeight) * target));
-            topics.push(...cat.topics.slice(0, n));
-          });
-          setCtTopics([...new Set(topics)]);
-          setCtQuestionCount(40);
-          setCtFormats([]);
-          setCtMode('manual');
-        };
 
         return (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">

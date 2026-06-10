@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import multer from 'multer'
 import jwt from 'jsonwebtoken'
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth'
+import { getJwtSecret } from '../utils/jwt-secret'
 import pool from '../db'
 import { supabaseAdmin } from '../lib/supabase'
 
@@ -15,8 +16,6 @@ const DOCUMENTS_BUCKET = 'documents'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
-
-const JWT_SECRET = process.env.JWT_SECRET || 'gritsync-jwt-secret-key-2024'
 
 const MIME_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
@@ -71,7 +70,7 @@ function authenticateTokenOrQuery(req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
+    const decoded = jwt.verify(token, getJwtSecret()) as any
     req.user = decoded
     next()
   } catch {

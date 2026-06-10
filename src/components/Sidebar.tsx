@@ -183,7 +183,7 @@ export function Sidebar() {
 
   // Fetch quotations and count unopened ones
   useEffect(() => {
-    if (!isAdmin()) return
+    if (user?.role !== 'admin') return
 
     const fetchUnopenedCount = async () => {
       try {
@@ -221,11 +221,11 @@ export function Sidebar() {
       window.removeEventListener('quotesUpdated', handleQuotesUpdate)
       window.removeEventListener('storage', handleStorageChange)
     }
-  }, [isAdmin])
+  }, [user?.role])
 
   // Fetch documents status for non-admin users
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     // Load from cache first
     const cached = getCachedDocumentsStatus()
@@ -257,11 +257,11 @@ export function Sidebar() {
       .catch(() => {
         // Ignore errors, keep cached value
       })
-  }, [isAdmin, user])
+  }, [user])
 
   // Listen for document updates
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     const handleDocumentsUpdate = () => {
       // Invalidate caches and refetch.
@@ -297,22 +297,25 @@ export function Sidebar() {
         })
     }
 
-    window.addEventListener('documentsUpdated', handleDocumentsUpdate)
-    window.addEventListener('storage', (e) => {
+    const handleDocumentsStorageChange = (e: StorageEvent) => {
       if (e.key === `documentsStatus_${user.id}`) {
         const cached = getCachedDocumentsStatus()
         setDocumentsStatus(cached)
       }
-    })
+    }
+
+    window.addEventListener('documentsUpdated', handleDocumentsUpdate)
+    window.addEventListener('storage', handleDocumentsStorageChange)
 
     return () => {
       window.removeEventListener('documentsUpdated', handleDocumentsUpdate)
+      window.removeEventListener('storage', handleDocumentsStorageChange)
     }
-  }, [isAdmin, user])
+  }, [user])
 
   // Check for applications needing payment
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     // Load from cache first
     const cached = getCachedApplicationsPaymentStatus()
@@ -373,7 +376,7 @@ export function Sidebar() {
       window.removeEventListener('applicationsUpdated', handleApplicationsUpdate)
       clearInterval(interval)
     }
-  }, [isAdmin, user])
+  }, [user])
 
   // Load unread emails count from localStorage and listen for updates
   useEffect(() => {
@@ -486,7 +489,7 @@ export function Sidebar() {
       window.removeEventListener('messagesUpdated', handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
-  }, [user, isAdmin, showToast])
+  }, [user, showToast])
 
   return (
     <>
@@ -657,7 +660,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
   // Fetch quotations and count unopened ones
   useEffect(() => {
-    if (!isAdmin()) return
+    if (user?.role !== 'admin') return
 
     const fetchUnopenedCount = async () => {
       try {
@@ -695,11 +698,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       window.removeEventListener('quotesUpdated', handleQuotesUpdate)
       window.removeEventListener('storage', handleStorageChange)
     }
-  }, [isAdmin])
+  }, [user?.role])
 
   // Fetch documents status for non-admin users
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     // Load from cache first
     const cached = getCachedDocumentsStatus()
@@ -731,11 +734,11 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       .catch(() => {
         // Ignore errors, keep cached value
       })
-  }, [isAdmin, user])
+  }, [user])
 
   // Listen for document updates
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     const handleDocumentsUpdate = () => {
       // Invalidate caches and refetch.
@@ -771,22 +774,25 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
         })
     }
 
-    window.addEventListener('documentsUpdated', handleDocumentsUpdate)
-    window.addEventListener('storage', (e) => {
+    const handleDocumentsStorageChange = (e: StorageEvent) => {
       if (e.key === `documentsStatus_${user.id}`) {
         const cached = getCachedDocumentsStatus()
         setDocumentsStatus(cached)
       }
-    })
+    }
+
+    window.addEventListener('documentsUpdated', handleDocumentsUpdate)
+    window.addEventListener('storage', handleDocumentsStorageChange)
 
     return () => {
       window.removeEventListener('documentsUpdated', handleDocumentsUpdate)
+      window.removeEventListener('storage', handleDocumentsStorageChange)
     }
-  }, [isAdmin, user])
+  }, [user])
 
   // Check for applications needing payment
   useEffect(() => {
-    if (isAdmin() || !user) return
+    if (user?.role === 'admin' || !user) return
 
     // Load from cache first
     const cached = getCachedApplicationsPaymentStatus()
@@ -847,7 +853,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       window.removeEventListener('applicationsUpdated', handleApplicationsUpdate)
       clearInterval(interval)
     }
-  }, [isAdmin, user])
+  }, [user])
 
   // Load unread emails count from localStorage and listen for updates
   useEffect(() => {
@@ -960,7 +966,7 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
       window.removeEventListener('messagesUpdated', handleUpdate)
       window.removeEventListener('storage', handleUpdate)
     }
-  }, [user, isAdmin, showToast])
+  }, [user, showToast])
 
   return (
     <aside className="w-full h-full bg-white dark:bg-gray-900 p-4 overflow-visible">

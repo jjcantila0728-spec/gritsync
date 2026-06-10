@@ -48,10 +48,30 @@ export default defineConfig({
         // undefined). Bundling react with the rest of the vendor code
         // — Vite's default — sidesteps that entirely.
         manualChunks: (id) => {
+          // Vite's preload helper is shared by every dynamic import. Without an
+          // explicit assignment Rollup colocates it inside the first manual
+          // chunk it sees (the 1MB 'pdf' chunk), which makes the entry chunk
+          // statically import 'pdf' and load it eagerly on every page.
+          if (id.includes('vite/preload-helper')) return 'preload-helper'
+          // Rollup's CJS interop helpers are shared by every chunk; pin them
+          // to vendor-react so they don't get colocated inside a heavy chunk.
+          if (id.includes('commonjsHelpers')) return 'vendor-react'
           if (!id.includes('node_modules')) return
+          // Keep the React runtime in its own dependency-free chunk. If it is
+          // left to default placement, Rollup hoists react/react-dom into
+          // whichever manual chunk (lucide/recharts) imports them first, which
+          // forces that whole heavy chunk to load eagerly with the entry.
+          // vendor-react imports nothing, so it always evaluates first — no
+          // initialization-order issues.
+          // Includes tiny dependency-free shared libs (clsx, react-is,
+          // prop-types) for the same reason as the helpers above.
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-is|prop-types|clsx)[\\/]/.test(id)) return 'vendor-react'
           if (/[\\/]node_modules[\\/](jspdf|html2canvas|pdf-lib|@pdf-lib)[\\/]/.test(id)) return 'pdf'
           if (/[\\/]node_modules[\\/]@stripe[\\/]/.test(id)) return 'stripe'
           if (/[\\/]node_modules[\\/]@anthropic-ai[\\/]/.test(id)) return 'anthropic'
+          if (/[\\/]node_modules[\\/]recharts[\\/]/.test(id)) return 'recharts'
+          if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) return 'lucide'
+          if (/[\\/]node_modules[\\/]date-fns[\\/]/.test(id)) return 'date-fns'
         },
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name.split('.')

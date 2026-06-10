@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
+import { timingSafeEqual } from 'crypto'
 import { json, urlencoded } from 'express'
 import authRoutes from './routes/auth'
 import queryRoutes from './routes/query'
@@ -27,8 +28,34 @@ const app = express()
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3001
 const isProd = process.env.NODE_ENV === 'production'
 
+// CORS allowlist. ALLOWED_ORIGINS is a comma-separated list of origins
+// (e.g. "https://gritsync.com,https://app.gritsync.com"). Requests with no
+// Origin header (curl, mobile apps, server-to-server) are always allowed.
+// If ALLOWED_ORIGINS is unset: dev stays permissive (any origin, so the Vite
+// proxy and LAN testing keep working), but production falls back to the
+// canonical GritSync domains instead of reflecting arbitrary origins.
+const PROD_DEFAULT_ORIGINS = [
+  'https://gritsync.com',
+  'https://www.gritsync.com',
+  'https://app.gritsync.com',
+  'https://review.gritsync.com',
+]
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean)
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true) // no Origin header: curl/mobile/same-origin
+    if (allowedOrigins.length > 0) {
+      return callback(null, allowedOrigins.includes(origin))
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true) // dev: keep permissive behavior
+    }
+    return callback(null, PROD_DEFAULT_ORIGINS.includes(origin))
+  },
   credentials: true,
 }))
 // `verify` hook stashes the raw request bytes on the request object for
@@ -60,7 +87,16 @@ app.get('/api/health', (_req, res) => {
 app.post('/api/cron/tick', async (req, res) => {
   const secret = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   const expected = process.env.CRON_SECRET
-  if (expected && secret !== expected) {
+  // Fail closed: if CRON_SECRET isn't configured, the endpoint is disabled.
+  // Comparison is constant-time (length mismatch is an immediate failure —
+  // timingSafeEqual requires equal-length buffers).
+  const secretBuf = Buffer.from(secret)
+  const expectedBuf = Buffer.from(expected || '')
+  const authorized =
+    !!expected &&
+    secretBuf.length === expectedBuf.length &&
+    timingSafeEqual(secretBuf, expectedBuf)
+  if (!authorized) {
     return res.status(401).json({ error: 'unauthorized' })
   }
   const started = Date.now()

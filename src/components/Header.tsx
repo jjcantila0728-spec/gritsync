@@ -22,7 +22,7 @@ import { subscribeToNotifications, unsubscribe } from '@/lib/realtime'
 import type { RealtimeChannel } from '@db/db-js'
 
 export function Header() {
-  const { user, signOut, isAdmin } = useAuth()
+  const { user, signOut, isAdmin, refreshUser } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -119,7 +119,7 @@ export function Header() {
   })
   
   // State for default avatar design (updated when fetched from DB)
-  const [defaultAvatarDesign, setDefaultAvatarDesign] = useState<string>(() => {
+  const [, setDefaultAvatarDesign] = useState<string>(() => {
     return getCachedDefaultDesign(user?.id)
   })
   
@@ -132,15 +132,14 @@ export function Header() {
     return getCachedDefaultDesign(user.id)
   }
   
-  // Update state when fetched from DB, but render always uses getCurrentDesign()
+  // Sync the design from cache when the user changes. The initial value is
+  // derived lazily in the useState initializer above; render always reads the
+  // freshest value via getCurrentDesign(), so this state only triggers
+  // re-renders. Note: defaultAvatarDesign must never appear in a dep array —
+  // that previously caused a set-state-in-effect loop.
   useEffect(() => {
-    if (user?.id) {
-      const cached = getCachedDefaultDesign(user.id)
-      if (cached !== defaultAvatarDesign) {
-        setDefaultAvatarDesign(cached)
-      }
-    }
-  }, [user?.id, defaultAvatarDesign])
+    setDefaultAvatarDesign(getCachedDefaultDesign(user?.id))
+  }, [user?.id])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -349,10 +348,9 @@ export function Header() {
           // This is critical - cache must be updated before state to prevent flickering
           cacheDefaultDesign(user.id, newDefaultDesign)
           
-          // Update state if it changed (computedDefaultDesign will update on next render via useMemo)
-          if (newDefaultDesign !== defaultAvatarDesign) {
-            setDefaultAvatarDesign(newDefaultDesign)
-          }
+          // Update state if it changed (functional update avoids reading a
+          // stale defaultAvatarDesign from this effect's closure)
+          setDefaultAvatarDesign(prev => prev !== newDefaultDesign ? newDefaultDesign : prev)
           const currentCachedPath = localStorage.getItem(cachedAvatarPathKey)
           
           // Check if avatar path has changed (even if user hasn't changed)
@@ -506,9 +504,10 @@ export function Header() {
     return () => window.removeEventListener('avatarUpdated', handleAvatarUpdate)
   }, [user])
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
-    if (!user) return
+  // Fetch notifications. Returns a status so the 15s poll can distinguish a
+  // definitive auth failure (401/403) from transient errors and stop retrying.
+  const fetchNotifications = async (): Promise<'ok' | 'auth-error' | 'error'> => {
+    if (!user) return 'ok'
     setLoadingNotifications(true)
     try {
       const notifs = await notificationsAPI.getAll(false, 50)
@@ -517,16 +516,30 @@ export function Header() {
       // Derive count directly from fetched data — avoids the broken head-count API
       const unread = list.filter((n: any) => !n.read).length
       setUnreadCount(unread)
+      return 'ok'
     } catch (error: any) {
+      const message = String(error?.message || '')
+      // Definitive auth failures: AppError from the data layer carries
+      // .type ('AUTHENTICATION'/'AUTHORIZATION'); raw query errors only carry
+      // an "HTTP 401"-style message or a normalized auth message.
+      const isAuthFailure = error?.type === 'AUTHENTICATION' || error?.type === 'AUTHORIZATION' ||
+        error?.status === 401 || error?.status === 403 ||
+        /HTTP 40[13]\b/.test(message) ||
+        /not authenticated|unauthorized|forbidden|session has expired/i.test(message)
+      if (isAuthFailure) {
+        console.warn('Notifications fetch failed with auth error (401/403):', message)
+        return 'auth-error'
+      }
       // Network/timeout errors are expected to fail transiently (the poll retries
       // every 15s) — log as warn instead of error so they don't dominate the console.
       const isTransient = error?.type === 'NETWORK' || error?.type === 'TIMEOUT' ||
-        /fetch|network|timeout/i.test(error?.message || '')
+        /fetch|network|timeout/i.test(message)
       if (isTransient) {
-        console.warn('Notifications fetch transient failure (will retry):', error?.message || error)
+        console.warn('Notifications fetch transient failure (will retry):', message || error)
       } else {
         console.error('Error fetching notifications:', error)
       }
+      return 'error'
     } finally {
       setLoadingNotifications(false)
     }
@@ -543,8 +556,15 @@ export function Header() {
       notificationChannelRef.current = notificationChannel
 
       // Poll every 15 seconds as a reliable fallback (no real-time in this setup)
-      const pollInterval = setInterval(() => {
-        fetchNotifications().catch(() => {})
+      const pollInterval = setInterval(async () => {
+        const result = await fetchNotifications().catch(() => 'error' as const)
+        if (result === 'auth-error') {
+          // Definitive auth failure (401/403) — stop polling instead of
+          // hammering the API, and re-sync the session/user state.
+          console.warn('Stopping notification polling after auth failure; refreshing user session')
+          clearInterval(pollInterval)
+          refreshUser().catch(() => {})
+        }
       }, 15000)
 
       // Refresh immediately whenever documents are uploaded/deleted

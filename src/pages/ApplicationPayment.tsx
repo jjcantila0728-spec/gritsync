@@ -14,7 +14,6 @@ import { stripePromise } from '@/lib/stripe'
 import { Elements } from '@stripe/react-stripe-js'
 import { StripePaymentForm } from '@/components/StripePaymentForm'
 import { ArrowLeft, CheckCircle, CreditCard, Receipt, Download, AlertCircle } from 'lucide-react'
-import jsPDF from 'jspdf'
 
 interface PaymentItem {
   name: string
@@ -351,10 +350,11 @@ export function ApplicationPayment() {
     }
   }
 
-  function handleDownloadReceipt() {
+  async function handleDownloadReceipt() {
     if (!receipt) return
 
     try {
+      const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF()
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
