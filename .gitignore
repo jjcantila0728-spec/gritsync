@@ -73,3 +73,7 @@ Thumbs.db
 # Vercel
 .vercel
 api/_server.cjs
+
+# Local Claude Code config (contains tokens) + scratch artifacts
+.claude/
+expo-qr.png
