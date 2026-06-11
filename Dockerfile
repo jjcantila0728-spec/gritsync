@@ -1,49 +1,44 @@
-# Multi-stage Dockerfile for Production (Serverless/Static Build)
-# This Dockerfile is for serving the static Vite build
-# Note: The project is primarily deployed on Vercel (serverless)
-# This Dockerfile is optional and only needed if you want to self-host
+# Full-stack production image: Express API + built Vite frontend in one
+# container. `npm run build` emits both dist/ (frontend) and api/_server.cjs
+# (esbuild CJS bundle of server/index.ts — no tsx/ts-node needed at runtime).
+# The server binds 0.0.0.0:$PORT (platform-injected; falls back to 3001) and
+# serves dist/ itself, so no separate static layer is required or wanted —
+# a static SPA fallback in front of this container would shadow /api/*.
+# Primary deployment is Vercel (serverless); this image is for self-hosting
+# (Cantila, Docker, etc.).
 
-# Stage 1: Build
+# Stage 1: build frontend + server bundle
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source files
 COPY . .
-
-# Build the application (static files)
 RUN npm run build
 
-# Stage 2: Production - Serve static files with nginx
-FROM nginx:alpine
+# Stage 2: lean runtime
+FROM node:20-alpine
 
-# Copy built static files from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+ENV NODE_ENV=production
+WORKDIR /app
 
-# Copy nginx configuration (optional - nginx default config works for SPA)
-# For SPA routing, all routes should serve index.html
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Production deps only — the server bundle inlines its imports, but optional
+# externals (pg-native, bufferutil) and any runtime file reads resolve from
+# the real dependency tree when present.
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
-# Expose port
-EXPOSE 80
+# Server bundle + frontend build + runtime-read assets.
+COPY --from=builder /app/api ./api
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/public ./public
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+EXPOSE 3001
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --quiet --tries=1 --spider "http://localhost:${PORT:-3001}/api/health" || exit 1
+
+CMD ["node", "api/_server.cjs"]
