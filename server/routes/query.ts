@@ -126,36 +126,42 @@ async function getOwnedApplicationIds(userId: string): Promise<string[]> {
  * - Everyone else: the ownership predicate is ANDed onto the query (client
  *   filters are kept — a spoofed user_id filter simply yields zero rows).
  *
- * Returns the constrained query, or `null` when the user cannot match any
- * row at all (e.g. application-scoped table and the user has no applications);
- * callers should respond with an empty result.
+ * Returns `{ q }` with the constrained query, or `null` when the user cannot
+ * match any row at all (e.g. application-scoped table and the user has no
+ * applications); callers should respond with an empty result.
+ *
+ * The builder is wrapped in an object because PostgREST builders are
+ * thenables: `await applyOwnership(...)` returning a bare builder would make
+ * `await` resolve it — executing the query immediately and yielding
+ * `{ data, error }` instead of the builder (so later .order()/.limit()/
+ * .select() calls throw, and updates/deletes fire before their modifiers).
  */
 async function applyOwnership(
   q: any,
   table: string,
   req: AuthenticatedRequest
-): Promise<any | null> {
-  if (!PROTECTED_TABLES.has(table)) return q
+): Promise<{ q: any } | null> {
+  if (!PROTECTED_TABLES.has(table)) return { q }
   if (!req.user?.id) throw new HttpError(401, 'Authentication required')
-  if (isAdmin(req)) return q
+  if (isAdmin(req)) return { q }
 
   const uid = String(req.user.id)
   if (!SAFE_ID.test(uid)) throw new HttpError(403, 'Invalid user id')
 
   const ownCol = OWNED_TABLES[table]
-  if (ownCol) return q.eq(ownCol, uid)
+  if (ownCol) return { q: q.eq(ownCol, uid) }
 
-  if (table === 'messages') return q.or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
-  if (table === 'conversations') return q.contains('participant_ids', [uid])
+  if (table === 'messages') return { q: q.or(`sender_id.eq.${uid},recipient_id.eq.${uid}`) }
+  if (table === 'conversations') return { q: q.contains('participant_ids', [uid]) }
 
   const appCol = APPLICATION_SCOPED_TABLES[table]
   if (appCol) {
     const ids = await getOwnedApplicationIds(uid)
     if (ids.length === 0) return null
-    return q.in(appCol, ids)
+    return { q: q.in(appCol, ids) }
   }
 
-  return q
+  return { q }
 }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -286,8 +292,9 @@ router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Respo
     let q: any = supabaseAdmin.from(table).select(selectStr)
 
     q = applyFilters(q, filters)
-    q = await applyOwnership(q, table, req)
-    if (q === null) return res.json({ data: [], error: null })
+    const owned = await applyOwnership(q, table, req)
+    if (owned === null) return res.json({ data: [], error: null })
+    q = owned.q
 
     if (order) {
       const parts = String(order).split('.')
@@ -403,9 +410,9 @@ router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res
 
     let q: any = supabaseAdmin.from(table).update(updates)
     q = applyFilters(q, _filters)
-    q = await applyOwnership(q, table, req)
-    if (q === null) return res.json({ data: [], error: null })
-    q = q.select(selectStr)
+    const owned = await applyOwnership(q, table, req)
+    if (owned === null) return res.json({ data: [], error: null })
+    q = owned.q.select(selectStr)
 
     const { data, error } = await q
     if (error) throw error
@@ -433,8 +440,9 @@ router.delete('/:table', authenticateToken, async (req: AuthenticatedRequest, re
 
     let q: any = supabaseAdmin.from(table).delete().select('id')
     q = applyFilters(q, filters)
-    q = await applyOwnership(q, table, req)
-    if (q === null) return res.json({ data: [], error: null })
+    const owned = await applyOwnership(q, table, req)
+    if (owned === null) return res.json({ data: [], error: null })
+    q = owned.q
 
     const { data, error } = await q
     if (error) throw error
@@ -455,8 +463,9 @@ router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res
     const filters = req.body || {}
     let q: any = supabaseAdmin.from(table).select('*', { count: 'exact', head: true })
     q = applyFilters(q, filters)
-    q = await applyOwnership(q, table, req)
-    if (q === null) return res.json({ data: '0', error: null })
+    const owned = await applyOwnership(q, table, req)
+    if (owned === null) return res.json({ data: '0', error: null })
+    q = owned.q
 
     const { count, error } = await q
     if (error) throw error
