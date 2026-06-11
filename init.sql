@@ -417,16 +417,26 @@ CREATE TABLE IF NOT EXISTS testimonials (
 -- CAREERS  &  CAREER APPLICATIONS
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS careers (
-  id          SERIAL PRIMARY KEY,
-  title       TEXT NOT NULL,
-  department  TEXT,
-  location    TEXT,
-  type        TEXT DEFAULT 'full-time',
-  description TEXT,
-  requirements TEXT,
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                       SERIAL PRIMARY KEY,
+  title                    TEXT NOT NULL,
+  department               TEXT,
+  location                 TEXT,
+  type                     TEXT DEFAULT 'full-time',
+  description              TEXT,
+  requirements             TEXT,
+  responsibilities         TEXT,
+  employment_type          TEXT,
+  salary_range             TEXT,
+  is_featured              BOOLEAN NOT NULL DEFAULT false,
+  application_deadline     TIMESTAMPTZ,
+  application_instructions TEXT,
+  partner_agency_id        INTEGER REFERENCES partner_agencies(id) ON DELETE SET NULL,
+  views_count              INTEGER NOT NULL DEFAULT 0,
+  applications_count       INTEGER NOT NULL DEFAULT 0,
+  created_by               UUID REFERENCES users(id) ON DELETE SET NULL,
+  is_active                BOOLEAN NOT NULL DEFAULT true,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS career_applications (
