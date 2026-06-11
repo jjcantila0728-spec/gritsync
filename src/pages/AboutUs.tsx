@@ -43,40 +43,6 @@ const values = [
 ]
 
 
-const advisors = [
-  {
-    name: 'JJ Cantila',
-    title: 'RM, RN, SGRN, USRN, PN (RES)',
-    board: 'Texas Board of Nursing',
-    initials: 'JJ',
-    color: 'from-primary-600 to-primary-400',
-    photo: '/gritsyncfounder.png',
-  },
-  {
-    name: 'John Matthew Jalla',
-    title: 'BSN, PHRN, USRN',
-    board: 'Illinois Board of Nursing',
-    initials: 'JJ',
-    color: 'from-indigo-600 to-indigo-400',
-    photo: null,
-  },
-  {
-    name: 'Reynaldo Santos III',
-    title: 'PHRN, DHA-RN, DOH-RN, USRN, MAN',
-    board: 'New York Board of Nursing',
-    initials: 'RS',
-    color: 'from-emerald-600 to-emerald-400',
-    photo: null,
-  },
-  {
-    name: 'Dylan Rodriguez',
-    title: 'BSN, PHRN, USRN',
-    board: 'New York Board of Nursing',
-    initials: 'DR',
-    color: 'from-violet-600 to-violet-400',
-    photo: null,
-  },
-]
 
 export function AboutUs() {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -209,16 +175,9 @@ export function AboutUs() {
                 <div className="bg-gray-950 rounded-3xl overflow-hidden">
                   <img src="/assets/pages/about-hero.png" alt="GritSync Mission" className="w-full h-64 object-cover opacity-80" />
                   <div className="p-8">
-                    <blockquote className="text-gray-300 text-lg italic leading-relaxed mb-4">
+                    <blockquote className="text-gray-300 text-lg italic leading-relaxed">
                       "Every nurse who walks through this journey deserves someone in their corner. That's what GritSync is — your corner."
                     </blockquote>
-                    <div className="flex items-center gap-3">
-                      <img src="/gritsyncfounder.png" alt="JJ Cantila" className="w-10 h-10 rounded-full object-cover object-top border border-primary-700 flex-shrink-0" />
-                      <div>
-                        <p className="text-white font-bold text-sm">JJ Cantila</p>
-                        <p className="text-gray-400 text-xs">Founder, GritSync</p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -275,55 +234,6 @@ export function AboutUs() {
                 </div>
                 <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">{v.title}</h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{v.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Program Advisors */}
-      <section className="py-24 bg-gray-950">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-900/50 border border-primary-800 text-primary-300 text-sm font-medium mb-4">
-              <GraduationCap className="h-4 w-4" />
-              <span>Our Advisors</span>
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Meet the Program Advisors</h2>
-            <p className="text-xl text-gray-400 max-w-xl mx-auto">Licensed USRNs across multiple states guiding our program and clients</p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-            {advisors.map((advisor) => (
-              <div
-                key={advisor.name + advisor.board}
-                className="group bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden hover:border-primary-700 hover:shadow-xl hover:shadow-primary-900/20 transition-all duration-300"
-              >
-                {/* Photo / Avatar */}
-                <div className="relative h-56 bg-gray-800 overflow-hidden">
-                  {advisor.photo ? (
-                    <img
-                      src={advisor.photo}
-                      alt={advisor.name}
-                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className={`w-full h-full bg-gradient-to-br ${advisor.color} flex items-center justify-center`}>
-                      <span className="text-6xl font-black text-white/30">{advisor.initials}</span>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent" />
-                </div>
-
-                {/* Info */}
-                <div className="p-5">
-                  <h3 className="text-white font-bold text-lg leading-tight mb-1">{advisor.name}</h3>
-                  <p className="text-primary-400 text-xs font-semibold mb-2 leading-relaxed">{advisor.title}</p>
-                  <div className="flex items-center gap-1.5 text-gray-500 text-xs">
-                    <Globe className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span>{advisor.board}</span>
-                  </div>
-                </div>
               </div>
             ))}
           </div>

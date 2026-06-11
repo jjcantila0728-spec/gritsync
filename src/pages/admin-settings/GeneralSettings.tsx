@@ -21,7 +21,7 @@ export function GeneralSettings() {
       logoUrl: typeof window !== 'undefined' ? `${window.location.origin}/gritsync_logo.png` : '/gritsync_logo.png',
       primaryColor: '#dc2626', // Red from logo "SYNC" text
       secondaryColor: '#1f2937', // Dark gray/black from logo "GRIT" text
-      companyAddress: '123 Main Street, City, State, ZIP Code',
+      companyAddress: 'Albay, Philippines',
       companyDescription: 'Your trusted partner for NCLEX processing. Fast, secure, and reliable application processing services.',
       // Social Media
       facebookUrl: '',

@@ -241,7 +241,7 @@ export function SessionTimeout({ children }: SessionTimeoutProps) {
     if (showWarning && timeRemaining <= 0) {
       handleLogout()
     }
-  }, [timeRemaining, showWarning])
+  }, [timeRemaining, showWarning, handleLogout])
 
   return (
     <>
