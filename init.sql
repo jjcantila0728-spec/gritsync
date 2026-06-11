@@ -349,15 +349,24 @@ CREATE TABLE IF NOT EXISTS promo_codes (
 -- PARTNER AGENCIES
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partner_agencies (
-  id         SERIAL PRIMARY KEY,
-  name       TEXT NOT NULL,
-  country    TEXT,
-  contact    TEXT,
-  email      TEXT,
-  notes      TEXT,
-  is_active  BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                   SERIAL PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  country              TEXT,
+  contact              TEXT,
+  email                TEXT,
+  phone                TEXT,
+  website              TEXT,
+  address              TEXT,
+  city                 TEXT,
+  state                TEXT,
+  zipcode              TEXT,
+  contact_person_name  TEXT,
+  contact_person_email TEXT,
+  contact_person_phone TEXT,
+  notes                TEXT,
+  is_active            BOOLEAN NOT NULL DEFAULT true,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
