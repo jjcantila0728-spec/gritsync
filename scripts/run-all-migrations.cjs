@@ -58,21 +58,48 @@ if (files.length === 0) {
   })
   await c.connect()
 
+  // Tracking table: records which migration files have been applied so this
+  // script can skip them (and so "what's applied where?" is answerable).
+  // Pass --force to re-run files even if recorded (all migrations are
+  // IF NOT EXISTS-idempotent, so that's safe).
+  await c.query(
+    `CREATE TABLE IF NOT EXISTS schema_migrations (
+       filename   TEXT PRIMARY KEY,
+       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`
+  )
+  const force = args.includes('--force')
+  const appliedRows = await c.query(`SELECT filename FROM schema_migrations`)
+  const applied = new Set(appliedRows.rows.map((r) => r.filename))
+
   let failed = 0
+  let skipped = 0
   for (const f of files) {
+    if (!force && applied.has(f)) {
+      skipped++
+      continue
+    }
     const full = path.join(MIGRATIONS_DIR, f)
     const sql = fs.readFileSync(full, 'utf8')
     process.stdout.write(`→ ${f} ... `)
     try {
       await c.query(sql)
+      await c.query(
+        `INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
+        [f]
+      )
       console.log('OK')
     } catch (err) {
       failed++
       console.log('FAILED')
       console.error(`  ${err.message}`)
       if (err.position) console.error(`  Position: ${err.position}`)
+      // A migration that opens a transaction and fails leaves the connection
+      // in "aborted transaction" state, which poisons every later query.
+      await c.query('ROLLBACK').catch(() => {})
     }
   }
+  if (skipped > 0) console.log(`(${skipped} already applied — skipped; use --force to re-run)`)
 
   await c.end()
   console.log(failed === 0 ? `\nDone — ${files.length} migration(s) applied.` : `\nDone with ${failed} failure(s).`)

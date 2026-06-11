@@ -40,6 +40,17 @@ const sql = fs.readFileSync(file, 'utf8')
   console.log(`Running migration: ${path.relative(process.cwd(), file)}`)
   try {
     await c.query(sql)
+    // Record in the tracking table so run-all-migrations.cjs skips this file.
+    await c.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         filename   TEXT PRIMARY KEY,
+         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`
+    )
+    await c.query(
+      `INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
+      [path.basename(file)]
+    )
     console.log('OK — migration applied.')
   } catch (err) {
     console.error('Migration failed:', err.message)

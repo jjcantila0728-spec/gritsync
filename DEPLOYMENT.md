@@ -1,4 +1,4 @@
-# Deployment Guide
+﻿# Deployment Guide
 
 ## Vercel Deployment (Frontend)
 
@@ -27,7 +27,7 @@ git push origin main
    - Output Directory: `dist`
 
 #### 3. Configure Environment Variables
-In Vercel dashboard → Settings → Environment Variables, add:
+In Vercel dashboard â†’ Settings â†’ Environment Variables, add:
 
 **Required Variables:**
 ```
@@ -49,7 +49,7 @@ VITE_FRONTEND_URL=https://your-vercel-app.vercel.app
 - Your app will be live at `https://your-app.vercel.app`
 
 #### 5. Custom Domain (Optional)
-1. Go to Project Settings → Domains
+1. Go to Project Settings â†’ Domains
 2. Add your custom domain
 3. Update DNS records as instructed
 4. Update `VITE_FRONTEND_URL` environment variable
@@ -66,7 +66,7 @@ VITE_FRONTEND_URL=https://your-vercel-app.vercel.app
 3. Select your repository
 4. Railway will auto-detect Node.js
 5. Set root directory to project root
-6. Add environment variables from `env.production.example`
+6. Add environment variables from `.env.example` (single source of truth)
 7. Set start command: `npm run start:server`
 8. Deploy
 
@@ -85,7 +85,7 @@ Convert Express routes to Vercel serverless functions (requires refactoring).
 
 ## Environment Variables Checklist
 
-Copy from `env.production.example` and ensure all are set:
+Copy from `.env.example` (single source of truth) and ensure all are set:
 
 - [ ] `NODE_ENV=production`
 - [ ] `PORT=3001` (or your backend port)
