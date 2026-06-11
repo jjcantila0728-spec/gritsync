@@ -440,17 +440,37 @@ CREATE TABLE IF NOT EXISTS careers (
 );
 
 CREATE TABLE IF NOT EXISTS career_applications (
-  id          SERIAL PRIMARY KEY,
-  career_id   INTEGER REFERENCES careers(id) ON DELETE SET NULL,
-  full_name   TEXT NOT NULL,
-  email       TEXT NOT NULL,
-  mobile      TEXT,
-  resume_path TEXT,
-  cover_letter TEXT,
-  status      TEXT NOT NULL DEFAULT 'pending',
-  notes       TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                        SERIAL PRIMARY KEY,
+  career_id                 INTEGER REFERENCES careers(id) ON DELETE SET NULL,
+  user_id                   UUID REFERENCES users(id) ON DELETE SET NULL,
+  full_name                 TEXT,
+  first_name                TEXT,
+  last_name                 TEXT,
+  email                     TEXT NOT NULL,
+  mobile                    TEXT,
+  mobile_number             TEXT,
+  date_of_birth             DATE,
+  country                   TEXT,
+  nursing_school            TEXT,
+  graduation_date           DATE,
+  years_of_experience       TEXT,
+  current_employment_status TEXT,
+  license_number            TEXT,
+  license_state             TEXT,
+  resume_path               TEXT,
+  cover_letter              TEXT,
+  cover_letter_path         TEXT,
+  additional_documents_path TEXT,
+  partner_agency_id         INTEGER REFERENCES partner_agencies(id) ON DELETE SET NULL,
+  forwarded_to_agency_at    TIMESTAMPTZ,
+  forwarded_email_sent      BOOLEAN NOT NULL DEFAULT false,
+  status                    TEXT NOT NULL DEFAULT 'pending',
+  notes                     TEXT,
+  admin_notes               TEXT,
+  reviewed_by               UUID REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at               TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
