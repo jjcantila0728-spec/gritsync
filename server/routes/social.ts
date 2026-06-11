@@ -2427,10 +2427,16 @@ export async function processDuePosts() {
     ).catch(() => {})
 
     const due = await query(
-      `SELECT id, account_ids, content, media_urls, status
+      `SELECT id, account_ids, content, media_urls, status, results
        FROM social_posts
        WHERE status = 'queued'
           OR (status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW())
+          -- Retry partial publishes: per-account results let us skip the
+          -- accounts that already succeeded, so a retry can't double-post.
+          -- Capped at 3 retries via the _retries marker in results.
+          OR (status = 'partial'
+              AND updated_at < NOW() - INTERVAL '15 minutes'
+              AND COALESCE((results ->> '_retries')::int, 0) < 3)
        ORDER BY COALESCE(scheduled_at, created_at) ASC
        LIMIT 25`
     ).catch((err: any) => {
@@ -2449,11 +2455,21 @@ export async function processDuePosts() {
         `SELECT * FROM social_accounts WHERE id = ANY($1::uuid[])`,
         [post.account_ids]
       )
+      // On a partial-retry, carry over per-account successes so we only
+      // re-attempt the accounts that failed.
+      const prior: Record<string, any> =
+        post.results && typeof post.results === 'object' ? post.results : {}
+      const isRetry = post.status === 'partial'
       const results: Record<string, any> = {}
       let anyOk = false
       let anyFail = false
       const mediaUrls: string[] = Array.isArray(post.media_urls) ? post.media_urls : []
       for (const acc of accountsRes.rows) {
+        if (isRetry && prior[acc.id]?.ok) {
+          results[acc.id] = prior[acc.id]
+          anyOk = true
+          continue
+        }
         const r = await publishToPlatform(acc, post.content, mediaUrls)
         results[acc.id] = { platform: acc.platform, ...r, at: new Date().toISOString() }
         if (r.ok) anyOk = true
@@ -2466,6 +2482,7 @@ export async function processDuePosts() {
         }
       }
       const finalStatus = anyOk && !anyFail ? 'published' : anyOk ? 'partial' : 'failed'
+      if (isRetry) results._retries = (Number(prior._retries) || 0) + 1
       await query(
         `UPDATE social_posts
          SET status = $1,

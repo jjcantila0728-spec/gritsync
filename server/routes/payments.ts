@@ -471,6 +471,20 @@ router.post('/:id/trigger-followup-tasks', authenticateToken, async (req: Authen
     }
     if (!pay.application_id) return res.status(400).json({ error: 'Payment has no application' })
 
+    // Re-trigger guard: the unread-task check below stops duplicates while
+    // tasks are outstanding, but once staff mark them read a second click
+    // would re-create the full batch. Atomic claim — refuse repeats within 24h.
+    const guardR = await query(
+      `UPDATE application_payments SET tasks_triggered_at = NOW()
+        WHERE id = $1
+          AND (tasks_triggered_at IS NULL OR tasks_triggered_at < NOW() - INTERVAL '24 hours')
+        RETURNING id`,
+      [paymentId]
+    )
+    if (guardR.rowCount === 0) {
+      return res.json({ data: { skipped: true, reason: 'tasks already triggered for this payment in the last 24h' } })
+    }
+
     // Friendly identifier for the application + the owner's user_id (needed
     // for the NCLEX premium-bonus grant below).
     const appR = await query(
@@ -512,56 +526,76 @@ router.post('/:id/trigger-followup-tasks', authenticateToken, async (req: Authen
       },
     ]
 
-    let inserted = 0
+    // Idempotency in one round-trip: which (recipient, task) pairs still have
+    // an unread task outstanding? (Previously one SELECT per pair.)
+    const existingR = await query(
+      `SELECT user_id::text AS user_id, extra ->> 'task_key' AS task_key
+         FROM notifications
+        WHERE application_id = $1
+          AND type = 'task'
+          AND read = false
+          AND user_id::text = ANY($2::text[])
+          AND extra ->> 'task_key' = ANY($3::text[])`,
+      [pay.application_id, recipients.map((r) => r.id), tasks.map((t) => t.key)]
+    )
+    const existing = new Set(existingR.rows.map((row: any) => `${row.user_id}:${row.task_key}`))
+
+    const toInsert: Array<{ rid: string; link: string; t: (typeof tasks)[number] }> = []
     for (const r of recipients) {
       const rolePath = r.role === 'advisor' ? 'advisor' : 'admin'
       const link = `/${rolePath}/applications/${appLabel}/timeline`
       for (const t of tasks) {
-        // Idempotency: don't double up if an unread task for this recipient +
-        // application + task key is still outstanding.
-        const existsR = await query(
-          `SELECT 1 FROM notifications
-            WHERE user_id = $1
-              AND application_id = $2
-              AND type = 'task'
-              AND read = false
-              AND extra ->> 'task_key' = $3
-            LIMIT 1`,
-          [r.id, pay.application_id, t.key]
+        if (existing.has(`${r.id}:${t.key}`)) continue
+        toInsert.push({ rid: r.id, link, t })
+      }
+    }
+
+    if (toInsert.length > 0) {
+      // Single multi-row INSERT instead of one per pair.
+      const values: string[] = []
+      const params: any[] = []
+      toInsert.forEach((x, i) => {
+        const b = i * 6
+        values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, 'task', $${b + 5}, $${b + 6}::jsonb, false)`)
+        params.push(
+          x.rid,
+          pay.application_id,
+          x.t.title,
+          x.t.message,
+          x.link,
+          JSON.stringify({ task_key: x.t.key, payment_id: pay.id, payment_type: pay.payment_type })
         )
-        if (existsR.rowCount && existsR.rowCount > 0) continue
-        await query(
-          `INSERT INTO notifications (user_id, application_id, title, message, type, link, extra, read)
-           VALUES ($1, $2, $3, $4, 'task', $5, $6::jsonb, false)`,
-          [
-            r.id,
-            pay.application_id,
-            t.title,
-            t.message,
-            link,
-            JSON.stringify({ task_key: t.key, payment_id: pay.id, payment_type: pay.payment_type }),
-          ]
-        )
-        inserted++
-        // Fan out a mobile push to the staff member assigned this task. Fire
-        // and forget — push failures should never roll back a payment-triggered
-        // notification insert.
-        void pushNotifyUser(r.id, {
-          title: t.title,
-          body: t.message,
+      })
+      await query(
+        `INSERT INTO notifications (user_id, application_id, title, message, type, link, extra, read)
+         VALUES ${values.join(', ')}`,
+        params
+      )
+      // Fan out mobile pushes. Fire and forget — push failures should never
+      // roll back a payment-triggered notification insert.
+      for (const x of toInsert) {
+        void pushNotifyUser(x.rid, {
+          title: x.t.title,
+          body: x.t.message,
           data: {
             type: 'task',
             applicationId: pay.application_id,
-            taskKey: t.key,
-            link,
+            taskKey: x.t.key,
+            link: x.link,
           },
         })
       }
     }
+    const inserted = toInsert.length
 
     res.json({ data: { recipients: recipients.length, notifications: inserted, nclexBonus } })
   } catch (err: any) {
     console.error('[payments] trigger-followup-tasks:', err)
+    // Release the 24h re-trigger claim — a failed run shouldn't lock out retries.
+    await query(
+      `UPDATE application_payments SET tasks_triggered_at = NULL WHERE id = $1`,
+      [String(req.params.id)]
+    ).catch(() => {})
     res.status(500).json({ error: err?.message || 'Server error' })
   }
 })

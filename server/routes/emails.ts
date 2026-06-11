@@ -39,6 +39,14 @@ function verifyResendSignature(req: Request): boolean {
   const rawBody = (req as any).rawBody as Buffer | undefined
   if (!svixId || !svixTimestamp || !svixSignature || !rawBody) return false
 
+  // Replay guard: svix-timestamp (unix seconds) is covered by the HMAC, so a
+  // captured webhook can't be replayed after this window with a valid signature.
+  const ts = Number(svixTimestamp)
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    console.warn('[resend-webhook] stale svix-timestamp — rejecting (possible replay)')
+    return false
+  }
+
   // The Resend dashboard displays the secret as `whsec_<base64>`. Strip the
   // prefix and decode — the bytes are what we HMAC with.
   const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
@@ -134,11 +142,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
     }
 
     // Always record the event in analytics, even if we couldn't match an
-    // email_logs row (e.g. email sent outside of our app).
+    // email_logs row (e.g. email sent outside of our app). svix-id dedupes
+    // Resend redeliveries of the same event (late ack, resubscribe) so
+    // analytics counts don't inflate.
     await query(
-      `INSERT INTO email_analytics (email_id, event_type, occurred_at)
-       VALUES ($1, $2, COALESCE($3::timestamptz, NOW()))`,
-      [emailLogId, mapped.analytics, event?.created_at || null]
+      `INSERT INTO email_analytics (email_id, event_type, occurred_at, svix_id)
+       VALUES ($1, $2, COALESCE($3::timestamptz, NOW()), $4)
+       ON CONFLICT (svix_id) WHERE svix_id IS NOT NULL DO NOTHING`,
+      [emailLogId, mapped.analytics, event?.created_at || null, req.header('svix-id') || null]
     ).catch((err: any) => console.warn('[resend-webhook] email_analytics insert failed', err?.message))
 
     res.json({ ok: true })
