@@ -6,7 +6,7 @@
   "crons": [
     {
       "path": "/api/cron/tick",
-      "schedule": "0 1 * * *"
+      "schedule": "*/10 * * * *"
     }
   ],
   "rewrites": [

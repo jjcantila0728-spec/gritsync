@@ -46,7 +46,10 @@ module.exports = {
     // Empty `catch {}` is an intentional "swallow this error" idiom in plenty of places.
     'no-empty': ['error', { allowEmptyCatch: true }],
   },
-  ignorePatterns: ['dist/', 'dist-server/', 'build/', 'public/', 'node_modules/', 'review/', '*.cjs', '*.config.js'],
+  // mobile/ and mobile-e2e/ have their own toolchains (Expo, Playwright) and no
+  // tsconfig in parserOptions.project — linting them from the root only produces
+  // parsing errors.
+  ignorePatterns: ['dist/', 'dist-server/', 'build/', 'public/', 'node_modules/', 'review/', 'mobile/', 'mobile-e2e/', '*.cjs', '*.config.js'],
 };
 
 

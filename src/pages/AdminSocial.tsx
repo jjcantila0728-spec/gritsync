@@ -6132,7 +6132,7 @@ function InboxView({ showToast }: { showToast: (msg: string, type?: 'success' | 
       setLoading(false)
     }
   }
-  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+  useEffect(() => { load()   }, [])
 
   async function openThread(t: InboxThread) {
     setActiveThread(t)
@@ -6706,7 +6706,7 @@ function CommentsView({ showToast }: { showToast: (msg: string, type?: 'success'
       setLoading(false)
     }
   }
-  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+  useEffect(() => { load()   }, [])
 
   async function suggest(c: CommentItem) {
     setBusy((b) => ({ ...b, [`draft:${c.id}`]: true }))
@@ -6962,7 +6962,7 @@ function GroupsView({ showToast }: { showToast: (msg: string, type?: 'success' |
       setLoading(false)
     }
   }
-  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+  useEffect(() => { load()   }, [])
 
   async function discover() {
     setDiscovering(true)

@@ -2335,6 +2335,20 @@ export async function processDuePosts() {
   if (publishing || socialPostsTableMissing) return
   publishing = true
   try {
+    // Recovery sweep: a crash/restart mid-publish leaves rows stranded in
+    // 'publishing' forever — nothing re-selects them. Mark anything stuck for
+    // over 10 minutes as 'failed' (not 'queued': some accounts may already
+    // have received the post, and republishing without per-account
+    // idempotency would double-post publicly). Failed posts surface in the
+    // UI where an operator can re-queue deliberately.
+    await query(
+      `UPDATE social_posts
+       SET status = 'failed',
+           results = COALESCE(results, '{}'::jsonb) || '{"_recovery": "stuck in publishing >10min; likely crashed mid-publish"}'::jsonb,
+           updated_at = NOW()
+       WHERE status = 'publishing' AND updated_at < NOW() - INTERVAL '10 minutes'`
+    ).catch(() => {})
+
     const due = await query(
       `SELECT id, account_ids, content, media_urls, status
        FROM social_posts

@@ -183,7 +183,7 @@ TEXT LEGIBILITY OVER IMAGERY — name the strategy:
 - "In-scene placement" — text reads on a real-world surface (notebook page, signage, magazine spread). The most "designed in" feel; reserve for templates that explicitly stage a surface for it.
 
 ON-CANVAS COPY SPECIFY:
-- The literal headline string IF the template fixes one ("e.g. \"USRN starts here\"") — wrap in straight double quotes.
+- The literal headline string IF the template fixes one (e.g. "USRN starts here") — wrap in straight double quotes.
 - A length budget if the template will accept a per-render caption ("headline placeholder for ≤6 words, 2 stacked lines max, will be filled per-post").
 - Color + scrim treatment for the headline (per the strategies above).
 - Position with rule-of-thirds language ("headline sits along the upper third, flush-left, with a 60px gutter from the left edge").

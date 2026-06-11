@@ -79,7 +79,8 @@ app.get('/api/health', (_req, res) => {
 })
 
 // ── Vercel Cron endpoint ─────────────────────────────────────────────────
-// Runs every minute via vercel.json `crons`. Vercel sends
+// Runs every 10 minutes via vercel.json `crons` (requires a Vercel plan that
+// allows sub-daily crons; Hobby clamps to once a day). Vercel sends
 // `Authorization: Bearer {CRON_SECRET}` so we validate that header.
 // Two jobs in one tick: (1) publish any due scheduled posts,
 // (2) run the social autopilot tick (reads social_autopilot_state
