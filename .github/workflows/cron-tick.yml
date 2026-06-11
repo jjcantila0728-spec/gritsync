@@ -1,0 +1,28 @@
+# Hobby-tier Vercel clamps crons to once daily, so the real every-10-minutes
+# tick comes from here (IMPROVEMENT-PLAN.md row 2). The vercel.json daily cron
+# stays as a backstop in case Actions is disabled or delayed.
+# Requires repo secret CRON_SECRET matching Vercel's production CRON_SECRET.
+name: cron-tick
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: POST /api/cron/tick
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set — tick skipped"
+            exit 1
+          fi
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 300 \
+            https://www.gritsync.com/api/cron/tick
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
