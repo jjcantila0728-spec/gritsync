@@ -280,19 +280,96 @@ router.get('/webhooks/:platform', (req, res) => {
   res.sendStatus(403)
 })
 
-router.post('/webhooks/:platform', (req, res) => {
-  // ACK immediately — Meta drops the webhook if we don't respond within 20s.
-  // On Vercel Fluid Compute the function stays alive after res.sendStatus()
-  // so all the async processing below completes even though the HTTP response
-  // is already sent.
-  res.sendStatus(200)
+router.post('/webhooks/:platform', async (req, res) => {
   const platform = req.params.platform as 'facebook' | 'instagram'
   const body = req.body
+
+  // Persist the raw payload BEFORE acking: if the process dies mid-processing
+  // (deploy, crash, lambda teardown), the cron tick's retryPendingWebhooks()
+  // picks the row back up instead of silently dropping the customer message.
+  // Inserted as 'processing' so the drain doesn't double-process the inline
+  // attempt below. If the insert fails (table missing, DB blip) we degrade to
+  // the old fire-and-forget behavior.
+  let queueId: number | null = null
+  if (body?.entry) {
+    queueId = await query(
+      `INSERT INTO webhook_queue (platform, payload) VALUES ($1, $2::jsonb) RETURNING id`,
+      [platform, JSON.stringify(body)],
+    ).then((r) => r.rows[0]?.id ?? null).catch(() => null)
+  }
+
+  // ACK now — Meta drops the webhook if we don't respond within 20s.
+  // On Vercel Fluid Compute the function stays alive after res.sendStatus()
+  // so the async processing below completes even though the HTTP response
+  // is already sent.
+  res.sendStatus(200)
   if (!body?.entry) return
-  processWebhookEntries(platform, body.entry).catch((err) =>
+  try {
+    await processWebhookEntries(platform, body.entry)
+    if (queueId != null) {
+      await query(
+        `UPDATE webhook_queue SET status = 'done', processed_at = NOW() WHERE id = $1`,
+        [queueId],
+      ).catch(() => {})
+    }
+  } catch (err: any) {
     console.error('[meta-webhook] processing error:', err)
-  )
+    if (queueId != null) {
+      await query(
+        `UPDATE webhook_queue SET status = 'pending', attempts = attempts + 1, last_error = $2 WHERE id = $1`,
+        [queueId, String(err?.message || err)],
+      ).catch(() => {})
+    }
+  }
 })
+
+// Re-process webhook payloads whose inline processing failed or was cut off
+// by a crash/redeploy. Called from the cron tick alongside processDuePosts.
+export async function retryPendingWebhooks(): Promise<void> {
+  try {
+    // Rows stranded in 'processing' mean the process died mid-flight.
+    await query(
+      `UPDATE webhook_queue SET status = 'pending'
+        WHERE status = 'processing' AND created_at < NOW() - INTERVAL '5 minutes'`,
+    )
+    const rows = (await query(
+      `UPDATE webhook_queue SET status = 'processing', attempts = attempts + 1
+        WHERE id IN (
+          SELECT id FROM webhook_queue
+           WHERE status = 'pending' AND attempts < 5
+           ORDER BY created_at ASC LIMIT 10)
+        RETURNING id, platform, payload, attempts`,
+    )).rows
+    for (const row of rows) {
+      try {
+        const entries = row.payload?.entry
+        if (Array.isArray(entries)) {
+          await processWebhookEntries(row.platform, entries)
+        }
+        await query(
+          `UPDATE webhook_queue SET status = 'done', processed_at = NOW() WHERE id = $1`,
+          [row.id],
+        )
+      } catch (err: any) {
+        await query(
+          `UPDATE webhook_queue
+              SET status = CASE WHEN attempts >= 5 THEN 'failed' ELSE 'pending' END,
+                  last_error = $2
+            WHERE id = $1`,
+          [row.id, String(err?.message || err)],
+        ).catch(() => {})
+      }
+    }
+    // Retention: processed payloads aren't worth keeping for long.
+    await query(
+      `DELETE FROM webhook_queue
+        WHERE status IN ('done', 'failed') AND created_at < NOW() - INTERVAL '14 days'`,
+    ).catch(() => {})
+  } catch (err: any) {
+    if (err?.code === '42P01') return // table missing until migration is applied
+    console.error('retryPendingWebhooks error:', err)
+  }
+}
 
 // ── Real-time webhook processor ───────────────────────────────────────────
 // Called after we ack the webhook. Handles inbound DMs (Mika) and new

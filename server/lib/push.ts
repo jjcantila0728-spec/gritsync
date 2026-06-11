@@ -108,6 +108,7 @@ async function pushSendOne(message: ExpoPushMessage): Promise<ExpoPushTicket | n
   try {
     const [ticket] = await expo.sendPushNotificationsAsync([message])
     void handleTicketImmediate(ticket, [message.to as string])
+    void persistTickets([ticket], [message.to as string])
     return ticket ?? null
   } catch (err) {
     console.error('[push] sendOne failed', err)
@@ -133,6 +134,7 @@ async function pushSendMany(messages: ExpoPushMessage[]): Promise<ExpoPushTicket
   // Handle synchronous errors (bad token, etc) right away. Async receipts
   // are polled separately by pollPushReceipts (a cron entry).
   void handleTicketBatch(tickets, tokensForIndex)
+  void persistTickets(tickets, tokensForIndex)
   return tickets
 }
 
@@ -163,23 +165,23 @@ async function handleTicketBatch(tickets: ExpoPushTicket[], tokens: string[]): P
 }
 
 /**
- * Poll Expo for receipts on tickets older than ~15 minutes. Call this from
- * a cron / setInterval (currently invoked from server/index.ts every 5 min
- * alongside processDuePosts).
- *
- * In a real production deploy you'd persist ticket ids to a table; for now
- * the simplest version polls receipts for tickets we still hold in memory.
- * If you need durable receipt polling, wire it to a `push_tickets` table.
+ * Persist ok-ticket ids to the `push_tickets` table so receipt polling
+ * survives restarts and serverless cold starts. (The previous in-memory
+ * Set was never populated by any caller, so receipt polling was a no-op.)
+ * Requires scripts/migrations/2026-06-11_durable_background_state.sql.
  */
-const pendingTicketIds = new Set<string>()
-const ticketToToken = new Map<string, string>()
-
-/** Track a ticket id for later receipt polling. */
-export function trackTicketForReceipt(ticket: ExpoPushTicket, token: string): void {
-  if (ticket && ticket.status === 'ok' && (ticket as any).id) {
-    pendingTicketIds.add((ticket as any).id as string)
-    ticketToToken.set((ticket as any).id as string, token)
-  }
+async function persistTickets(tickets: (ExpoPushTicket | undefined)[], tokens: string[]): Promise<void> {
+  const rows: string[] = []
+  tickets.forEach((t, i) => {
+    const id = t?.status === 'ok' ? ((t as any).id as string | undefined) : undefined
+    if (id && tokens[i]) rows.push(id, tokens[i])
+  })
+  if (rows.length === 0) return
+  const values = Array.from({ length: rows.length / 2 }, (_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ')
+  await query(
+    `INSERT INTO push_tickets (ticket_id, token) VALUES ${values} ON CONFLICT (ticket_id) DO NOTHING`,
+    rows,
+  ).catch((e) => console.error('[push] persistTickets failed', e))
 }
 
 /**
@@ -217,10 +219,23 @@ export async function pruneStalePushTokens(staleDays = 90): Promise<number> {
 }
 
 export async function pollPushReceipts(): Promise<void> {
-  if (pendingTicketIds.size === 0) return
-  const ids = Array.from(pendingTicketIds)
-  pendingTicketIds.clear()
-  const chunks = expo.chunkPushNotificationReceiptIds(ids)
+  let rows: { ticket_id: string; token: string }[]
+  try {
+    // Expo recommends waiting ~15 minutes before asking for receipts.
+    rows = (await query<{ ticket_id: string; token: string }>(
+      `SELECT ticket_id, token FROM push_tickets
+        WHERE created_at < NOW() - INTERVAL '15 minutes'
+        ORDER BY created_at ASC LIMIT 300`,
+    )).rows
+  } catch (err: any) {
+    // 42P01: table missing until the migration is applied — stay quiet.
+    if (err?.code !== '42P01') console.error('[push] receipt fetch failed', err)
+    return
+  }
+  if (rows.length === 0) return
+  const tokenById = new Map(rows.map((r) => [r.ticket_id, r.token]))
+  const done: string[] = []
+  const chunks = expo.chunkPushNotificationReceiptIds(rows.map((r) => r.ticket_id))
   for (const chunk of chunks) {
     try {
       const receipts: Record<string, ExpoPushReceipt> = await expo.getPushNotificationReceiptsAsync(chunk)
@@ -228,16 +243,25 @@ export async function pollPushReceipts(): Promise<void> {
         if (r.status === 'error') {
           const code = (r as any).details?.error
           if (code === 'DeviceNotRegistered') {
-            const tok = ticketToToken.get(id)
+            const tok = tokenById.get(id)
             if (tok) await clearUserToken(tok)
           } else {
             console.error('[push] receipt error', id, r)
           }
         }
-        ticketToToken.delete(id)
+        done.push(id)
       }
     } catch (err) {
       console.error('[push] receipt poll failed', err)
     }
+  }
+  try {
+    if (done.length > 0) {
+      await query(`DELETE FROM push_tickets WHERE ticket_id = ANY($1::text[])`, [done])
+    }
+    // Expo only holds receipts for ~24h; drop rows it will never answer for.
+    await query(`DELETE FROM push_tickets WHERE created_at < NOW() - INTERVAL '24 hours'`)
+  } catch (err) {
+    console.error('[push] receipt cleanup failed', err)
   }
 }

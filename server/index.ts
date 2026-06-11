@@ -13,8 +13,10 @@ import storageRoutes from './routes/storage'
 import contactRoutes from './routes/contact'
 import messageRoutes from './routes/messages'
 import referralRoutes from './routes/referrals'
-import socialRoutes, { processDuePosts } from './routes/social'
+import socialRoutes, { processDuePosts, retryPendingWebhooks } from './routes/social'
 import { pollPushReceipts, pruneStalePushTokens } from './lib/push'
+import { drainEmailQueue } from './utils/email'
+import { query } from './db'
 import socialAiRoutes from './routes/social-ai'
 import socialMetaRoutes from './routes/social-meta'
 import { startSocialAutopilot, tickOnce } from './lib/social-autopilot'
@@ -104,19 +106,32 @@ app.post('/api/cron/tick', async (req, res) => {
   }
   const started = Date.now()
   const log: string[] = []
-  try {
-    await processDuePosts()
-    log.push('processDuePosts ok')
-  } catch (e: any) {
-    log.push(`processDuePosts error: ${e.message}`)
+  const jobs: Array<[string, () => Promise<unknown>]> = [
+    ['processDuePosts', processDuePosts],
+    ['autopilot tick', tickOnce],
+    ['retryPendingWebhooks', retryPendingWebhooks],
+    ['drainEmailQueue', () => drainEmailQueue()],
+    ['pollPushReceipts', pollPushReceipts],
+  ]
+  let allOk = true
+  for (const [name, fn] of jobs) {
+    try {
+      await fn()
+      log.push(`${name} ok`)
+    } catch (e: any) {
+      allOk = false
+      log.push(`${name} error: ${e.message}`)
+    }
   }
-  try {
-    await tickOnce()
-    log.push('autopilot tick ok')
-  } catch (e: any) {
-    log.push(`autopilot tick error: ${e.message}`)
-  }
-  res.json({ ok: true, ms: Date.now() - started, log })
+  // Observability: every tick leaves a row, so "when did the cron last run?"
+  // is answerable (SELECT max(started_at) FROM cron_runs WHERE job='tick').
+  const duration = Date.now() - started
+  await query(
+    `INSERT INTO cron_runs (job, duration_ms, ok, log) VALUES ('tick', $1, $2, $3::jsonb)`,
+    [duration, allOk, JSON.stringify(log)],
+  ).catch(() => {})
+  await query(`DELETE FROM cron_runs WHERE started_at < NOW() - INTERVAL '30 days'`).catch(() => {})
+  res.json({ ok: true, ms: duration, log })
 })
 
 // API Routes
@@ -177,6 +192,15 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ error: err.message || 'Internal server error' })
 })
 
+// On Vercel ALL background work (scheduled posts, autopilot, retries) hangs
+// off /api/cron/tick, and that endpoint fails closed without CRON_SECRET —
+// an unset secret silently stops every background job. Shout at boot.
+if (process.env.VERCEL && !process.env.CRON_SECRET) {
+  console.error(
+    'FATAL CONFIG: CRON_SECRET is not set — /api/cron/tick is disabled and no background jobs will run on Vercel.',
+  )
+}
+
 // Start local server (Vercel uses the exported app instead)
 if (!process.env.VERCEL) {
   // Explicit IPv4 any-address bind: some container platforms' health probes
@@ -187,6 +211,11 @@ if (!process.env.VERCEL) {
     setInterval(() => {
       processDuePosts().catch((err) => console.error('Scheduled post tick failed:', err))
     }, 60_000)
+    // Every 2 minutes: retry crashed webhook payloads + queued emails.
+    setInterval(() => {
+      retryPendingWebhooks().catch((err) => console.error('Webhook retry tick failed:', err))
+      drainEmailQueue().catch((err) => console.error('Email queue drain failed:', err))
+    }, 2 * 60_000)
     // Poll Expo for push delivery receipts every 5 minutes. Drops tokens whose
     // receipts come back DeviceNotRegistered so the next send isn't wasted.
     setInterval(() => {
