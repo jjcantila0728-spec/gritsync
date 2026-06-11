@@ -15,6 +15,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+# Vite inlines VITE_* vars at build time; the platform passes this as a
+# build arg when set on the project. Runtime-config flows (NCLEX plans)
+# work without it.
+ARG VITE_STRIPE_PUBLISHABLE_KEY
+ENV VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
+
 COPY . .
 RUN npm run build
 
