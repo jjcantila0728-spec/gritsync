@@ -730,7 +730,7 @@ export function Home() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Support</p>
-                      <a href="tel:+15092703437" className="text-primary-600 dark:text-primary-400 hover:underline">+1 (509) 270-3437</a>
+                      <a href="tel:+639691533239" className="text-primary-600 dark:text-primary-400 hover:underline">+63 969 153 3239</a>
                     </div>
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                       <p className="text-gray-500 dark:text-gray-400 text-xs">Available 24/7 for urgent inquiries</p>

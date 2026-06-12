@@ -155,12 +155,12 @@ export function generateOrganizationSchema() {
       height: 200,
     },
     image: 'https://gritsync.com/gritsync_logo.png',
-    telephone: '+15092703437',
+    telephone: '+639691533239',
     email: 'admin@gritsync.com',
     contactPoint: [
       {
         '@type': 'ContactPoint',
-        telephone: '+15092703437',
+        telephone: '+639691533239',
         contactType: 'customer service',
         email: 'admin@gritsync.com',
         availableLanguage: ['English', 'Filipino', 'Tagalog'],
@@ -411,7 +411,7 @@ export function generateLocalBusinessSchema() {
     name: 'GritSync NCLEX Processing Agency',
     description: 'Professional NCLEX application processing service for Filipino nurses seeking US nursing licensure. We handle NYSED submissions, BON applications, Pearson VUE registration, and ATT acquisition.',
     url: 'https://gritsync.com',
-    telephone: '+15092703437',
+    telephone: '+639691533239',
     email: 'admin@gritsync.com',
     priceRange: '$$',
     openingHoursSpecification: {
