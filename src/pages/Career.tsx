@@ -310,10 +310,16 @@ export function Career() {
                   {career ? `Apply for ${career.title}` : 'Career Application'}
                 </h1>
                 <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
-                  {career 
+                  {career
                     ? career.description.substring(0, 150) + '...'
                     : "Apply directly to GritSync. We'll automatically forward your application to our partner agencies in the USA. Join our team and help nurses achieve their USRN dreams."}
                 </p>
+                <div className="max-w-2xl mx-auto flex items-start gap-3 text-left text-sm text-blue-900 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 rounded-xl px-4 py-3">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                  <p>
+                    <span className="font-semibold">GritSync is not the hiring employer.</span> Your application will be forwarded to the designated partner agency, which handles all interviews and hiring decisions.
+                  </p>
+                </div>
               </div>
             </div>
           </section>

@@ -11,16 +11,18 @@ import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { careerApplicationsAPI, partnerAgenciesAPI, careersAPI } from '@/lib/api'
+import { db } from '@/lib/api-client'
+import { getFileUrl } from '@/lib/storage-urls'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import { 
-  Search, 
-  RefreshCw, 
-  ChevronLeft, 
-  ChevronRight, 
-  Eye, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Search,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  CheckCircle,
+  XCircle,
   Clock,
   Send,
   FileText,
@@ -29,7 +31,11 @@ import {
   Briefcase,
   Plus,
   Edit,
-  Trash2
+  Trash2,
+  Upload,
+  X,
+  ExternalLink,
+  Image as ImageIcon
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 
@@ -94,6 +100,7 @@ interface PartnerAgency {
   contact_person_name: string | null
   contact_person_email: string | null
   contact_person_phone: string | null
+  report_form_url: string | null
   is_active: boolean
   notes: string | null
   created_at: string
@@ -115,6 +122,7 @@ interface Career {
   application_deadline: string | null
   application_instructions: string | null
   partner_agency_id: string | null
+  promo_images: string[] | null
   views_count: number
   applications_count: number
   created_at: string
@@ -150,6 +158,10 @@ export function AdminCareers() {
   const [newStatus, setNewStatus] = useState<'pending' | 'under_review' | 'forwarded' | 'interviewed' | 'accepted' | 'rejected'>('pending')
   const [adminNotes, setAdminNotes] = useState('')
   const [selectedAgencyId, setSelectedAgencyId] = useState('')
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportingApplication, setReportingApplication] = useState<CareerApplication | null>(null)
+  const [reportAgencyId, setReportAgencyId] = useState('')
+  const [reporting, setReporting] = useState(false)
   
   // Careers state
   const [careers, setCareers] = useState<Career[]>([])
@@ -160,6 +172,7 @@ export function AdminCareers() {
   const [showDeleteCareerModal, setShowDeleteCareerModal] = useState(false)
   const [deletingCareer, setDeletingCareer] = useState(false)
   const [savingCareer, setSavingCareer] = useState(false)
+  const [uploadingPromoImages, setUploadingPromoImages] = useState(false)
   
   // Partner agency state
   const [editingAgency, setEditingAgency] = useState<PartnerAgency | null>(null)
@@ -178,6 +191,7 @@ export function AdminCareers() {
     contact_person_name: '',
     contact_person_email: '',
     contact_person_phone: '',
+    report_form_url: '',
     is_active: true,
     notes: '',
   })
@@ -197,6 +211,7 @@ export function AdminCareers() {
     application_deadline: '',
     application_instructions: '',
     partner_agency_id: '',
+    promo_images: [] as string[],
   })
 
   useEffect(() => {
@@ -281,6 +296,7 @@ export function AdminCareers() {
       contact_person_name: '',
       contact_person_email: '',
       contact_person_phone: '',
+      report_form_url: '',
       is_active: true,
       notes: '',
     })
@@ -307,6 +323,7 @@ export function AdminCareers() {
       contact_person_name: agency.contact_person_name || '',
       contact_person_email: agency.contact_person_email || '',
       contact_person_phone: agency.contact_person_phone || '',
+      report_form_url: agency.report_form_url || '',
       is_active: agency.is_active,
       notes: agency.notes || '',
     })
@@ -333,6 +350,7 @@ export function AdminCareers() {
         contact_person_name: agencyForm.contact_person_name.trim() || null,
         contact_person_email: agencyForm.contact_person_email.trim() || null,
         contact_person_phone: agencyForm.contact_person_phone.trim() || null,
+        report_form_url: agencyForm.report_form_url.trim() || null,
         is_active: agencyForm.is_active,
         notes: agencyForm.notes.trim() || null,
       }
@@ -381,6 +399,7 @@ export function AdminCareers() {
       application_deadline: '',
       application_instructions: '',
       partner_agency_id: '',
+      promo_images: [],
     })
     setShowCareerModal(true)
   }
@@ -401,13 +420,50 @@ export function AdminCareers() {
       application_deadline: career.application_deadline ? career.application_deadline.split('T')[0] : '',
       application_instructions: career.application_instructions || '',
       partner_agency_id: career.partner_agency_id || '',
+      promo_images: career.promo_images || [],
     })
     setShowCareerModal(true)
+  }
+
+  const handlePromoImagesUpload = async (files: FileList) => {
+    setUploadingPromoImages(true)
+    try {
+      const uploaded: string[] = []
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          showToast(`${file.name} is not an image`, 'error')
+          continue
+        }
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+        const path = `career_promos/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+        const { error } = await db.storage.from('documents').upload(path, file)
+        if (error) throw new Error(error.message)
+        uploaded.push(path)
+      }
+      if (uploaded.length) {
+        setCareerForm(prev => ({ ...prev, promo_images: [...prev.promo_images, ...uploaded] }))
+      }
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to upload promotional image', 'error')
+    } finally {
+      setUploadingPromoImages(false)
+    }
+  }
+
+  const handleRemovePromoImage = (index: number) => {
+    setCareerForm(prev => ({
+      ...prev,
+      promo_images: prev.promo_images.filter((_, i) => i !== index),
+    }))
   }
 
   const handleSaveCareer = async () => {
     if (!careerForm.title.trim() || !careerForm.description.trim()) {
       showToast('Title and description are required', 'error')
+      return
+    }
+    if (careerForm.promo_images.length === 0) {
+      showToast('At least one promotional image is required — it powers the career\'s landing page', 'error')
       return
     }
 
@@ -517,6 +573,48 @@ export function AdminCareers() {
       showToast(error?.message || 'Failed to forward application', 'error')
     } finally {
       setForwarding(false)
+    }
+  }
+
+  const handleOpenReport = (application: CareerApplication) => {
+    setReportingApplication(application)
+    setReportAgencyId(application.partner_agency_id || '')
+    setShowReportModal(true)
+  }
+
+  const handleReportToAgency = async () => {
+    if (!reportingApplication || !reportAgencyId) {
+      showToast('Please select a partner agency', 'error')
+      return
+    }
+    const agency = partnerAgencies.find(a => a.id === reportAgencyId)
+    if (!agency) {
+      showToast('Selected agency not found', 'error')
+      return
+    }
+
+    setReporting(true)
+    try {
+      // Agencies with their own intake form (e.g. Airtable) take the report
+      // there; open it before the await so the browser treats it as a
+      // user-initiated popup and doesn't block it.
+      if (agency.report_form_url) {
+        window.open(agency.report_form_url, '_blank', 'noopener')
+      }
+      await careerApplicationsAPI.forwardToAgency(reportingApplication.id, reportAgencyId)
+      showToast(
+        agency.report_form_url
+          ? `Reporting form opened — application marked as reported to ${agency.name}`
+          : `Application reported to ${agency.name} via email`,
+        'success'
+      )
+      setShowReportModal(false)
+      setReportingApplication(null)
+      await fetchData()
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to report application', 'error')
+    } finally {
+      setReporting(false)
     }
   }
 
@@ -842,13 +940,23 @@ export function AdminCareers() {
                             <p>Applied: {formatDate(application.created_at)}</p>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleViewDetails(application)}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => handleViewDetails(application)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleOpenReport(application)}
+                            disabled={!partnerAgencies.length}
+                          >
+                            <Send className="h-4 w-4 mr-2" />
+                            Report
+                          </Button>
+                        </div>
                       </div>
                     </Card>
                   )
@@ -1136,6 +1244,80 @@ export function AdminCareers() {
               </div>
             </Modal>
           )}
+
+          {/* Report to Agency Modal */}
+          {showReportModal && reportingApplication && (
+            <Modal
+              isOpen={showReportModal}
+              onClose={() => {
+                setShowReportModal(false)
+                setReportingApplication(null)
+              }}
+              title="Report Application to Partner Agency"
+            >
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Reporting <span className="font-semibold text-gray-900 dark:text-gray-100">{reportingApplication.first_name} {reportingApplication.last_name}</span>'s application to the designated partner agency.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Partner Agency
+                  </label>
+                  <Select
+                    value={reportAgencyId}
+                    onChange={(e) => setReportAgencyId(e.target.value)}
+                  >
+                    <option value="">Select an agency...</option>
+                    {partnerAgencies
+                      .filter(agency => agency.is_active)
+                      .map((agency) => (
+                        <option key={agency.id} value={agency.id}>
+                          {agency.name}{agency.report_form_url ? ' (own reporting form)' : ''}
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+                {(() => {
+                  const agency = partnerAgencies.find(a => a.id === reportAgencyId)
+                  if (!agency) return null
+                  return agency.report_form_url ? (
+                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2">
+                      <ExternalLink className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        {agency.name} uses their own reporting form. It will open in a new tab — submit the applicant's details there. The application will be marked as reported here.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                      <Send className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        {agency.name} has no external reporting form — the application will be reported to {agency.contact_person_email || agency.email}.
+                      </span>
+                    </div>
+                  )
+                })()}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowReportModal(false)
+                      setReportingApplication(null)
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleReportToAgency}
+                    disabled={reporting || !reportAgencyId}
+                    className="flex-1"
+                  >
+                    {reporting ? 'Reporting...' : 'Report Application'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
             </>
           )}
 
@@ -1333,6 +1515,20 @@ export function AdminCareers() {
                   </div>
                 </div>
 
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-1 text-gray-900 dark:text-gray-100">Application Reporting</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    If this agency receives applicant reports through their own form (e.g. an Airtable form), paste its URL here. The admin "Report" action opens it; leave empty to report via email.
+                  </p>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Reporting Form URL</label>
+                  <Input
+                    type="url"
+                    value={agencyForm.report_form_url}
+                    onChange={(e) => setAgencyForm({ ...agencyForm, report_form_url: e.target.value })}
+                    placeholder="https://airtable.com/..."
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Notes</label>
                   <Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Add any additional notes..." rows={3} />
@@ -1511,6 +1707,70 @@ export function AdminCareers() {
                     placeholder="Special instructions for applicants..."
                     rows={2}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Promotional Images <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Shown on this career's promotional landing page. The first image is the hero/cover.
+                  </p>
+                  {careerForm.promo_images.length > 0 && (
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      {careerForm.promo_images.map((path, index) => (
+                        <div key={path} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                          <img
+                            src={getFileUrl(path)}
+                            alt={`Promotional ${index + 1}`}
+                            className="w-full h-24 object-cover"
+                          />
+                          {index === 0 && (
+                            <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-medium">
+                              Cover
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePromoImage(index)}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label className={cn(
+                    'flex items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed cursor-pointer transition-colors',
+                    'border-gray-300 dark:border-gray-600 hover:border-primary-400 dark:hover:border-primary-500 text-gray-500 dark:text-gray-400',
+                    uploadingPromoImages && 'opacity-50 pointer-events-none'
+                  )}>
+                    {uploadingPromoImages ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : careerForm.promo_images.length === 0 ? (
+                      <ImageIcon className="h-4 w-4" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">
+                      {uploadingPromoImages
+                        ? 'Uploading...'
+                        : careerForm.promo_images.length === 0
+                          ? 'Upload promotional images (required)'
+                          : 'Add more images'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) handlePromoImagesUpload(e.target.files)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
                 </div>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2">

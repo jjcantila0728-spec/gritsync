@@ -67,6 +67,7 @@ const DonateSuccess = lazy(() => import('./pages/DonateSuccess').then(m => ({ de
 const AdminSponsorships = lazy(() => import('./pages/AdminSponsorships').then(m => ({ default: m.AdminSponsorships })))
 const Career = lazy(() => import('./pages/Career').then(m => ({ default: m.Career })))
 const CareerListing = lazy(() => import('./pages/CareerListing').then(m => ({ default: m.CareerListing })))
+const CareerPromo = lazy(() => import('./pages/CareerPromo').then(m => ({ default: m.CareerPromo })))
 const AdminCareers = lazy(() => import('./pages/AdminCareers').then(m => ({ default: m.AdminCareers })))
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const AdminEmails = lazy(() => import('./pages/AdminEmails').then(m => ({ default: m.AdminEmails })))
@@ -292,6 +293,7 @@ function LandingRoutes() {
         <Route path="/sponsorship/apply" element={<NCLEXSponsorship />} />
         <Route path="/career" element={<CareerListing />} />
         <Route path="/career/apply" element={<Career />} />
+        <Route path="/career/:careerId" element={<CareerPromo />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/donate/checkout" element={<DonateCheckout />} />
         <Route path="/donate/success" element={<DonateSuccess />} />

@@ -22,7 +22,8 @@ import {
   Globe,
   HeartHandshake,
   TrendingUp,
-  GraduationCap
+  GraduationCap,
+  Info
 } from 'lucide-react'
 
 function useInView(ref: React.RefObject<Element>, threshold = 0.2) {
@@ -172,6 +173,18 @@ export function CareerListing() {
             </div>
           </div>
         </section>
+
+        {/* Agency forwarding disclaimer */}
+        <div className="bg-blue-50 dark:bg-blue-950/40 border-b border-blue-100 dark:border-blue-900">
+          <div className="container mx-auto px-4 py-4">
+            <div className="max-w-4xl mx-auto flex items-start gap-3 text-sm text-blue-900 dark:text-blue-200">
+              <Info className="h-5 w-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+              <p>
+                <span className="font-semibold">Please note:</span> GritSync does not hire for these positions directly. We promote opportunities on behalf of our partner agencies — your application will be forwarded to the designated partner agency, which handles all hiring decisions.
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* Perks Strip */}
         <div className="bg-gray-900 border-y border-gray-800 py-8">
@@ -351,7 +364,9 @@ function CareerCard({ career, featured = false }: CareerCardProps) {
             <Briefcase className={`h-5 w-5 ${featured ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`} />
           </div>
           <div className="min-w-0 pr-16">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">{career.title}</h3>
+            <Link to={`/career/${career.id}`}>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight hover:text-blue-600 dark:hover:text-blue-400 transition-colors">{career.title}</h3>
+            </Link>
             {career.partner_agencies && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{career.partner_agencies.name}</p>
             )}
@@ -395,9 +410,12 @@ function CareerCard({ career, featured = false }: CareerCardProps) {
       </div>
 
       <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-        <div className="text-xs text-gray-400 dark:text-gray-500">
-          {career.views_count} views
-        </div>
+        <Link
+          to={`/career/${career.id}`}
+          className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          View Details
+        </Link>
         <Button
           onClick={() => navigate(`/career/apply?careerId=${career.id}`)}
           disabled={!!isDeadlinePassed}
