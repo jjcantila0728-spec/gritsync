@@ -1474,7 +1474,7 @@ export async function createWelcomeOnboardingEmail(data: {
       <p style="margin:4px 0 0;"><strong>JJ Cantila</strong><br>
       <span style="color:#6b7280;font-size:14px;">RM, RN, SGRN, CADRN, USRN<br>Founder &amp; CEO, GritSync</span></p>
 
-      <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:${colors.primary};">admin@gritsync.com</a> or call us at +1 (509) 270-3437. We genuinely love hearing from our nurses.</p>
+      <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:${colors.primary};">admin@gritsync.com</a> or call us at +63 969 153 3239. We genuinely love hearing from our nurses.</p>
     </div>
   `
 

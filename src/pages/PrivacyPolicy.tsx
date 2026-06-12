@@ -30,7 +30,7 @@ export function PrivacyPolicy() {
     { name: 'Home', url: baseUrl },
     { name: 'Privacy Policy', url: currentUrl },
   ]
-  const [phoneNumber, setPhoneNumber] = useState('+1 (509) 270-3437')
+  const [phoneNumber, setPhoneNumber] = useState('+63 969 153 3239')
   const [activeSection, setActiveSection] = useState('introduction')
 
   useEffect(() => {

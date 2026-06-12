@@ -12,7 +12,7 @@ export function Footer() {
   const { showToast } = useToast()
   const [newsletterEmail, setNewsletterEmail] = useState('')
   const [isSubscribing, setIsSubscribing] = useState(false)
-  const [phoneNumber, setPhoneNumber] = useState('+1 (509) 270-3437')
+  const [phoneNumber, setPhoneNumber] = useState('+63 969 153 3239')
 
   useEffect(() => {
     const loadPhoneNumber = async () => {

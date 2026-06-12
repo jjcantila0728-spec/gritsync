@@ -79,7 +79,7 @@ export function ApplicationDetail() {
   const [loadingAccounts, setLoadingAccounts] = useState(false)
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState<any>(null)
-  const [phoneNumber, setPhoneNumber] = useState('+1 (509) 270-3437')
+  const [phoneNumber, setPhoneNumber] = useState('+63 969 153 3239')
   const [accountForm, setAccountForm] = useState({ 
     account_type: 'gritsync', 
     name: '',

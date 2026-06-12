@@ -14,7 +14,7 @@ export function GeneralSettings() {
       siteName: 'GritSync',
       siteEmail: 'admin@gritsync.com',
       supportEmail: 'support@gritsync.com',
-      phoneNumber: '+1 (509) 270-3437',
+      phoneNumber: '+63 969 153 3239',
       maintenanceMode: false,
       // Branding & Theme
       websiteUrl: 'https://gritsync.com',
@@ -33,7 +33,7 @@ export function GeneralSettings() {
       siteName: data.siteName || 'GritSync',
       siteEmail: data.siteEmail || 'admin@gritsync.com',
       supportEmail: data.supportEmail || 'support@gritsync.com',
-      phoneNumber: data.phoneNumber || '+1 (509) 270-3437',
+      phoneNumber: data.phoneNumber || '+63 969 153 3239',
       maintenanceMode: String(data.maintenanceMode) === 'true',
       // Branding & Theme
       websiteUrl: data.websiteUrl || 'https://gritsync.com',
@@ -174,7 +174,7 @@ export function GeneralSettings() {
                 setValidationErrors({ ...validationErrors, phoneNumber: '' })
               }
             }}
-            placeholder="+1 (509) 270-3437"
+            placeholder="+63 969 153 3239"
           />
           {validationErrors.phoneNumber && (
             <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{validationErrors.phoneNumber}</p>

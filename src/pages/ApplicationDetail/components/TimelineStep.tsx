@@ -28,7 +28,7 @@ export function TimelineStep({
   examTime,
   result,
   showGenerateLetter = false,
-  phoneNumber = '+1 (509) 270-3437',
+  phoneNumber = '+63 969 153 3239',
   user,
   navigate,
   showToast,

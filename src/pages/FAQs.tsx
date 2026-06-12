@@ -373,7 +373,7 @@ const faqCategories: FAQCategory[] = [
     faqs: [
       {
         question: 'How can I contact GritSync support?',
-        answer: 'You can reach our support team by email at support@gritsync.com or by phone at +1 (509) 270-3437. All application-related updates are also communicated directly through your dashboard and email notifications.',
+        answer: 'You can reach our support team by email at support@gritsync.com or by phone at +63 969 153 3239. All application-related updates are also communicated directly through your dashboard and email notifications.',
       },
       {
         question: 'What are GritSync\'s support hours?',
@@ -385,7 +385,7 @@ const faqCategories: FAQCategory[] = [
       },
       {
         question: 'What if I have a question not covered in these FAQs?',
-        answer: 'Send us an email at support@gritsync.com or call +1 (509) 270-3437. Our team is happy to answer any question about your specific situation. You can also request a free consultation through the Quote page.',
+        answer: 'Send us an email at support@gritsync.com or call +63 969 153 3239. Our team is happy to answer any question about your specific situation. You can also request a free consultation through the Quote page.',
       },
       {
         question: 'Do you offer a free consultation before I commit to the service?',

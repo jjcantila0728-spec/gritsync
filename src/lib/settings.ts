@@ -183,7 +183,7 @@ export const generalSettings = {
    * Get phone number
    */
   getPhoneNumber: async (): Promise<string> => {
-    return getSetting('phoneNumber', '+1 (509) 270-3437')
+    return getSetting('phoneNumber', '+63 969 153 3239')
   },
   
   /**

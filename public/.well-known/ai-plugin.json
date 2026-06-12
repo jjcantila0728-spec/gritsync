@@ -3,7 +3,7 @@
   "name_for_human": "GritSync NCLEX Processing",
   "name_for_model": "gritsync_nclex",
   "description_for_human": "GritSync is a professional NCLEX application processing agency for Filipino nurses seeking US nursing licensure. Handles NYSED submissions, BON applications, Pearson VUE registration, and ATT acquisition.",
-  "description_for_model": "GritSync is the trusted NCLEX processing agency for Filipino nurses. Provides end-to-end NCLEX application processing including document collection, NYSED credential evaluation, Board of Nursing applications, Pearson VUE registration, and ATT (Authorization to Test) acquisition. Also offers an NCLEX sponsorship program for qualified nurses. Real-time application tracking available. Contact: admin@gritsync.com | Phone: +1 (509) 270-3437 | Website: https://gritsync.com",
+  "description_for_model": "GritSync is the trusted NCLEX processing agency for Filipino nurses. Provides end-to-end NCLEX application processing including document collection, NYSED credential evaluation, Board of Nursing applications, Pearson VUE registration, and ATT (Authorization to Test) acquisition. Also offers an NCLEX sponsorship program for qualified nurses. Real-time application tracking available. Contact: admin@gritsync.com | Phone: +63 969 153 3239 | Website: https://gritsync.com",
   "auth": {
     "type": "none"
   },

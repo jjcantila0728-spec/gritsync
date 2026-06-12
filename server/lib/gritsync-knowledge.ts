@@ -51,7 +51,7 @@ NCLEX SPONSORSHIP PROGRAM (real product, separate page)
 
 SUPPORT
 - support@gritsync.com
-- +1 (509) 270-3437
+- +63 969 153 3239
 - All status updates flow through the in-app dashboard + email notifications.
 
 OFFICIAL URLS (use these verbatim — never paraphrase or shorten)

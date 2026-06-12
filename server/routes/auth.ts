@@ -173,10 +173,10 @@ async function sendWelcomeEmail(personalEmail: string, firstName: string, lastNa
         <p style="margin:4px 0 0;color:#374151;"><strong>JJ Cantila</strong><br>
         <span style="color:#6b7280;font-size:14px;">RM, RN, SGRN, CADRN, USRN<br>Founder &amp; CEO, GritSync</span></p>
 
-        <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:#10b981;">admin@gritsync.com</a> or call us at +1 (509) 270-3437. We genuinely love hearing from our nurses.</p>
+        <p style="margin-top:20px;font-size:13px;color:#9ca3af;font-style:italic;">P.S. — If you have any questions or just want to talk through your concerns, you can reach us at <a href="mailto:admin@gritsync.com" style="color:#10b981;">admin@gritsync.com</a> or call us at +63 969 153 3239. We genuinely love hearing from our nurses.</p>
       </div>
       <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 32px;border-radius:0 0 12px 12px;text-align:center;">
-        <p style="font-size:12px;color:#9ca3af;margin:0;">GritSync | admin@gritsync.com | +1 (509) 270-3437</p>
+        <p style="font-size:12px;color:#9ca3af;margin:0;">GritSync | admin@gritsync.com | +63 969 153 3239</p>
         <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">Empowering Filipino Nurses on Their Path to the US</p>
       </div>
     </div>
