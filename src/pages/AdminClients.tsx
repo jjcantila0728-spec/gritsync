@@ -143,7 +143,7 @@ export function AdminClients() {
   // Validation modal for deactivate/reactivate/delete. Delete requires typing
   // the user's email to enable the confirm button (account deletion is
   // irreversible — we want a deliberate keystroke, not just a click).
-  const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'delete'; client: Client } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'delete' | 'reset'; client: Client } | null>(null)
   const [confirmInput, setConfirmInput] = useState('')
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [activeTab, setActiveTab] = useState<RoleTab>('client')
@@ -597,6 +597,46 @@ export function AdminClients() {
     setConfirmAction({ type: 'delete', client })
   }
 
+  const handleResetPassword = (client: Client) => {
+    setConfirmInput('')
+    setConfirmAction({ type: 'reset', client })
+  }
+
+  // Issues a one-time temporary password. The account is flagged so the client
+  // is forced to set a new password on next login; the admin delivers the temp
+  // password via the CredentialsModal (shown once, never retrievable again).
+  const performResetPassword = async (client: Client) => {
+    setActioningClientId(client.id)
+    try {
+      const adminToken = localStorage.getItem('gritsync_token')
+      const res = await fetch(`/api/auth/admin/users/${client.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password')
+      const u = data.user || {}
+      setConfirmAction(null)
+      setCreatedCredentials({
+        id: u.id || client.id,
+        first_name: u.first_name ?? client.first_name,
+        last_name: u.last_name ?? client.last_name,
+        middle_name: u.middle_name ?? null,
+        personal_email: u.personal_email || client.gmail_account || client.email,
+        gritsync_email: u.gritsync_email ?? null,
+        grit_id: u.grit_id ?? client.grit_id ?? null,
+        mobile: u.mobile ?? null,
+        password: data.temp_password,
+        role_label: 'temporary password',
+      })
+      showToast('Temporary password issued — share it securely with the client', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Failed to reset password', 'error')
+    } finally {
+      setActioningClientId(null)
+    }
+  }
+
   const performDeactivate = async (client: Client) => {
     const isActive = client.is_active !== false
     const action = isActive ? 'deactivate' : 'reactivate'
@@ -1001,6 +1041,18 @@ export function AdminClients() {
                           <span className="hidden min-[360px]:inline">Delete</span>
                         </Button>
                       </div>
+
+                      <Button
+                        size="sm"
+                        title="Issue a temporary password"
+                        aria-label="Issue a temporary password"
+                        disabled={actioningClientId === client.id}
+                        className="mt-2 h-11 w-full text-xs whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 border-0"
+                        onClick={() => handleResetPassword(client)}
+                      >
+                        <RefreshCcw className="h-4 w-4 mr-1" />
+                        Reset password
+                      </Button>
                     </Card>
                   )
                 })}
@@ -1145,6 +1197,17 @@ export function AdminClients() {
                                     <UserX className="h-3.5 w-3.5 sm:mr-1" />
                                     <span className="hidden sm:inline">{client.is_active !== false ? 'Deactivate' : 'Activate'}</span>
                                   </Button>
+                                  {/* Reset password — issue a one-time temporary password */}
+                                  <Button
+                                    size="sm"
+                                    title="Issue a temporary password"
+                                    disabled={actioningClientId === client.id}
+                                    className="text-xs whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 border-0"
+                                    onClick={() => handleResetPassword(client)}
+                                  >
+                                    <RefreshCcw className="h-3.5 w-3.5 sm:mr-1" />
+                                    <span className="hidden sm:inline">Reset PW</span>
+                                  </Button>
                                   {/* Delete */}
                                   <Button
                                     size="sm"
@@ -1213,7 +1276,8 @@ export function AdminClients() {
         const name = getFullName(client.first_name, client.last_name) || client.email
         const isActive = client.is_active !== false
         const isDelete = type === 'delete'
-        const action = isDelete ? 'Delete' : (isActive ? 'Deactivate' : 'Reactivate')
+        const isReset = type === 'reset'
+        const action = isDelete ? 'Delete' : isReset ? 'Reset password' : (isActive ? 'Deactivate' : 'Reactivate')
         const busy = actioningClientId === client.id
         const requiredText = client.email || ''
         const canConfirm = isDelete
@@ -1221,6 +1285,7 @@ export function AdminClients() {
           : !busy
         const onConfirm = () => {
           if (isDelete) performDelete(client)
+          else if (isReset) performResetPassword(client)
           else performDeactivate(client)
         }
         return (
@@ -1232,14 +1297,18 @@ export function AdminClients() {
           >
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${isDelete ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
-                  <AlertTriangle className="h-5 w-5" />
+                <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${isDelete ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : isReset ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                  {isReset ? <RefreshCcw className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-900 dark:text-gray-100">
                     {isDelete ? (
                       <>
                         Permanently delete <span className="font-semibold">{name}</span>?
+                      </>
+                    ) : isReset ? (
+                      <>
+                        Issue a temporary password for <span className="font-semibold">{name}</span>?
                       </>
                     ) : isActive ? (
                       <>
@@ -1254,9 +1323,11 @@ export function AdminClients() {
                   <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">
                     {isDelete
                       ? 'This removes the account and all associated data. This action cannot be undone.'
-                      : isActive
-                        ? 'The user will be signed out and blocked from logging in until reactivated.'
-                        : 'The user will be able to sign in again.'}
+                      : isReset
+                        ? "This replaces the user's current password with a one-time temporary one. They'll be forced to set a new password on their next login. You'll see the temporary password once — share it securely."
+                        : isActive
+                          ? 'The user will be signed out and blocked from logging in until reactivated.'
+                          : 'The user will be able to sign in again.'}
                   </p>
                 </div>
               </div>
@@ -1294,11 +1365,15 @@ export function AdminClients() {
                   disabled={!canConfirm}
                   className={isDelete
                     ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : (isActive
-                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                        : 'bg-green-600 hover:bg-green-700 text-white')}
+                    : isReset
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : (isActive
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                          : 'bg-green-600 hover:bg-green-700 text-white')}
                 >
-                  {busy ? `${action.replace(/e$/, '')}ing…` : action}
+                  {busy
+                    ? (isReset ? 'Issuing…' : `${action.replace(/e$/, '')}ing…`)
+                    : (isReset ? 'Issue temporary password' : action)}
                 </Button>
               </div>
             </div>

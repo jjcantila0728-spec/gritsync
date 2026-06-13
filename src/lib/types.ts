@@ -11,6 +11,9 @@ export interface User {
   personal_email?: string  // User's personal email (Gmail, Yahoo, etc.)
   mobile?: string
   middle_name?: string
+  /** True when an admin issued a temporary password — the app forces a
+   *  password change before the account can be used. Cleared on first change. */
+  must_change_password?: boolean
   created_at: string
   // Legacy Supabase-shaped metadata bags. Still read in a few places that
   // predate the local-auth migration; kept optional so they typecheck.

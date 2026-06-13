@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_name: (authUser as any).last_name || authUser.user_metadata?.last_name || undefined,
           mobile: (authUser as any).mobile || undefined,
           grit_id: (authUser as any).grit_id || authUser.user_metadata?.grit_id || undefined,
+          must_change_password: (authUser as any).must_change_password === true,
           created_at: authUser.created_at,
         })
 

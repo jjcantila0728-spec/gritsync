@@ -53,6 +53,26 @@ function generateOTP(): string {
   return crypto.randomInt(100000, 1000000).toString()
 }
 
+// Cryptographically-secure, human-readable temporary password. Ambiguous
+// characters (0/O, 1/l/I) are excluded so it's easy to read aloud / retype.
+function generateTempPassword(length = 12): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghijkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const symbols = '!@#$%*?'
+  const all = upper + lower + digits + symbols
+  // Guarantee at least one of each class, then fill the rest from the full set.
+  const pick = (set: string) => set[crypto.randomInt(0, set.length)]
+  const chars = [pick(upper), pick(lower), pick(digits), pick(symbols)]
+  for (let i = chars.length; i < length; i++) chars.push(pick(all))
+  // Fisher–Yates shuffle so the required classes aren't always in front.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
+
 async function sendVerificationEmail(personalEmail: string, firstName: string, token: string, otp?: string) {
   const verifyUrl = `${process.env.APP_URL || 'https://gritsync.com'}/verify-email?token=${token}`
   const otpSection = otp ? `
@@ -491,7 +511,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       // Prefer exact email match first (so admin accounts take priority over client accounts
       // that share the same personal email), then fall back by creation date.
       result = await query(
-        `SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at
+        `SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, is_active, must_change_password, created_at
          FROM users
          WHERE email = $1 OR personal_email = $1
          ORDER BY (email = $1) DESC, created_at ASC
@@ -500,13 +520,13 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       )
     } else if (isGritId) {
       result = await query(
-        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE LOWER(grit_id) = LOWER($1)',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, is_active, must_change_password, created_at FROM users WHERE LOWER(grit_id) = LOWER($1)',
         [identifier]
       )
     } else {
       // Treat as mobile number
       result = await query(
-        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, created_at FROM users WHERE mobile = $1',
+        'SELECT id, email, gritsync_email, personal_email, password_hash, role, first_name, last_name, middle_name, grit_id, avatar_path, email_verified, is_active, must_change_password, created_at FROM users WHERE mobile = $1',
         [identifier]
       )
     }
@@ -568,6 +588,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
         first_name: user.first_name,
         last_name: user.last_name,
         grit_id: user.grit_id,
+        must_change_password: user.must_change_password === true,
         created_at: user.created_at,
       },
       session: {
@@ -579,6 +600,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
           id: user.id,
           email: user.email,
           role: user.role,
+          must_change_password: user.must_change_password === true,
           user_metadata: {
             first_name: user.first_name,
             last_name: user.last_name,
@@ -599,7 +621,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const result = await query(
-      'SELECT id, email, role, first_name, last_name, middle_name, grit_id, avatar_path, mobile, gritsync_email, created_at FROM users WHERE id = $1',
+      'SELECT id, email, role, first_name, last_name, middle_name, grit_id, avatar_path, mobile, gritsync_email, must_change_password, created_at FROM users WHERE id = $1',
       [req.user!.id]
     )
 
@@ -619,6 +641,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
       avatar_path: user.avatar_path,
       mobile: user.mobile,
       gritsync_email: user.gritsync_email,
+      must_change_password: user.must_change_password === true,
       created_at: user.created_at,
       user_metadata: {
         first_name: user.first_name,
@@ -829,6 +852,9 @@ router.put('/update', authenticateToken, async (req: AuthenticatedRequest, res: 
       const hash = await bcrypt.hash(password, 12)
       updates.push(`password_hash = $${idx++}`)
       values.push(hash)
+      // Setting a new password clears any admin-issued "must change" flag — this
+      // is exactly the action the forced-change gate is waiting for.
+      updates.push(`must_change_password = false`)
     }
     // Mobile-app push notification token. `null` clears it (e.g. user opted out).
     if (push_token !== undefined) {
@@ -1380,6 +1406,69 @@ router.post('/advisor/clients', authenticateToken, async (req: Request, res: Res
     })
   } catch (err: any) {
     console.error('Advisor create client error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/auth/admin/users/:id/reset-password  (admin only)
+// Issues a one-time temporary password for a client who forgot theirs. The
+// account is stamped must_change_password = true, so the next login forces the
+// client through a password-change screen before they can use the app. The
+// plaintext password is returned ONCE so the admin can deliver it via a secure
+// channel (it is never stored in plaintext and can't be retrieved again).
+router.post('/admin/users/:id/reset-password', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest
+  if (authReq.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' })
+  }
+  try {
+    const { id } = req.params
+    if (authReq.user?.id === id) {
+      return res.status(400).json({ error: 'Use Account Settings to change your own password' })
+    }
+
+    const userResult = await query(
+      `SELECT id, email, gritsync_email, personal_email, first_name, last_name, middle_name, mobile, grit_id
+       FROM users WHERE id = $1`,
+      [id]
+    )
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    const user = userResult.rows[0]
+
+    const tempPassword = generateTempPassword()
+    const password_hash = await bcrypt.hash(tempPassword, 12)
+
+    await query(
+      `UPDATE users
+       SET password_hash = $1, must_change_password = true, updated_at = NOW()
+       WHERE id = $2`,
+      [password_hash, id]
+    )
+
+    // Any outstanding self-service reset links are now stale — drop them so an
+    // old emailed link can't be used to set a different password out-of-band.
+    await query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [id]).catch(() => {})
+
+    res.json({
+      success: true,
+      message: 'Temporary password issued. The user must change it on next login.',
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        middle_name: user.middle_name,
+        personal_email: user.personal_email || user.email,
+        gritsync_email: user.gritsync_email,
+        grit_id: user.grit_id,
+        mobile: user.mobile,
+      },
+      // Plaintext temp password — shown to the admin once, never persisted.
+      temp_password: tempPassword,
+    })
+  } catch (err: any) {
+    console.error('Admin reset password error:', err)
     res.status(500).json({ error: err.message })
   }
 })

@@ -92,6 +92,7 @@ const AccountDelete = lazy(() => import('./pages/AccountDelete').then(m => ({ de
 const FacebookDataDeletionStatus = lazy(() => import('./pages/FacebookDataDeletionStatus').then(m => ({ default: m.FacebookDataDeletionStatus })))
 const PearsonVueExam = lazy(() => import('./pages/pearsonvue/PearsonVueExam').then(m => ({ default: m.PearsonVueExam })))
 const PearsonVueHome = lazy(() => import('./pages/pearsonvue/PearsonVueHome').then(m => ({ default: m.PearsonVueHome })))
+const ForcePasswordChange = lazy(() => import('./pages/ForcePasswordChange').then(m => ({ default: m.ForcePasswordChange })))
 
 /**
  * Cross-subdomain navigation helper. <Navigate> only handles in-router
@@ -598,6 +599,27 @@ function RootRoutes() {
   return <LandingRoutes />
 }
 
+/**
+ * Forced password-change gate. When an admin issues a temporary password
+ * (because the client forgot theirs), the account carries
+ * `must_change_password`. Until the client sets a new password, every route on
+ * every subdomain is replaced by the change-password screen — they can log in
+ * once with the temp password, then must change it before doing anything else.
+ */
+function PasswordChangeGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+
+  if (!loading && user?.must_change_password) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ForcePasswordChange />
+      </Suspense>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   const basename = getBasename()
 
@@ -616,7 +638,9 @@ function App() {
                   }}
                 >
                   <ScrollToTop />
-                  <RootRoutes />
+                  <PasswordChangeGate>
+                    <RootRoutes />
+                  </PasswordChangeGate>
                   <PWAUpdateNotification />
                   <Toaster position="top-right" />
                 </BrowserRouter>
