@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { appUrl } from '@/lib/routing'
 import { useToast } from '@/components/ui/Toast'
@@ -49,6 +49,7 @@ export function Register() {
 
   const { signUp } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
 
   // Cooldown countdown for resend button
   useEffect(() => {
@@ -134,6 +135,19 @@ export function Register() {
         setResendCooldown(60)
       }
     } catch (err: any) {
+      // Returning client: an account already exists for this email/mobile.
+      // Send them to login (prefilled) rather than blocking with an error.
+      if (err?.accountExists) {
+        const existingEmail = err.email || personalEmail.trim().toLowerCase()
+        showToast('You already have a GritSync account — please log in.', 'info')
+        navigate('/login', {
+          state: {
+            prefillEmail: existingEmail,
+            notice: 'You already have an account. Please log in below.',
+          },
+        })
+        return
+      }
       const errorMessage = err.message || 'Failed to create account'
       setError(errorMessage)
       showToast(errorMessage, 'error')

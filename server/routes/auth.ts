@@ -215,16 +215,38 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Please use your personal email address (e.g. Gmail, Yahoo), not a GritSync email' })
     }
 
-    // Check for duplicate personal email
-    const existingEmail = await query('SELECT id FROM users WHERE personal_email = $1', [personal_email.trim().toLowerCase()])
-    if (existingEmail.rows.length > 0) {
-      return res.status(400).json({ error: 'This email address is already registered' })
+    // Duplicate checks. Only a *verified* account actually owns an email/mobile.
+    // An unverified row is a half-finished signup that was never confirmed (the
+    // client abandoned the funnel, never got/clicked the verification email,
+    // etc.). Such rows must NOT permanently reserve credentials — otherwise a
+    // client who once started a signup (e.g. from the quote funnel) can never
+    // create their account, because every retry is rejected as "already
+    // registered". So: block on verified matches, recycle unverified ones.
+    const emailNorm = personal_email.trim().toLowerCase()
+    const mobileNorm = mobile.trim()
+    const emailHit = await query('SELECT id, email_verified FROM users WHERE personal_email = $1', [emailNorm])
+    const mobileHit = await query('SELECT id, email_verified FROM users WHERE mobile = $1', [mobileNorm])
+
+    const emailTaken = emailHit.rows.some((r: any) => r.email_verified)
+    const mobileTaken = mobileHit.rows.some((r: any) => r.email_verified)
+    if (emailTaken || mobileTaken) {
+      // A real account already exists for these credentials. Don't let the
+      // client create a duplicate — signal the frontend to send them to login
+      // (prefilled with this email) instead of just showing an inline error.
+      return res.status(409).json({
+        error: emailTaken
+          ? 'An account with this email already exists. Please log in instead.'
+          : 'An account with this mobile number already exists. Please log in instead.',
+        accountExists: true,
+        email: emailNorm,
+      })
     }
 
-    // Check for duplicate mobile number
-    const existingMobile = await query('SELECT id FROM users WHERE mobile = $1', [mobile.trim()])
-    if (existingMobile.rows.length > 0) {
-      return res.status(400).json({ error: 'This mobile number is already registered' })
+    // Any remaining matches are unverified pending signups — clear them so the
+    // client can register fresh with these credentials.
+    const staleIds = [...new Set([...emailHit.rows, ...mobileHit.rows].map((r: any) => r.id))]
+    if (staleIds.length > 0) {
+      await query('DELETE FROM users WHERE id = ANY($1::uuid[]) AND email_verified = false', [staleIds])
     }
 
     // Generate GRIT ID

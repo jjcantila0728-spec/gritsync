@@ -137,7 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (error) {
-      throw new Error(error.message)
+      // Preserve the "account already exists" signal so the registration page
+      // can redirect a returning client to login instead of showing an error.
+      const e = new Error(error.message) as Error & { accountExists?: boolean; email?: string }
+      e.accountExists = (error as any).accountExists
+      e.email = (error as any).email
+      throw e
     }
 
     // If registration requires email verification, return that info

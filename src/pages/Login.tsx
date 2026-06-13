@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link, Navigate } from 'react-router-dom'
+import { useNavigate, useLocation, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/Toast'
 import { Header } from '@/components/Header'
@@ -14,7 +14,9 @@ import { homePathForRole } from '@/lib/permissions'
 
 
 export function Login() {
-  const [email, setEmail] = useState('')
+  const location = useLocation()
+  const navState = (location.state as { prefillEmail?: string; notice?: string } | null) || null
+  const [email, setEmail] = useState(navState?.prefillEmail || '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -28,6 +30,16 @@ export function Login() {
   const { signIn, isAdmin, user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
+
+  // One-time notice when redirected here from registration (account already exists)
+  useEffect(() => {
+    if (navState?.notice) {
+      showToast(navState.notice, 'info')
+      // Drop the state so the notice doesn't replay on refresh/back-nav.
+      navigate(location.pathname, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Redirect if already logged in
   useEffect(() => {

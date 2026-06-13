@@ -65,7 +65,7 @@ async function apiRequest(path: string, options: RequestInit = {}): Promise<{ da
           localStorage.removeItem('gritsync_user')
         } catch {}
       }
-      return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}`, status: res.status, code: res.status } }
+      return { data: null, error: { message: body.error?.message || body.error || `HTTP ${res.status}`, status: res.status, code: res.status, accountExists: body.accountExists, email: body.email } }
     }
     return { data: body, error: null }
   } catch (err: any) {
