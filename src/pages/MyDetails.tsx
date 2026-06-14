@@ -1242,105 +1242,6 @@ export function MyDetails() {
           </div>
 
           <div className="space-y-6">
-            {/* Completion Progress Card */}
-            {!editing && (
-              <Card className={cn(
-                "border-0 shadow-md transition-all duration-300",
-                completionPercentage === 100 
-                  ? "bg-gradient-to-br from-green-50 via-green-50/50 to-white dark:from-green-900/20 dark:via-green-800/10 dark:to-gray-800"
-                  : completionPercentage >= 80
-                  ? "bg-gradient-to-br from-blue-50 via-blue-50/50 to-white dark:from-blue-900/20 dark:via-blue-800/10 dark:to-gray-800"
-                  : completionPercentage >= 60
-                  ? "bg-gradient-to-br from-primary-50 via-primary-50/50 to-white dark:from-primary-900/20 dark:via-primary-800/10 dark:to-gray-800"
-                  : completionPercentage >= 40
-                  ? "bg-gradient-to-br from-yellow-50 via-yellow-50/50 to-white dark:from-yellow-900/20 dark:via-yellow-800/10 dark:to-gray-800"
-                  : completionPercentage >= 20
-                  ? "bg-gradient-to-br from-orange-50 via-orange-50/50 to-white dark:from-orange-900/20 dark:via-orange-800/10 dark:to-gray-800"
-                  : "bg-gradient-to-br from-red-50 via-red-50/50 to-white dark:from-red-900/20 dark:via-red-800/10 dark:to-gray-800"
-              )}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "p-3 rounded-xl",
-                      completionPercentage === 100 
-                        ? "bg-green-500/10 dark:bg-green-400/20"
-                        : completionPercentage >= 80
-                        ? "bg-blue-500/10 dark:bg-blue-400/20"
-                        : completionPercentage >= 60
-                        ? "bg-primary-500/10 dark:bg-primary-400/20"
-                        : completionPercentage >= 40
-                        ? "bg-yellow-500/10 dark:bg-yellow-400/20"
-                        : completionPercentage >= 20
-                        ? "bg-orange-500/10 dark:bg-orange-400/20"
-                        : "bg-red-500/10 dark:bg-red-400/20"
-                    )}>
-                      <Sparkles className={cn(
-                        "h-6 w-6",
-                        completionPercentage === 100 
-                          ? "text-green-600 dark:text-green-400"
-                          : completionPercentage >= 80
-                          ? "text-blue-600 dark:text-blue-400"
-                          : completionPercentage >= 60
-                          ? "text-primary-600 dark:text-primary-400"
-                          : completionPercentage >= 40
-                          ? "text-yellow-600 dark:text-yellow-400"
-                          : completionPercentage >= 20
-                          ? "text-orange-600 dark:text-orange-400"
-                          : "text-red-600 dark:text-red-400"
-                      )} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                        Profile Completion
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {completionPercentage === 100 
-                          ? 'All details completed! ðŸŽ‰' 
-                          : `${completionPercentage}% complete - Fill in more details to speed up your applications`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={cn(
-                      "text-3xl font-bold mb-1",
-                      completionPercentage === 100 
-                        ? "text-green-600 dark:text-green-400"
-                        : completionPercentage >= 80
-                        ? "text-blue-600 dark:text-blue-400"
-                        : completionPercentage >= 60
-                        ? "text-primary-600 dark:text-primary-400"
-                        : completionPercentage >= 40
-                        ? "text-yellow-600 dark:text-yellow-400"
-                        : completionPercentage >= 20
-                        ? "text-orange-600 dark:text-orange-400"
-                        : "text-red-600 dark:text-red-400"
-                    )}>
-                      {completionPercentage}%
-                    </div>
-                    <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div 
-                        className={cn(
-                          "h-full transition-all duration-500 rounded-full",
-                          completionPercentage === 100 
-                            ? "bg-gradient-to-r from-green-500 to-green-600" 
-                            : completionPercentage >= 80
-                            ? "bg-gradient-to-r from-blue-500 to-blue-600"
-                            : completionPercentage >= 60
-                            ? "bg-gradient-to-r from-primary-500 to-primary-600"
-                            : completionPercentage >= 40
-                            ? "bg-gradient-to-r from-yellow-500 to-yellow-600"
-                            : completionPercentage >= 20
-                            ? "bg-gradient-to-r from-orange-500 to-orange-600"
-                            : "bg-gradient-to-r from-red-500 to-red-600"
-                        )}
-                        style={{ width: `${completionPercentage}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
-
             {/* Profile Header */}
             <Card className="border-0 shadow-md hover:shadow-lg transition-shadow duration-300">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
@@ -1467,6 +1368,76 @@ export function MyDetails() {
                     )}
                   </div>
                 </div>
+                {/* Profile Completion Speedometer (pulled right) */}
+                {!editing && (() => {
+                  const colorKey =
+                    completionPercentage === 100 ? 'green'
+                    : completionPercentage >= 80 ? 'blue'
+                    : completionPercentage >= 60 ? 'primary'
+                    : completionPercentage >= 40 ? 'yellow'
+                    : completionPercentage >= 20 ? 'orange'
+                    : 'red'
+                  const gaugeColors: Record<string, { stroke: string; text: string }> = {
+                    green: { stroke: 'stroke-green-500', text: 'text-green-600 dark:text-green-400' },
+                    blue: { stroke: 'stroke-blue-500', text: 'text-blue-600 dark:text-blue-400' },
+                    primary: { stroke: 'stroke-primary-500', text: 'text-primary-600 dark:text-primary-400' },
+                    yellow: { stroke: 'stroke-yellow-500', text: 'text-yellow-600 dark:text-yellow-400' },
+                    orange: { stroke: 'stroke-orange-500', text: 'text-orange-600 dark:text-orange-400' },
+                    red: { stroke: 'stroke-red-500', text: 'text-red-600 dark:text-red-400' },
+                  }
+                  const { stroke, text } = gaugeColors[colorKey]
+                  const r = 52
+                  const arcLength = Math.PI * r
+                  const offset = arcLength * (1 - completionPercentage / 100)
+                  const angleRad = ((180 - completionPercentage * 1.8) * Math.PI) / 180
+                  const needleX = 64 + 40 * Math.cos(angleRad)
+                  const needleY = 64 - 40 * Math.sin(angleRad)
+                  return (
+                    <div className="flex flex-col items-center sm:ml-auto self-center sm:self-start flex-shrink-0">
+                      <div className="relative w-[140px]">
+                        <svg viewBox="0 0 128 78" className="w-[140px] h-auto overflow-visible">
+                          {/* Track */}
+                          <path
+                            d="M 12 64 A 52 52 0 0 1 116 64"
+                            fill="none"
+                            className="stroke-gray-200 dark:stroke-gray-700"
+                            strokeWidth={10}
+                            strokeLinecap="round"
+                          />
+                          {/* Value arc */}
+                          <path
+                            d="M 12 64 A 52 52 0 0 1 116 64"
+                            fill="none"
+                            className={cn(stroke, 'transition-all duration-700')}
+                            strokeWidth={10}
+                            strokeLinecap="round"
+                            strokeDasharray={arcLength}
+                            strokeDashoffset={offset}
+                          />
+                          {/* Needle */}
+                          <line
+                            x1={64}
+                            y1={64}
+                            x2={needleX}
+                            y2={needleY}
+                            className={cn(stroke, 'transition-all duration-700')}
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                          />
+                          <circle cx={64} cy={64} r={5} className={cn('fill-current', text)} />
+                        </svg>
+                        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
+                          <span className={cn('text-2xl font-bold leading-none', text)}>
+                            {completionPercentage}%
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400 text-center">
+                        {completionPercentage === 100 ? 'Profile complete' : 'Profile completion'}
+                      </p>
+                    </div>
+                  )
+                })()}
               </div>
             </Card>
 
