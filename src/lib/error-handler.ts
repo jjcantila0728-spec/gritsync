@@ -168,12 +168,16 @@ export function classifyError(error: any): ErrorClassification {
     }
   }
 
-  // Not found errors
+  // Not found errors.
+  // Only treat substring matches as NOT_FOUND when the status isn't a 5xx —
+  // a 500 whose message happens to contain "does not exist" (e.g. a Postgres
+  // "column ... does not exist" schema error) is a server error, not a 404,
+  // and must fall through to the 5xx branch below.
+  const isServerError = errorCode >= 500 || (error?.status && error.status >= 500)
   if (
-    errorMessage.includes('Not found') ||
-    errorMessage.includes('does not exist') ||
     errorCode === 404 ||
-    error?.status === 404
+    error?.status === 404 ||
+    (!isServerError && (errorMessage.includes('Not found') || errorMessage.includes('does not exist')))
   ) {
     return {
       type: ErrorType.NOT_FOUND,
