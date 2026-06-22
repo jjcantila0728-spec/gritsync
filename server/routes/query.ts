@@ -223,6 +223,54 @@ async function getSafeColumns(table: string): Promise<string[]> {
   return safe
 }
 
+// All real columns of a table (including sensitive ones) — used to reconcile
+// write payloads and guard read filters against the live schema. The codebase
+// was written against an older, wider schema than the live DB, so payloads
+// routinely carry columns the table no longer has; sending them makes
+// PostgREST fail with "Could not find the '<col>' column ... in the schema
+// cache" (PGRST204) and bad filters fail with 42703. We resolve them here, at
+// the single chokepoint, instead of patching every call site.
+const rawColumnCache = new Map<string, { cols: Set<string>; expires: number }>()
+
+async function getRawColumns(table: string): Promise<Set<string> | null> {
+  const cached = rawColumnCache.get(table)
+  if (cached && cached.expires > Date.now()) return cached.cols
+  const { data, error } = await supabaseAdmin.rpc('get_table_columns', { p_table: table })
+  if (error || !Array.isArray(data) || data.length === 0) return null // unknown — don't filter
+  // The RPC returns rows of { column_name, data_type, is_nullable }; tolerate a
+  // plain string[] too in case the shape ever changes.
+  const names = (data as any[])
+    .map((r) => (typeof r === 'string' ? r : r?.column_name))
+    .filter((c): c is string => typeof c === 'string' && c.length > 0)
+  if (names.length === 0) return null
+  const cols = new Set<string>(names)
+  rawColumnCache.set(table, { cols, expires: Date.now() + COLUMN_CACHE_TTL_MS })
+  return cols
+}
+
+/**
+ * Drop keys that aren't real columns on `table`. If the table has an `extra`
+ * jsonb bucket, unknown keys are folded into it (preserving audit/history);
+ * otherwise they're dropped with a warning. Returns the reconciled record.
+ */
+async function reconcileWrite(table: string, record: Record<string, any>): Promise<Record<string, any>> {
+  const cols = await getRawColumns(table)
+  if (!cols) return record // schema unknown — leave untouched
+  const unknown = Object.keys(record).filter((k) => !cols.has(k))
+  if (unknown.length === 0) return record
+  const known: Record<string, any> = {}
+  for (const [k, v] of Object.entries(record)) if (cols.has(k)) known[k] = v
+  if (cols.has('extra')) {
+    const extra = { ...(record.extra && typeof record.extra === 'object' ? record.extra : {}) }
+    for (const k of unknown) if (k !== 'extra') extra[k] = record[k]
+    known.extra = extra
+    console.warn(`[/api/db] ${table}: folded non-schema column(s) into extra: ${unknown.join(', ')}`)
+  } else {
+    console.warn(`[/api/db] ${table}: dropped non-schema column(s): ${unknown.join(', ')}`)
+  }
+  return known
+}
+
 async function buildSelectString(table: string, raw: string | undefined): Promise<string> {
   const value = (raw ?? '*').trim()
   if (value === '' || value === '*') {
@@ -289,6 +337,18 @@ router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Respo
 
     const selectStr = await buildSelectString(table, select)
 
+    // Guard against filtering on a column the live table doesn't have: such a
+    // query would 500 with Postgres 42703 ("column does not exist"). Treat it
+    // as a no-match instead (a nonexistent column can never equal a value).
+    const tableCols = await getRawColumns(table)
+    if (tableCols) {
+      const badFilter = Object.keys(filters).find((k) => IDENT.test(k) && !tableCols.has(k))
+      if (badFilter) {
+        console.warn(`[/api/db] ${table}: filter on non-schema column "${badFilter}" -> empty result`)
+        return res.json({ data: [], error: null })
+      }
+    }
+
     let q: any = supabaseAdmin.from(table).select(selectStr)
 
     q = applyFilters(q, filters)
@@ -300,7 +360,8 @@ router.get('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Respo
       const parts = String(order).split('.')
       const col = parts[0]
       const dir = (parts[1] || 'asc').toLowerCase()
-      if (IDENT.test(col)) {
+      // Skip ordering on a column the table doesn't have (avoids 42703).
+      if (IDENT.test(col) && (!tableCols || tableCols.has(col))) {
         q = q.order(col, { ascending: dir !== 'desc' })
       }
     }
@@ -340,9 +401,15 @@ router.post('/:table', optionalAuth, async (req: AuthenticatedRequest, res: Resp
 
   try {
     const { returning = '*', _onConflict, _batch, ...record } = req.body
-    const records: any[] = Array.isArray(_batch) ? _batch : [record]
-    if (records.length === 0 || Object.keys(records[0]).length === 0) {
+    const rawRecords: any[] = Array.isArray(_batch) ? _batch : [record]
+    if (rawRecords.length === 0 || Object.keys(rawRecords[0]).length === 0) {
       return res.status(400).json({ error: 'No data provided' })
+    }
+
+    // Drop/redirect columns the live table doesn't have (see reconcileWrite).
+    const records = await Promise.all(rawRecords.map((r) => reconcileWrite(table, r)))
+    if (Object.keys(records[0]).length === 0) {
+      return res.status(400).json({ error: 'No valid columns to insert' })
     }
 
     // Validate column names
@@ -383,11 +450,13 @@ router.patch('/:table', authenticateToken, async (req: AuthenticatedRequest, res
   }
 
   try {
-    const { _filters, _returning = '*', ...updates } = req.body
+    const { _filters, _returning = '*', ...rawUpdates } = req.body
     if (!_filters || Object.keys(_filters).length === 0) {
       return res.status(400).json({ error: 'Filters required for update' })
     }
 
+    // Drop/redirect columns the live table doesn't have (see reconcileWrite).
+    const updates = await reconcileWrite(table, rawUpdates)
     const setCols = Object.keys(updates)
     if (setCols.length === 0) return res.status(400).json({ error: 'No fields to update' })
     setCols.forEach(assertIdent)
@@ -438,6 +507,13 @@ router.delete('/:table', authenticateToken, async (req: AuthenticatedRequest, re
       return res.status(400).json({ error: 'Filters required for delete' })
     }
 
+    // A filter on a non-schema column would 500 (42703); treat as no-match so
+    // we never delete more than intended.
+    const delCols = await getRawColumns(table)
+    if (delCols && Object.keys(filters).some((k) => IDENT.test(k) && !delCols.has(k))) {
+      return res.json({ data: [], error: null })
+    }
+
     let q: any = supabaseAdmin.from(table).delete().select('id')
     q = applyFilters(q, filters)
     const owned = await applyOwnership(q, table, req)
@@ -461,6 +537,11 @@ router.post('/:table/count', optionalAuth, async (req: AuthenticatedRequest, res
 
   try {
     const filters = req.body || {}
+    // A filter on a non-schema column would 500 (42703); treat as no-match.
+    const cntCols = await getRawColumns(table)
+    if (cntCols && Object.keys(filters).some((k) => IDENT.test(k) && !cntCols.has(k))) {
+      return res.json({ data: '0', error: null })
+    }
     let q: any = supabaseAdmin.from(table).select('*', { count: 'exact', head: true })
     q = applyFilters(q, filters)
     const owned = await applyOwnership(q, table, req)
