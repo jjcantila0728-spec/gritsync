@@ -43,6 +43,7 @@ import {
   ExternalLink,
   Filter,
   TrendingUp,
+  TrendingDown,
   Calendar,
   Activity,
   ArrowRight,
@@ -2150,13 +2151,56 @@ interface MetaConnectionStatus {
 // Filipino healthcare professionals primarily in Asia/Manila (PHT). All
 // times shown are PHT. Reasoning is surfaced inline so the operator
 // understands *why* a window is recommended, not just what.
-const BEST_TIMES: Record<Platform, { weekday: string; weekend: string; reason: string }> = {
-  facebook:  { weekday: '8–10 AM · 7–10 PM',     weekend: '12–3 PM',     reason: 'Audience checks FB on the commute and after dinner. Weekends shift to early afternoon.' },
-  instagram: { weekday: '12 PM · 7–9 PM',         weekend: '11 AM–2 PM',  reason: 'Lunch + post-shift scroll. Stories peak 8–10 PM PHT.' },
-  threads:   { weekday: '12–1 PM · 10 PM–12 AM',  weekend: '10–11 PM',    reason: 'Threads skews late-night and conversational — short hooks win.' },
-  linkedin:  { weekday: '8–10 AM (Tue/Wed/Thu)',  weekend: 'avoid',       reason: 'Professional audience reads in the workday lull. Weekends die for B2B.' },
-  youtube:   { weekday: '7–10 PM',                weekend: 'Sat 6–8 PM',  reason: 'Watch-time peaks evenings; Saturday night is the longer-form sweet spot.' },
-  tiktok:    { weekday: '6–10 PM',                weekend: '8–10 PM',     reason: 'Mobile-first audience — peak FYP time after dinner, every day of the week.' },
+// `weekdaySlots` / `weekendSlots` are the *start* hours (24h, Asia/Manila)
+// of each posting window. They power the live "next window" countdown in
+// BestTimesCard; the human-readable `weekday`/`weekend` strings stay the
+// source of truth for the displayed copy. Keep the two in sync when tuning.
+const BEST_TIMES: Record<Platform, {
+  weekday: string; weekend: string; reason: string;
+  weekdaySlots: number[]; weekendSlots: number[];
+}> = {
+  facebook:  { weekday: '8–10 AM · 7–10 PM',     weekend: '12–3 PM',     reason: 'Audience checks FB on the commute and after dinner. Weekends shift to early afternoon.', weekdaySlots: [8, 19],  weekendSlots: [12] },
+  instagram: { weekday: '12 PM · 7–9 PM',         weekend: '11 AM–2 PM',  reason: 'Lunch + post-shift scroll. Stories peak 8–10 PM PHT.',                                  weekdaySlots: [12, 19], weekendSlots: [11] },
+  threads:   { weekday: '12–1 PM · 10 PM–12 AM',  weekend: '10–11 PM',    reason: 'Threads skews late-night and conversational — short hooks win.',                        weekdaySlots: [12, 22], weekendSlots: [22] },
+  linkedin:  { weekday: '8–10 AM (Tue/Wed/Thu)',  weekend: 'avoid',       reason: 'Professional audience reads in the workday lull. Weekends die for B2B.',                weekdaySlots: [8],      weekendSlots: [] },
+  youtube:   { weekday: '7–10 PM',                weekend: 'Sat 6–8 PM',  reason: 'Watch-time peaks evenings; Saturday night is the longer-form sweet spot.',              weekdaySlots: [19],     weekendSlots: [18] },
+  tiktok:    { weekday: '6–10 PM',                weekend: '8–10 PM',     reason: 'Mobile-first audience — peak FYP time after dinner, every day of the week.',            weekdaySlots: [18],     weekendSlots: [20] },
+}
+
+// Find the next upcoming posting window for a platform given the current
+// Asia/Manila day-of-week (0=Sun) and fractional hour. Scans up to 8 days
+// ahead so a platform with no weekend window (e.g. LinkedIn) still resolves
+// to its next weekday slot. Returns null only if every slot list is empty.
+function computeNextWindow(
+  bt: { weekdaySlots: number[]; weekendSlots: number[] },
+  day: number,
+  hour: number,
+): { label: string; hoursAway: number } | null {
+  for (let d = 0; d < 8; d++) {
+    const checkDay = (day + d) % 7
+    const isWeekend = checkDay === 0 || checkDay === 6
+    // Sort defensively so the "first non-skipped slot wins" return is always
+    // the *earliest* upcoming window, regardless of how the data is authored.
+    const slots = [...(isWeekend ? bt.weekendSlots : bt.weekdaySlots)].sort((a, b) => a - b)
+    for (const s of slots) {
+      if (d === 0 && s <= hour) continue
+      const hoursAway = d * 24 + (s - hour)
+      return { label: formatCountdown(hoursAway), hoursAway }
+    }
+  }
+  return null
+}
+
+function formatCountdown(hoursAway: number): string {
+  if (hoursAway < 1) return `in ${Math.max(1, Math.round(hoursAway * 60))}m`
+  if (hoursAway < 24) {
+    const h = Math.floor(hoursAway)
+    const m = Math.round((hoursAway - h) * 60)
+    return m > 0 ? `in ${h}h ${m}m` : `in ${h}h`
+  }
+  const days = Math.floor(hoursAway / 24)
+  const h = Math.floor(hoursAway - days * 24)
+  return h > 0 ? `in ${days}d ${h}h` : `in ${days}d`
 }
 
 // Curated "what's hot for our audience right now" topic seeds. These run
@@ -2215,17 +2259,31 @@ function ManagerView({
   // Stats — all computed client-side from data already in scope. No
   // separate API call; this card stays in lock-step with the other tabs.
   const stats = useMemo(() => {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000
-    const published7d = posts.filter((p) =>
-      p.published_at && new Date(p.published_at).getTime() >= sevenDaysAgo
-    ).length
+    const dayMs = 24 * 3600 * 1000
+    const now = Date.now()
+    const sevenDaysAgo = now - 7 * dayMs
+    const fourteenDaysAgo = now - 14 * dayMs
+    const publishedTimes = posts
+      .filter((p) => p.published_at)
+      .map((p) => new Date(p.published_at as string).getTime())
+    const published7d = publishedTimes.filter((t) => t >= sevenDaysAgo).length
+    // Prior 7-day window (days 8–14 ago) so the snapshot can show momentum,
+    // not just a point-in-time count.
+    const publishedPrev7d = publishedTimes.filter((t) => t >= fourteenDaysAgo && t < sevenDaysAgo).length
+    // Daily publish counts for the last 7 days, oldest → newest, for the
+    // inline sparkline on the Published card.
+    const dailySpark = Array.from({ length: 7 }, (_, i) => {
+      const start = now - (7 - i) * dayMs
+      const end = now - (6 - i) * dayMs
+      return publishedTimes.filter((t) => t >= start && t < end).length
+    })
     const scheduledCount = posts.filter((p) =>
       p.status === 'draft' || p.status === 'scheduled' || p.status === 'queued'
     ).length
     const bankReady = bank.filter((b) => b.status === 'available').length
     const failedOrPartial = posts.filter((p) => p.status === 'failed' || p.status === 'partial').length
     const connectedPlatforms = Array.from(new Set(accounts.map((a) => a.platform)))
-    return { published7d, scheduledCount, bankReady, failedOrPartial, connectedPlatforms, avgPerDay: published7d / 7 }
+    return { published7d, publishedPrev7d, dailySpark, scheduledCount, bankReady, failedOrPartial, connectedPlatforms, avgPerDay: published7d / 7 }
   }, [posts, bank, accounts])
 
   // The operator's chosen posts/day target — drives both the cadence bar
@@ -2505,6 +2563,8 @@ function ManagerView({
           sub={`${stats.avgPerDay.toFixed(1)}/day avg`}
           icon={Activity}
           tone={stats.published7d > 0 ? 'green' : 'gray'}
+          delta={stats.published7d - stats.publishedPrev7d}
+          spark={stats.dailySpark}
           onClick={() => onGoTo('history')}
         />
         <ManagerStatCard
@@ -2563,6 +2623,70 @@ function ManagerView({
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {/* All-clear state — when nothing needs attention, confirm it instead
+          of rendering an empty void where the action queue would be. Only
+          shown once at least one account is connected (otherwise the queue
+          already surfaces the "connect an account" prompt). */}
+      {actions.length === 0 && accounts.length > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <span className="h-9 w-9 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">You're all caught up</h3>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                No gaps, failed posts, or empty queues. The agent will surface anything that needs attention here.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Platform pulse — last-publish recency per connected channel. Turns
+          the gap data (already computed for the action queue) into an at-a-
+          glance row so the operator can spot a stale platform instantly. */}
+      {stats.connectedPlatforms.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Platform pulse</h3>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">· last publish per channel</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {gapsByPlatform.map((g) => {
+              const meta = PLATFORM_META[g.platform as Platform]
+              const Icon = meta.icon
+              const tone = g.daysSince === null ? 'red' : g.daysSince > 5 ? 'amber' : 'green'
+              const label = g.daysSince === null
+                ? 'never posted'
+                : g.daysSince === 0 ? 'today'
+                : g.daysSince === 1 ? 'yesterday'
+                : `${g.daysSince}d ago`
+              const toneCls =
+                tone === 'red'   ? 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20' :
+                tone === 'amber' ? 'border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20' :
+                                   'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-900/20'
+              return (
+                <button
+                  key={g.platform}
+                  type="button"
+                  onClick={() => onGoTo('bank')}
+                  title={`Schedule a post for ${meta.label}`}
+                  className={cn('inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border text-xs transition-colors hover:shadow-sm', toneCls)}
+                >
+                  <span className={cn('h-5 w-5 rounded-full flex items-center justify-center text-white', meta.color)}>
+                    <Icon className="h-3 w-3" />
+                  </span>
+                  <span className="font-medium text-gray-800 dark:text-gray-100">{meta.label}</span>
+                  <span className="text-gray-500 dark:text-gray-400">· {label}</span>
+                </button>
+              )
+            })}
+          </div>
         </Card>
       )}
 
@@ -2650,48 +2774,10 @@ function ManagerView({
         </div>
       </Card>
 
-      {/* Best times to post. PHT-tuned for the Filipino-nurse audience. Each
-          row CTAs into Bank → schedule modal so the operator can act on the
-          recommendation in two clicks. */}
-      <Card className="p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Clock className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Best times to post · PH time</h3>
-        </div>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-          Windows tuned for your audience: Filipino healthcare professionals in Asia/Manila planning the US move.
-        </p>
-        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-          {(stats.connectedPlatforms.length > 0
-            ? stats.connectedPlatforms
-            : (['facebook', 'instagram', 'threads', 'linkedin'] as Platform[])
-          ).map((pl) => {
-            const meta = PLATFORM_META[pl]
-            const Icon = meta.icon
-            const bt = BEST_TIMES[pl]
-            return (
-              <li key={pl} className="py-2.5 flex items-start gap-3">
-                <span className={cn('h-8 w-8 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{meta.label}</div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300 mt-0.5">
-                    <span className="inline-flex items-center gap-1 mr-3"><span className="text-gray-500 dark:text-gray-400">Weekdays:</span> {bt.weekday}</span>
-                    <span className="inline-flex items-center gap-1"><span className="text-gray-500 dark:text-gray-400">Weekends:</span> {bt.weekend}</span>
-                  </div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{bt.reason}</div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-        {stats.connectedPlatforms.length === 0 && (
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-3 italic">
-            Connect an account to see times tailored to your active platforms.
-          </p>
-        )}
-      </Card>
+      {/* Best times to post — live "next window" countdown, PHT-tuned for
+          the Filipino-nurse audience. Each row CTAs into Bank → schedule
+          modal so the operator can act on the recommendation in two clicks. */}
+      <BestTimesCard connectedPlatforms={stats.connectedPlatforms as Platform[]} onGoTo={onGoTo} />
 
       {/* Live performance — pulls Page Insights from Facebook + Instagram
           via the connected long-lived token. The "Generate AI plan" button
@@ -2704,6 +2790,115 @@ function ManagerView({
         postsPerDay={postsPerDay}
         showToast={showToast}
       />
+    </div>
+  )
+}
+
+// Best-times card with a live "next window" countdown. Owns its own 30s
+// ticking clock so the countdown stays fresh without re-rendering the whole
+// agent surface. Times are computed in Asia/Manila (UTC+8, no DST).
+function BestTimesCard({
+  connectedPlatforms,
+  onGoTo,
+}: {
+  connectedPlatforms: Platform[]
+  onGoTo: (tab: 'bank') => void
+}) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Shift the UTC instant +8h, then read it with getUTC* accessors to get
+  // the Asia/Manila wall-clock day-of-week and fractional hour.
+  const pht = new Date(now + 8 * 3600 * 1000)
+  const phtDay = pht.getUTCDay()
+  const phtHour = pht.getUTCHours() + pht.getUTCMinutes() / 60
+
+  const platforms = connectedPlatforms.length > 0
+    ? connectedPlatforms
+    : (['facebook', 'instagram', 'threads', 'linkedin'] as Platform[])
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Clock className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Best times to post · PH time</h3>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+        Windows tuned for your audience: Filipino healthcare professionals in Asia/Manila planning the US move.
+      </p>
+      <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+        {platforms.map((pl) => {
+          const meta = PLATFORM_META[pl]
+          const Icon = meta.icon
+          const bt = BEST_TIMES[pl]
+          const next = computeNextWindow(bt, phtDay, phtHour)
+          const imminent = next !== null && next.hoursAway <= 2
+          return (
+            <li key={pl} className="py-2.5 flex items-start gap-3">
+              <span className={cn('h-8 w-8 rounded-full flex items-center justify-center text-white flex-shrink-0', meta.color)}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{meta.label}</div>
+                  {next && (
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0',
+                        imminent
+                          ? 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40'
+                          : 'text-primary-700 bg-primary-50 dark:text-primary-300 dark:bg-primary-900/30'
+                      )}
+                      title="Next recommended posting window"
+                    >
+                      <Clock className="h-2.5 w-2.5" /> next {next.label}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-700 dark:text-gray-300 mt-0.5">
+                  <span className="inline-flex items-center gap-1 mr-3"><span className="text-gray-500 dark:text-gray-400">Weekdays:</span> {bt.weekday}</span>
+                  <span className="inline-flex items-center gap-1"><span className="text-gray-500 dark:text-gray-400">Weekends:</span> {bt.weekend}</span>
+                </div>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{bt.reason}</div>
+                {connectedPlatforms.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onGoTo('bank')}
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                  >
+                    Schedule for this window <ArrowRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {connectedPlatforms.length === 0 && (
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-3 italic">
+          Connect an account to see times tailored to your active platforms.
+        </p>
+      )}
+    </Card>
+  )
+}
+
+// Tiny inline bar sparkline. Inherits color from `text-*` on the wrapper via
+// `bg-current`, so callers tint it by setting a text color class.
+function Sparkline({ data, className }: { data: number[]; className?: string }) {
+  const max = Math.max(1, ...data)
+  return (
+    <div className={cn('flex items-end gap-px h-6', className)} aria-hidden="true">
+      {data.map((v, i) => (
+        <span
+          key={i}
+          className="w-1 rounded-sm bg-current"
+          style={{ height: `${Math.max(12, (v / max) * 100)}%`, opacity: v === 0 ? 0.25 : 0.8 }}
+        />
+      ))}
     </div>
   )
 }
@@ -2980,6 +3175,8 @@ function ManagerStatCard({
   sub,
   icon: Icon,
   tone,
+  delta,
+  spark,
   onClick,
 }: {
   label: string
@@ -2987,6 +3184,10 @@ function ManagerStatCard({
   sub: string
   icon: React.ComponentType<{ className?: string }>
   tone: 'green' | 'amber' | 'red' | 'gray'
+  // Week-over-week change. Rendered as an up/down chip; 0 or undefined hides it.
+  delta?: number
+  // 7-point series for the inline sparkline (oldest → newest).
+  spark?: number[]
   onClick: () => void
 }) {
   const tones: Record<string, string> = {
@@ -3014,7 +3215,28 @@ function ManagerStatCard({
         <Icon className={cn('h-3.5 w-3.5', iconTones[tone])} />
         <span className="text-[10px] uppercase tracking-wider font-medium text-gray-600 dark:text-gray-300">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
+      <div className="flex items-end justify-between gap-2">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
+          {typeof delta === 'number' && delta !== 0 && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0.5 rounded',
+                delta > 0
+                  ? 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40'
+                  : 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40'
+              )}
+              title="vs previous 7 days"
+            >
+              {delta > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+              {delta > 0 ? '+' : ''}{delta}
+            </span>
+          )}
+        </div>
+        {spark && spark.some((n) => n > 0) && (
+          <Sparkline data={spark} className={cn('flex-shrink-0', iconTones[tone])} />
+        )}
+      </div>
       <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
         {sub}
         <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />

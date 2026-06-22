@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { CardSkeleton } from '@/components/ui/Loading'
 import { serviceRequiredDocumentsAPI, userDocumentsAPI, getSignedFileUrl, userDetailsAPI } from '@/lib/api'
-import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, RefreshCw } from 'lucide-react'
+import { FileText, Upload, CheckCircle, Image, File as FileIcon, FileCheck, Eye, Download, Trash2, RefreshCw, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Modal } from '@/components/ui/Modal'
 
@@ -88,6 +88,11 @@ export function Documents() {
   const [serviceDocRequirements, setServiceDocRequirements] = useState<ServiceDocumentRequirement[]>([])
   const [docConfigLoading, setDocConfigLoading] = useState(true)
   const [docConfigError, setDocConfigError] = useState<string | null>(null)
+
+  // "Add other document" — lets clients upload documents beyond the required set.
+  const [addOther, setAddOther] = useState<{ name: string; file: File | null; previewUrl: string } | null>(null)
+  const [addingOther, setAddingOther] = useState(false)
+  const addOtherInputRef = useRef<HTMLInputElement>(null)
 
   // Helper function to get display name for document types
   const getDocumentDisplayName = (type: string): string => {
@@ -454,6 +459,72 @@ export function Documents() {
     setUploadPreview(null)
   }
 
+  // ---- Add other (non-required) document -----------------------------------
+  const openAddOther = () => setAddOther({ name: '', file: null, previewUrl: '' })
+
+  const closeAddOther = () => {
+    if (addingOther) return
+    if (addOther?.previewUrl) URL.revokeObjectURL(addOther.previewUrl)
+    setAddOther(null)
+  }
+
+  const handleAddOtherFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size must be less than 10MB', 'error')
+      return
+    }
+    setAddOther((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl)
+      const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+      // Default the document name to the file's base name if not set yet.
+      const baseName = file.name.replace(/\.[^.]+$/, '')
+      return { name: prev?.name?.trim() ? prev.name : baseName, file, previewUrl }
+    })
+  }
+
+  const handleAddOtherSubmit = async () => {
+    if (!addOther || !addOther.file || !user) return
+    const label = addOther.name.trim()
+    if (!label) {
+      showToast('Please enter a document name', 'error')
+      return
+    }
+
+    // Build a unique `additional_<slug>` type so it round-trips to a readable
+    // display name and never collides with an existing document.
+    const baseSlug = `additional_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`.replace(/_+$/, '') || 'additional_document'
+    const existingTypes = new Set(documents.map((d) => d.type))
+    let type = baseSlug
+    let n = 2
+    while (existingTypes.has(type)) { type = `${baseSlug}_${n++}` }
+
+    setAddingOther(true)
+    try {
+      const firstName = userFirstName.toLowerCase().replace(/\s+/g, '')
+      const lastName = userLastName.toLowerCase().replace(/\s+/g, '')
+      const fileExt = addOther.file.name.split('.').pop() || ''
+      const docSlug = type.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'document'
+      const newFileName = `${docSlug}_${firstName}_${lastName}.${fileExt}`
+      const renamedFile = new File([addOther.file], newFileName, { type: addOther.file.type })
+
+      await userDocumentsAPI.upload(type, renamedFile)
+      showToast(`${label} uploaded successfully!`, 'success')
+
+      if (addOther.previewUrl) URL.revokeObjectURL(addOther.previewUrl)
+      setAddOther(null)
+      await fetchDocuments()
+      setRefreshKey((k) => k + 1)
+      window.dispatchEvent(new Event('documentsUpdated'))
+    } catch (error: any) {
+      showToast(error.message || `Failed to upload ${label}`, 'error')
+    } finally {
+      setAddingOther(false)
+    }
+  }
+
   const getDocumentIcon = (type: string) => {
     switch (type) {
       case 'picture':
@@ -609,17 +680,27 @@ export function Documents() {
                 Upload and manage the documents required for your NCLEX application.
               </p>
             </div>
-            <button
-              onClick={async () => {
-                await fetchDocuments()
-                setRefreshKey(k => k + 1)
-              }}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 mt-1 flex-shrink-0"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2 mt-1 flex-shrink-0">
+              <button
+                onClick={openAddOther}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add Document
+              </button>
+              <button
+                onClick={async () => {
+                  await fetchDocuments()
+                  setRefreshKey(k => k + 1)
+                }}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -906,6 +987,18 @@ export function Documents() {
               return (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {documents.map(renderCard)}
+                  {/* Add other (non-required) document */}
+                  <button
+                    type="button"
+                    onClick={openAddOther}
+                    className="flex flex-col items-center justify-center gap-3 min-h-[220px] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                  >
+                    <span className="p-3 rounded-full bg-gray-100 dark:bg-gray-800">
+                      <Plus className="h-6 w-6" />
+                    </span>
+                    <span className="text-sm font-semibold">Add other document</span>
+                    <span className="text-xs px-6 text-center">Upload a file that isn’t in the required list</span>
+                  </button>
                 </div>
               )
             })()}
@@ -932,6 +1025,104 @@ export function Documents() {
           </div>
         </main>
       </div>
+
+      {/* Add Other Document Modal */}
+      <Modal
+        isOpen={!!addOther}
+        onClose={closeAddOther}
+        title="Add other document"
+        size="lg"
+      >
+        {addOther && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Document name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={addOther.name}
+                onChange={(e) => setAddOther((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                placeholder="e.g. Bank Statement, Recommendation Letter"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                File <span className="text-red-500">*</span>
+              </label>
+              <input
+                ref={addOtherInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleAddOtherFile}
+                className="hidden"
+              />
+              {!addOther.file ? (
+                <button
+                  type="button"
+                  onClick={() => addOtherInputRef.current?.click()}
+                  className="w-full flex flex-col items-center justify-center gap-2 py-8 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                >
+                  <Upload className="h-6 w-6" />
+                  <span className="text-sm font-medium">Choose a file</span>
+                  <span className="text-xs">Images or PDF, up to 10MB</span>
+                </button>
+              ) : (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800">
+                  {addOther.previewUrl ? (
+                    <div className="flex justify-center bg-gray-100 dark:bg-gray-900 p-3 rounded-lg mb-3">
+                      <img src={addOther.previewUrl} alt="Preview" className="max-w-full max-h-72 object-contain rounded-lg" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-6 text-gray-500 dark:text-gray-400">
+                      <FileIcon className="h-10 w-10" />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{addOther.file.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{(addOther.file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addOtherInputRef.current?.click()}
+                      className="flex-shrink-0 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <Button variant="outline" onClick={closeAddOther} disabled={addingOther}>Cancel</Button>
+              <Button
+                variant="default"
+                onClick={handleAddOtherSubmit}
+                disabled={addingOther || !addOther.file || !addOther.name.trim()}
+              >
+                {addingOther ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Upload Preview Modal */}
       <Modal

@@ -9,7 +9,7 @@ import {
   Send, MessageSquare, RefreshCw, SquarePen, X, Search, ArrowLeft,
   Trash2, Pencil, Check, CheckCheck, Shield, Link2, Briefcase,
   Paperclip, Download, FileText, FileImage, FileVideo, FileAudio, FileArchive, Loader2,
-  Megaphone, Users, Globe2,
+  Megaphone, Users, Globe2, Reply, ChevronLeft, ChevronRight, ExternalLink,
 } from 'lucide-react'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
 import { Loading } from '@/components/ui/Loading'
@@ -170,6 +170,39 @@ function isImageAttachment(a: { name?: string; type?: string | null }): boolean 
   return IMAGE_EXT_RE.test(a.name || '')
 }
 
+function isVideoAttachment(a: { name?: string; type?: string | null }): boolean {
+  if (a.type && a.type.startsWith('video/')) return true
+  return VIDEO_EXT_RE.test(a.name || '')
+}
+
+function isAudioAttachment(a: { name?: string; type?: string | null }): boolean {
+  if (a.type && a.type.startsWith('audio/')) return true
+  return AUDIO_EXT_RE.test(a.name || '')
+}
+
+function isPdfAttachment(a: { name?: string; type?: string | null }): boolean {
+  if (a.type && a.type.includes('pdf')) return true
+  return /\.pdf$/i.test(a.name || '')
+}
+
+// Lightweight quote-reply lives inside the message body: the reply is prefixed
+// with one or more "> " lines holding the quoted snippet, then a blank line,
+// then the actual reply text. No DB column needed — we parse it back on render.
+function buildQuotedBody(quote: string, body: string): string {
+  const oneLine = quote.replace(/\s+/g, ' ').trim().slice(0, 160)
+  return `> ${oneLine}\n\n${body}`.trimEnd()
+}
+
+function parseQuotedBody(body: string): { quote: string | null; text: string } {
+  const lines = body.split('\n')
+  if (!lines[0]?.startsWith('> ')) return { quote: null, text: body }
+  const quoteLines: string[] = []
+  let i = 0
+  while (i < lines.length && lines[i].startsWith('> ')) { quoteLines.push(lines[i].slice(2)); i++ }
+  if (lines[i] === '') i++ // skip the single blank separator line
+  return { quote: quoteLines.join('\n'), text: lines.slice(i).join('\n') }
+}
+
 function attachmentIcon(a: { name?: string; type?: string | null }) {
   const t = a.type || ''
   const n = a.name || ''
@@ -239,19 +272,18 @@ function Avatar({
   )
 }
 
-function MessageAttachment({ attachment, mine, pending }: { attachment: Attachment; mine: boolean; pending: boolean }) {
+function MessageAttachment({ attachment, mine, pending, onOpen }: { attachment: Attachment; mine: boolean; pending: boolean; onOpen: (a: Attachment) => void }) {
   const [imgErr, setImgErr] = useState(false)
   const url = storageUrl(attachment.path)
   const showImage = isImageAttachment(attachment) && !!url && !imgErr
   if (showImage) {
     return (
-      <a
-        href={url!}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
+        onClick={() => onOpen(attachment)}
         title={attachment.name}
         className={cn(
-          'block rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[260px] sm:max-w-[280px] hover:opacity-95 transition-opacity',
+          'block rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[260px] sm:max-w-[280px] hover:opacity-95 transition-opacity cursor-zoom-in',
           pending && 'opacity-70',
           mine ? 'rounded-br-sm' : 'rounded-bl-sm'
         )}
@@ -262,19 +294,17 @@ function MessageAttachment({ attachment, mine, pending }: { attachment: Attachme
           onError={() => setImgErr(true)}
           className="block w-full max-h-[280px] object-cover bg-gray-100 dark:bg-gray-800"
         />
-      </a>
+      </button>
     )
   }
   const Icon = attachmentIcon(attachment)
   return (
-    <a
-      href={url || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
-      download={attachment.name}
+    <button
+      type="button"
+      onClick={() => onOpen(attachment)}
       title={`${attachment.name}${attachment.size ? ` · ${formatBytes(attachment.size)}` : ''}`}
       className={cn(
-        'flex items-center gap-2.5 px-3 py-2 rounded-2xl text-sm border w-full max-w-[260px] sm:max-w-[280px] transition-colors',
+        'flex items-center gap-2.5 px-3 py-2 rounded-2xl text-sm border w-full max-w-[260px] sm:max-w-[280px] text-left transition-colors',
         pending && 'opacity-70',
         mine
           ? 'bg-primary-600/95 hover:bg-primary-600 text-white border-primary-500 rounded-br-sm'
@@ -288,8 +318,126 @@ function MessageAttachment({ attachment, mine, pending }: { attachment: Attachme
         <span className="block truncate font-medium">{attachment.name}</span>
         {attachment.size ? <span className={cn('block text-[11px]', mine ? 'text-white/70' : 'text-gray-500 dark:text-gray-400')}>{formatBytes(attachment.size)}</span> : null}
       </span>
-      <Download className={cn('h-4 w-4 flex-shrink-0', mine ? 'text-white/80' : 'text-gray-400')} />
-    </a>
+      <ExternalLink className={cn('h-4 w-4 flex-shrink-0', mine ? 'text-white/80' : 'text-gray-400')} />
+    </button>
+  )
+}
+
+// Full-screen lightbox for viewing a message attachment (image / video / audio /
+// PDF / generic file) with prev-next navigation across every attachment in the
+// open conversation. Esc closes; ←/→ navigate.
+function AttachmentLightbox({
+  items, index, onIndex, onClose,
+}: {
+  items: Attachment[]
+  index: number
+  onIndex: (i: number) => void
+  onClose: () => void
+}) {
+  const current = items[index]
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft' && index > 0) onIndex(index - 1)
+      else if (e.key === 'ArrowRight' && index < items.length - 1) onIndex(index + 1)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [index, items.length, onIndex, onClose])
+
+  if (!current) return null
+  const url = storageUrl(current.path)
+  const hasPrev = index > 0
+  const hasNext = index < items.length - 1
+
+  const renderBody = () => {
+    if (!url) return <div className="text-white/70 text-sm">This file can’t be previewed.</div>
+    if (isImageAttachment(current)) {
+      return <img src={url} alt={current.name} className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl" />
+    }
+    if (isVideoAttachment(current)) {
+      return <video src={url} controls autoPlay className="max-w-full max-h-[80vh] rounded-lg shadow-2xl bg-black" />
+    }
+    if (isAudioAttachment(current)) {
+      return (
+        <div className="flex flex-col items-center gap-4 bg-gray-900 rounded-2xl px-8 py-10">
+          <FileAudio className="h-16 w-16 text-white/70" />
+          <span className="text-white/90 text-sm max-w-[80vw] truncate">{current.name}</span>
+          <audio src={url} controls autoPlay className="w-[min(80vw,420px)]" />
+        </div>
+      )
+    }
+    if (isPdfAttachment(current)) {
+      return <iframe src={url} title={current.name} className="w-[min(90vw,1000px)] h-[80vh] rounded-lg bg-white shadow-2xl" />
+    }
+    const Icon = attachmentIcon(current)
+    return (
+      <div className="flex flex-col items-center gap-4 bg-gray-900 rounded-2xl px-10 py-12 text-center">
+        <Icon className="h-16 w-16 text-white/70" />
+        <div>
+          <p className="text-white/90 text-sm font-medium max-w-[80vw] truncate">{current.name}</p>
+          {current.size ? <p className="text-white/50 text-xs mt-0.5">{formatBytes(current.size)}</p> : null}
+        </div>
+        <p className="text-white/50 text-xs">No inline preview for this file type.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex flex-col"
+      onClick={onClose}
+    >
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-3 text-white/90" onClick={(e) => e.stopPropagation()}>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium truncate">{current.name}</p>
+          <p className="text-[11px] text-white/50">
+            {items.length > 1 ? `${index + 1} of ${items.length}` : ''}{current.size ? `${items.length > 1 ? ' · ' : ''}${formatBytes(current.size)}` : ''}
+          </p>
+        </div>
+        {url && (
+          <>
+            <a href={url} target="_blank" rel="noopener noreferrer" title="Open in new tab" className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <ExternalLink className="h-5 w-5" />
+            </a>
+            <a href={url} download={current.name} title="Download" className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <Download className="h-5 w-5" />
+            </a>
+          </>
+        )}
+        <button type="button" onClick={onClose} title="Close" className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Stage */}
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4 pb-6 relative" onClick={onClose}>
+        {hasPrev && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onIndex(index - 1) }}
+            title="Previous"
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        )}
+        <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center max-w-full max-h-full">
+          {renderBody()}
+        </div>
+        {hasNext && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onIndex(index + 1) }}
+            title="Next"
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -348,6 +496,11 @@ export function Messages() {
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Quote-reply: the message currently being replied to (frontend-only).
+  const [replyTo, setReplyTo] = useState<Message | null>(null)
+  // Attachment lightbox: path of the attachment being viewed, or null.
+  const [lightboxPath, setLightboxPath] = useState<string | null>(null)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const composeRef = useRef<HTMLTextAreaElement>(null)
@@ -376,6 +529,17 @@ export function Messages() {
   const bcDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const realThread = useMemo(() => thread.filter((m) => !m.pending && !m.failed), [thread])
+
+  // Flat list of every attachment in the open thread, for lightbox navigation.
+  const allAttachments = useMemo(() => {
+    const list: Attachment[] = []
+    for (const m of thread) for (const a of (m.attachments || [])) list.push(a)
+    return list
+  }, [thread])
+  const lightboxIndex = useMemo(
+    () => (lightboxPath == null ? -1 : allAttachments.findIndex((a) => a.path === lightboxPath)),
+    [allAttachments, lightboxPath]
+  )
 
   // ---- Loaders ------------------------------------------------------------
   const loadConversations = useCallback(async (silent = false) => {
@@ -488,6 +652,8 @@ export function Messages() {
     setThread([])
     setEditingId(null)
     setAttachmentUploads([])
+    setReplyTo(null)
+    setLightboxPath(null)
     const conv = conversations.find((c) => c.user_id === selectedUserId)
     if (conv) {
       setPartyInfo({
@@ -511,6 +677,16 @@ export function Messages() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
+
+  // Auto-grow the compose box: start at a single thin line, expand with content
+  // up to a cap, then scroll internally.
+  const MAX_COMPOSE_PX = 160
+  useEffect(() => {
+    const el = composeRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSE_PX)}px`
+  }, [newMessage])
 
   const runUserSearch = useCallback(async (q: string) => {
     setSearchingUsers(true)
@@ -683,10 +859,31 @@ export function Messages() {
     .map((u) => ({ path: u.path!, name: u.name, type: u.type, size: u.size }))
   const canSend = !sending && uploadingCount === 0 && (newMessage.trim().length > 0 || readyAttachments.length > 0)
 
+  // ---- Quote-reply --------------------------------------------------------
+  const replySenderName = useCallback((m: Message): string => (
+    m.sender_id === user?.id
+      ? 'You'
+      : (`${m.sender_first_name || ''} ${m.sender_last_name || ''}`.trim() || displayName(partyInfo || pendingPartyInfo))
+  ), [user?.id, partyInfo, pendingPartyInfo])
+
+  const quoteSnippet = useCallback((m: Message): string => {
+    const text = (m.body && m.body.trim()) ? parseQuotedBody(m.body).text.trim() || m.body.trim() : ''
+    return text || attachmentsPreviewLabel(m.attachments) || 'Attachment'
+  }, [])
+
+  const startReply = useCallback((m: Message) => {
+    setReplyTo(m)
+    setTimeout(() => composeRef.current?.focus(), 0)
+  }, [])
+
   const handleSend = async () => {
-    const body = newMessage.trim()
+    const typed = newMessage.trim()
     const atts = readyAttachments
-    if ((!body && atts.length === 0) || !selectedUserId || sending || uploadingCount > 0) return
+    if ((!typed && atts.length === 0) || !selectedUserId || sending || uploadingCount > 0) return
+
+    const body = replyTo
+      ? buildQuotedBody(`${replySenderName(replyTo)}: ${quoteSnippet(replyTo)}`, typed)
+      : typed
 
     const tempId = `temp-${Date.now()}`
     const optimistic: Message = {
@@ -700,6 +897,7 @@ export function Messages() {
     setThread((prev) => [...prev, optimistic])
     setNewMessage('')
     setAttachmentUploads([])
+    setReplyTo(null)
     setSending(true)
     try {
       await apiFetch('/api/messages', {
@@ -765,6 +963,7 @@ export function Messages() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+    else if (e.key === 'Escape' && replyTo) { e.preventDefault(); setReplyTo(null) }
   }
 
   // ---- Derived ------------------------------------------------------------
@@ -1076,37 +1275,57 @@ export function Messages() {
                                   </div>
                                 ) : (
                                   <div className={cn('flex flex-col gap-1.5 min-w-0', mine ? 'items-end' : 'items-start')}>
-                                    {msg.body && (
-                                      <div
-                                        className={cn(
-                                          'px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words',
-                                          mine
-                                            ? msg.failed
-                                              ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 rounded-br-sm border border-red-300 dark:border-red-800'
-                                              : 'bg-primary-600 text-white rounded-br-sm'
-                                            : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-200 dark:border-gray-700',
-                                          msg.pending && 'opacity-70'
-                                        )}
-                                      >
-                                        {msg.body}
-                                      </div>
-                                    )}
+                                    {msg.body && (() => {
+                                      const parsed = parseQuotedBody(msg.body)
+                                      return (
+                                        <div
+                                          className={cn(
+                                            'px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words',
+                                            mine
+                                              ? msg.failed
+                                                ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 rounded-br-sm border border-red-300 dark:border-red-800'
+                                                : 'bg-primary-600 text-white rounded-br-sm'
+                                              : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-200 dark:border-gray-700',
+                                            msg.pending && 'opacity-70'
+                                          )}
+                                        >
+                                          {parsed.quote && (
+                                            <div className={cn(
+                                              'mb-1.5 rounded-md border-l-2 pl-2 pr-2 py-1 text-xs',
+                                              mine
+                                                ? 'border-white/60 bg-white/15 text-white/85'
+                                                : 'border-primary-400 bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300'
+                                            )}>
+                                              <span className="line-clamp-3 break-words">{parsed.quote}</span>
+                                            </div>
+                                          )}
+                                          {parsed.text && <span>{parsed.text}</span>}
+                                        </div>
+                                      )
+                                    })()}
                                     {(msg.attachments || []).map((a, ai) => (
-                                      <MessageAttachment key={`${msg.id}-att-${ai}`} attachment={a} mine={mine} pending={!!msg.pending} />
+                                      <MessageAttachment key={`${msg.id}-att-${ai}`} attachment={a} mine={mine} pending={!!msg.pending} onOpen={(att) => setLightboxPath(att.path)} />
                                     ))}
                                   </div>
                                 )}
-                                {/* hover actions for my own messages */}
-                                {mine && !editing && (
+                                {/* hover actions */}
+                                {!editing && (
                                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {!msg.pending && !msg.failed && (
+                                      <button onClick={() => startReply(msg)} className="p-1 rounded-md text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-800" title="Reply">
+                                        <Reply className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                    {mine && !msg.pending && !msg.failed && (
                                       <button onClick={() => startEdit(msg)} className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800" title="Edit">
                                         <Pencil className="h-3.5 w-3.5" />
                                       </button>
                                     )}
-                                    <button onClick={() => handleDelete(msg)} className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800" title="Delete">
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    {mine && (
+                                      <button onClick={() => handleDelete(msg)} className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800" title="Delete">
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1162,6 +1381,25 @@ export function Messages() {
                       </div>
                     )}
 
+                    {/* Reply-preview chip — the message being quoted */}
+                    {replyTo && (
+                      <div className="flex items-stretch gap-2 rounded-lg border-l-2 border-primary-500 bg-gray-50 dark:bg-gray-800/70 pl-2.5 pr-2 py-1.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
+                            <Reply className="h-3 w-3" /> Replying to {replySenderName(replyTo)}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{quoteSnippet(replyTo)}</p>
+                        </div>
+                        <button
+                          onClick={() => setReplyTo(null)}
+                          className="flex-shrink-0 self-center p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          title="Cancel reply"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex gap-2 items-end">
                       <input
                         ref={fileInputRef}
@@ -1188,8 +1426,8 @@ export function Messages() {
                           if (files.length) { e.preventDefault(); handleFilesSelected(files) }
                         }}
                         placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)"
-                        rows={2}
-                        className="flex-1 resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        rows={1}
+                        className="flex-1 resize-none overflow-y-auto rounded-2xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3.5 py-2 text-sm leading-5 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                       <button
                         onClick={handleSend}
@@ -1354,6 +1592,16 @@ export function Messages() {
           </div>
         </div>
       </Modal>
+
+      {/* Attachment lightbox */}
+      {lightboxIndex >= 0 && (
+        <AttachmentLightbox
+          items={allAttachments}
+          index={lightboxIndex}
+          onIndex={(i) => setLightboxPath(allAttachments[i]?.path ?? null)}
+          onClose={() => setLightboxPath(null)}
+        />
+      )}
     </div>
   )
 }

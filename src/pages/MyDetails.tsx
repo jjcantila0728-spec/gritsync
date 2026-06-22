@@ -479,8 +479,8 @@ export function MyDetails() {
       if (!typedDetails) return
       
       const completion = calculateCompletion({
-        firstName: typedDetails.first_name,
-        lastName: typedDetails.last_name,
+        firstName: typedDetails.first_name || user?.first_name,
+        lastName: typedDetails.last_name || user?.last_name,
         gender: typedDetails.gender,
         dateOfBirth: typedDetails.date_of_birth,
         birthPlace: typedDetails.birth_place || typedDetails.place_of_birth,
@@ -703,8 +703,8 @@ export function MyDetails() {
         
         // Calculate completion percentage
         const completion = calculateCompletion({
-          firstName: typedDetails.first_name,
-          lastName: typedDetails.last_name,
+          firstName: typedDetails.first_name || user?.first_name,
+          lastName: typedDetails.last_name || user?.last_name,
           gender: typedDetails.gender,
           dateOfBirth: typedDetails.date_of_birth,
           birthPlace: typedDetails.birth_place || typedDetails.place_of_birth,
