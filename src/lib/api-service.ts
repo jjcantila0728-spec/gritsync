@@ -777,24 +777,41 @@ export const applicationsAPI = {
       attempts++
     }
     
-    // Prepare insert data - include all fields from applicationData
+    // The `applications` table is intentionally thin: identity, status and a
+    // few payment/audit columns plus an `extra` jsonb bucket. The full
+    // applicant profile (name, address, education, etc.) is persisted to
+    // `user_details`, the single source of truth. So we only send recognised
+    // columns here and stash the rest of the payload into `extra` for
+    // history/audit — sending unknown columns makes PostgREST fail with a
+    // "Could not find the '<col>' column ... in the schema cache" error.
+    const APPLICATION_COLUMNS = [
+      'grit_app_id', 'user_id', 'service_id', 'application_type', 'status',
+      'state', 'notes', 'admin_notes', 'payment_type', 'promo_code',
+      'discount_amount', 'total_amount', 'paid_amount', 'submitted_at',
+    ]
+
     const insertData: any = {
-      ...applicationData,
       grit_app_id: gritAppId,
       user_id: userId,
       application_type: applicationType,
-      // Required NOT NULL columns — derive from applicationData fields if not explicitly set
-      applicant_name: applicationData.applicant_name ||
-        [applicationData.first_name, applicationData.last_name].filter(Boolean).join(' ').trim() || 'Unknown',
-      service_type: applicationData.service_type || 'NCLEX Processing',
-      state_of_application: applicationData.state_of_application || 'New York',
-      email: applicationData.email || '',
     }
-    
-    // Include document paths
-    insertData.picture_path = picturePath
-    insertData.diploma_path = diplomaPath
-    insertData.passport_path = passportPath
+    for (const key of APPLICATION_COLUMNS) {
+      if (applicationData[key] !== undefined) insertData[key] = applicationData[key]
+    }
+
+    // Everything that isn't a real column goes into `extra` for audit/history.
+    const extra: Record<string, any> = { ...(applicationData.extra || {}) }
+    for (const [key, value] of Object.entries(applicationData)) {
+      if (key === 'extra' || APPLICATION_COLUMNS.includes(key)) continue
+      extra[key] = value
+    }
+    // Uploaded document paths and a derived display name live in `extra` too.
+    extra.picture_path = picturePath
+    extra.diploma_path = diplomaPath
+    extra.passport_path = passportPath
+    extra.applicant_name = applicationData.applicant_name ||
+      [applicationData.first_name, applicationData.last_name].filter(Boolean).join(' ').trim() || 'Unknown'
+    insertData.extra = extra
     
     // Create application
     const { data, error } = await db
