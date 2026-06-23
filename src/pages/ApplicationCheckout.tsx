@@ -28,11 +28,23 @@ export function ApplicationCheckout() {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
   const [processingPayment, setProcessingPayment] = useState(false)
+
+  // Only show the line items that this payment actually covers. Items without a
+  // `step` belong to step 1 (same convention as ServiceSettings). A 'full'
+  // payment covers everything.
+  const displayedLineItems = useMemo(() => {
+    const items = serviceDetails?.line_items
+    if (!items) return []
+    const paymentType = payment?.payment_type
+    if (paymentType === 'step1') return items.filter((item: any) => !item.step || item.step === 1)
+    if (paymentType === 'step2') return items.filter((item: any) => item.step === 2)
+    return items
+  }, [serviceDetails, payment])
+
   const estimatedTax = useMemo(() => {
-    if (!serviceDetails?.line_items) return 0
     const TAX_RATE = 0.12
-    return serviceDetails.line_items.reduce((sum: number, item: any) => sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0), 0)
-  }, [serviceDetails])
+    return displayedLineItems.reduce((sum: number, item: any) => sum + (item.taxable ? (item.amount || 0) * TAX_RATE : 0), 0)
+  }, [displayedLineItems])
 
   useEffect(() => {
     // Allow public access - no authentication required for checkout
@@ -279,11 +291,11 @@ export function ApplicationCheckout() {
                         </span>
                       </div>
                     </div>
-                    {serviceDetails?.line_items && (
+                    {displayedLineItems.length > 0 && (
                       <div className="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-700">
                         <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Line Items</h4>
                         <div className="space-y-1">
-                          {serviceDetails.line_items.map((item: any, index: number) => (
+                          {displayedLineItems.map((item: any, index: number) => (
                             <div key={index} className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
                               <span>
                                 {item.description}
