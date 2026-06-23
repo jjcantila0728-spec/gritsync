@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -44,6 +44,8 @@ export function TimelineStep({
 }: TimelineStepProps) {
   const { handleError: handleErrorSilently } = useErrorHandler()
   const [isExpanded, setIsExpanded] = useState(true)
+  const [letterModalHtml, setLetterModalHtml] = useState<string | null>(null)
+  const letterIframeRef = useRef<HTMLIFrameElement>(null)
   const [attCodeValue, setAttCodeValue] = useState<string>('')
   const [attExpiryDate, setAttExpiryDate] = useState<string>('')
   const [savingAttNotes, setSavingAttNotes] = useState(false)
@@ -2140,26 +2142,20 @@ export function TimelineStep({
                         </html>
                       `
 
-                      // Open new tab with letter
-                      const printWindow = window.open('', '_blank')
-                      if (printWindow) {
-                        printWindow.document.write(letterHTML)
-                        printWindow.document.close()
-                                  
-                                  // Mark letter_generated step as completed
-                                  if (onUpdateSubStep && application?.id) {
-                                    try {
-                                      await onUpdateSubStep('letter_generated', 'completed', {
-                                        date: new Date().toISOString(),
-                                        generated_at: new Date().toISOString()
-                                      })
-                                    } catch (error) {
-                                      handleErrorSilently(error, { operation: 'updateTimelineStep', applicationId: application?.id })
-                                    }
-                                  }
-                                } else {
-                                  alert('Please allow pop-ups for this site to generate the letter.')
-                                }
+                      // Show the letter in an in-app modal (no pop-up tab needed)
+                      setLetterModalHtml(letterHTML)
+
+                      // Mark letter_generated step as completed
+                      if (onUpdateSubStep && application?.id) {
+                        try {
+                          await onUpdateSubStep('letter_generated', 'completed', {
+                            date: new Date().toISOString(),
+                            generated_at: new Date().toISOString()
+                          })
+                        } catch (error) {
+                          handleErrorSilently(error, { operation: 'updateTimelineStep', applicationId: application?.id })
+                        }
+                      }
                               } catch (error) {
                                 handleErrorSilently(error, { operation: 'generateLetter', applicationId: application?.id })
                                 alert('An error occurred while generating the letter. Please try again.')
@@ -4366,6 +4362,45 @@ export function TimelineStep({
           loadingDuration={2500}
           successDuration={3000}
         />
+      )}
+
+      {/* Letter-for-school preview modal */}
+      {letterModalHtml && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setLetterModalHtml(null)}
+        >
+          <div
+            className="flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                <FileText className="h-4 w-4" />
+                Letter for School
+              </h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => letterIframeRef.current?.contentWindow?.print()}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Print
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setLetterModalHtml(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            <iframe
+              ref={letterIframeRef}
+              srcDoc={letterModalHtml}
+              title="Letter for School"
+              className="h-full w-full flex-1 bg-gray-100"
+            />
+          </div>
+        </div>
       )}
     </div>
   )
