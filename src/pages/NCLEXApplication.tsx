@@ -111,10 +111,14 @@ export function NCLEXApplication() {
 
   // Payment
   const [paymentCategory, setPaymentCategory] = useState<'firstTake' | 'retake' | ''>('')
-  const [paymentType, setPaymentType] = useState<'full' | 'step1' | 'retake' | ''>('')
+  const [paymentType, setPaymentType] = useState<'full' | 'step1' | 'step2' | 'retake' | ''>('')
   const [isRetaker, setIsRetaker] = useState(false)
   const [checkingRetaker, setCheckingRetaker] = useState(false)
   const [firstTakeService, setFirstTakeService] = useState<any>(null)
+  // Optional standalone "Step 2 Only" service for first-take applicants who
+  // only need Step 2 processed. Configured in admin Service Settings as a
+  // service with payment_type === 'step2'; null when none is configured.
+  const [firstTakeStep2Service, setFirstTakeStep2Service] = useState<any>(null)
   const [retakeService, setRetakeService] = useState<any>(null)
   const [loadingServices, setLoadingServices] = useState(true)
 
@@ -383,7 +387,10 @@ export function NCLEXApplication() {
       const firstTakeFull = services.find((s: any) => s.payment_type === 'full')
       // Find staggered payment service for first take
       const firstTakeStaggered = services.find((s: any) => s.payment_type === 'staggered')
-      
+      // Optional standalone Step 2 service for first-take Step 2-only flow.
+      const firstTakeStep2 = services.find((s: any) => s.payment_type === 'step2')
+      setFirstTakeStep2Service(firstTakeStep2 || null)
+
       // For retake, the client only pays for Step 2. The staggered service
       // carries the Step 2 breakdown (line items with step === 2, total_step2,
       // tax_step2), so prefer it; fall back to full/first available service.
@@ -435,6 +442,9 @@ export function NCLEXApplication() {
       return firstTakeService.full?.total_full || firstTakeService.total_full || 0
     } else if (paymentType === 'step1' && firstTakeService) {
       return firstTakeService.staggered?.total_step1 || 0
+    } else if (paymentType === 'step2' && firstTakeStep2Service) {
+      // First-take Step 2 only. Uses the dedicated step2 service price.
+      return firstTakeStep2Service.total_step2 || firstTakeStep2Service.total_full || 0
     } else if (paymentType === 'retake' && retakeService) {
       // Retake = Step 2 only. Use the staggered Step 2 total.
       return retakeService.total_step2 || 0
@@ -990,8 +1000,9 @@ export function NCLEXApplication() {
         throw new Error('Invalid payment amount')
       }
 
-      // Determine payment type for API
-      const paymentTypeForAPI = paymentType === 'retake' ? 'step2' : paymentType as 'step1' | 'step2' | 'full'
+      // Determine payment type for API. Both retake and first-take "Step 2 only"
+      // resolve to a Step 2 payment.
+      const paymentTypeForAPI = (paymentType === 'retake' || paymentType === 'step2') ? 'step2' : paymentType as 'step1' | 'step2' | 'full'
       
       // Create payment record
       const payment = await applicationPaymentsAPI.create(applicationId, paymentTypeForAPI, amount)
@@ -2442,6 +2453,30 @@ export function NCLEXApplication() {
                                 </div>
                               </div>
                             </label>
+                            {firstTakeStep2Service && (
+                              <label className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                                paymentType === 'step2'
+                                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                  : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                              }`}>
+                                <input
+                                  type="radio"
+                                  name="firstTakePaymentType"
+                                  value="step2"
+                                  checked={paymentType === 'step2'}
+                                  onChange={(e) => setPaymentType(e.target.value as 'step2')}
+                                  className="mt-1"
+                                />
+                                <div className="flex-1">
+                                  <div className="font-semibold text-gray-900 dark:text-gray-100">
+                                    Step 2 Only
+                                  </div>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    For first-take applicants who only need Step 2 processed.
+                                  </p>
+                                </div>
+                              </label>
+                            )}
                           </div>
                         </div>
 
@@ -2450,6 +2485,78 @@ export function NCLEXApplication() {
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
                             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Loading pricing...</p>
                           </div>
+                        ) : paymentType === 'step2' ? (
+                          firstTakeStep2Service ? (
+                            <>
+                              {/* Step 2 Only Breakdown */}
+                              <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Step 2 Breakdown</h4>
+                                <div className="space-y-2">
+                                  {firstTakeStep2Service.line_items
+                                    ?.filter((item: any) => item.step === 2 || !item.step)
+                                    .map((item: any, idx: number) => {
+                                      const itemTax = calculateItemTax(item)
+                                      const itemTotal = calculateItemTotal(item)
+                                      return (
+                                        <div key={idx} className="space-y-1">
+                                          <div className="flex justify-between text-sm">
+                                            <span className="text-gray-700 dark:text-gray-300">
+                                              {item.description}
+                                              {item.taxable && (
+                                                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(Taxable)</span>
+                                              )}
+                                            </span>
+                                            <span className="text-gray-900 dark:text-gray-100 font-medium">{formatCurrency(item.amount)}</span>
+                                          </div>
+                                          {item.taxable && itemTax > 0 && (
+                                            <div className="flex justify-between text-xs pl-4 text-gray-600 dark:text-gray-400">
+                                              <span>Tax (12%):</span>
+                                              <span>{formatCurrency(itemTax)}</span>
+                                            </div>
+                                          )}
+                                          {item.taxable && (
+                                            <div className="flex justify-between text-sm pl-4 font-medium text-gray-900 dark:text-gray-100 border-t border-gray-200 dark:border-gray-700 pt-1">
+                                              <span>Subtotal:</span>
+                                              <span>{formatCurrency(itemTotal)}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                  <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+                                    <span className="text-gray-700 dark:text-gray-300">Subtotal</span>
+                                    <span className="text-gray-900 dark:text-gray-100 font-medium">
+                                      {formatCurrency((firstTakeStep2Service.total_step2 || firstTakeStep2Service.total_full || 0) - (firstTakeStep2Service.tax_step2 || firstTakeStep2Service.tax_amount || 0))}
+                                    </span>
+                                  </div>
+                                  {(firstTakeStep2Service.tax_step2 || firstTakeStep2Service.tax_amount) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-gray-700 dark:text-gray-300">Tax</span>
+                                      <span className="text-gray-900 dark:text-gray-100 font-medium">
+                                        {formatCurrency(firstTakeStep2Service.tax_step2 || firstTakeStep2Service.tax_amount || 0)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Total Summary */}
+                              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                    Total Amount (Step 2 Only)
+                                  </span>
+                                  <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                                    {formatCurrency(firstTakeStep2Service.total_step2 || firstTakeStep2Service.total_full || 0)}
+                                  </span>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center py-4 text-gray-600 dark:text-gray-400">
+                              <p>Step 2 pricing not available. Please contact support.</p>
+                            </div>
+                          )
                         ) : firstTakeService ? (
                           <>
                             {/* Step 1 Breakdown */}

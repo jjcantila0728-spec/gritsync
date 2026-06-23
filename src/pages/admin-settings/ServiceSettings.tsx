@@ -12,7 +12,7 @@ interface Service {
   id: string
   service_name: string
   state: string
-  payment_type: 'full' | 'staggered'
+  payment_type: 'full' | 'staggered' | 'step2'
   line_items: Array<{ description: string; amount: number; step?: 1 | 2; taxable?: boolean }>
   total_full: number
   total_step1?: number
@@ -71,9 +71,11 @@ export function ServiceSettings() {
       taxable: item.taxable ?? false
     }))
     
-    const step1Items = itemsWithTaxable.filter(item => !item.step || item.step === 1)
-    const step2Items = itemsWithTaxable.filter(item => item.step === 2)
-    
+    // A "step2" service has no Step 1 — every item is treated as Step 2.
+    const isStep2Only = service.payment_type === 'step2'
+    const step1Items = isStep2Only ? [] : itemsWithTaxable.filter(item => !item.step || item.step === 1)
+    const step2Items = isStep2Only ? itemsWithTaxable : itemsWithTaxable.filter(item => item.step === 2)
+
     const taxStep1 = step1Items.reduce((sum, item) => {
       const tax = item.taxable ? (item.amount || 0) * TAX_RATE : 0
       return sum + tax
@@ -95,9 +97,9 @@ export function ServiceSettings() {
       line_items: itemsWithTaxable,
       tax_amount: taxStep1 + taxStep2,
       tax_step1: service.payment_type === 'staggered' ? taxStep1 : undefined,
-      tax_step2: service.payment_type === 'staggered' ? taxStep2 : undefined,
+      tax_step2: (service.payment_type === 'staggered' || isStep2Only) ? taxStep2 : undefined,
       total_step1: service.payment_type === 'staggered' ? totalStep1 : undefined,
-      total_step2: service.payment_type === 'staggered' ? totalStep2 : undefined,
+      total_step2: (service.payment_type === 'staggered' || isStep2Only) ? totalStep2 : undefined,
       total_full: totalFull
     }
   }
@@ -325,9 +327,15 @@ export function ServiceSettings() {
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${
                           service.payment_type === 'staggered'
                             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                            : service.payment_type === 'step2'
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
                             : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
                         }`}>
-                          {service.payment_type === 'staggered' ? 'Staggered Payment' : 'Full Payment'}
+                          {service.payment_type === 'staggered'
+                            ? 'Staggered Payment'
+                            : service.payment_type === 'step2'
+                            ? 'Step 2 Only'
+                            : 'Full Payment'}
                         </span>
                       </div>
                     </div>
@@ -387,7 +395,7 @@ export function ServiceSettings() {
 
                   {/* Totals */}
                   <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    {service.payment_type === 'full' ? (
+                    {service.payment_type === 'full' || service.payment_type === 'step2' ? (
                       <>
                         <div className="flex justify-between items-center text-sm mb-1">
                           <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
@@ -404,7 +412,9 @@ export function ServiceSettings() {
                           </div>
                         )}
                         <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">Total (Full Payment):</span>
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {service.payment_type === 'step2' ? 'Total (Step 2 Only):' : 'Total (Full Payment):'}
+                          </span>
                           <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
                             {formatCurrency(service.total_full)}
                           </span>
@@ -1001,10 +1011,12 @@ function EditServiceForm({
 }) {
   const TAX_RATE = 0.12 // 12% tax
 
-  const calculateTotals = (items: typeof service.line_items) => {
-    const step1Items = items.filter(item => !item.step || item.step === 1)
-    const step2Items = items.filter(item => item.step === 2)
-    
+  const calculateTotals = (items: typeof service.line_items, paymentType: Service['payment_type'] = service.payment_type) => {
+    // A "step2" service has no Step 1 — every item is treated as Step 2.
+    const isStep2Only = paymentType === 'step2'
+    const step1Items = isStep2Only ? [] : items.filter(item => !item.step || item.step === 1)
+    const step2Items = isStep2Only ? items : items.filter(item => item.step === 2)
+
     // Calculate subtotals (before tax)
     const subtotalStep1 = step1Items.reduce((sum, item) => sum + (item.amount || 0), 0)
     const subtotalStep2 = step2Items.reduce((sum, item) => sum + (item.amount || 0), 0)
@@ -1049,10 +1061,10 @@ function EditServiceForm({
       line_items: newItems, 
       total_full: totals.totalFull,
       total_step1: service.payment_type === 'staggered' ? totals.totalStep1 : undefined,
-      total_step2: service.payment_type === 'staggered' ? totals.totalStep2 : undefined,
+      total_step2: (service.payment_type === 'staggered' || service.payment_type === 'step2') ? totals.totalStep2 : undefined,
       tax_amount: totals.taxAmount,
       tax_step1: service.payment_type === 'staggered' ? totals.taxStep1 : undefined,
-      tax_step2: service.payment_type === 'staggered' ? totals.taxStep2 : undefined
+      tax_step2: (service.payment_type === 'staggered' || service.payment_type === 'step2') ? totals.taxStep2 : undefined
     })
   }
 
@@ -1075,17 +1087,17 @@ function EditServiceForm({
       line_items: newItems, 
       total_full: totals.totalFull,
       total_step1: service.payment_type === 'staggered' ? totals.totalStep1 : undefined,
-      total_step2: service.payment_type === 'staggered' ? totals.totalStep2 : undefined,
+      total_step2: (service.payment_type === 'staggered' || service.payment_type === 'step2') ? totals.totalStep2 : undefined,
       tax_amount: totals.taxAmount,
       tax_step1: service.payment_type === 'staggered' ? totals.taxStep1 : undefined,
-      tax_step2: service.payment_type === 'staggered' ? totals.taxStep2 : undefined
+      tax_step2: (service.payment_type === 'staggered' || service.payment_type === 'step2') ? totals.taxStep2 : undefined
     })
   }
 
-  const handlePaymentTypeChange = (paymentType: 'full' | 'staggered') => {
-    // When switching to full payment, remove step info from items
-    // When switching to staggered, assign step 1 to items without step
-    const updatedItems = paymentType === 'full'
+  const handlePaymentTypeChange = (paymentType: Service['payment_type']) => {
+    // Full / Step 2 Only have no step grouping — strip step info from items.
+    // Staggered assigns step 1 to items without an explicit step.
+    const updatedItems = (paymentType === 'full' || paymentType === 'step2')
       ? service.line_items.map(item => {
           const { step, ...rest } = item
           return rest
@@ -1094,20 +1106,21 @@ function EditServiceForm({
           ...item,
           step: item.step || 1
         }))
-    
-    // Recalculate totals with tax
-    const totals = calculateTotals(updatedItems)
-    
+
+    // Recalculate totals with tax using the new payment type
+    const totals = calculateTotals(updatedItems, paymentType)
+    const isStep2Only = paymentType === 'step2'
+
     setService({
       ...service,
       payment_type: paymentType,
       line_items: updatedItems,
       total_full: totals.totalFull,
       total_step1: paymentType === 'staggered' ? totals.totalStep1 : undefined,
-      total_step2: paymentType === 'staggered' ? totals.totalStep2 : undefined,
+      total_step2: (paymentType === 'staggered' || isStep2Only) ? totals.totalStep2 : undefined,
       tax_amount: totals.taxAmount,
       tax_step1: paymentType === 'staggered' ? totals.taxStep1 : undefined,
-      tax_step2: paymentType === 'staggered' ? totals.taxStep2 : undefined
+      tax_step2: (paymentType === 'staggered' || isStep2Only) ? totals.taxStep2 : undefined
     })
   }
 
@@ -1143,15 +1156,18 @@ function EditServiceForm({
             </label>
             <select
               value={service.payment_type}
-              onChange={(e) => handlePaymentTypeChange(e.target.value as 'full' | 'staggered')}
+              onChange={(e) => handlePaymentTypeChange(e.target.value as Service['payment_type'])}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             >
               <option value="full">Full Payment</option>
               <option value="staggered">Staggered Payment</option>
+              <option value="step2">Step 2 Only</option>
             </select>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {service.payment_type === 'full'
                 ? 'All items are paid upfront in a single payment.'
+                : service.payment_type === 'step2'
+                ? 'Standalone Step 2 price for first-take applicants who only need Step 2 processed. All items are billed as Step 2.'
                 : 'Items can be assigned to Step 1 (pay now) or Step 2 (pay later).'}
             </p>
           </div>
@@ -1214,7 +1230,7 @@ function EditServiceForm({
             ))}
           </div>
           <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2">
-            {service.payment_type === 'full' ? (
+            {service.payment_type === 'full' || service.payment_type === 'step2' ? (
               <>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
@@ -1231,7 +1247,9 @@ function EditServiceForm({
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">Total (Full Payment):</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    {service.payment_type === 'step2' ? 'Total (Step 2 Only):' : 'Total (Full Payment):'}
+                  </span>
                   <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
                     {formatCurrency(service.total_full)}
                   </span>

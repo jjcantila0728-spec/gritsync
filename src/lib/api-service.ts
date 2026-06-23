@@ -1456,7 +1456,7 @@ export const servicesAPI = {
     id?: string
     service_name: string
     state: string
-    payment_type: 'full' | 'staggered'
+    payment_type: 'full' | 'staggered' | 'step2'
     line_items: Array<{ description: string; amount: number; step?: 1 | 2; taxable?: boolean }>
     total_full: number
     total_step1?: number
