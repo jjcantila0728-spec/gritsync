@@ -11,8 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { Loading, CardSkeleton } from '@/components/ui/Loading'
 import { Modal } from '@/components/ui/Modal'
 import { Link } from 'react-router-dom'
-import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI } from '@/lib/api'
-import { db } from '@/lib/api-client'
+import { applicationsAPI, applicationPaymentsAPI, getSignedFileUrl, timelineStepsAPI, processingAccountsAPI, userDocumentsAPI, servicesAPI, serviceRequiredDocumentsAPI, userDetailsAPI } from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { generalSettings } from '@/lib/settings'
 import { stripePromise } from '@/lib/stripe'
@@ -210,6 +209,56 @@ export function ApplicationDetail() {
       }
     }
   }, [id, application?.id])
+
+  // Polling fallback to auto-update the timeline.
+  // Realtime websockets aren't available in this environment — `db.channel()`
+  // is a no-op stub because the frontend talks to the Express `/api/db` proxy
+  // (not Supabase realtime), so the postgres_changes subscriptions above never
+  // fire. We poll instead so admin/system-driven changes to the timeline steps
+  // and application status show up without a manual page refresh.
+  const pollInFlightRef = useRef(false)
+  useEffect(() => {
+    if (!application?.id || activeTab !== 'timeline') return
+
+    const POLL_INTERVAL_MS = 20000
+
+    const poll = async () => {
+      // Skip when the tab is backgrounded, already loading, or we're the ones
+      // writing a status change (avoids redundant work and update loops).
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (pollInFlightRef.current || loadingTimeline || isUpdatingStatus) return
+      pollInFlightRef.current = true
+      try {
+        await fetchTimelineSteps()
+
+        // Refresh application status so admin-driven status changes appear.
+        const latest = await applicationsAPI.getById(application.id)
+        if (latest && typeof latest === 'object' && !('error' in latest)) {
+          const latestStatus = (latest as any).status
+          if (latestStatus) {
+            setApplication((prev) =>
+              prev && latestStatus !== prev.status ? ({ ...prev, ...latest } as ApplicationData) : prev
+            )
+            setStatus((prev) => (latestStatus !== prev ? latestStatus : prev))
+          }
+        }
+      } catch (error) {
+        handleErrorSilently(error, { operation: 'pollTimeline', applicationId: id })
+      } finally {
+        pollInFlightRef.current = false
+      }
+    }
+
+    const intervalId = setInterval(poll, POLL_INTERVAL_MS)
+    // Refresh immediately when the tab regains focus.
+    const onVisible = () => { if (!document.hidden) poll() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [application?.id, activeTab])
 
   // Check if all required EAD documents are uploaded and auto-update timeline
   useEffect(() => {
@@ -423,28 +472,39 @@ export function ApplicationDetail() {
         throw new Error('Failed to fetch application')
       }
       let appData = data as ApplicationData
-      
-      // If application is missing name fields (older records before migration), fetch from users table
-      if (!appData.first_name && appData.user_id) {
+
+      // The `applications` table is intentionally thin: it holds identity,
+      // status and payment columns plus an `extra` jsonb bucket. The applicant
+      // profile (name, address, education, etc.) is stashed in `extra` at
+      // creation and is the single source of truth in `user_details`. The
+      // Details tab reads flat fields off `application`, so flatten `extra` up
+      // (real columns still win) then backfill anything still missing from
+      // `user_details` so the profile renders instead of showing all "N/A".
+      const extra = (appData as any).extra
+      if (extra && typeof extra === 'object') {
+        appData = { ...extra, ...appData } as ApplicationData
+      }
+
+      if (appData.user_id) {
         try {
-          const { data: userData } = await db
-            .from('users')
-            .select('first_name, middle_name, last_name, mobile')
-            .eq('id', appData.user_id)
-            .single()
-          if (userData) {
-            appData = {
-              ...appData,
-              first_name: appData.first_name || userData.first_name || '',
-              middle_name: appData.middle_name || userData.middle_name || '',
-              last_name: appData.last_name || userData.last_name || '',
+          const profile = await userDetailsAPI.getByUserId(appData.user_id)
+          if (profile) {
+            const merged: any = { ...appData }
+            for (const [key, value] of Object.entries(profile)) {
+              if (value == null) continue
+              const current = merged[key]
+              if (current === undefined || current === null || current === '') {
+                merged[key] = value
+              }
             }
+            appData = merged as ApplicationData
           }
         } catch {
-          // Silently ignore — names will just show as N/A
+          // Non-admin viewing someone else's profile, or no row — fall back to
+          // whatever `extra` already provided.
         }
       }
-      
+
       setApplication(appData)
       // Initialize status from application data - this ensures it's always synced with the database
       const appStatus = appData.status || 'initiated'
