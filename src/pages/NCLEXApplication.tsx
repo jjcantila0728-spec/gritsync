@@ -384,9 +384,10 @@ export function NCLEXApplication() {
       // Find staggered payment service for first take
       const firstTakeStaggered = services.find((s: any) => s.payment_type === 'staggered')
       
-      // For retake, we'll use the full payment service (or create a combined service)
-      // Check if there's a specific retake service, otherwise use full payment
-      const retakeServiceData = firstTakeFull || services[0]
+      // For retake, the client only pays for Step 2. The staggered service
+      // carries the Step 2 breakdown (line items with step === 2, total_step2,
+      // tax_step2), so prefer it; fall back to full/first available service.
+      const retakeServiceData = firstTakeStaggered || firstTakeFull || services[0]
       
       // Combine full and staggered for first take display
       if (firstTakeFull && firstTakeStaggered) {
@@ -435,7 +436,8 @@ export function NCLEXApplication() {
     } else if (paymentType === 'step1' && firstTakeService) {
       return firstTakeService.staggered?.total_step1 || 0
     } else if (paymentType === 'retake' && retakeService) {
-      return retakeService.total_step2 || retakeService.total_full || 0
+      // Retake = Step 2 only. Use the staggered Step 2 total.
+      return retakeService.total_step2 || 0
     }
     return 0
   }
@@ -2624,10 +2626,13 @@ export function NCLEXApplication() {
 
                     {paymentCategory === 'retake' && (
                       <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
                           Retake Payment - Quotation
                         </h3>
-                        
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Retake applications cover Step 2 only.
+                        </p>
+
                         {loadingServices ? (
                           <div className="text-center py-4">
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
@@ -2635,34 +2640,65 @@ export function NCLEXApplication() {
                           </div>
                         ) : retakeService ? (
                           <>
-                            <div className="space-y-2 mb-4">
-                              {retakeService.line_items?.map((item: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-gray-700 dark:text-gray-300">{item.description}</span>
-                                  <span className="text-gray-900 dark:text-gray-100 font-medium">{formatCurrency(item.amount)}</span>
+                            {/* Step 2 Breakdown */}
+                            <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                              <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Step 2 Breakdown</h4>
+                              <div className="space-y-2">
+                                {retakeService.line_items
+                                  ?.filter((item: any) => item.step === 2)
+                                  .map((item: any, idx: number) => {
+                                    const itemTax = calculateItemTax(item)
+                                    const itemTotal = calculateItemTotal(item)
+                                    return (
+                                      <div key={idx} className="space-y-1">
+                                        <div className="flex justify-between text-sm">
+                                          <span className="text-gray-700 dark:text-gray-300">
+                                            {item.description}
+                                            {item.taxable && (
+                                              <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(Taxable)</span>
+                                            )}
+                                          </span>
+                                          <span className="text-gray-900 dark:text-gray-100 font-medium">{formatCurrency(item.amount)}</span>
+                                        </div>
+                                        {item.taxable && itemTax > 0 && (
+                                          <div className="flex justify-between text-xs pl-4 text-gray-600 dark:text-gray-400">
+                                            <span>Tax (12%):</span>
+                                            <span>{formatCurrency(itemTax)}</span>
+                                          </div>
+                                        )}
+                                        {item.taxable && (
+                                          <div className="flex justify-between text-sm pl-4 font-medium text-gray-900 dark:text-gray-100 border-t border-gray-200 dark:border-gray-700 pt-1">
+                                            <span>Subtotal:</span>
+                                            <span>{formatCurrency(itemTotal)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+                                  <span className="text-gray-700 dark:text-gray-300">Subtotal</span>
+                                  <span className="text-gray-900 dark:text-gray-100 font-medium">
+                                    {formatCurrency((retakeService.total_step2 || 0) - (retakeService.tax_step2 || 0))}
+                                  </span>
                                 </div>
-                              ))}
+                                {retakeService.tax_step2 && retakeService.tax_step2 > 0 && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-700 dark:text-gray-300">Tax</span>
+                                    <span className="text-gray-900 dark:text-gray-100 font-medium">
+                                      {formatCurrency(retakeService.tax_step2)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-                              <div className="flex justify-between text-sm mb-2">
-                                <span className="text-gray-700 dark:text-gray-300">Subtotal</span>
-                                <span className="text-gray-900 dark:text-gray-100">
-                                  {formatCurrency((retakeService.total_full || 0) - (retakeService.tax_amount || 0))}
+                              <div className="flex justify-between items-center">
+                                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                  Total Amount (Step 2 Only)
                                 </span>
-                              </div>
-                              {retakeService.tax_amount && retakeService.tax_amount > 0 && (
-                                <div className="flex justify-between text-sm mb-2">
-                                  <span className="text-gray-700 dark:text-gray-300">Tax</span>
-                                  <span className="text-gray-900 dark:text-gray-100">
-                                    {formatCurrency(retakeService.tax_amount)}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex justify-between items-center pt-2 border-t border-green-200 dark:border-green-800 mt-2">
-                                <span className="text-lg font-bold text-gray-900 dark:text-gray-100">Total Amount</span>
                                 <span className="text-xl font-bold text-green-600 dark:text-green-400">
-                                  {formatCurrency(retakeService.total_full || 0)}
+                                  {formatCurrency(retakeService.total_step2 || 0)}
                                 </span>
                               </div>
                             </div>
